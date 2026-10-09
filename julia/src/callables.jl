@@ -118,8 +118,11 @@ function build_callable(ref::CallableRef)
         "callable $(ref.id) has no `type` attribute"))
     T = callable_type(ref.type)
     T === nothing && throw(MestraError(nothing,
-        "no callable registered for type $(ref.type); the dictionary " *
-        "is opaque to this reader and must not be interpreted"))
+        "no callable registered for type \"$(ref.type)\"; the dictionary " *
+        "is opaque to this reader and must not be interpreted. To " *
+        "evaluate it, load the package that provides the type, which " *
+        "registers it, or call Mestra.register_callable! (the file's " *
+        "writer attribute names the tool that wrote it)"))
     return from_dict(T, ref.dict)
 end
 

@@ -18,6 +18,15 @@ bool legal_netcdf_name(const std::string& name);
 // not begin with.
 bool reserved_name(const std::string& name);
 
+// What a reader adds when it meets a callable type nobody registered
+// (section 25): how to make the type evaluable.  The reader itself
+// never loads anything to find one.
+inline constexpr char kRegisterHint[] =
+    "To evaluate it, link the library that provides the type and run its "
+    "registration, or register a factory with "
+    "mestra::CallableRegistry::register_type (the file's writer attribute "
+    "names the tool that wrote it)";
+
 // Valid UTF-8, and no NUL anywhere.
 bool valid_utf8(const std::string& s);
 

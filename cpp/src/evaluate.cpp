@@ -139,7 +139,7 @@ Dataset evaluate(const Dataset& d, const KeysTable& keys) {
     if (!object) {
       throw Error("", "no factory is registered for the callable type \"" +
                           c.type + "\"; the dictionary may be copied but "
-                                   "not interpreted");
+                                   "not interpreted. " + internal::kRegisterHint);
     }
     produced[c.id] = object->call(keys);
   }

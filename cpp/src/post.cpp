@@ -111,7 +111,7 @@ Prediction served(const Dataset& d, const std::string& id,
   if (!object) {
     refuse("prediction", "no factory is registered for the callable type \"" +
                              stored->type + "\"; the dictionary may be "
-                             "copied but not interpreted");
+                             "copied but not interpreted. " + internal::kRegisterHint);
   }
   KeysTable own;
   if (keys == nullptr) {

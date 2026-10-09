@@ -1175,6 +1175,17 @@ void conventions_callables() {
   check::is_true("and the scalar holds data",
                  got != nullptr && got->source == "data");
 
+  // A type nobody registered is refused, and the refusal says how to
+  // make it evaluable rather than only that it is not.
+  mestra::Dataset foreign = d;
+  foreign.callables.front().type = "someone-elses-model";
+  std::string refused;
+  rule_of([&] { mestra::evaluate(foreign, table); }, &refused);
+  check::is_true("an unregistered type names the registration call",
+                 refused.find("\"someone-elses-model\"") != std::string::npos &&
+                     refused.find("CallableRegistry::register_type") !=
+                         std::string::npos);
+
   // Conventions section 7: every callable slot now holds data, so the
   // result has no callable to keep and /callables is absent from the
   // file it writes -- absent, and not present and empty.

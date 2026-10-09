@@ -306,7 +306,7 @@ def test_an_unknown_type_is_copied_and_not_interpreted(tmp_path):
             assert isinstance(model, mestra.OpaqueCallable)
             assert model.type == "affine"
             assert sorted(model.to_dict()) == sorted(held)
-            with pytest.raises(MestraError):
+            with pytest.raises(MestraError, match="mestra.register_callable"):
                 model({"mach": [0.5], "alpha": [4.0]})
             path = str(tmp_path / "copied.mes")
             mestra.write(ds, path)

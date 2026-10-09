@@ -258,7 +258,11 @@ class OpaqueCallable:
     def __call__(self, keys: Any) -> dict[str, Prediction]:
         raise MestraError(
             "section 10", "this reader does not own the callable type "
-            "%r, so it can copy it but not evaluate it" % self.type)
+            "%r, so it can copy it but not evaluate it. To evaluate it, "
+            "import the package that provides the type, which registers "
+            "it, or register a class for it with mestra.register_callable "
+            "(the file's writer attribute names the tool that wrote it)"
+            % self.type)
 
     def to_dict(self) -> dict[str, Any]:
         """The dictionary as it was read, unchanged."""

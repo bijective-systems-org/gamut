@@ -412,6 +412,20 @@ end
     @test_throws Mestra.MestraError c(Dict("mach" => [0.5]))
 end
 
+@testset "an unregistered callable type says how to register one" begin
+    ref = Mestra.CallableRef("m1", "someone-elses-model")
+    err = try
+        Mestra.build_callable(ref)
+        nothing
+    catch e
+        e
+    end
+    @test err isa Mestra.MestraError
+    text = sprint(showerror, err)
+    @test occursin("\"someone-elses-model\"", text)
+    @test occursin("Mestra.register_callable!", text)
+end
+
 @testset "a prediction is a mean and at most a band (section 10)" begin
     plain = Mestra.Prediction([1.0, 2.0])
     @test plain.uncertainty === nothing && plain.level === nothing
