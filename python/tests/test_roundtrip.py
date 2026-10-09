@@ -80,12 +80,16 @@ def test_a_destination_that_cannot_take_a_file_is_refused_first(tmp_path):
     read_only = tmp_path / "sealed"
     read_only.mkdir()
     read_only.chmod(stat.S_IRUSR | stat.S_IXUSR)
+    cases = [(str(a_directory), "names a directory"),
+             (str(tmp_path / "gone" / "x.mes"), "does not exist"),
+             ("", "path is empty")]
+    # Root may write into a 0500 directory, and the writer asks the same
+    # question (os.access), so that case only means something when the
+    # directory really refuses this process.
+    if not os.access(read_only, os.W_OK | os.X_OK):
+        cases.append((str(read_only / "x.mes"), "not writable"))
     try:
-        for path, said in ((str(a_directory), "names a directory"),
-                           (str(read_only / "x.mes"), "not writable"),
-                           (str(tmp_path / "gone" / "x.mes"),
-                            "does not exist"),
-                           ("", "path is empty")):
+        for path, said in cases:
             with pytest.raises(mestra.MestraError) as caught:
                 mestra.write(ds, path)
             assert caught.value.rule == ""
