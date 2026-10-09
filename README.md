@@ -115,6 +115,6 @@ Licence: code under Apache-2.0 (see LICENSE); specification text under
 CC-BY-4.0. Copyright (c) 2026 Bijective Systems.
 
 [Contributing and changing the format](CONTRIBUTING.md) describes the
-compatibility rules and how to run the checks; [AGENTS.md](AGENTS.md) is
-the reading map for working on the code. [Releasing](docs/releasing.md) describes the checks
+compatibility rules and how to run the checks; [AGENTS.md](AGENTS.md)
+is the reading map for working on the code. [Releasing](docs/releasing.md) describes the checks
 required for a release and for updating downstream consumers.

@@ -37,7 +37,7 @@ From the repository root, as `.github/workflows/ci.yml` runs them:
     python vectors/generate.py --on-demand   # once: three files too big to commit
     python vectors/check.py                  # needs h5py, numpy, netCDF4, h5netcdf
 
-    pip install -e "python/[dev]"
+    pip install -e "python/[dev]"     # [dev,checks] also runs the netCDF round trips
     (cd python && python -m pytest -q && python -m ruff check . && python -m mypy)
 
     cmake -S cpp -B cpp/build -DHDF5_ROOT=<hdf5 prefix> \
@@ -47,7 +47,7 @@ From the repository root, as `.github/workflows/ci.yml` runs them:
 
     julia --project=julia -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
 
-    matlab -batch "addpath('matlab'); run('matlab/tests/run_tests.m')"
+    matlab -nodisplay -batch "addpath('matlab'); run('matlab/tests/run_tests.m')" < /dev/null
 
 Each language's README says more about its own setup;
 [cpp/README.md](cpp/README.md) explains `HDF5_ROOT`.

@@ -40,8 +40,9 @@ decision under SPEC section 28.
 
 - **Callables.** A reader that does not own a callable type copies its
   dictionary unchanged and refuses to evaluate it (SPEC section 10). The
-  owning tool registers the type when it is imported; mestra never imports
-  or loads a plugin to find one. The refusal says how to register.
+  owning tool registers the type (on import in Python and Julia, by its
+  registration call in C++ and MATLAB); mestra never imports or loads a
+  plugin to find one. The refusal says how to register.
 - **Alignment and support identity.** `support_id` hashes structure, not
   geometry; the producer establishes correspondence
   ([compatibility.md](docs/compatibility.md#who-establishes-correspondence)).
@@ -57,8 +58,3 @@ lists every lane as CI runs it. Generate the three on-demand corpus files
 once before any suite. Each language's README covers its own setup;
 [cpp/README.md](cpp/README.md) says what `HDF5_ROOT` must hold. Releases and
 downstream pin updates: [docs/releasing.md](docs/releasing.md).
-
-## Not kept here
-
-Task lists, decision records and process notes are kept outside this
-repository. Nothing dated or process-specific belongs in its documents.

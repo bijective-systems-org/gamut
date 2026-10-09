@@ -56,9 +56,9 @@ sorted by name. The cases fall into five groups:
     E37 has two, `err_e37` and `err_e37_false`, one for each direction
     of the rule, E12 three (a statistic with no `of`, a stored band
     with no level, and a callable slot that declares a draw), and E25
-    seven. 81 cases in all;
+    seven. 96 cases in all;
   - one file per warning identifier, named `warn_<id>`, the same way,
-    18 in all.
+    19 in all.
 
 E07 and W09 were retired on 2026-09-20 and have no case. Their
 identifiers are not reused, per section 14: within a major version a
