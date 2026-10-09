@@ -326,13 +326,14 @@ class FileSource(_Source):
         return self._dtype
 
 
-def _wrap(values: Any, dtype: str) -> _Source | None:
+def _wrap(values: Any, dtype: str, where: str) -> _Source | None:
     """Hold values that are already in memory, or nothing."""
     if values is None:
         return None
     if isinstance(values, _Source):
         return values
-    return MemorySource(np.asarray(values, dtype=dtype))
+    return MemorySource(_exact(_numbers(values, None, where), dtype,
+                               where))
 
 
 def _decode_strings(values: Any) -> np.ndarray:
@@ -636,9 +637,10 @@ class Support:
         self.n_nodes = int(n_nodes)
         self.n_cells = int(n_cells)
         self._cells: dict[str, _Source | None] = {
-            "cell_types": _wrap(cell_types, "<u1"),
-            "cell_offsets": _wrap(cell_offsets, "<i8"),
-            "cell_connectivity": _wrap(cell_connectivity, "<i8"),
+            "cell_types": _wrap(cell_types, "<u1", "cell_types"),
+            "cell_offsets": _wrap(cell_offsets, "<i8", "cell_offsets"),
+            "cell_connectivity": _wrap(cell_connectivity, "<i8",
+                                       "cell_connectivity"),
         }
         self.coordinates: ArraySlot | None = None
         self.node_arrays: dict[str, ArraySlot] = _Arrays("node")
@@ -663,7 +665,7 @@ class Support:
 
     @cell_types.setter
     def cell_types(self, values: Any) -> None:
-        self._cells["cell_types"] = _wrap(values, "<u1")
+        self._cells["cell_types"] = _wrap(values, "<u1", "cell_types")
         self.stored_support_id = None
 
     @property
@@ -673,7 +675,8 @@ class Support:
 
     @cell_offsets.setter
     def cell_offsets(self, values: Any) -> None:
-        self._cells["cell_offsets"] = _wrap(values, "<i8")
+        self._cells["cell_offsets"] = _wrap(values, "<i8",
+                                            "cell_offsets")
         self.stored_support_id = None
 
     @property
@@ -683,7 +686,8 @@ class Support:
 
     @cell_connectivity.setter
     def cell_connectivity(self, values: Any) -> None:
-        self._cells["cell_connectivity"] = _wrap(values, "<i8")
+        self._cells["cell_connectivity"] = _wrap(values, "<i8",
+                                                 "cell_connectivity")
         self.stored_support_id = None
 
     def _read_cells(self, which: str) -> np.ndarray | None:
@@ -1206,8 +1210,7 @@ class Dataset:
 
     @row_support.setter
     def row_support(self, values: Any) -> None:
-        self._row_support = (None if values is None
-                             else _wrap(values, "<i4"))
+        self._row_support = _wrap(values, "<i4", "/row_support")
 
     @property
     def has_row_support(self) -> bool:
@@ -1323,13 +1326,13 @@ class Dataset:
                     "integers; these values are %s. Pass the ids, and "
                     "their names as categories=" % (role, given.dtype),
                     name)
-            array = given.astype(dtype or "<i4")
+            array = _exact(given, dtype or "<i4", name, wider="<i8")
         elif role == "id":
             array = _numbers(values, None, name)
             if array.dtype.kind in "US":
                 array = array.astype(np.str_)
             elif array.dtype.kind in "iub":
-                array = array.astype(dtype or "<i8")
+                array = _exact(array, dtype or "<i8", name)
             else:
                 raise MestraError(
                     "E20", "an id key stores row identifiers, which are "
@@ -1577,7 +1580,8 @@ class Dataset:
         the file's support order, which is the support names sorted
         by their UTF-8 bytes.
         """
-        array = np.asarray(values, dtype="<i4")
+        array = _exact(_numbers(values, None, "/row_support"), "<i4",
+                       "/row_support")
         if array.ndim != 1:
             raise MestraError(
                 "E04", "/row_support has one dimension, row",
@@ -1774,7 +1778,9 @@ def _as_array(values: Any, role: str, dtype: Any, name: str
             "E30", "a slot holding data needs values; pass values=, or "
             "add_callable_slot for a slot a callable serves", name)
     if role == "label":
-        array = _numbers(values, dtype or "<i4", name)
+        array = _numbers(values, None, name)
+        if array.dtype.kind in "biuf":
+            array = _exact(array, dtype or "<i4", name, wider="<i8")
         if array.dtype.kind not in "iu":
             raise MestraError(
                 "E20", "a label is int32 or int64, and these values are "
@@ -1804,6 +1810,41 @@ def _numbers(values: Any, dtype: Any, name: str) -> np.ndarray:
             "E20", "values must be a rectangular array of %s, and these "
             "are not (%s); pass one value per row and the same shape "
             "in every row" % (want, exc), name) from None
+
+
+def _exact(given: np.ndarray, dtype: Any, name: str,
+           wider: str | None = None) -> np.ndarray:
+    """`given` stored as `dtype`, or E20 when that changes a value.
+
+    numpy's cast wraps an integer the narrower type cannot hold, and
+    drops a fraction, and a file holding the result validates clean
+    with another id in it. `wider` is the dtype section 19 also
+    allows here, which the message suggests.
+    """
+    if given.dtype.kind not in "biuf":
+        raise MestraError(
+            "E20", "values must be integers, and these are %s; pass "
+            "integers" % given.dtype, name)
+    if np.can_cast(given.dtype, dtype):
+        return given.astype(dtype, copy=False)
+    with np.errstate(invalid="ignore"):
+        array = given.astype(dtype)
+    changed = np.flatnonzero(array != given)
+    if not changed.size:
+        return array
+    first = given.reshape(-1)[changed[0]]
+    stored = array.reshape(-1)[changed[0]]
+    if not float(first).is_integer():
+        hint = "; pass integers"
+    elif wider is not None and \
+            np.dtype(wider).itemsize > array.dtype.itemsize:
+        hint = "; pass dtype=\"%s\", which section 19 also allows" % wider
+    else:
+        hint = (", and section 19 allows nothing wider; pass values %s "
+                "holds" % array.dtype)
+    raise MestraError(
+        "E20", "values holds %s, which %s would store as %s%s"
+        % (first, array.dtype, stored, hint), name)
 
 
 def _check_bounds(lower: Any, upper: Any, name: str) -> None:

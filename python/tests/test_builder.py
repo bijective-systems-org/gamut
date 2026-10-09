@@ -515,6 +515,97 @@ def test_an_id_key_is_integers_or_text():
     other.add_key("case", ["a", "b"], role="id")
 
 
+def _categorical(given):
+    ds = mestra.Dataset(writer="t")
+    ds.add_key("trim", given, role="categorical", categories=["a", "b"])
+    return ds, lambda back: back.keys["trim"].data.read()
+
+
+def _label(given):
+    ds = mestra.Dataset(writer="t")
+    ds.add_support("s", kind="axis", units="m",
+                   coordinates=np.arange(float(len(given)))[:, None])
+    ds.supports["s"].add_node_array("zone", given, role="label",
+                                    varies="none")
+    return ds, lambda back: back.supports["s"].node_arrays["zone"].values
+
+
+def _id(given):
+    ds = mestra.Dataset(writer="t")
+    ds.add_key("run", given, role="id")
+    return ds, lambda back: back.keys["run"].data.read()
+
+
+def _row_support(given):
+    ds = mestra.Dataset(writer="t")
+    ds.add_key("mach", [0.4, 0.5], role="condition", units="1")
+    ds.add_support("s0", coordinates=XY, cells=CELLS)
+    ds.add_support("s1", coordinates=XY[:4],
+                   cells=(np.array([9]), np.array([0, 4]),
+                          np.array([0, 1, 3, 2])))
+    ds.set_row_support(given)
+    return ds, lambda back: back.row_support
+
+
+def _cell_types(given):
+    ds = mestra.Dataset(writer="t")
+    ds.add_support("s", coordinates=XY[:3],
+                   cells=(given, np.array([0, 3]), np.array([0, 1, 2])))
+    return ds, lambda back: back.supports["s"].cell_types
+
+
+@pytest.mark.parametrize("build, given, first, remedy", [
+    (_categorical, np.array([2**32 + 1, 0]), "4294967297", 'dtype="<i8"'),
+    (_label, np.array([-7, 0, 2**31, -1]), "2147483648", 'dtype="<i8"'),
+    (_label, [-7, 0, 2**31, -1], "2147483648", 'dtype="<i8"'),
+    (_label, [0, 1.5, 2], "1.5", "pass integers"),
+    (_id, np.array([2**63, 1], dtype=np.uint64), "9223372036854775808",
+     "nothing wider"),
+    (_row_support, np.array([0, 2**32 + 1]), "4294967297",
+     "nothing wider"),
+    (_cell_types, np.array([256 + 5]), "261", "nothing wider"),
+], ids=["categorical key", "label", "label list", "label fraction",
+        "id key", "row support", "cell types"])
+def test_a_builder_does_not_change_a_value(tmp_path, build, given, first,
+                                           remedy):
+    """Section 19 decides the dtype, and nothing lets a writer change
+    a value to fit it. numpy's cast wrapped what the narrower type
+    could not hold, so 2**32 + 1 was stored as category 1, 2**31 as
+    -2**31 and cell type 261 as 5, a triangle, and each file
+    validated clean. A value either comes back as given or is
+    refused, naming the value and what to pass."""
+    path = str(tmp_path / "given.mes")
+    try:
+        ds, stored = build(given)
+        mestra.write(ds, path)
+    except MestraError as refused:
+        assert refused.rule == "E20"
+        assert "values holds %s" % first in refused.message
+        assert remedy in refused.message
+        return
+    with mestra.read(path, lazy=False) as back:
+        assert np.asarray(stored(back)).reshape(-1).tolist() == \
+            np.asarray(given).reshape(-1).tolist()
+
+
+def test_a_label_that_needs_int64_is_stored_as_given(tmp_path):
+    """The remedy the refusal names works: section 19 allows a label
+    to be int64, and the values come back as they were given."""
+    given = [-7, 0, 2**31, -1]
+    ds = mestra.Dataset(writer="t")
+    support = ds.add_support("s", kind="axis", units="m",
+                             coordinates=np.arange(4.0)[:, None])
+    support.add_node_array("zone", given, role="label", varies="none",
+                           dtype="<i8")
+    path = str(tmp_path / "wide.mes")
+    mestra.write(ds, path)
+    assert mestra.validate(path).error_ids == []
+    with mestra.read(path, lazy=False) as back:
+        zone = back.supports["s"].node_arrays["zone"].values
+        assert zone.dtype == np.dtype("<i8")
+        assert zone.values.reshape(-1).tolist() == given
+
+
 def test_two_supports_need_a_row_support(tmp_path):
     ds = mestra.Dataset(writer="t")
     ds.add_key("mach", [0.4, 0.5, 0.6], role="condition", units="1")
