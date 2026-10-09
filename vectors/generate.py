@@ -2673,6 +2673,12 @@ CASES = {
         "The root format attribute names a major version a version 0 "
         "reader must refuse outright.",
         errors=["E01"], support_ids={"s0": MESH_SID}),
+    "err_e01_noncanonical": mk(
+        mesh_base, {"format": "mestra/00"},
+        "The root format attribute is \"mestra/00\": a number a parser "
+        "may read as 0, but not the string \"mestra/0\" section 11 "
+        "gives. A version 0 reader refuses it (E01).",
+        errors=["E01"], support_ids={"s0": MESH_SID}),
     "err_e02": mk(
         mesh_base, {"mach_no_role": True},
         "A key with no role attribute.",

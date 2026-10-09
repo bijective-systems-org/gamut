@@ -267,8 +267,9 @@ def _read_root(f: h5py.File, ds: Dataset,
         raise MestraError("E01", "the root attribute format is missing",
                           "/")
     ds.format = read_attr(f, "format")
-    major = _major(ds.format)
-    if major != 0:
+    # The exact string, as section 11 gives it: "mestra/00" or a
+    # non-ASCII zero is not version 0 to any of the four readers.
+    if ds.format != "mestra/0":
         raise MestraError(
             "E01", "this reader accepts mestra/0 and the file says %r"
             % (ds.format,), "/")
@@ -286,14 +287,6 @@ def _read_root(f: h5py.File, ds: Dataset,
             _problem(ds, "/" + name, member.problem,
                      lossy=member.kind == h5safe.EXTERNAL,
                      rule=member.rule)
-
-
-def _major(text: Any) -> int | None:
-    """The major version of a `format` string, or None."""
-    if not isinstance(text, str) or not text.startswith("mestra/"):
-        return None
-    tail = text[len("mestra/"):]
-    return int(tail) if tail.isdigit() and len(tail) < 10 else None
 
 
 def _row_count(f: h5py.File, root: dict[str, h5safe.Member]) -> int:

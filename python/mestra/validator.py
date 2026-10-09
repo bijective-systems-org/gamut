@@ -356,11 +356,7 @@ class _FileValidator:
             self.error("E17", "/", "format is required")
             return False
         text = read_attr(self.f, "format")
-        major = None
-        if isinstance(text, str) and text.startswith("mestra/"):
-            tail = text[len("mestra/"):]
-            major = int(tail) if tail.isdigit() else None
-        if major != 0:
+        if text != "mestra/0":
             self.error("E01", "/", "this reader accepts mestra/0 and "
                                    "the file says %r" % (text,))
             return False

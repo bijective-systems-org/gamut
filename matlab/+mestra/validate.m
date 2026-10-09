@@ -180,8 +180,7 @@ function ok = checkFormat(ctx)
     end
     [value, ok] = H5.scalarAttr(ctx.root, 'format');
     if ~ok || ~ischar(value), value = ''; end
-    major = mestra.internal.Reader.majorVersion(value);
-    if isnan(major) || major ~= 0
+    if ~strcmp(value, 'mestra/0')
         ctx.rep.add('E01', '/', ...
             'format is "%s"; this reader accepts "mestra/0" only', value);
         return

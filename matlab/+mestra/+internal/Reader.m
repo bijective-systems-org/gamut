@@ -81,8 +81,9 @@ classdef Reader
             [value, ok] = H5.scalarAttr(root, 'format');
             d.format = '';
             if ok && ischar(value), d.format = value; end
-            major = mestra.internal.Reader.majorVersion(d.format);
-            if isnan(major) || major ~= 0
+            % The exact string, as section 11 gives it: str2double
+            % read "mestra/00", "mestra/+0" and "mestra/0e0" as 0.
+            if ~strcmp(d.format, 'mestra/0')
                 error('mestra:E01', ...
                       ['this reader accepts "mestra/0" and the file ' ...
                        'says "%s"; it will not be read partially (E01)'], ...
@@ -478,18 +479,6 @@ classdef Reader
                     tf = info.isScale;  % any other scale is the container's
                 end
             catch
-            end
-        end
-
-        function major = majorVersion(format)
-        %majorVersion  The n of "mestra/n", or NaN.
-            major = NaN;
-            if isempty(format), return, end
-            parts = strsplit(format, '/');
-            if numel(parts) ~= 2 || ~strcmp(parts{1}, 'mestra'), return, end
-            v = str2double(parts{2});
-            if ~isnan(v) && v == floor(v) && v >= 0
-                major = v;
             end
         end
 
