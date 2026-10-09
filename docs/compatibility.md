@@ -47,8 +47,9 @@ C++ reader, on a different libhdf5, lost 2 of the same set. Reading
 the damaged attribute raw, without the dimension-scale API, faults
 the same way, so there is no code path here that avoids it.
 
-What this means for a caller: the process boundary is the defence. The
-command line (`mestra validate`, `mestra info`, `mestra read`) is one,
+What this means for a caller: the process boundary is the defence. A
+command line (Python's `mestra validate` and `mestra info`, C++'s
+`mestra-cli validate`, `info` and `read`) is one,
 and a program that opens files nobody vouches for should do the same
 -- run the read in a child it can kill, as the hostile tests do. The
 truncation sweep is not affected: a truncated file is refused by rule

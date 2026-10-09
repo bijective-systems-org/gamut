@@ -98,9 +98,11 @@ to the structural equality rule of section 30, which is the normative
 comparison, because the HDF5 library decides the superblock and the
 object header layout and byte identity across HDF5 versions must not
 be tested. It then opens every case that must validate cleanly with
-two netCDF-4 readers that share no code and checks that each
-variable's dimension names are the link names of the scales attached
-to it. It exits non-zero on any difference or failure.
+two netCDF-4 readers that share no code (netCDF4 and h5netcdf, the
+package's `checks` extra; a missing one is reported as a failure, not
+skipped) and checks that each variable's dimension names are the link
+names of the scales attached to it. It exits non-zero on any
+difference or failure.
 
 The golden files are byte reproducible on one machine: object time
 tracking is off everywhere, `created` and `writer` are fixed strings,

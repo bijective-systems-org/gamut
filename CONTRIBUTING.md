@@ -30,6 +30,28 @@ across languages/HDF5 versions; require deterministic bytes only where
 SPEC section 30 does. Run the relevant tests locally and the full CI
 matrix before release. [releasing.md](docs/releasing.md) lists the gates.
 
+## Running the checks
+
+From the repository root, as `.github/workflows/ci.yml` runs them:
+
+    python vectors/generate.py --on-demand   # once: three files too big to commit
+    python vectors/check.py                  # needs h5py, numpy, netCDF4, h5netcdf
+
+    pip install -e "python/[dev]"
+    (cd python && python -m pytest -q && python -m ruff check . && python -m mypy)
+
+    cmake -S cpp -B cpp/build -DHDF5_ROOT=<hdf5 prefix> \
+          -DPython3_EXECUTABLE=<a python with h5py>
+    cmake --build cpp/build
+    ctest --test-dir cpp/build --output-on-failure
+
+    julia --project=julia -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
+
+    matlab -batch "addpath('matlab'); run('matlab/tests/run_tests.m')"
+
+Each language's README says more about its own setup;
+[cpp/README.md](cpp/README.md) explains `HDF5_ROOT`.
+
 The current callable envelope is intentionally small. A new tool can
 register its own callable type without making the model's internals
 part of Mestra. Readers that do not own that type preserve its dictionary

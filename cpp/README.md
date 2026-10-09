@@ -5,7 +5,9 @@ Install
 -------
 
 CMake, a C++17 compiler, and HDF5 with its headers and the high-level
-`H5DS` dimension-scale API. No other dependency.
+`H5DS` dimension-scale API. No other dependency. `HDF5_ROOT` is the
+prefix holding `include/H5DSpublic.h` and `lib/libhdf5_hl`: a conda
+environment with `hdf5` installed (what CI uses) or Homebrew's `hdf5`.
 
     cmake -S cpp -B cpp/build -DHDF5_ROOT="$HDF5_ROOT"
     cmake --build cpp/build -j

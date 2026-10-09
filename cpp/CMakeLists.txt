@@ -158,6 +158,12 @@ if(MESTRA_BUILD_TESTS)
       ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_examples.py
       --bin ${MESTRA_EXAMPLE_BINARIES}
       --examples ${CMAKE_CURRENT_SOURCE_DIR}/../docs/examples)
+  else()
+    # Without this a ctest run of `unit` alone reports success.
+    message(WARNING
+      "mestra: no Python 3 interpreter, so only the `unit` test is "
+      "registered; the corpus, metadata, hostile and example tests are "
+      "not. Pass -DPython3_EXECUTABLE=<a python with h5py>.")
   endif()
 endif()
 
