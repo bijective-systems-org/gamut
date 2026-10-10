@@ -21,6 +21,7 @@ is `<id> <path>: <message>` and a run ends with
 from __future__ import annotations
 
 import argparse
+import errno
 import os
 import sys
 from collections.abc import Sequence
@@ -102,7 +103,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Flushed here, so that a reader that has gone away is met in
         # this block and not by the interpreter's flush at exit.
         sys.stdout.flush()
-    except BrokenPipeError:
+    except OSError as exc:
+        if not _reader_gone(exc):
+            raise
         # Whatever was reading the output stopped (`mestra info f |
         # head`). Nothing is wrong with the file, so nothing more is
         # said; stdout goes to the null device so that the interpreter's
@@ -111,6 +114,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         os.dup2(devnull, sys.stdout.fileno())
         return 1
     return status
+
+
+def _reader_gone(exc: OSError) -> bool:
+    """Whether a failed write to stdout means its reader went away.
+
+    POSIX says so with EPIPE, which Python raises as BrokenPipeError.
+    Windows says EINVAL: a write to a pipe whose reading end is closed
+    fails there with ERROR_NO_DATA, which the C runtime reports as
+    EINVAL. Only a write reaches main()'s handler, because both
+    commands catch the errors of the files they read.
+    """
+    return isinstance(exc, BrokenPipeError) or (
+        sys.platform == "win32" and exc.errno == errno.EINVAL)
 
 
 def _validate(paths: Sequence[str], quiet: bool) -> int:
