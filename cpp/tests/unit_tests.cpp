@@ -708,6 +708,20 @@ void conventions_write() {
     check::is_true("one dataset written twice gives the same bytes",
                    !a.empty() && a == b);
   }
+
+  // Writing over a file replaces it (docs/compatibility.md, "Replacing
+  // files"), on Windows too, where the C library's rename will not
+  // replace an existing file.
+  bool replaced = true;
+  try {
+    mestra::write(d, again);
+  } catch (const mestra::Error&) {
+    replaced = false;
+  }
+  check::is_true("a write replaces the file already at its path",
+                 replaced && mestra::validate(again).ok());
+  check::is_true("nothing is left beside a replaced file",
+                 !std::ifstream(again + ".mestra-writing").good());
   std::remove(again.c_str());
 
   // An easy trap to fall into: `varies` is assigned on a

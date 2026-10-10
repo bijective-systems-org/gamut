@@ -698,10 +698,16 @@ void write(const Dataset& d, const std::string& path,
     std::remove(beside.c_str());
     throw Error(r.errors.front().id, findings_text(path, r));
   }
-  if (std::rename(beside.c_str(), path.c_str()) != 0) {
+  // std::filesystem::rename replaces an existing file on every platform
+  // (MoveFileExW with MOVEFILE_REPLACE_EXISTING on Windows), as
+  // append_rows' publish does; the C library's rename refuses one on
+  // Windows, so a write over a file failed there.
+  std::error_code ec;
+  std::filesystem::rename(beside, path, ec);
+  if (ec) {
     std::remove(beside.c_str());
     throw Error("", "cannot move the written file into place at \"" + path +
-                        "\"");
+                        "\": " + ec.message());
   }
 }
 
