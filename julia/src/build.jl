@@ -72,9 +72,24 @@ function numbers(values, T::Union{Nothing,Type}, path;
         return convert(Array{T}, a)
     catch e
         e isa InexactError || rethrow()
+        # The value is found here rather than read off the error, whose
+        # fields are not the same in every Julia version.
+        j = findfirst(x -> !holds(T, x), a)
+        bad = j === nothing ? "one of them" : repr(a[j])
         throw(MestraError("E20", path,
             "`$(argument)` must be $(what) that $(T) can hold, and " *
-            "$(repr(e.val)) is not; pass `eltype`, or convert the array"))
+            "$(bad) is not; pass `eltype`, or convert the array"))
+    end
+end
+
+"""Whether `T` holds `x` exactly."""
+function holds(::Type{T}, x) where {T}
+    try
+        convert(T, x)
+        return true
+    catch e
+        e isa InexactError || rethrow()
+        return false
     end
 end
 
