@@ -438,6 +438,8 @@ classdef Dataset < handle
                     mestra.Dataset.observedBounds(role, rec(1).values, ...
                                                   r.Lower, r.Upper);
             end
+            mestra.Dataset.checkFits(rec(1).values, rec(1).dtype, path, ...
+                                     'VALUES', role);
             obj.checkCategories(rec(1).category, rec(1).values, path);
             obj.noteRows(numel(rec(1).values));
             obj.keys = mestra.Dataset.append(obj.keys, rec, name);
@@ -548,6 +550,16 @@ classdef Dataset < handle
             rec(1).name = name;
             rec(1).kind = kind;
             rec(1).nNodes = double(nNodes);
+            % Section 19 fixes these dtypes, so a value they cannot
+            % hold is refused (E20) rather than converted.
+            at = ['/supports/' name '/'];
+            mestra.Dataset.checkFits(r.CellTypes, 'uint8', ...
+                                     [at 'cell_types'], 'CellTypes');
+            mestra.Dataset.checkFits(r.CellOffsets, 'int64', ...
+                                     [at 'cell_offsets'], 'CellOffsets');
+            mestra.Dataset.checkFits(r.CellConnectivity, 'int64', ...
+                                     [at 'cell_connectivity'], ...
+                                     'CellConnectivity');
             rec(1).cellTypes = uint8(r.CellTypes(:)');
             rec(1).cellOffsets = int64(r.CellOffsets(:)');
             rec(1).cellConnectivity = int64(r.CellConnectivity(:)');
@@ -838,6 +850,10 @@ classdef Dataset < handle
 
         function setRowSupport(obj, values)
         %setRowSupport  Which support each row is on, zero based.
+        %   /row_support is int32 (section 19), so a value that type
+        %   cannot hold is refused (E20) rather than converted.
+            mestra.Dataset.checkFits(values, 'int32', '/row_support', ...
+                                     'VALUES');
             obj.rowSupport = int32(reshape(values, 1, []));
             obj.noteRows(numel(obj.rowSupport));
             obj.aligned = numel(obj.supports) <= 1;
@@ -1041,11 +1057,13 @@ classdef Dataset < handle
             sz = [sz ones(1, numel(wanted) - numel(sz))];
             slot(1).shape = fliplr(sz(1:numel(wanted)));
             obj.checkExtent(slot(1), supportName, location, path, given);
-            obj.checkCategories(r.Category, slot(1).values, path);
             slot(1).dtype = r.Dtype;
             if isempty(slot(1).dtype)
                 slot(1).dtype = mestra.Dataset.dtypeForArrayRole(role, values);
             end
+            mestra.Dataset.checkFits(slot(1).values, slot(1).dtype, path, ...
+                                     'VALUES', role);
+            obj.checkCategories(r.Category, slot(1).values, path);
             slot(1).components = r.Components;
             if isempty(slot(1).components)
                 slot(1).components = size(slot(1).values, 1);
@@ -1261,6 +1279,78 @@ classdef Dataset < handle
                       ['E19: %s: %s is a finite float64 bound, and %s is ' ...
                        'not; give a number, or leave it out for the ' ...
                        'observed one'], path, label, mat2str(value));
+            end
+        end
+
+        function checkFits(values, dtype, path, argument, role)
+        %checkFits  E20 at build time: a value its integer dtype
+        %   cannot hold (section 19).
+        %
+        %   The values a builder is handed are converted to the dtype
+        %   of section 19 when the file is written, and MATLAB's
+        %   integer conversion saturates and rounds without a word:
+        %   2^31 would be stored as 2147483647, 2.5 as 3 and NaN as 0,
+        %   a file with a value nobody gave.  A value that is not a
+        %   whole number inside the range of the dtype is refused
+        %   here instead, naming the argument it came in and the first
+        %   value that does not fit.  ROLE, when given, is the role of
+        %   a key or an array, and says whether int64 is a way out.
+            if nargin < 5, role = ''; end
+            if isempty(values) || ~isnumeric(values) || ...
+                    ~any(strcmp(dtype, {'int8', 'uint8', 'int32', 'int64'}))
+                return
+            end
+            lo = intmin(dtype);
+            hi = intmax(dtype);
+            v = values(:);
+            if isinteger(v)
+                % Compared in the class of the values, which holds the
+                % bounds of the dtype exactly or saturates them where
+                % every value it holds is inside anyway.
+                bad = find(v < cast(lo, class(v)) | v > cast(hi, class(v)), 1);
+            else
+                % double(intmax('int64')) rounds up to 2^63, which
+                % int64 cannot hold, so the top is exclusive.
+                x = double(v);
+                bad = find(imag(x) ~= 0 | ~isfinite(x) | x ~= round(x) | ...
+                           x < double(lo) | x >= double(hi) + 1, 1);
+            end
+            if isempty(bad), return, end
+            remedy = '';
+            x = double(v(bad));
+            if strcmp(dtype, 'int32') && isreal(x) && isfinite(x) && ...
+                    x == round(x) && ...
+                    any(strcmp(role, {'label', 'categorical', 'group', ...
+                                      'split', 'status'}))
+                % Section 19 allows int64 for these roles.
+                remedy = [', or store it as int64 by passing int64 ' ...
+                          'values or ''Dtype'', ''int64'''];
+            end
+            error('mestra:E20', ...
+                  ['E20: %s: the value %s in %s does not fit %s, which ' ...
+                   'holds the whole numbers %d to %d; converting it ' ...
+                   'would store a different number, so correct the ' ...
+                   'value%s'], ...
+                  path, mestra.Dataset.showNumber(v(bad)), argument, ...
+                  dtype, lo, hi, remedy);
+        end
+
+        function s = showNumber(x)
+        %showNumber  A number as text, exactly enough to recognise it.
+            if isinteger(x) && startsWith(class(x), 'u')
+                % %d prints a uint64 above intmax('int64') as %e.
+                s = sprintf('%u', x);
+            elseif isinteger(x)
+                s = sprintf('%d', x);
+            elseif ~isreal(x)
+                s = num2str(x);
+            elseif isfinite(x) && x == round(x)
+                s = sprintf('%.0f', x);
+            else
+                s = sprintf('%.15g', x);
+                if str2double(s) ~= x
+                    s = sprintf('%.17g', x);
+                end
             end
         end
 

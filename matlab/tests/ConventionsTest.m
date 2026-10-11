@@ -157,6 +157,82 @@ classdef ConventionsTest < matlab.unittest.TestCase
                 'mestra:E10');
         end
 
+        function aBuilderNeverChangesAValue(testCase)
+        %aBuilderNeverChangesAValue  Section 19 decides the dtype, and
+        %   MATLAB's integer conversion saturates and rounds without a
+        %   word: a categorical key 2^32 + 1 was written as 2147483647,
+        %   an id 2^63 as 2^63 - 1 and a label 2.5 as 3.  A value that
+        %   its dtype cannot hold is refused at build time with E20,
+        %   which names the value, and checked before the category
+        %   table so that every implementation gives the same rule.
+            d = mestra.Dataset();
+            d.addCategoryTable('regime', {'a', 'b'});
+            err = ConventionsTest.errorFrom(testCase, ...
+                @() d.addKey('regime', [2^32 + 1, 0], 'categorical', ...
+                             'Category', 'regime'), 'mestra:E20');
+            testCase.verifyTrue(startsWith(err.message, 'E20: /keys/regime: '));
+            testCase.verifySubstring(err.message, 'the value 4294967297');
+            testCase.verifySubstring(err.message, '''Dtype'', ''int64''');
+
+            err = ConventionsTest.errorFrom(testCase, ...
+                @() d.addKey('run', uint64([2^63 1]), 'id'), 'mestra:E20');
+            testCase.verifySubstring(err.message, 'the value 9223372036854775808');
+            testCase.verifyFalse(contains(err.message, 'Dtype'), ...
+                'section 19 allows nothing wider than int64 for an id');
+
+            e = ConventionsTest.twoRows();
+            err = ConventionsTest.errorFrom(testCase, ...
+                @() e.addNodeArray('s0', 'zone', [-7 0 2^31 -1 0 0], ...
+                                   'label', 'Dims', {'component', 'node'}), ...
+                'mestra:E20');
+            testCase.verifySubstring(err.message, '/supports/s0/node_arrays/zone');
+            testCase.verifySubstring(err.message, 'the value 2147483648');
+            testCase.verifySubstring(err.message, '''Dtype'', ''int64''');
+            for bad = {2.5, NaN}
+                err = ConventionsTest.errorFrom(testCase, ...
+                    @() e.addNodeArray('s0', 'zone', [0 1 bad{1} 0 0 0], ...
+                                       'label', 'Dims', {'component', 'node'}), ...
+                    'mestra:E20');
+                testCase.verifySubstring(err.message, ...
+                    sprintf('the value %s', num2str(bad{1})));
+                testCase.verifyFalse(contains(err.message, 'int64'), ...
+                    'a value that is not a whole number has no wider dtype');
+            end
+
+            err = ConventionsTest.errorFrom(testCase, ...
+                @() mestra.Dataset().setRowSupport([0, 2^32 + 1]), ...
+                'mestra:E20');
+            testCase.verifyTrue(startsWith(err.message, 'E20: /row_support: '));
+            testCase.verifySubstring(err.message, 'the value 4294967297');
+
+            err = ConventionsTest.errorFrom(testCase, ...
+                @() mestra.Dataset().addMeshSupport('s', [0 1 0; 0 0 1], ...
+                        261, int64([0 3]), int64([0 1 2]), 'm'), ...
+                'mestra:E20');
+            testCase.verifyTrue(startsWith(err.message, ...
+                'E20: /supports/s/cell_types: '));
+            testCase.verifySubstring(err.message, 'the value 261');
+        end
+
+        function aLabelThatNeedsInt64IsStoredAsGiven(testCase)
+        %aLabelThatNeedsInt64IsStoredAsGiven  The remedy the refusal
+        %   names works: section 19 allows a label to be int64, and
+        %   the values come back as they were given.
+            d = ConventionsTest.twoRows();
+            given = [-7 0 2^31 -1 0 0];
+            d.addNodeArray('s0', 'zone', given, 'label', ...
+                           'Dims', {'component', 'node'}, 'Dtype', 'int64');
+            out = [tempname() '.mes'];
+            cleanup = onCleanup(@() ConventionsTest.removeIfPresent(out));
+            mestra.write(d, out);
+            r = mestra.validate(out);
+            testCase.verifyEmpty(r.errors, strjoin(r.errors, ','));
+            back = mestra.read(out);
+            zone = back.nodeArray('s0', 'zone');
+            testCase.verifyClass(zone.values, 'int64');
+            testCase.verifyEqual(double(zone.values(:)'), given);
+        end
+
         function boundsDefaultToTheObservedRange(testCase)
         %boundsDefaultToTheObservedRange  Section 1: the same arrays
         %   written by any implementation must give the same file,
