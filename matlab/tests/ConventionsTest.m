@@ -510,6 +510,21 @@ classdef ConventionsTest < matlab.unittest.TestCase
             testCase.verifyEqual(r.errors, {'E16'});
         end
 
+        function aWriteToARelativeNameLandsInTheCurrentFolder(testCase)
+        %aWriteToARelativeNameLandsInTheCurrentFolder  A checked write
+        %   publishes through Java, which took a relative name from the
+        %   folder MATLAB started in rather than the one cd chose; on
+        %   Windows the staged file was then not found and the write
+        %   failed.
+            folder = tempname();
+            mkdir(folder);
+            back = cd(folder);
+            cleanup = onCleanup(@() ConventionsTest.leaveFolder(back, folder));
+            mestra.write(ConventionsTest.twoRows(), 'relative.mes');
+            testCase.verifyEqual(exist(fullfile(folder, 'relative.mes'), 'file'), 2);
+            testCase.verifyEmpty(mestra.validate(fullfile(folder, 'relative.mes')).errors);
+        end
+
         function aRefusedWriteLeavesTheOldFileAlone(testCase)
         %aRefusedWriteLeavesTheOldFileAlone  The file outlives the
         %   session that made it, so a refusal must not destroy one.
@@ -1100,6 +1115,13 @@ classdef ConventionsTest < matlab.unittest.TestCase
         function removeIfPresent(path)
             if exist(path, 'file') == 2
                 delete(path);
+            end
+        end
+
+        function leaveFolder(back, folder)
+            cd(back);
+            if exist(folder, 'dir') == 7
+                rmdir(folder, 's');
             end
         end
     end

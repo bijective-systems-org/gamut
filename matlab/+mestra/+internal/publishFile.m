@@ -9,10 +9,17 @@ function publishFile(source, target)
     end
     options = javaArray('java.nio.file.CopyOption', 1);
     options(1) = java.nio.file.StandardCopyOption.ATOMIC_MOVE;
-    from = java.io.File(char(source));
-    to = java.io.File(char(target));
+    % Both names are resolved against MATLAB's current folder here. Java
+    % takes a relative path from the folder MATLAB started in, which cd
+    % does not move: on macOS and Linux the operating system resolves it
+    % against the process's folder, which cd does move, but on Windows
+    % Java resolves it itself, so a write to a relative name found its
+    % staged file missing (NoSuchFileException).
+    here = java.io.File(pwd).toPath();
+    from = here.resolve(char(source));
+    to = here.resolve(char(target));
     try
-        java.nio.file.Files.move(from.toPath(), to.toPath(), options);
+        java.nio.file.Files.move(from, to, options);
     catch cause
         problem = MException('mestra:write', ...
             'could not atomically publish the file at %s: %s', target, cause.message);
