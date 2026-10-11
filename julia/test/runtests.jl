@@ -805,6 +805,20 @@ end
     e = refusal(() -> Mestra.add_key!(ds, "split", [0.0, 1.0]; role = :split,
                                       category = "split"))
     @test e !== nothing && e.rule == "E20" && occursin("integers", e.msg)
+    # a category id int32 cannot hold, and a label value: the refusal
+    # names the value, whatever fields this Julia's InexactError has
+    Mestra.add_category_table!(ds, "regime", ["a", "b"])
+    e = refusal(() -> Mestra.add_key!(ds, "regime", Int64[0, 2^32 + 1];
+                                      role = :categorical,
+                                      category = "regime"))
+    @test e !== nothing && e.rule == "E20" && e.path == "/keys/regime"
+    @test occursin("Int32 can hold, and 4294967297 is not", e.msg)
+    e = refusal(() -> Mestra.add_node_array!(ds, axis, "zone",
+            Int64[0, 1, 2^31]; role = :label, dims = (:node,),
+            eltype = Int32))
+    @test e !== nothing && e.rule == "E20"
+    @test e.path == "/supports/t/node_arrays/zone"
+    @test occursin("2147483648 is not", e.msg)
     # a key or a scalar is one column
     e = refusal(() -> Mestra.add_key!(ds, "alpha", [1.0 2.0; 3.0 4.0];
                                       role = :condition, units = "1"))
