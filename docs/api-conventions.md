@@ -7,7 +7,10 @@ follows them, so a user moving between languages meets the same
 names, the same order,
 the same defaults, and the same messages. Where a language's idiom
 forces a difference (keyword arguments, name-value pairs, a struct),
-the difference is in syntax only.
+the shared operation retains its meaning. Available helpers and
+implementation limits are listed in `compatibility.md` and each
+language's README; this convention is not a claim that every helper
+ships in every language.
 
 
 1. Building
@@ -15,8 +18,10 @@ the difference is in syntax only.
 
 Keys: `add_key(name, values, role, units)` in that order. The role and
 the units are required for design, condition, and time keys. A
-categorical, group, split, id, or status key takes `category` naming
-its table instead of units. Bounds: when the caller gives none, the
+categorical, group, split, or status key takes `category` naming
+its table instead of units. An id key stores unique integer or string
+identifiers and requires neither units nor a category table.
+Bounds: when the caller gives none, the
 builder records the observed finite minimum and maximum as `lower`
 and `upper`, so that every writer produces the same file from the same
 arrays and W04 and W08 are decidable on every file. A caller who wants
@@ -24,7 +29,9 @@ a wider domain of validity passes `lower` and `upper` explicitly.
 
 Category tables: one way per language, `add_category_table(name,
 entries)` before the key or label that uses it; the key or label then
-names it with `category`. No inline alternative.
+names it with `category`. This is the explicit form the documents use;
+an inline convenience such as Python's `categories=` may create that
+same table before adding the key.
 
 The unit of generalisation: a dataset property, set by
 `set_generalisation_group(name)` (spelled to the language's idiom),
@@ -41,9 +48,10 @@ builder derives `varies` from `dims` (a `row` axis means row, a
 `group:<k>` axis means that group, neither means none) and derives
 `components` from the component axis or adds a component axis of
 length one. A caller who passes `varies` as well as `dims` gets an
-error at build time if they disagree. Every builder refuses at build
-time, with the rule id, anything the validator would refuse; the model
-message is Python's for E04.
+error at build time if they disagree. Builders refuse invalid arguments
+they can decide at that call, with the rule id; the model message is
+Python's for E04. Whole-dataset invariants still need validation and a
+checked write.
 
 Callables: `add_callable(id, callable)` then `add_callable_slot(...)`
 with the same argument order as the array builders plus `callable`
@@ -62,8 +70,10 @@ defaults to `coordinates`.
 ----------------------
 
 `write(dataset, path)` validates first and refuses on any error, with
-the findings, unless the caller passes `check=false`. A file written
-by any implementation validates clean in every implementation.
+the findings, unless the caller passes `check=false`. That option does
+not bypass every writer refusal; see the preservation limits below.
+Checked output must obey the shared public contract, within the
+implementation capabilities in `compatibility.md`.
 
 A checked write stages beside the destination, closes the file and
 publishes it only on success. A prepublication failure preserves an
@@ -193,17 +203,17 @@ about. A producer that wants records on the result attaches its own
 at write time. `/notes` is carried, because it is the format's own
 optional text about the content, and the content is the same.
 
-An unknown dataset inside a known group. Section 14 leaves it
-outside the byte-level rules, and a reader does not know what it
-means, so a rewrite does not carry it: the reader lists its path
-among the dataset's lossy paths, and `write` refuses a dataset with
-a lossy path unless the caller passes `check=false`, in which case
-the path is dropped and the refusal is the caller's to own. This is
-the same treatment an external link gets. The alternative, copying
-bytes a reader cannot describe, would make every writer responsible
-for a shape no rule constrains; the one thing that is not allowed is
-dropping it in silence. An unknown *group* is untouched under W11
-and section 28, which is unchanged.
+An unknown dataset inside a known group. Public byte-level rules still
+apply: `err_e25_unknown_dataset` is a corpus example, and W11 does not
+cover unknown datasets. A reader does not know their meaning, so the
+interface convention requires listing what a rewrite cannot preserve
+as lossy and refusing a checked rewrite rather than dropping it silently.
+Current Python source does not establish complete inventory of unknown
+public datasets; do not rely on a successful rewrite to prove retention.
+`check=false` is not a portable conversion guarantee: Python refuses
+a dataset with recorded lossy paths even with that option. See the
+preservation limits in `compatibility.md`. Unknown *groups* have the
+separate W11 and section 28 treatment; supported opaque content is preserved.
 
 
 8. Predictions
