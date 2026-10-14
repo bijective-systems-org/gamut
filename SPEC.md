@@ -747,8 +747,10 @@ Layout:
     be read everywhere, because one binding in common use cannot carry a
     fixed-length string that is not (section 25).
   - Category tables hold fixed-length UTF-8 strings (section 19).
-  - float32 is not allowed anywhere; a producer that computes in single
-    precision widens on write (section 19).
+  - float32 is not allowed for public numeric values; a producer that
+    computes in single precision widens on write (section 19). The
+    dimension-scale placeholders of section 21 are not value arrays.
+    Private content is outside these byte-level rules (section 14).
   - The component dimension is always present, with length 1 for a
     single-component quantity (sections 4 and 19).
   - `row` is an unlimited dimension in every file, which is what makes a
@@ -1065,7 +1067,11 @@ way (E19).
   string    a fixed-length HDF5 string, scalar dataspace, with
             character set H5T_CSET_UTF8 and padding H5T_STR_NULLPAD.
 
-A writer must not use a variable-length string anywhere in the file.
+A writer must not use a variable-length string for the public values and
+attributes defined by this format or in its callable dictionary codec.
+The dimension-scale machinery has the exception stated in section 13;
+private and unknown content have the boundaries stated in sections 14,
+28 and 29.
 
 The size of a string attribute is the number of bytes in the UTF-8
 encoding of the value, or 1 when the value is the empty string, since
@@ -1112,8 +1118,10 @@ _NCProperties.
 19. Dataset encodings
 ---------------------
 
-Every numeric dataset is little-endian and in C (row-major) order. The
-format has no missing-value convention: a writer must not set an HDF5
+Numeric value datasets are little-endian and in C (row-major) order.
+The dimension-scale placeholders instead use the encoding of section 21;
+no values are read from them. Private and unknown content remain outside
+the byte-level rules as section 14 states. The format has no missing-value convention: a writer must not set an HDF5
 fill value and must not write a `_FillValue` attribute, a reader must
 ignore one if it finds it, and every element the file declares must be
 written. Missing floating-point data is NaN, which the validator
@@ -1121,8 +1129,10 @@ reports (W03). Missing integer data has no representation; use a
 status key or a category for it.
 
 Dtypes by role. Any other dtype is an error (E20). float32 is not
-allowed anywhere: a producer that computes in single precision widens
-on write, so that two readers never disagree about a value.
+allowed for these public values: a producer that computes in single
+precision widens on write, so that two readers never disagree about a
+value. Dimension-scale placeholders follow section 21; private content
+is not validated by this table (section 14).
 
   coordinates, field, derived, weight, normal   float64
   a scalar under /scalars                       float64

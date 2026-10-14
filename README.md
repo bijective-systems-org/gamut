@@ -16,17 +16,22 @@ every tool that reads the folder has to guess it again. mestra writes
 it into the file, where a validator can check it:
 
 - A train/test split that puts one geometry, or one transient run, on
-  both sides is reported (W01). A model scored that way is scored on
-  cases it has already seen.
+  both sides is reported (W01). Such a split does not test
+  generalisation to unseen units; consumers choose and enforce the
+  modelling policy.
 - Every field and scalar carries units in the UDUNITS grammar that CF
   uses (E11, W10), and every run can say whether it converged (W02).
 - Whether every row is on the same mesh is stated in the file, and
-  each mesh carries an id hashed from its connectivity (E08), so two
-  files can be checked for sharing a mesh before their rows are
-  compared or combined.
-- A fitted model is a file of the same shape with no rows: its slots
-  name the model that serves them, its keys carry the range it was
-  trained over, and its support has the same id as its training data.
+  each mesh carries an id hashed from its node count and connectivity
+  (E08). Matching ids establish structural support identity, not that
+  independent producers gave node k the same physical meaning.
+  Producers establish that correspondence before rows are compared
+  or combined.
+- A fitted model can be a file of the same shape with no rows: its
+  slots name the callable that serves them and its keys carry bounds.
+  A file may also carry rows, stored values and callable slots together;
+  each slot's `source`, rather than the row count, decides its content.
+  A matching support id checks structure, not model validity.
 
 It is for engineers who run parametric or transient studies and want
 the results to outlive the script that made them, for people who fit
@@ -40,6 +45,11 @@ without this package:
 
     import xarray as xr
     xr.open_datatree("run.mes")     # every group, every named dimension
+
+Reading a callable's interface does not execute it: evaluation needs the
+software that owns its type and any licence that software requires.
+Generic netCDF tools can read the public layout, but their rewrites are
+not necessarily conforming mestra files (SPEC section 21).
 
 What mestra adds is the meaning: roles, units, alignment, statistics
 and models, stored as attributes any HDF5 reader can see.
