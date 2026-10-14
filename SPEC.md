@@ -1120,7 +1120,7 @@ _NCProperties.
 
 Numeric value datasets are little-endian and in C (row-major) order.
 The dimension-scale placeholders instead use the encoding of section 21;
-no values are read from them. Private and unknown content remain outside
+no values are read from them. Private content and ignored unknown groups remain outside
 the byte-level rules as section 14 states. The format has no missing-value convention: a writer must not set an HDF5
 fill value and must not write a `_FillValue` attribute, a reader must
 ignore one if it finds it, and every element the file declares must be

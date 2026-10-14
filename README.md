@@ -64,7 +64,7 @@ What a file holds:
     arrays      fields and labels on a support, with what they vary
                 along: the row, a group, or nothing
     callables   a slot may name the model that produces it, so a
-                fitted model is a file with no rows
+                fitted model may have no rows
     alignment   every row on the same support: stated, and checkable
 
 Install:
