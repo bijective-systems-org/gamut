@@ -76,7 +76,8 @@ what a helper returns -- put the full detail in the docstring, help text or
 header comment. The README may retain a short qualification needed to use
 its example correctly, with a route to the authoritative detail.
 
-One addition is allowed. Section 4 of `api-conventions.md` requires a
-language without the post-processing helpers to say so under a heading
-of its own; where that applies, that heading is the sixth section and
-goes after "What the reader refuses".
+Section 4 of `api-conventions.md` requires a language without the
+post-processing helpers to say so under a heading of its own, after
+"What the reader refuses". Additional implementation-specific workflow
+sections are useful when needed to complete a task, such as C++ row-wise
+appending; keep full API detail beside the calls and link to it.
