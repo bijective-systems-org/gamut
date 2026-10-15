@@ -4,20 +4,20 @@ A guide to mestra
 This is for an engineer who has simulation results, or a model fitted
 to them, and wants one file that says what they are. It explains the
 model in plain words and points at one runnable example per idea. It
-is not the reference: `../SPEC.md` is, and this guide links into it by
+is not the reference: [SPEC.md](../SPEC.md) is, and this guide links into it by
 section rather than repeating it.
 
-Read it in order once; it is about twenty minutes with the README.
-Every example lives under `examples/`, is under thirty lines, and its
+Read it in order once, alongside the [README](../README.md).
+Every example lives under [examples/](examples/), and its
 README states the data and the exact output, so you can check a run
 against the page. The output blocks are what the Python script
 prints; a port in another language prints the same values in that
 language's own formatting.
 
-The examples are written in Python because the package installs in one
-line. The same calls exist in MATLAB, C++ and Julia under the same
-names and in the same order (`api-conventions.md`), so nothing here is
-Python-only except the spelling.
+The examples are written in Python. The shared APIs follow the names,
+argument order and defaults in [API conventions](api-conventions.md); available helpers
+and language limits are listed in [compatibility](compatibility.md) and each language's
+README. The examples include ports in MATLAB, C++ and Julia.
 
 
 1. What a file holds
@@ -56,7 +56,9 @@ Every key carries a *role*, and the role is what tools act on
     status       whether the row is fit to use
 
 A design, condition or time key carries units; a categorical, group,
-split, id or status key carries the name of a category table instead.
+split or status key carries the name of a category table instead.
+An id key stores unique integer or string identifiers, without requiring
+a category table.
 The units are strings in the UDUNITS grammar that CF uses: `Pa`,
 `m s-1`, `W m-2`, and `1` for a dimensionless quantity.
 
@@ -68,11 +70,11 @@ finite range, so the same arrays give the same file in every language.
 Pass `lower` and `upper` yourself when the domain of validity is wider
 than the data you happen to have.
 
-*Status.* The words the validator knows are `converged`, `failed` and
-`partial`. A producer may add its own, but only `converged` means the
-row is fit for modelling; any other value is reported as W02, which is
-a warning and not a refusal. A file whose status column says `ok` will
-warn on every row.
+*Status.* `converged`, `failed` and `partial` are recommended category
+names; a producer may add its own. Rows not marked `converged` must be
+excluded from modelling unless explicitly requested (SPEC section 3).
+They produce W02, a warning rather than a refusal; a status of `ok`
+therefore warns. This eligibility rule does not certify model fitness.
 
 A scalar is simpler: a per-row number with units, and nothing else.
 
@@ -154,10 +156,10 @@ over, and it is a property of the dataset, not of the key:
     ds.set_generalisation_group("member")
 
 It matters because of splits. A split that puts rows of one unit on
-both sides is not a generalisation test: the model has already seen
-that geometry, and its test score is flattering. A file carrying such
-a split is valid, and the validator warns W01 and names the unit that
-leaked. The helper `grouped_split` moves whole units, takes a seed
+both sides does not test generalisation to unseen units. The size and
+direction of its effect on a score depend on the data and model. A file
+carrying such a split is valid; the validator warns W01 and names the
+shared unit. The helper `grouped_split` moves whole units, takes a seed
 with a documented default, and refuses to run on a file that declares
 no unit of generalisation.
 
@@ -179,18 +181,19 @@ split written the naive way and the leak it causes.
 5. Alignment, and why it is the point
 -------------------------------------
 
-A file is *aligned* when it declares at most one support, so that
-every row is on the same one and node 3 means the same node in every
-row. That is what makes per-node comparison across rows, coordinate
-ensembles and reduced bases valid, and it is stated in the file as
-`aligned` rather than assumed (SPEC section 8). A file with several
+A file is *aligned* when it declares at most one support (SPEC section
+8). The producer establishes the correspondence that makes node 3 mean
+the same thing across rows; a structural declaration alone cannot do
+that. Given that correspondence, the shared support allows per-node
+comparison, coordinate ensembles and reduced bases. A file with several
 supports is valid and not aligned, and says so.
 
 Each support also carries a `support_id`, a hash over its node count
 and its connectivity, and over its coordinates as well when it is an
-axis (SPEC section 24). Within one file it adds nothing. Across files it
-is the whole check: a model file and the training file it was fitted
-on agree on one attribute, with no array read and no tolerance.
+axis (SPEC section 24). Within one file it adds nothing. Across files,
+matching ids establish structural support identity. They do not establish
+physical correspondence between independent producers or identify mesh
+geometry for geometry-dependent caches (`compatibility.md`).
 
     print(support.support_id[:16])
 
@@ -202,23 +205,28 @@ connectivity are on different supports by definition.
 ---------------------------
 
 Any slot may hold stored data or name a *callable* that produces it
-(SPEC section 10). A fitted model is therefore an ordinary file with
-zero rows: its key columns carry only their bounds, which is the
-domain the model is valid over, and its slots carry their units and
+(SPEC section 10). A fitted model may be an ordinary file with zero
+rows: its key columns then carry bounds declaring its domain, and its
+slots carry their units and
 their shape and say `source = callable:m1`. A mesh support's
 coordinates are a slot too, so a model of the geometry itself is the
 same kind of file: the support carries its cells and its node count,
-and its coordinates are served, beside the fields on them.
+and its coordinates are served, beside the fields on them. A file may
+also combine rows, stored values and callable slots; `source` decides
+what each slot holds, not the row count. Bounds declare a domain rather
+than proving predictive accuracy throughout it.
 
 A callable is four things and nothing more: call it with a keys table
 and get one prediction per output back, a mean and, when the model
 has one, a band; turn it into a dictionary; rebuild it from one; and
 optionally describe itself in a line. Everything else it knows,
 including its algorithm and its fitted state, lives inside that
-dictionary and is nobody else's business. That is what keeps a
+dictionary. That is what keeps a
 proprietary model and an open format compatible: the `type` string is
 public, so a reader knows which tool can evaluate it, and the contents
-are opaque to every reader that does not own the type.
+are opaque to every reader that does not own the type. Reading the
+interface does not execute the model; execution needs the owning
+runtime and any licence it requires. Opaque storage is not encryption.
 
 Evaluating a file on a keys table gives a file with the same slots,
 now holding data and no callables at all. Distillation is that
@@ -278,7 +286,8 @@ group, in which a producer keeps its own records in whatever form it
 likes. A writer must not put public information in either of them, and
 a reader must not require anything from either (SPEC section 12). A
 distilled table is stored data and therefore public; the model that
-produced it is not.
+produced it is opaque. This is a schema boundary, not a confidentiality
+guarantee for the bytes in a file.
 
 
 9. Validating a file
@@ -300,9 +309,9 @@ returns a report you can ask by rule id:
     report = mestra.validate("run.mes")
     report.ok, report.error_ids, report.warning_ids
 
-Three habits save time. First, you will usually meet a rule before the
-file exists: every builder refuses at build time, naming the rule and
-the argument to change, anything the validator would refuse. Second,
+Three habits save time. First, builders check the arguments they can
+decide at that call, naming the rule and the argument to change. A
+whole-dataset check still belongs to validation and a checked write. Second,
 `write` validates before it writes and refuses on any error, because a
 file outlives the session that made it. Third, a rule identifier is
 always about a file: asking for a slot that is not there is your
@@ -315,8 +324,11 @@ warning that does not stop the file.
 10. Reading a file somebody else made
 -------------------------------------
 
-Opening a file reads its structure and none of its data, so it is
-cheap on a large file. From there the file answers for itself:
+The default lazy open reads structure without reading slot values or
+callable-dictionary datasets. It may read category tables and, in an
+unaligned file, `/row_support` (API conventions section 7), so opening
+cost is not independent of those datasets. From there the file answers
+for itself:
 
     with mestra.read("theirs.mes") as d:
         print(d.n_rows, d.aligned, d.key_names())
@@ -339,15 +351,13 @@ survey: every key with its role, units and bounds, every support with
 its counts and id, every slot with its shape under the name of each
 axis.
 
-A reader treats every file as untrusted input: a malformed or hostile
-file gets a finding or a refusal that names the rule, never a crash, a
-hang, or an allocation that takes the machine with it. Links are never
-followed. Each language's README lists the rules its reader refuses to
-open a file on. One thing no reader can promise is what the HDF5
-library does with damaged bytes before the reader runs: a crafted
-change to one byte of a valid file can fault the library itself, so a
-file nobody vouches for is best read from a process that can be
-killed, as the command line is (`compatibility.md`, "Damaged files").
+A reader's own code must treat malformed input with a finding or a
+refusal, bounded recursion and bounded eager allocation (SPEC section
+29). Soft and external links are not followed; hard links are used by
+the public layout. Each language's README lists its open refusals.
+The underlying HDF5 parser can still crash or hang on damaged bytes.
+Read untrusted files in a separate process with an external deadline
+and a way to kill it (`compatibility.md`, "Damaged files").
 
 Because the layout is netCDF-4, other tools can open the file too, and
 `h5dump`, `ncdump` and xarray all work. Note that the reverse is not

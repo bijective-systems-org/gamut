@@ -1949,10 +1949,13 @@ the layout of sections 19 to 23 is what makes them possible.
     rows outside the range. Chunking along `row` with the non-row
     extents full (section 23) is what makes that one contiguous run
     of chunks.
-  - Opening a file must not read any array. A reader must be able to
+  - Opening a file must not read slot values or datasets in a callable's
+    dictionary. The metadata pass may read category tables and, for an
+    unaligned file, `/row_support`, as the interface conventions and
+    section 16 state. A reader must be able to
     report the row count, the keys with their roles and bounds, the
     supports with their ids, and every slot with its attributes,
-    having read attributes and dataspaces only.
+    having read only that metadata and structure, not slot values.
   - Dimensions by name. A reader must expose the logical dimension
     name of every axis it returns (section 21), and must permute by
     name. A column-major reader may return whatever order is natural

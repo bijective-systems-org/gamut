@@ -29,6 +29,16 @@ reader and writer explicitly refuse them. Passing the shared corpus
 Convenience post-processing APIs also differ; consult each language's
 README. These implementation limits do not change a file's meaning.
 
+`check=false` is intended for deliberately invalid fixtures, not as a
+portable way to rewrite unsupported content. Python refuses a dataset
+whose `lossy` paths show content the reader could not preserve, even
+when that option is false. Its reader does not establish complete
+inventory of unknown public datasets; a successful rewrite is not proof
+that all such content was retained. Do not assume disabling validation
+overrides preservation, naming, shape or destination refusals. The
+shared requirement to avoid silent loss remains; any conversion needs
+an explicit check of the content it must preserve.
+
 ## Damaged files
 
 Every reader here treats a file as untrusted input, and the hostile

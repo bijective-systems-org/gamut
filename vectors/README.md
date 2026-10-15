@@ -12,8 +12,9 @@ implementation disagree, the specification decides; when the
 specification is silent, that is a defect in the specification and it
 is fixed there, in the same change that regenerates the corpus.
 
-Nothing here depends on any tool beyond Python, h5py and numpy, and
-nothing here is a mestra package. `generate.py` is sections 13 to 30
+Generation needs Python, h5py and numpy; `check.py` also requires
+netCDF4 and h5netcdf for the independent netCDF reader checks below.
+Neither script requires the mestra package. `generate.py` is sections 13 to 30
 read literally and written out with h5py, so that an implementer can
 compare a file byte for byte against the rules rather than against
 somebody's code.
@@ -68,7 +69,8 @@ Beside the cases there is a second subset, `vectors/hostile`, of
 fifteen files that are malformed on purpose. It is described at the
 end of this file.
 
-Every file is a few tens of kilobytes. That is almost all HDF5 object
+Most committed cases are a few tens of kilobytes; the three large
+on-demand files are listed below. The small files are mostly HDF5 object
 headers and dimension scales; the data in each file is a few hundred
 bytes.
 
@@ -271,7 +273,7 @@ thirty thousand nested groups that search runs off the stack and
 takes the process with it. Dereferencing the scale and reading its
 object address is safe; the link name has to come from a map built
 while walking the tree, within the depth cap. A reader that resolves
-scale names the obvious way passes all seventy cases and dies on
+scale names the obvious way can pass ordinary cases and die on
 `deep_groups_keys`. `check.py` does it the safe way, and its walk is
 depth capped and follows hard links only, which is what section 29
 requires of anything reading a file it did not write.
