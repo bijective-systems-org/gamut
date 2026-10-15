@@ -19,7 +19,9 @@ shape, the dimension scale on each axis, and its attributes with their
 values and their types. `(scale)` marks a dimension scale dataset;
 none of them holds a value that anyone reads. "u8" means an eight-byte
 unsigned integer and "i4" a four-byte signed one; every numeric
-dataset is little-endian and in C order; every string is fixed-length
+value dataset is little-endian and in C order; the dimension-scale
+placeholders explicitly listed as >f4 are big-endian float32 (SPEC21).
+Every string defined by this layout is fixed-length
 UTF-8 with NUL padding.
 
 
@@ -260,11 +262,13 @@ value inside its bounds, so no W04; no non-finite value, so no W03;
 File two: affine_zero_rows.mes
 ==============================
 
-No rows. The same support, with the same support_id, so a tool can
-check that this file and file one are about the same mesh without
-reading an array. Two slots, one scalar and one node array, are served
-by one callable of type `affine`. The key columns carry the bounds the
-callable is valid over and no data.
+No rows. Matching support_id attributes declare the same structural
+support as file one. These examples use known corresponding nodes;
+matching ids alone would not establish correspondence between independent
+producers. Verifying an id against stored arrays still requires reading
+those arrays. Two slots, one scalar and one node array, are served by one
+`affine` callable. Key columns declare bounds and carry no data; those
+bounds are not a model-accuracy certificate.
 
 Object list
 -----------
@@ -401,9 +405,9 @@ vary, so they have no leading dimension.
         exactly as in file one
 
 The support_id is the same because it hashes the node count and the
-cells and not the coordinates. That is the point of it: the two files
-are about the same mesh, and a tool knows it after reading one
-attribute.
+cells and not the coordinates. Matching the attributes is a structural
+identity comparison; it neither verifies the digest against stored arrays
+nor proves physical correspondence or matching geometry.
 
 The callable
 ------------

@@ -4,6 +4,11 @@ Design notes
 Why the model is shaped the way it is, recorded on 2026-09-19 from the
 design conversation, so the reasoning survives the people who had it.
 
+The alternatives below retain that design context, not a current survey or
+conversion qualification. [SPEC.md](../SPEC.md) and the corpus govern the
+current contract; [comparison.md](comparison.md) links current external
+references. Clarifications below follow the existing specification.
+
 
 Long format with roles, not a table per kind of data
 ----------------------------------------------------
@@ -41,8 +46,8 @@ Node coordinates are not special. They are an array with role
 `coordinates` that varies along nothing (fixed mesh), a group
 (parametric family: one geometry per member, shared by every time
 step and condition of that member), or the row (moving mesh). Regions
-are not special either: they are integer label arrays with category
-tables, one column per taxonomy (CAD face, topology group, material).
+are not special either: they are integer label arrays, with an optional
+category table, one column per taxonomy (CAD face, topology group, material).
 The only structures with fixed shape are cells (connectivity) and the
 row axis.
 
@@ -80,7 +85,7 @@ in, values out), `to_dict`, `from_dict`, and an optional `repr`;
 everything else it knows is inside its own dictionary. The boundary
 is kept that narrow on purpose, so that future models, including
 other people's, integrate by conforming to four things and not to a
-model of what a surrogate is. Three consequences the suite gets for
+model of what a surrogate is. Consequences the suite gets for
 free:
 
   - Composition of per-quantity models (x, y, z, pressure, shear) is
@@ -95,9 +100,11 @@ free:
     not the file's: that is the line between the open format and the
     commercial tools, and the format does not cross it.
 
-Bounds are attributes of the key columns in every file, so a file
-with callable slots has zero rows and the same keys, and extrapolation
-warnings are generic rather than a library special case.
+Bounds are attributes of the key columns. A file with callable slots
+may have zero rows or combine rows, stored values and callables; each
+slot's `source` decides its content. Bounds declare a domain rather than
+certifying accuracy throughout it, and extrapolation warnings are generic
+rather than a library special case.
 
 
 Uncertainty is optional, and a draw is a whole field
@@ -114,7 +121,7 @@ the file rather than collapsed into something that cannot be put
 back. Summaries follow from the draws by an open routine, and any
 summary the format does not name is a derived array with a recipe.
 The parameters that change the numbers (draw count, seed, batch size)
-are recorded with the result.
+belong in the producer's records; the public format does not require them.
 
 A callable's contract is one record per output and nothing more: a
 mean and, when the model has one, a band with its level and its
@@ -128,8 +135,10 @@ The public/private boundary
 ---------------------------
 
 Everything a reader needs to use the data is public and readable
-without any proprietary dependency. A private group holds fitted
-state, algorithms, and the producer's own records; readers ignore it.
+without any proprietary dependency. A callable's dictionary holds its
+fitted state; readers that do not own the type preserve supported opaque
+content without interpreting or executing it. An optional private group
+holds the producer's own records. Neither boundary encrypts the bytes.
 This is what lets the format be open while the tools that produce
 callables stay closed, and it makes "what does an open user get from
 a distilled model" a structural fact: the table, not the object.
@@ -140,7 +149,8 @@ HDF5, laid out to also be netCDF-4
 
 netCDF-4 is HDF5 with a constrained layout: named dimensions as
 dimension scales, plain attributes, groups. Staying inside that subset
-costs little (no compound types, references, or enums) and buys named
+constrains public values (with dimension-scale machinery exceptions under
+SPEC13) and buys named
 dimensions in every language (xarray, MATLAB's ncread, Julia's
 NCDatasets, R's ncdf4), which is what makes "permute by name" work
 without each reader inventing it. The transpose confusion between
