@@ -1281,11 +1281,12 @@ class Dataset:
 
         `role` is one of section 3: design, condition, time,
         categorical, group, split, id or status. A design, condition
-        or time key carries `units`; a categorical, group, split, id
+        or time key carries `units`; a categorical, group, split
         or status key carries `category`, naming a table
         `add_category_table` has already written, instead, and its
         values are the positions of that table's entries, counting
-        from 0.
+        from 0. An id key holds unique integer or string row identifiers;
+        it requires neither units nor a category table.
 
         `trajectory_group=` on a time key names the group key whose
         categories are the trajectories (section 7); without it a

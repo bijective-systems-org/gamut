@@ -5,12 +5,13 @@ Install
 -------
 
 CMake, a C++17 compiler, and HDF5 with its headers and the high-level
-`H5DS` dimension-scale API. No other dependency. `HDF5_ROOT` is the
-prefix holding `include/H5DSpublic.h` and `lib/libhdf5_hl`: a conda
-environment with `hdf5` installed (what CI uses) or Homebrew's `hdf5`.
+`H5DS` dimension-scale API. `HDF5_ROOT` is the installation prefix
+containing the headers (including `H5DSpublic.h`) and C/high-level
+libraries; library names and locations depend on the platform. Tests
+have the additional Python requirements below.
 
     cmake -S cpp -B cpp/build -DHDF5_ROOT="$HDF5_ROOT"
-    cmake --build cpp/build -j
+    cmake --build cpp/build --parallel 2
 
 That gives `libmestra`, `mestra-cli` and the seven examples in
 `cpp/build`; `mestra-cli` with no argument says what it does. The tests
@@ -20,6 +21,13 @@ need a Python 3 with `h5py` too, and three corpus files too big to commit:
     cmake -S cpp -B cpp/build -DHDF5_ROOT="$HDF5_ROOT" \
           -DPython3_EXECUTABLE="$(which python3)"
     ctest --test-dir cpp/build --output-on-failure
+
+Run these configure/build/test commands from the repository root. Without
+a discovered Python interpreter, CMake registers only the unit test and
+warns that corpus/metadata/hostile/example lanes are absent. Check the
+registered lanes before treating a CTest result as conformance evidence.
+Multi-configuration generators add a configuration directory to example
+paths; select that configuration when building and testing.
 
 `-DMESTRA_SANITIZE=ON` builds the suite under the address and
 undefined-behaviour sanitizers.
@@ -99,7 +107,10 @@ E29, E30, E40 and E41, and any fault no rule covers, throwing
 fault never stops a read. `mestra::read(path, {/*strict=*/false})` reads
 what it can and lists what it refused in `Dataset::not_read`. Findings
 are a `mestra::Report`, one per rule per object, and the limits and
-depth caps a hostile file meets are in `include/mestra/io.hpp`.
+depth caps a hostile file meets are in `include/mestra/io.hpp`. Native
+HDF5 can still crash or hang on damaged bytes; untrusted reads need a
+separate killable process and external deadline. See
+[damaged-file limits](../docs/compatibility.md#damaged-files).
 
 
 Post-processing this package does not carry

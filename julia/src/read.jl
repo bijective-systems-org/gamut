@@ -110,9 +110,10 @@ illegal_bool(a::Dict{String,RawAttr}, name) =
     Mestra.read(path; lazy = true, strict = true) -> Dataset
 
 Open a `.mes` file.  With `lazy = true`, which is the default, this
-reads attributes and dataspaces only, so it reports the row count, the
-keys with their roles and bounds, the supports with their ids and
-every slot with its attributes without touching an array.  Ask for an
+reads structure and metadata, which may include category tables and
+`/row_support` (API conventions section 7). It reports the row count,
+key roles/bounds, support ids and slot attributes without reading slot
+values or callable-dictionary datasets. Ask for an
 array with `Mestra.values(ds, slot)`, or for a range of rows with
 `Mestra.rows(ds, slot, 1:10)`.
 
@@ -125,10 +126,10 @@ E40 and E41 -- with a `MestraError` carrying the first it found and
 naming every other one in its message.  Those are what a file is made
 of rather than what it means, so deciding them costs attributes,
 dataspaces, link types, dimension-scale structure and the file's
-category tables, and not one array element: a strict read still opens
-a file that declares a trillion numbers it does not hold.  A slot is
-never read to decide them, so this read and `lazy = false` refuse the
-same file with the same rule (`docs/api-conventions.md` section 7).
+category tables and `/row_support`, not slot values or callable-dictionary
+datasets. Those metadata checks are shared; eager reads may additionally
+refuse E41 for materialisation limits (`docs/api-conventions.md` section 7
+and SPEC section 29).
 
 A semantic fault never stops a read, strict or not: a missing unit, a
 bad split, a support id that does not match its cells are all things a

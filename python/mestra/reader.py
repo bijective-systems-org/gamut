@@ -94,9 +94,11 @@ _SUPPORT_MEMBERS = ("node", "cell", "cell_plus_one", "index", "row",
 def read(path: str, lazy: bool = True, strict: bool = True) -> Dataset:
     """Open a mestra file and return the dataset it holds.
 
-    With `lazy` true, which is the default, no array is read until
-    it is asked for and the file stays open; close it with
-    `dataset.close()` or use the dataset as a context manager.
+    With `lazy` true, which is the default, slot values and datasets in
+    callable dictionaries are deferred and the file stays open. Metadata
+    checks may read category tables and an unaligned `/row_support`
+    (API conventions section 7). Close the file with `dataset.close()`
+    or use the dataset as a context manager.
 
     Refusals are `MestraError` naming the rule: E01 for a file that
     is not mestra/0 or not HDF5 at all, E40 for a link this reader

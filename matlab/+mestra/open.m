@@ -1,17 +1,18 @@
 function d = open(path, varargin)
-%MESTRA.OPEN  Read a file's structure without reading any array.
+%MESTRA.OPEN  Read metadata without materialising slot values.
 %
 %   D = MESTRA.OPEN(PATH) returns a mestra.Dataset that knows the row
 %   count, every key with its role and bounds, every support with its
 %   id, and every slot with its attributes and its dimension names,
-%   having read attributes and dataspaces only.  Specification section
-%   29 requires a reader to be able to do this.
+%   while deferring slot values and callable-dictionary datasets.
+%   Specification section 29 requires this metadata interface.
 %
 %   Section 7 of docs/api-conventions.md says what this much is: an
 %   open reads attributes, dataspaces, link types and dimension-scale
 %   structure, and reads a category table in full, because tables are
 %   small by construction and the open needs them to name E10, E26 and
-%   E41 on the same files MESTRA.READ names them on.  It never reads a
+%   E41 on the same files MESTRA.READ names them on. It may also read
+%   /row_support in an unaligned file. It never reads a
 %   slot's data and never reads a dataset inside a callable's
 %   dictionary.
 %
@@ -28,8 +29,9 @@ function d = open(path, varargin)
 %       chunk = d.readRows('/supports/s0/node_arrays/pressure', [1 100]);
 %       chunk.dims        % names the axes of chunk.values
 %
-%   Opening reads no array, so a slot or a dictionary dataset larger
-%   than the maxElements limit is no obstacle to it; only an eager
+%   Opening defers slot values and callable-dictionary datasets, so a
+%   slot or dictionary dataset larger than maxElements is no obstacle
+%   to that metadata access; only an eager
 %   read refuses one (E41).  A category table above it is E41 from
 %   both, because an open reads those.  Everything else about
 %   untrusted input is as MESTRA.READ describes, including

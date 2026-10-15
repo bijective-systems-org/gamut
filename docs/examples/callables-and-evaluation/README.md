@@ -2,8 +2,10 @@ A callable and evaluation
 =========================
 
 Any slot may hold stored data or name a callable that produces it, so
-a fitted model is a file with no rows whose key columns carry only the
-bounds it is valid over. Evaluating that file on a keys table gives a
+this example represents a fitted model with no rows and declared key
+bounds. A model file may also retain rows or mix stored and callable
+slots; bounds do not certify predictive accuracy throughout a domain.
+Evaluating that file on a keys table gives a
 file with the same slots, now holding data. `affine` is the one
 callable type the format defines, for testing without any proprietary
 model.
@@ -42,9 +44,12 @@ Run it
 It writes `model.mes` in the working directory, reads it back and
 evaluates it. The evaluated dataset holds data and no callables.
 
-Run from this directory. The C++ programs are CMake targets: build
-them once with `cmake -S cpp -B cpp/build` and
-`cmake --build cpp/build -j`.
+Run the examples from this directory. First configure and build the C++
+programs from the repository root with `cmake -S cpp -B cpp/build` and
+`cmake --build cpp/build --parallel 2`, using the HDF5 setup in
+[the C++ README](../../../cpp/README.md). The executable paths above
+assume a single-configuration generator; otherwise use its configuration
+subdirectory.
 
 Expected output
 ---------------
