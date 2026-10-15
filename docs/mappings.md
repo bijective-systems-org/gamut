@@ -6,6 +6,12 @@ suite already handles maps onto the spec with no special case. Where a
 mapping needed a special case, that is where the model was wrong. As
 of this draft, none did; the places that were close are marked.
 
+These are design mappings, including proposed cases, not new qualification
+of a dataset, exporter or modelling workflow. Counts describe the source
+snapshots used in this design exercise. The [specification](../SPEC.md) and
+corpus govern the current contract; producer correspondence and model
+fitness remain separate from structural validation.
+
 Shorthand: keys are written name:role; arrays as name (varies, units,
 location, components).
 
@@ -21,7 +27,7 @@ CSV by file name.
 Rows        122, one per member.
 Keys        total_length:design, half_angle:design, nose_radius:design,
             member:group (unit of generalisation), status:status.
-Supports    one, kind mesh, quad cells; cell_hash from the shared
+Supports    one, kind mesh, quad cells; support_id from node count and
             connectivity; aligned = true.
 Arrays      coordinates (row, m, node, 3): each member's own geometry.
             cad_face_id (none, label, node), topo_face_id (none,
@@ -32,9 +38,9 @@ Arrays      coordinates (row, m, node, 3): each member's own geometry.
 Scalars     none from TopoLink itself.
 Notes       optionally the TopoLink version and solver iterations;
             lineage stays with the tools, not the file.
-Validator   would refuse a member whose connectivity hash differs (a
-            failed remap), which is exactly the silent failure the
-            structural check cannot catch today.
+Validator   checks support_id against stored structure. The producer
+            establishes correspondence before putting members on that
+            shared support; a valid hash cannot detect semantic remapping.
 
 With a solver sweep on top (a freestream sweep per member), rows
 become 122 times n_conditions,
@@ -72,13 +78,14 @@ Notes       the upstream dataset identifier and licence.
 
 What this buys. Geometry-as-input is a recipe on top (an SVD of the
 coordinate ensemble), not a format feature, and the file says the
-ensemble is aligned so the recipe is valid. Per-field validation is
-automatic because the six fields are six arrays with units, not one
-wide matrix.
+ensemble is aligned. The producer must establish correspondence before
+using that recipe. Six separate fields with units support structural
+checks and field-specific analysis; they do not automate model-quality
+validation.
 
 Close call. "Aligned" here is a property of the upstream dataset's
-construction, not of any tool of ours. The claim is still
-checkable (the connectivity hash), so it is honest.
+construction, not of any tool of ours. Its structure is checkable through
+support_id; physical correspondence remains an upstream responsibility.
 
 
 3. HiLift (scalars only, no support)
@@ -93,9 +100,9 @@ Keys        the geometry parameters:design, incidence:condition,
 Supports    none.
 Arrays      none.
 Scalars     CL, CD, CM, dimensionless (units "1").
-Validator   warns on any split that puts one geometry on both sides,
-            which is the optimistic split a reviewer catches and a
-            naive row split performs.
+Validator   warns on a split that puts one geometry on both sides;
+            it does not test generalisation to unseen geometries. The
+            score's change depends on the data and model.
 
 This is the "not everything is a field" case, and it needs nothing
 special: a file with keys and scalars is a complete, valid file.
@@ -160,8 +167,8 @@ reports over. Both are valid, and the roles keep them apart.
 
 Not a dataset in the tree, but the case the design was built for.
 
-A model trained on dataset 1 with the freestream sweep is a file with
-zero rows: the key columns carry their roles and bounds (the training
+A zero-row representation of a model trained on dataset 1 with the
+freestream sweep has key columns carrying roles and bounds (the training
 range, or wider if the modeller says so); support S is stored with the
 same support_id as the training file; the slots pressure, heat_flux
 (node arrays on S) and CL (scalar) carry their attributes and
@@ -170,14 +177,19 @@ dictionary under its `type`. Evaluating the file on a keys table gives
 a file with the same slots holding data, including pressure with its
 band beside it (statistic = band, `of` pressure), whose level and
 method the callable stated; how the callable arrived at the band was
-its own business.
+its own business. A callable file may also retain observations or mix
+stored and callable slots (SPEC22).
 
 Five callables, one each for x, y, z, pressure, and shear, sharing
 support S and overlapping key bounds, are five slots referencing five
-callable ids in one file. The validator's two checks are support_id
-equality and the intersection of the bounds. Nothing about the
-callables' own records is touched.
+callable ids in one file. The validator checks the declared file
+structure, including support_id against stored structure, and reports
+key values outside declared bounds. It does not establish correspondence
+between independent model producers or compute a model-validity domain
+from an intersection of callable bounds. Nothing about the callables'
+own records is touched.
 
 Distillation is evaluating the file on a grid of keys and writing the
 result with every slot as stored data. The table is public; the
-callable that made it is not.
+callable that made it is opaque to readers that do not own its type,
+which is a schema boundary rather than a confidentiality guarantee.
