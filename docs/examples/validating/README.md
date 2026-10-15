@@ -3,9 +3,10 @@ Validating
 
 Every rule has an identifier that never changes: an error means the
 file is rejected, a warning means it is accepted and the reader must
-say so. The builder refuses at build time, naming the rule and the
-argument to change, anything the validator would refuse in the file,
-and `write` validates before it writes. A warning does not stop a
+say so. Builders refuse invalid arguments they can decide at that call;
+whole-dataset validation and a checked write remain necessary. Here the
+missing scalar units are caught at build time, naming the rule and
+argument; `write` also validates before publication. A warning does not stop a
 file, so the split that leaks a member is written and reported.
 
 The data
@@ -35,9 +36,12 @@ Run it
 
 It writes `family.mes` in the working directory and validates it.
 
-Run from this directory. The C++ programs are CMake targets: build
-them once with `cmake -S cpp -B cpp/build` and
-`cmake --build cpp/build -j`.
+Run the examples from this directory. First configure and build the C++
+programs from the repository root with `cmake -S cpp -B cpp/build` and
+`cmake --build cpp/build --parallel 2`, using the HDF5 setup in
+[the C++ README](../../../cpp/README.md). The executable paths above
+assume a single-configuration generator; otherwise use its configuration
+subdirectory.
 
 Expected output
 ---------------

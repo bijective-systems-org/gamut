@@ -43,7 +43,7 @@ The ten-line example
 
 It is the same data and the same value in all four languages.
 [`docs/examples/`](https://github.com/bijective-systems-org/mestra/tree/main/docs/examples) has seven worked examples, one per concept, each
-runnable and under thirty lines, and [`docs/guide.md`](https://github.com/bijective-systems-org/mestra/blob/main/docs/guide.md) says what the
+runnable, with expected output beside the source, and [`docs/guide.md`](https://github.com/bijective-systems-org/mestra/blob/main/docs/guide.md) says what the
 concepts mean. Every call has its own documentation where you meet
 it: `help(mestra)` and `help(mestra.Dataset)` for the library,
 `mestra --help` for the command line.
@@ -53,8 +53,8 @@ Axis order and permute by name
 ------------------------------
 
 Python hands an array back in the order the file stores it (SPEC
-section 19): what it varies along first, then the nodes or the cells,
-then the components. A reader in a column-major language hands the
+section 19): what it varies along first, an optional draw axis, then
+the nodes or the cells and the components. A reader in a column-major language hands the
 same array back in the reverse order, and the dimension names are
 what the two agree on, so index by name and permute by name and never
 count axes.
@@ -76,8 +76,12 @@ would return under -- E01, E16, E19, E25, E26, E29, E30, E40, E41,
 which are `mestra.reader.REFUSED` -- and raises `MestraError` naming
 the first; a semantic fault never stops a read, and
 `read(path, strict=False)` hands back whatever could be read anyway.
-The findings are on `dataset.problems` either way, `mestra.validate`
-repeats them, and what could not be copied is in `dataset.lossy`.
+On a non-strict result, recorded reader findings are on `dataset.problems`;
+`mestra.validate` supplies the validation report. Known preservation losses
+are recorded in `dataset.lossy`, but unknown public dataset inventory is
+incomplete: a successful rewrite alone does not prove retention. The writer
+refuses recorded losses even with `check=False`; see the preservation limits
+in [`docs/compatibility.md`](https://github.com/bijective-systems-org/mestra/blob/main/docs/compatibility.md).
 `help(mestra.reader)` and `mestra.limits` carry the rest.
 
 A refusal is what this package can promise. What it cannot promise is
@@ -85,7 +89,8 @@ that libhdf5 returns control on a file whose bytes were damaged: a
 crafted single-byte change can fault or hang the library before any
 code here runs ([`docs/compatibility.md`](https://github.com/bijective-systems-org/mestra/blob/main/docs/compatibility.md#damaged-files), "Damaged files";
 `tests/test_mutation.py` measures it). Read a file nobody vouches for
-from a process you can kill, as `mestra validate` does.
+from a separate process with an external deadline and a way to kill it,
+as callers can do around `mestra validate`.
 
 
 Where to go next

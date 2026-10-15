@@ -4,6 +4,7 @@ mestra for Julia
 Install
 -------
 
+    julia --project=julia -e 'using Pkg; Pkg.instantiate()'
     julia --project=julia          # or Pkg.develop(path = "julia")
     julia> using Mestra
 
@@ -72,13 +73,17 @@ What the reader refuses
 
 `Mestra.read` is strict, and refuses a file that breaks one of
 `Mestra.STRUCTURAL_RULES` -- E01, E16, E19, E25, E26, E29, E30, E40
-and E41 -- reading no array to decide it. `Mestra.read(path; strict =
-false)` opens that file anyway and lists what it would not follow or
+and E41. Metadata checks may read category tables and `/row_support`;
+slot values and callable-dictionary datasets are deferred on a lazy read
+(API conventions section 7). `Mestra.read(path; strict = false)` opens
+that file anyway and lists what it would not follow or
 could not read in `ds.findings`, which is the call for a file you are
 inspecting rather than trusting. What a file means rather than what it
 is made of never stops a read and is reported by `Mestra.validate`,
 printed by `Mestra.report`; `?Mestra.read` has the caps and the link
-rules a hostile file meets.
+rules a hostile file meets. Native HDF5 can still crash or hang on
+damaged bytes; untrusted reads need a separate killable process with
+an external deadline. See [damaged-file limits](../docs/compatibility.md#damaged-files).
 
 
 Where to go next

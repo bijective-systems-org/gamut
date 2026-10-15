@@ -24,8 +24,9 @@ The six rows of `../rows-and-roles`, without `cl`, on one mesh.
                 row r, node n holds 100*(r+1) + (n+1): row 0 is
                 101 to 106, row 5 is 601 to 606
 
-One support, so the file is aligned: node 3 means the same node in
-every row.
+One support makes the file structurally aligned. This example constructs
+known corresponding nodes; the declaration alone would not establish
+physical correspondence between independent producers.
 
 Run it
 ------
@@ -37,9 +38,12 @@ Run it
 
 It writes `family.mes` in the working directory and reads it back.
 
-Run from this directory. The C++ programs are CMake targets: build
-them once with `cmake -S cpp -B cpp/build` and
-`cmake --build cpp/build -j`.
+Run the examples from this directory. First configure and build the C++
+programs from the repository root with `cmake -S cpp -B cpp/build` and
+`cmake --build cpp/build --parallel 2`, using the HDF5 setup in
+[the C++ README](../../../cpp/README.md). The executable paths above
+assume a single-configuration generator; otherwise use its configuration
+subdirectory.
 
 Expected output
 ---------------

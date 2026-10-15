@@ -27,7 +27,9 @@ The first three rows are wing_a twice and wing_b once, so that split
 cuts wing_b in half. `grouped_split` is asked for 0.67 train and 0.33
 test with seed 0, and returns whole members. Which member lands where
 is SPEC section 31's algorithm and not the language's own generator,
-so all four languages print these rows.
+so Python, MATLAB and Julia print these rows. The C++ example stops
+after the first two leak-report lines: it does not ship `grouped_split`
+or perform the seeded selection shown below.
 
 Run it
 ------
@@ -39,9 +41,12 @@ Run it
 
 It writes `family.mes` in the working directory and reads it back.
 
-Run from this directory. The C++ programs are CMake targets: build
-them once with `cmake -S cpp -B cpp/build` and
-`cmake --build cpp/build -j`.
+Run the examples from this directory. First configure and build the C++
+programs from the repository root with `cmake -S cpp -B cpp/build` and
+`cmake --build cpp/build --parallel 2`, using the HDF5 setup in
+[the C++ README](../../../cpp/README.md). The executable paths above
+assume a single-configuration generator; otherwise use its configuration
+subdirectory.
 
 Expected output
 ---------------

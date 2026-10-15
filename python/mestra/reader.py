@@ -1,20 +1,21 @@
 """Reading a mestra file.
 
-`read(path)` returns a `Dataset` having read attributes and
-dataspaces only: the row count, the keys with their roles and
-bounds, the supports with their ids, and every slot with its
-attributes. Values are read when they are asked for, and a row range
-of one slot is read without touching any other slot, which is what
-section 29 requires.
+`read(path)` returns a lazy `Dataset`: slot values and dictionary
+datasets are deferred until requested. Opening reads metadata and may
+also read category-table values and unaligned `/row_support` values.
+A row range of one slot can be read without reading other slots;
+see section 29 of the specification for the scope of that contract.
 
 Pass `lazy=False` to read every value at once and close the file.
 
-A file is untrusted input. This reader follows no link, walks no
-deeper than `limits.MAX_DEPTH`, materialises no more than
-`limits.MAX_READ_ELEMENTS` in one call, and turns what it cannot
-read into a finding on `dataset.problems` rather than an exception
-from inside the library. What it could not copy is named in
-`dataset.lossy`, and writing such a dataset is refused.
+A file is untrusted input. The reader refuses soft and external links
+and applies the limits in `mestra.limits`. Findings are reported through
+`dataset.problems`; refusal and strict-read findings can raise
+`MestraError`. Recorded losses appear in `dataset.lossy` and prevent
+writing, including with `check=False`. That inventory does not yet cover
+every unknown public dataset. These Python checks do not isolate native
+HDF5 crashes or hangs; use an external process deadline for untrusted
+files. See `docs/compatibility.md` for the preservation and safety limits.
 """
 
 from __future__ import annotations
@@ -94,9 +95,11 @@ _SUPPORT_MEMBERS = ("node", "cell", "cell_plus_one", "index", "row",
 def read(path: str, lazy: bool = True, strict: bool = True) -> Dataset:
     """Open a mestra file and return the dataset it holds.
 
-    With `lazy` true, which is the default, no array is read until
-    it is asked for and the file stays open; close it with
-    `dataset.close()` or use the dataset as a context manager.
+    With `lazy` true, which is the default, slot values and datasets in
+    callable dictionaries are deferred and the file stays open. Metadata
+    checks may read category tables and an unaligned `/row_support`
+    (API conventions section 7). Close the file with `dataset.close()`
+    or use the dataset as a context manager.
 
     Refusals are `MestraError` naming the rule: E01 for a file that
     is not mestra/0 or not HDF5 at all, E40 for a link this reader

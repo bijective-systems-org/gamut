@@ -83,6 +83,13 @@ lists the rest in `d.skipped`, one line each. Everything else a file
 gets wrong is a finding and not a refusal: `mestra.validate` always
 returns them and `mestra.report` prints them.
 
+`mestra.read` materialises the file; use `mestra.open` for metadata and
+subsequent row-range access. Metadata opens may read category tables and
+`/row_support`, while slot values and callable-dictionary datasets are
+deferred (API conventions section 7). Native HDF5 can still crash or hang;
+untrusted reads need a separate killable process and external deadline.
+See [damaged-file limits](../docs/compatibility.md#damaged-files).
+
 
 Where to go next
 ----------------

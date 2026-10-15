@@ -82,9 +82,9 @@ function d = read(path, varargin)
 %   mestra.write` says why, and why there is no way round it from
 %   inside MATLAB.
 %
-%   MESTRA.OPEN reads the same file without reading any array, which
-%   is what section 29 asks of a reader that is only being asked what
-%   is in the file.
+%   MESTRA.OPEN reads metadata while deferring slot values and callable-
+%   dictionary datasets. Category tables and /row_support may be read,
+%   as API conventions section 7 and specification section 29 state.
 %
 %   See also mestra.open, mestra.write, mestra.validate,
 %   mestra.evaluate, mestra.permute, mestra.Dataset.
