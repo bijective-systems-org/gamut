@@ -1,26 +1,29 @@
 The skeleton every per-language README is cut to
 ================================================
 
-The documents come in four layers, each complete at its own depth and
-nothing repeated between them. A per-language README
+This is the authoring guide for per-language READMEs, not a statement of
+runtime guarantees or a line-count test. Keep the core concepts in the
+format guide and the full API details beside the calls. A per-language README
 is not a layer: it is the door to one interface. Anything about the
 format belongs in `guide.md`, anything normative in `../SPEC.md`, and
 anything about one call belongs in that call's docstring or help text,
 where a user will actually meet it.
 
-So every per-language README carries these five sections, in this
-order, and nothing else. One screen for the first three.
+Use these five sections in this order. Keep the first three concise, while
+retaining the prerequisites and working-directory instructions needed to
+run the example.
 
 
 1. Install
 ----------
 
-How to get the package and run its tests: the one command that
-installs it, what it depends on, and the one command that runs the
-suite. No prose about what the format is.
+How to get the package and run its tests: the installation steps, direct
+dependencies, optional test dependencies and commands for the configured
+test lane. State platform/configuration differences where they affect those
+commands. No prose about what the format is.
 
 
-2. The ten-line example (this language)
+2. The small example (this language)
 ---------------------------------------
 
 The top-level README's example, written in this language: build a
@@ -45,10 +48,12 @@ documents a user should never have to read twice.
 4. What the reader refuses
 --------------------------
 
-Three lines: the rules this reader refuses to open a file on, what a
-non-strict read gives instead, and where the findings of a read are
-reported. The detail of hostile files, limits and depth caps moves
-into the module's own documentation.
+Name the rules that cause refusal, what a non-strict read gives instead,
+and where findings are reported. Distinguish metadata opening from eager
+reads and validation where those differ. Briefly state the native-library
+safety boundary and link to `compatibility.md`; detailed limits belong in
+the module's documentation. Do not promise complete loss inventories or
+failure isolation that the implementation does not provide.
 
 
 5. Where to go next
@@ -67,8 +72,9 @@ in one of two directions. If it is about the format -- roles, varies,
 alignment, statistics, the public and private line, what the validator
 reports -- it moves to `guide.md`, and the README links there. If it
 is about this API -- an argument's default, what one call refuses,
-what a helper returns -- it moves into the docstring, the help text or
-the header comment for that call, and the README does not mention it.
+what a helper returns -- put the full detail in the docstring, help text or
+header comment. The README may retain a short qualification needed to use
+its example correctly, with a route to the authoritative detail.
 
 One addition is allowed. Section 4 of `api-conventions.md` requires a
 language without the post-processing helpers to say so under a heading

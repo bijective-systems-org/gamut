@@ -19,9 +19,9 @@ Building one from arrays takes a handful of calls:
                      dims=("row", "node"))
 
 The dimensions, the bounds, the component axis and the support id are
-filled in. Every builder refuses at build time, naming the rule of
-section 14 and the argument to change, anything the validator would
-refuse in the file.
+filled in. Builders check their own arguments and report relevant rules
+from section 14. They do not replace validation of the complete dataset;
+use `validate` or a checked write for that check.
 """
 
 from __future__ import annotations
