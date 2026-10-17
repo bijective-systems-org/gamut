@@ -157,6 +157,43 @@ def model_dataset() -> Any:
     return ds
 
 
+def transient_dataset() -> Any:
+    """Two runs at successive times: a time parameter naming its runs
+    in run_group, and a split that keeps each run whole."""
+    ds = lib.Dataset(writer=WRITER, created=CREATED)
+    ds.add_label("run", [0, 0, 0, 1, 1], "group",
+                 categories=["r0", "r1"])
+    ds.set_generalisation_group("run")
+    ds.add_parameter("t", [0.0, 0.5, 1.0, 0.0, 0.5], "time", "s",
+                     lower=0.0, upper=1.0, run_group="run")
+    ds.add_label("split", [0, 0, 0, 1, 1], "split",
+                 categories=["train", "test"])
+    ds.add_scalar("cl", [0.1, 0.2, 0.3, 0.1, 0.25], "1")
+    return ds
+
+
+def relations_dataset() -> Any:
+    """The family with every kind of relation: a stored band and a std,
+    derivatives with respect to a parameter, and an adjoint shape
+    sensitivity with respect to the coordinates."""
+    ds = family_dataset()
+    ds.add_scalar("cl_std", np.full(6, 0.01), "1", statistic="std",
+                  of="cl")
+    ds.add_scalar("dcl_dmach", np.full(6, 0.4), "1",
+                  with_respect_to="mach", of="cl")
+    mesh = ds.mesh
+    mesh.add_node_array("pressure_band", np.full((6, 6), 5.0), "Pa",
+                        ("row", "node"), statistic="band", of="pressure",
+                        level=0.95, method="two standard deviations")
+    mesh.add_node_array("dp_dmach", np.ones((6, 6)), "Pa",
+                        ("row", "node"), with_respect_to="mach",
+                        of="pressure")
+    mesh.add_node_array("dcl_dx", np.zeros((6, 6, 3)), "m-1",
+                        ("row", "node", "component"),
+                        with_respect_to="coordinates", of="cl")
+    return ds
+
+
 CASES = {
     "table": table_dataset,
     "family": family_dataset,
@@ -165,9 +202,16 @@ CASES = {
 }
 
 
+#: Further files the rule tests start from.
+MORE = {
+    "transient": transient_dataset,
+    "relations": relations_dataset,
+}
+
+
 def write_case(name: str, directory: Any) -> str:
     path = os.path.join(str(directory), name + ".mes")
-    lib.write(CASES[name](), path)
+    lib.write({**CASES, **MORE}[name](), path)
     return path
 
 
