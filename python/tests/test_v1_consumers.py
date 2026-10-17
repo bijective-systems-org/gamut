@@ -1,8 +1,10 @@
 """What TopoLink and romlib need, on the pinned surface, working.
 
 Each operation is the right-hand column of the interface's table of
-changes for today's consumers, plus the calls the two tools make
-around them. For each, the names it uses must be on the pinned
+changes for today's consumers (its ten rows), plus the calls the two
+tools make around them. The list is written by hand while the two
+tools still use version 0; extracting the names from pinned copies of
+their sources follows their version 1 changes. For each, the names it uses must be on the pinned
 surface (docs/surface/python.json) and the call must work on a real
 file. A consumer that needed a name the surface does not list would
 fail here, in this package's own suite.
@@ -107,6 +109,46 @@ def topolink_checks_foreign_content(path, tmp):
         f.create_group("legacy_profile")
     return [(x.rule, x.path) for x in lib.validate(path).warnings
             if x.rule == "W11"]
+
+
+def topolink_reads_foreign_attributes(path, tmp):
+    """Api section 5, row 6: what the legacy profile check read from
+    read_header's root_extra and key.extra is W11 naming the concept
+    path and the attribute."""
+    import h5py
+    with h5py.File(path, "r+") as f:
+        f.attrs["topolink_profile"] = "family-store/3"
+        f["member"].attrs["topolink_order"] = "by member"
+    found = {(x.path, x.message) for x in lib.validate(path).warnings
+             if x.rule == "W11"}
+    assert any(p == "" and "topolink_profile" in m for p, m in found)
+    assert any(p == "labels/member" and "topolink_order" in m
+               for p, m in found)
+    with lib.read(path) as ds:                     # a strict read opens it
+        assert ds.labels["member"].role == "group"
+    return sorted(p for p, _ in found)
+
+
+def romlib_serves_the_coordinates(path, tmp):
+    """Api section 5, row 9: set_mesh(..., callable=) in place of
+    set_callable_coordinates."""
+    ds = lib.Dataset(writer="romlib 0.4", created="2026-10-16T00:00:00Z")
+    ds.add_parameter("scale", [], "design", "1", lower=1.0, upper=2.0)
+    flat = QUAD_XY.reshape(-1)
+    geometry = lib.Affine(["scale"], {"coordinates": {
+        "A": flat.reshape(-1, 1), "b": np.zeros(flat.size),
+        "shape": [6, 3]}})
+    ds.add_callable("g", geometry, inputs=["scale"])
+    from tests.v1_cases import QUAD_CONNECTIVITY, QUAD_OFFSETS, QUAD_TYPES
+    ds.set_mesh((QUAD_TYPES, QUAD_OFFSETS, QUAD_CONNECTIVITY), units="m",
+                dims=("row", "node", "component"), n_nodes=6,
+                callable="g", output="coordinates", components=3)
+    out = os.path.join(tmp, "geometry.mes")
+    lib.write(ds, out)
+    with lib.read(out) as back:
+        assert back.mesh.coordinates.served
+        filled = lib.evaluate(back, {"scale": [2.0]})
+    return filled.mesh.coordinates.read().values[0].tolist()
 
 
 def topolink_compacts(path, tmp):
@@ -214,8 +256,16 @@ OPERATIONS = [
       "Dataset.add_scalar", "Dataset.row_count"]),
     ("foreign content as W11 findings", topolink_checks_foreign_content,
      ["validate", "Report.warnings", "Finding.rule", "Finding.path"]),
+    ("unknown root and label attributes as W11",
+     topolink_reads_foreign_attributes,
+     ["validate", "Report.warnings", "Finding.rule", "Finding.path",
+      "Finding.message", "read", "Label.role"]),
     ("a rewrite that compacts", topolink_compacts, ["read", "write",
                                                     "Report.errors"]),
+    ("served coordinates with set_mesh(callable=)",
+     romlib_serves_the_coordinates,
+     ["Dataset.set_mesh", "Dataset.add_callable", "Affine", "evaluate",
+      "Mesh.coordinates", "Slot.served", "Slot.read"]),
     ("the input table", romlib_input_table,
      ["input_table", "Dataset.parameters", "Parameter.role"]),
     ("served slots and served mesh arrays", romlib_writes_a_model,
@@ -257,6 +307,8 @@ def test_the_results_are_what_the_consumers_expect(family, tmp_path):
     assert topolink_checks_foreign_content(family, tmp) == [
         ("W11", "legacy_profile")]
     assert topolink_compacts(family, tmp) == []
+    assert romlib_serves_the_coordinates(family, tmp) == (
+        QUAD_XY * 2.0).tolist()
     assert romlib_input_table(family, tmp) == 6
     assert romlib_registers_and_evaluates(family, tmp) == ([1.0], 0.95)
     assert romlib_constructs_an_error(family, tmp) == (
