@@ -21,6 +21,7 @@ This package reads and writes format version 1 (`mestra/1`);
 
 from __future__ import annotations
 
+from .append import append
 from .callables import (
     Affine,
     Callable,
@@ -31,6 +32,7 @@ from .callables import (
     register_callable,
 )
 from .errors import Finding, MestraError
+from .evaluate import evaluate, prediction
 from .model import FORMAT, Dataset, Label, Mesh, NamedArray, Parameter, Slot
 from .reader import read
 from .upgrade import upgrade
@@ -55,8 +57,11 @@ __all__ = [
     "Report",
     "Slot",
     "__version__",
+    "append",
     "callable_types",
+    "evaluate",
     "input_table",
+    "prediction",
     "read",
     "register_callable",
     "upgrade",

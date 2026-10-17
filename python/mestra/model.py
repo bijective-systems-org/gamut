@@ -1007,6 +1007,7 @@ class Mesh:
                 raise MestraError(
                     "E30", "pass values for data, or callable= for a "
                     "served slot, not both", where)
+            _served_storage(dtype, round_bits, where)
             identifier = _callable_id(dataset, callable, where)
             names = tuple(dims) if dims is not None else \
                 ("row", location, "component")
@@ -1463,6 +1464,7 @@ class Dataset:
                 raise MestraError(
                     "E30", "pass values for data, or callable= for a "
                     "served slot, not both", where)
+            _served_storage(dtype, round_bits, where)
             identifier = _callable_id(self, callable, where)
             slot = Slot(name, location="row", role="scalar", units=units,
                         varies="row", source=_CALLABLE + identifier,
@@ -1560,6 +1562,7 @@ class Dataset:
                 raise MestraError(
                     "E30", "pass coordinates for data, or callable= for "
                     "served coordinates, not both", "mesh/coordinates")
+            _served_storage(dtype, None, "mesh/coordinates")
             if n_nodes is None:
                 raise MestraError(
                     "E05", "served coordinates store no values, so the "
@@ -1915,7 +1918,9 @@ def _exact(given: np.ndarray, dtype: Any, where: str) -> np.ndarray:
             "E20", "values must be integers, and these are %s"
             % given.dtype, where)
     if np.can_cast(given.dtype, dtype):
-        return given.astype(dtype, copy=False)
+        # A copy, always: the dataset owns its values, so changing the
+        # caller's array afterwards does not change the dataset.
+        return given.astype(dtype)
     with np.errstate(invalid="ignore"):
         array = given.astype(dtype)
     changed = np.flatnonzero(array != given)
@@ -2030,6 +2035,15 @@ def _split_dims(dims: Sequence[str], location: str,
         raise MestraError(
             "E04", "dims names no %s axis" % location, where)
     return names, (leading[0] if leading else "none")
+
+
+def _served_storage(dtype: Any, round_bits: Any, where: str) -> None:
+    """A served slot stores nothing, so it takes no dtype and no
+    rounding; evaluation writes its values as float64."""
+    if dtype is not None or round_bits is not None:
+        raise MestraError(
+            "", "a served slot holds no data, so dtype and round_bits do "
+            "not apply; evaluation writes its values as float64", where)
 
 
 def _served_width(names: Sequence[str], components: int | None,

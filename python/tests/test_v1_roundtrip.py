@@ -19,6 +19,10 @@ import pytest
 from tests.v1_cases import (
     CASES,
     PACKAGE_DIR,
+    QUAD_CONNECTIVITY,
+    QUAD_OFFSETS,
+    QUAD_TYPES,
+    QUAD_XY,
     assert_this_package,
     content,
     lib,
@@ -515,3 +519,20 @@ def test_a_relation_takes_the_varies_and_width_of_its_of():
     ds.mesh.add_node_array("dcl_dx", np.zeros((6, 6, 3)), "m-1",
                            ("row", "node", "component"), of="cl",
                            with_respect_to="coordinates")
+
+
+def test_the_builder_owns_its_values():
+    cells = [np.array(a) for a in (QUAD_TYPES, QUAD_OFFSETS,
+                                   QUAD_CONNECTIVITY)]
+    ribs = np.array([4, 5], dtype=np.int64)
+    ids = np.array([7, 8], dtype=np.int64)
+    ds = lib.Dataset()
+    ds.add_parameter("ribs", ribs, "design", "1")
+    ds.add_label("case", ids, "id")
+    mesh = ds.set_mesh(tuple(cells), coordinates=QUAD_XY, units="m",
+                       dims=("node", "component"))
+    for array in cells + [ribs, ids]:
+        array[...] = 0
+    assert ds.parameters["ribs"].values().values.tolist() == [4, 5]
+    assert ds.labels["case"].names().values.tolist() == [7, 8]
+    assert mesh.cells()[2].tolist() == QUAD_CONNECTIVITY.tolist()
