@@ -237,6 +237,7 @@ def _write(ds: Dataset, f: h5py.File) -> None:
         for name in sorted(ds.notes, key=lambda n: n.encode("utf-8")):
             _write_note(notes, name, ds.notes[name])
     for name in sorted(ds._opaque):
+        _foreign_scales(ds, f, "", ds._opaque[name])
         opaque.restore(f, name, ds._opaque[name])
     for name in sorted(ds._unknown):
         kind, body = ds._unknown[name]
@@ -486,9 +487,11 @@ def _write_mesh(mesh: Mesh, f: h5py.File, scales: _Scales) -> None:
         sub = group.create_group(which)
         for name in arrays:
             _write_slot(sub, name, arrays[name], scales)
-    for name in sorted(mesh._opaque):
-        opaque.restore(group, name, mesh._opaque[name])
     dataset = mesh._dataset
+    for name in sorted(mesh._opaque):
+        if dataset is not None:
+            _foreign_scales(dataset, group, "mesh", mesh._opaque[name])
+        opaque.restore(group, name, mesh._opaque[name])
     for name in sorted(mesh._unknown):
         kind, body = mesh._unknown[name]
         if dataset is not None:
@@ -498,9 +501,11 @@ def _write_mesh(mesh: Mesh, f: h5py.File, scales: _Scales) -> None:
 
 def _foreign_scales(ds: Dataset, group: h5py.Group, where: str,
                     body: dict[str, Any]) -> None:
-    """Make again, before an object kept whole is put back, every
-    dimension scale it was attached to that this file does not have:
-    a scale only foreign objects use is not one the writer makes."""
+    """Make again, before an object or a group kept whole is put back,
+    every dimension scale it or anything inside it was attached to
+    that this file does not have: a scale only kept content uses (in
+    /private, in an unknown group, or on a foreign root object) is not
+    one the writer makes."""
     for dim in body.get("dims") or []:
         if dim is None or dim[0] != "named":
             continue
@@ -516,9 +521,8 @@ def _foreign_scales(ds: Dataset, group: h5py.Group, where: str,
             continue
         length, unlimited = info
         make_scale(home, name, length, unlimited=unlimited)
-    for kind, member in (body.get("members") or {}).values():
-        if kind == "dataset":
-            _foreign_scales(ds, group, where, member)
+    for _kind, member in (body.get("members") or {}).values():
+        _foreign_scales(ds, group, where, member)
 
 
 def _write_callables(ds: Dataset, f: h5py.File) -> None:

@@ -666,3 +666,41 @@ def test_a_group_dimensioned_dataset_by_hand(files):
         # 3 members of 6 nodes x 3 float64: 144 bytes an entry.
         assert f["mesh/coordinates"].chunks == (3, 6, 3)
         assert f["category_member"].maxshape == (None,)
+
+
+@pytest.mark.parametrize("case, holder", [
+    ("table", "private"), ("table", "ext"), ("family", "mesh/ext"),
+    ("table", "private/deeper/still")])
+def test_kept_groups_keep_the_root_scales_they_use(files, tmp_path, case,
+                                                   holder):
+    """A dataset kept inside /private, an unknown group or an unknown
+    group of the mesh, over a root dimension only it uses: the rewrite
+    makes the dimension again, and netCDF4 still opens the file."""
+    netCDF4 = pytest.importorskip("netCDF4")
+    assert_this_package()
+    import shutil
+
+    from mestra.encoding import make_scale
+    path = str(tmp_path / "kept.mes")
+    shutil.copy(files[case], path)
+    with h5py.File(path, "r+") as f:
+        rows = f["row"].shape[0]
+        scale = make_scale(f, "parameter", 3)
+        group = f.require_group(holder)
+        grad = group.create_dataset("grad", data=np.ones((rows, 3)),
+                                    track_times=False)
+        grad.dims[0].attach_scale(f["row"])
+        grad.dims[1].attach_scale(scale)
+    with netCDF4.Dataset(path) as nc:
+        assert nc[holder + "/grad"].dimensions == ("row", "parameter")
+    again = str(tmp_path / "again.mes")
+    with lib.read(path) as ds:
+        lib.write(ds, again)
+    with h5py.File(again, "r") as f:
+        assert [s.name for s in f[holder + "/grad"].dims[1].values()] == [
+            "/parameter"]
+        np.testing.assert_array_equal(f[holder + "/grad"][()],
+                                      np.ones((rows, 3)))
+    with netCDF4.Dataset(again) as nc:
+        assert nc[holder + "/grad"].dimensions == ("row", "parameter")
+    assert lib.validate(again).errors == []
