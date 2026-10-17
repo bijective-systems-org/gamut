@@ -945,3 +945,47 @@ def test_e42_a_scale_made_without_creation_order(changed, base):
     assert report.error_ids == ["E42"]
     assert errors_at(report, "E42") == ["mesh/node"]
     assert "E42" not in lib.validate(base["family"]).error_ids
+
+
+# ------------------------------------- unknown attributes (W11 only)
+
+def test_w11_an_unknown_attribute_is_never_e19(changed, base):
+    """h5py writes a variable-length string when given a str; on an
+    attribute the specification does not name there it is W11 and
+    nothing else, and a strict read opens the file."""
+    def change(f):
+        f.attrs["campaign"] = "spring tests"
+        f["mach"].attrs["comment"] = "from the tunnel log"
+        f["member"].attrs["colour"] = "teal"
+        f["mesh/node_arrays/pressure"].attrs["probe"] = "kulite"
+        f["categories/member"].attrs["source_table"] = "sheet 2"
+        f["mesh/cell_types"].attrs["note"] = "quads"
+    path = changed("family", change)
+    report = lib.validate(path)
+    assert report.errors == [], report
+    assert warnings_at(report, "W11") == [
+        "", "categories/member", "labels/member", "mesh/cell_types",
+        "mesh/node_arrays/pressure", "parameters/mach"]
+    with lib.read(path) as ds:                    # strict
+        assert ds.parameters["mach"]._extra == {
+            "comment": "from the tunnel log"}
+        again = path + ".again.mes"
+        lib.write(ds, again)
+    with h5py.File(again, "r") as f:
+        assert f["mach"].attrs["comment"] == b"from the tunnel log"
+    assert lib.validate(again).errors == []
+    assert "E19" not in lib.validate(base["family"]).error_ids
+
+
+def test_e19_still_holds_for_an_attribute_the_specification_names(changed):
+    def change(f):
+        del f["mach"].attrs["units"]
+        f["mach"].attrs["units"] = "1"            # variable-length
+    report = lib.validate(changed("family", change))
+    assert errors_at(report, "E19") == ["parameters/mach"]
+
+
+def test_dictionary_entries_keep_the_string_encoding(changed):
+    path = changed("model", lambda f: f["callables/m1"].attrs.__setitem__(
+        "label", "variable length"))
+    assert errors_at(lib.validate(path), "E19") == ["callables/m1"]

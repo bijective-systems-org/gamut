@@ -1179,7 +1179,7 @@ class _FileValidator:
         public object. `/private`, `/VTKHDF`, unknown groups and root
         objects with a role this reader does not know are outside the
         public byte rules."""
-        self._object(self.f, "", named=True)
+        self._object(self.f, "")
         stack = [(self.f, "", 0)]
         while stack:
             group, prefix, depth = stack.pop()
@@ -1201,29 +1201,73 @@ class _FileValidator:
                                                   "not checked further"
                               % limits.MAX_OBJECTS)
                     return
-                named = _named_attrs(path)
-                self.guarded(self.concept(path), self._object, obj, path,
-                             named)
+                self.guarded(self.concept(path), self._object, obj, path)
                 if isinstance(obj, h5py.Group):
                     stack.append((obj, path, depth + 1))
                 else:
                     self.guarded(self.concept(path), self._dataset, obj,
                                  path)
 
-    def _object(self, obj: Any, path: str, named: bool) -> None:
+    def _object(self, obj: Any, path: str) -> None:
+        """E33 on attribute names, and the encoding of each attribute
+        the specification names for this object. An attribute it does
+        not name there is W11 and nothing else, whatever its encoding:
+        a later 1.x attribute must not break a reader (section 14).
+        Notes and a callable's dictionary entries are free-form public
+        values, held to the generic string encoding."""
         where = self.concept(path)
+        mode, known = self._attribute_scope(path, obj)
         for name in h5safe.attr_names(obj):
             if not is_legal_name(name):
                 self.error("E33", where, "the attribute name %r is not a "
                                          "legal netCDF-4 name" % name)
-            self.guarded(where, self._attr_encoding, obj, name, where,
-                         named)
+            if name in known:
+                self.guarded(where, self._attr_encoding, obj, name, where,
+                             _ATTR_KIND.get(name))
+            elif mode == "named":
+                self.warn("W11", where, "this reader does not know the "
+                                        "attribute %s, and ignores it"
+                          % name)
+            else:
+                self.guarded(where, self._attr_encoding, obj, name, where,
+                             None)
+
+    def _attribute_scope(self, path: str,
+                         obj: Any) -> tuple[str, Sequence[str]]:
+        """("named", the attributes section 11 gives this object),
+        ("callable", its container attributes, the rest being dictionary
+        entries), or ("free", nothing named)."""
+        parts = path.strip("/").split("/")
+        if parts == [""]:
+            return "named", _ROOT_ATTRS
+        head = parts[0]
+        if head == "notes" or (head == "callables" and len(parts) > 2):
+            return "free", ()
+        if head == "callables" and len(parts) == 2:
+            return "callable", _CALLABLE_ATTRS
+        if len(parts) == 1:
+            if head == "mesh":
+                return "named", _MESH_ATTRS
+            if head in self.parameters:
+                return "named", _PARAMETER_ATTRS
+            if head in self.labels:
+                role = _attr(self.labels[head], "role")
+                return "named", ("role",) if role == "id" else _LABEL_ATTRS
+            if head in self.scalars:
+                return "named", _SCALAR_ATTRS
+            return "named", ()
+        if head == "mesh" and (parts[1] == "coordinates" or (
+                len(parts) == 3 and parts[1] in ("node_arrays",
+                                                  "cell_arrays"))):
+            return "named", _ARRAY_ATTRS
+        return "named", ()
 
     def _attr_encoding(self, obj: Any, name: str, where: str,
-                       named: bool) -> None:
-        """E19 and E26 on one attribute."""
+                       kind: str | None) -> None:
+        """E19 and E26 on one attribute: `kind` is the encoding section
+        18 gives it, or None for a free-form value, held to the generic
+        string rules only."""
         attr = obj.attrs.get_id(name)
-        kind = _ATTR_KIND.get(name) if named else None
         htype = attr.get_type()
         if tuple(attr.shape) and kind is not None:
             self.error("E19", where, "the attribute %s has the shape %s, "
@@ -1748,16 +1792,6 @@ def _outside(prefix: str, name: str, obj: Any, ignored: set[str]) -> bool:
     if prefix == "/mesh":
         return name not in _MESH_MEMBERS
     return False
-
-
-def _named_attrs(path: str) -> bool:
-    """Whether the attributes of the object at `path` are the ones the
-    specification names (and so have one encoding each), rather than
-    free-form: notes, and a callable's dictionary below its group."""
-    parts = path.strip("/").split("/")
-    if parts[0] == "notes":
-        return False
-    return not (parts[0] == "callables" and len(parts) > 2)
 
 
 def _exact(name: str) -> Any:
