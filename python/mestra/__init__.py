@@ -33,6 +33,7 @@ from .callables import (
 from .errors import Finding, MestraError
 from .model import FORMAT, Dataset, Label, Mesh, NamedArray, Parameter, Slot
 from .reader import read
+from .upgrade import upgrade
 from .validator import Report, validate
 from .writer import write
 
@@ -58,6 +59,7 @@ __all__ = [
     "input_table",
     "read",
     "register_callable",
+    "upgrade",
     "validate",
     "write",
 ]
