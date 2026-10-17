@@ -735,3 +735,17 @@ def test_a_study_started_empty_grows_in_sensible_chunks(tmp_path):
     assert os.path.getsize(path) < 2_000_000
     report = lib.validate(path)
     assert report.errors == [] and report.warnings == []
+
+
+def test_deep_copies(files):
+    built = CASES["family"]()
+    twin = copy.deepcopy(built)
+    twin.scalars["cl"]._data.array[0] = 9.0
+    assert built.scalars["cl"].read().values[0] == 0.2
+    eager = lib.read(files["family"], lazy=False)
+    assert copy.deepcopy(eager).labels["member"].names().values[0] == "m_a"
+    with lib.read(files["family"]) as lazy:
+        with pytest.raises(lib.MestraError) as caught:
+            copy.deepcopy(lazy)
+        assert caught.value.rule == ""
+        assert copy.copy(lazy).row_count == 6      # a copy shares the file

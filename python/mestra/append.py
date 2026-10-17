@@ -23,6 +23,7 @@ copy if the file must survive a crash.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from typing import Any
 
@@ -56,13 +57,22 @@ def append(ds: Dataset, path: str, replace_by: str | None = None) -> int:
     Returns the number of rows written: those appended and those
     replaced. Refuses, before anything is written, a dataset whose
     structure differs from the file's (rule "" naming the difference)
-    or whose rows break E10, E16 or E48.
+    or whose rows break E10, E16 or E48, and a file that another open
+    handle in this process holds (close it first).
     """
     with read(str(path)) as old:
         plan = _plan(old, ds, replace_by)
     if plan.written == 0:
         return 0
-    with h5py.File(str(path), "r+") as f:
+    if not os.access(str(path), os.W_OK):
+        raise MestraError("", "this file is not writable", str(path))
+    try:
+        f = h5py.File(str(path), "r+")
+    except OSError as exc:
+        raise MestraError(
+            "", "close the other handles on this file first",
+            str(path)) from exc
+    with f:
         _apply(f, plan)
     return plan.written
 

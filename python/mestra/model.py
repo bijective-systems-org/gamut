@@ -1162,8 +1162,10 @@ class Dataset:
     directly.
 
     It is a handle: a read dataset keeps its file open until
-    `close()`, and copies share the file. Arrays it returns are the
-    caller's own.
+    `close()`, and copies (`copy.copy`) share the file. Arrays it
+    returns are the caller's own. `copy.deepcopy` is refused while the
+    dataset holds an open file, because a file cannot be duplicated;
+    a dataset built in memory or read with `lazy=False` deep-copies.
     """
 
     def __init__(self, writer: str = "mestra python",
@@ -1720,6 +1722,20 @@ class Dataset:
         """Release the file a read dataset holds. Values already
         returned stay valid; values not yet read cannot be read."""
         self._handle.close()
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> Dataset:
+        if self._handle.file is not None:
+            raise MestraError(
+                "", "this dataset holds its file open, and a file cannot be "
+                "deep-copied; copy.copy shares the file, and read(path, "
+                "lazy=False) gives a dataset that deep-copies",
+                self.path or "")
+        import copy as _copy
+        made = Dataset.__new__(Dataset)
+        memo[id(self)] = made
+        for key, value in self.__dict__.items():
+            setattr(made, key, _copy.deepcopy(value, memo))
+        return made
 
     def __enter__(self) -> Dataset:
         return self

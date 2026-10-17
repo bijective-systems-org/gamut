@@ -222,3 +222,18 @@ def test_a_widened_id_keeps_the_default_chunk(tmp_path):
         assert f["run"].shape == (40001,)
     report = lib.validate(path)
     assert report.errors == [] and "W12" not in report.warning_ids
+
+
+def test_append_with_another_handle_open_is_refused_clearly(tmp_path):
+    path = str(tmp_path / "store.mes")
+    lib.write(rows(["a@0.5"]), path)
+    before = digest(path)
+    with lib.read(path) as held:
+        with pytest.raises(lib.MestraError) as caught:
+            lib.append(rows(["b@0.5"]), path)
+        assert caught.value.rule == ""
+        assert caught.value.message == \
+            "close the other handles on this file first"
+        assert held.row_count == 1
+    assert digest(path) == before
+    assert lib.append(rows(["b@0.5"]), path) == 1     # once it is closed
