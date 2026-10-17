@@ -1389,6 +1389,7 @@ class _FileValidator:
         """W12: decided from the file alone (section 12.3)."""
         chunks = tuple(dset.chunks)
         rest = tuple(int(n) for n in dset.shape[1:])
+        whole = tuple(max(1, n) for n in rest)
         size = dset.dtype.itemsize
         bound = leading_bound(size, rest)
         if chunks[0] > bound:
@@ -1398,12 +1399,19 @@ class _FileValidator:
             return
         if entry_bytes(size, rest) > CHUNK_TARGET and dset.ndim >= 3:
             block = site_block(size, max(1, rest[0]), rest[1])
-            if chunks[1] != block:
+            wanted = (block,) + whole[1:]
+            if chunks[1:] != wanted:
                 self.warn("W12", where, "an entry is larger than 256 KiB, "
                                         "so the default chunk takes the "
-                                        "node or cell axis in blocks of %d, "
-                                        "and this takes %d"
-                          % (block, chunks[1]))
+                                        "node or cell axis in blocks of %d "
+                                        "and the rest whole, %s, and this "
+                                        "takes %s"
+                          % (block, wanted, chunks[1:]))
+            return
+        if chunks[1:] != whole:
+            self.warn("W12", where, "the default chunk takes the axes after "
+                                    "the leading one whole, %s, and this "
+                                    "takes %s" % (whole, chunks[1:]))
 
     # -- small shared checks
 

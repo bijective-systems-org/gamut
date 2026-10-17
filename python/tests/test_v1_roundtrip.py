@@ -11,6 +11,7 @@ opened by netCDF4 and by xarray, and validated.
 from __future__ import annotations
 
 import copy
+import os
 
 import h5py
 import numpy as np
@@ -378,7 +379,7 @@ def test_large_rows_are_chunked_by_node_blocks(tmp_path):
 
 def test_zero_rows_take_a_chunk_of_one(files):
     with h5py.File(files["model"], "r") as f:
-        assert f["mach"].shape == (0,) and f["mach"].chunks == (1,)
+        assert f["mach"].shape == (0,) and f["mach"].chunks == (32768,)
         assert isinstance(f["cl"], h5py.Group)
         assert f["cl"].attrs["source"].decode() == "callable:m1"
         assert f["callables/m1"].attrs["inputs"].decode() == "alpha mach"
@@ -639,7 +640,8 @@ def test_a_zero_length_cell_axis_is_refused_by_rule(tmp_path):
     ((3, 1000, 3), "<f4", (3, 1000, 3)),           # b < T, a field
     ((2, 1048576, 1), "<f4", (1, 65536, 1)),       # b > T, node blocks
     ((2, 262144, 3), "<f8", (1, 10922, 3)),        # b > T, 3 components
-    ((0, 6, 1), "<f8", (1, 1, 1)),                 # L = 0
+    ((0, 6, 1), "<f8", (5461, 6, 1)),              # L = 0: not capped
+    ((0, 262144, 3), "<f8", (1, 10922, 3)),        # L = 0, b > T
 ])
 def test_the_chunk_rule_by_hand(tmp_path, shape, dtype, chunks):
     ds = lib.Dataset(created="2026-10-16T00:00:00Z")
@@ -704,3 +706,32 @@ def test_kept_groups_keep_the_root_scales_they_use(files, tmp_path, case,
     with netCDF4.Dataset(again) as nc:
         assert nc[holder + "/grad"].dimensions == ("row", "parameter")
     assert lib.validate(again).errors == []
+
+
+def test_a_study_started_empty_grows_in_sensible_chunks(tmp_path):
+    """Created with no rows, a node field of 10,000 float64 nodes takes
+    three rows a chunk, not one value a chunk, so twenty appends make
+    seven chunks of 240 kB and the file draws no W12."""
+    def study(ids, values):
+        ds = lib.Dataset(writer="store", created="2026-10-16T00:00:00Z")
+        ds.add_label("run", np.array(ids, dtype=np.int64), "id")
+        mesh = ds.set_mesh(coordinates=np.zeros((10000, 1)), units="m",
+                           dims=("node", "component"))
+        mesh.add_node_array("p", np.array(values).reshape(len(ids), 10000),
+                            "Pa", ("row", "node"))
+        return ds
+
+    path = str(tmp_path / "grown.mes")
+    lib.write(study([], np.zeros((0, 10000))), path)
+    with h5py.File(path, "r") as f:
+        assert f["mesh/node_arrays/p"].chunks == (3, 10000, 1)
+        assert f["run"].chunks == (32768,)
+    for row in range(20):
+        assert lib.append(study([row], np.full((1, 10000), row)), path) == 1
+    with h5py.File(path, "r") as f:
+        field = f["mesh/node_arrays/p"]
+        assert field.shape == (20, 10000, 1)
+        assert field.id.get_num_chunks() == 7
+    assert os.path.getsize(path) < 2_000_000
+    report = lib.validate(path)
+    assert report.errors == [] and report.warnings == []

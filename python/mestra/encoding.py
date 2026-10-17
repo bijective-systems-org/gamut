@@ -356,22 +356,24 @@ def default_chunks(itemsize: int, shape: Sequence[int]) -> tuple[int, ...]:
     """The default chunk of a dataset whose first axis is `row` or
     `group_<k>`, with L the length of that axis at creation.
 
-    L = 0 is a chunk of 1 on every axis. Otherwise an entry of b <= T
-    bytes takes c = min(L, max(1, floor(T / b))) entries per chunk with
-    the other axes whole, and a larger entry takes one entry per chunk
-    with the node or cell axis (the second) in blocks of m and the
-    component axis whole. A chunk extent is never below 1.
+    An entry of b <= T bytes takes c = max(1, floor(T / b)) entries per
+    chunk, capped at L when L > 0, with the other axes whole. An empty
+    dataset is not capped: it will grow by appends, and HDF5 allows a
+    chunk longer than the current extent of an unlimited axis. A larger
+    entry takes one entry per chunk, with the node or cell axis (the
+    second) in blocks of m and the other axes whole. A chunk extent is
+    never below 1.
     """
     shape = tuple(int(n) for n in shape)
     if not shape:
         raise ValueError("a dataset with no axes has no chunks")
-    if shape[0] == 0:
-        return (1,) * len(shape)
     rest = shape[1:]
-    # A chunk extent is at least 1, whatever the axis's length.
     whole = tuple(max(1, n) for n in rest)
     if entry_bytes(itemsize, rest) <= CHUNK_TARGET:
-        return (min(shape[0], leading_bound(itemsize, rest)),) + whole
+        count = leading_bound(itemsize, rest)
+        if shape[0] > 0:
+            count = min(count, shape[0])
+        return (count,) + whole
     if len(shape) < 3:
         return (1,) + whole
     block = site_block(itemsize, max(1, shape[1]), shape[2])

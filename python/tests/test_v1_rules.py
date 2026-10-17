@@ -843,6 +843,30 @@ def test_w12_fewer_entries_than_the_bound_are_the_default(changed, base):
     assert warnings_at(lib.validate(path), "W12") == ["parameters/mach"]
 
 
+def test_w12_the_axes_after_the_leading_one_are_whole(changed):
+    path = changed("family", lambda f: recreate(
+        f, "mesh/node_arrays/pressure", chunks=(1, 3, 1)))
+    assert warnings_at(lib.validate(path), "W12") == [
+        "mesh/node_arrays/pressure"]
+
+
+def test_w12_after_the_node_block_the_axes_are_whole(tmp_path):
+    ds = lib.Dataset(created="2026-10-16T00:00:00Z")
+    ds.add_parameter("x", [0.0, 1.0], "design", "1")
+    mesh = ds.set_mesh(coordinates=np.zeros((30000, 1)), units="m",
+                       dims=("node", "component"))
+    mesh.add_node_array("v", np.zeros((2, 30000, 3)), "m s-1",
+                        ("row", "node", "component"))
+    path = str(tmp_path / "v.mes")
+    lib.write(ds, path)
+    with h5py.File(path, "r") as f:
+        assert f["mesh/node_arrays/v"].chunks == (1, 10922, 3)
+    assert "W12" not in lib.validate(path).warning_ids
+    with h5py.File(path, "r+") as f:
+        recreate(f, "mesh/node_arrays/v", chunks=(1, 10922, 1))
+    assert warnings_at(lib.validate(path), "W12") == ["mesh/node_arrays/v"]
+
+
 # ------------------------------------------------------------- W18
 
 def test_w18_two_rows_of_one_run_at_the_same_time(changed, base):
