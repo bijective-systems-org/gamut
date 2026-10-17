@@ -337,9 +337,18 @@ Declarations are Dicts (or NamedTuples) from a name to its units text or
 to its specification, as in Python: `parameters = Dict("mach" => "1")`,
 `fields = Dict("p" => (units = "Pa", at = "node"))`.
 """
+function axes_of(kw)
+    c = get(kw, :coordinates, nothing)
+    c === nothing && return 3
+    v = get(spec(c, "units"), "axes", 3)
+    (v isa Integer && !(v isa Bool)) || throw(MestraError("E24", "coordinates: axes is 1, 2 or 3, not $(repr(v))"))
+    return Int(v)
+end
+
 function create(path::AbstractString; writer::AbstractString, mesh=nothing, per=nothing, kw...)
     mesh !== nothing && per === nothing &&
         throw(MestraError("E6", "a mesh needs per: \"fixed\", \"run\" or \"group:<label>\""))
+    axes_of(kw)                      # before the file exists: a refusal leaves none
     out = Ref{Ptr{Cvoid}}(C_NULL)
     @mes mes_create (Cstring, Cstring, Cstring, Cstring, Ref{Ptr{Cvoid}}) cs(path) cs(writer) cs(something(mesh, "")) cs(something(per, "fixed")) out
     return started(Study(out[], String(path), true, something(mesh, ""), something(per, "")), kw)
@@ -355,6 +364,7 @@ Creates a model file (spec section 7): parameters with bounds, every result
 naming the model and output that computes it; then `add_model!`.
 """
 function create_model(path::AbstractString; writer::AbstractString, mesh=nothing, per="fixed", kw...)
+    axes_of(kw)                      # before the file exists: a refusal leaves none
     out = Ref{Ptr{Cvoid}}(C_NULL)
     @mes mes_create_model (Cstring, Cstring, Cstring, Cstring, Ref{Ptr{Cvoid}}) cs(path) cs(writer) cs(something(mesh, "")) cs(per) out
     return started(Study(out[], String(path), true, something(mesh, ""), mesh === nothing ? "" : per), kw)
@@ -372,8 +382,7 @@ function started(s::Study, kw)
         throw(MestraError("", "unknown keyword $(first(unknown)); the declarations are " *
                               join(DECLARATIONS, ", ")))
     end
-    c = get(kw, :coordinates, nothing)
-    c === nothing || (s.axes = Int(get(spec(c, "units"), "axes", 3)))
+    s.axes = axes_of(kw)
     try
         declare(s.handle, kw)
     catch

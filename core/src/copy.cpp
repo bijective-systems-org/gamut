@@ -56,9 +56,27 @@ std::vector<std::int64_t> as_i64(const Column& c) {
   return v;
 }
 
+// Mesh-label codes of a source file as the destination's codes, by name
+// (spec section 4.3: a mesh label's codes name entries of its table).
+// Labels without a table, and copies into a new file, map codes to
+// themselves.
+using CodeMaps = std::map<std::string, std::vector<std::int64_t>>;
+
+std::vector<std::int64_t> mapped(const std::string& label, std::vector<std::int64_t> codes,
+                                 const CodeMaps& maps) {
+  const auto it = maps.find(label);
+  if (it == maps.end()) return codes;
+  for (auto& c : codes) {
+    need(c >= 0 && static_cast<std::size_t>(c) < it->second.size(), "E9",
+         label + ": a code is outside its table", label);
+    c = it->second[static_cast<std::size_t>(c)];
+  }
+  return codes;
+}
+
 // The geometry row `row` uses: its coordinates, and for a changing mesh its
-// cells and mesh labels.
-Geometry geometry_of(const Reader& r, std::int64_t row) {
+// cells and mesh labels (as the destination's codes).
+Geometry geometry_of(const Reader& r, std::int64_t row, const CodeMaps& maps) {
   const Mesh& m = r.schema().mesh;
   const Selection one = Selection::list({row});
   Geometry g;
@@ -73,7 +91,8 @@ Geometry geometry_of(const Reader& r, std::int64_t row) {
       g.connectivity = as_i64(read_column(r, "cells/connectivity", one, DType::Int64));
     }
     for (const auto& ml : m.labels) {
-      g.labels[ml.name] = as_i64(read_column(r, mesh_label_path(ml), one, DType::Int64));
+      g.labels[ml.name] =
+          mapped(ml.name, as_i64(read_column(r, mesh_label_path(ml), one, DType::Int64)), maps);
     }
   }
   return g;
@@ -85,30 +104,71 @@ bool same_geometry(const Geometry& a, const Geometry& b) {
          a.labels == b.labels;
 }
 
-// Rows of `src`, in batches small enough to hold, through the writer.
+// The bytes one row of `s` takes in a batch: every column, and for a shared
+// mesh its fields and changing coordinates.
+std::size_t shared_row_bytes(const Schema& s) {
+  const Mesh& m = s.mesh;
+  std::size_t n = 8;                                        // the row id
+  for (const auto& p : s.parameters) n += dtype_size(p.dtype);
+  n += 32 * s.labels.size();                                // a name each
+  for (const auto& r : s.results) {
+    if (r.where == "scalar") {
+      n += dtype_size(r.dtype);
+    } else if (m.kind == "shared") {
+      n += dtype_size(r.dtype) * static_cast<std::size_t>(r.where == "node" ? m.n_nodes : m.n_cells);
+    }
+  }
+  if (m.kind == "shared" && m.per != "fixed") {
+    n += dtype_size(m.coordinate_dtype) * static_cast<std::size_t>(m.n_nodes * m.axes);
+  }
+  return n;
+}
+
+// A changing-mesh row's bytes: its instance's nodes and cells times what
+// each holds.
+std::size_t changing_row_bytes(const Reader& r, std::int64_t row, std::size_t base) {
+  const Schema& s = r.schema();
+  const Mesh& m = s.mesh;
+  const Selection one = Selection::list({row});
+  const Selection all = Selection::all();
+  const std::size_t nodes = static_cast<std::size_t>(r.shape("coordinates", one, all)[0]);
+  std::size_t cells = 0, conn = 0;
+  if (m.has_cells == 1) {
+    cells = static_cast<std::size_t>(r.shape("cells/types", one, all)[0]);
+    conn = static_cast<std::size_t>(r.shape("cells/connectivity", one, all)[0]);
+  }
+  std::size_t per_node = dtype_size(m.coordinate_dtype) * static_cast<std::size_t>(m.axes);
+  std::size_t per_cell = 1 + 8;
+  for (const auto& res : s.results) {
+    if (res.where == "node") per_node += dtype_size(res.dtype);
+    if (res.where == "cell") per_cell += dtype_size(res.dtype);
+  }
+  for (const auto& ml : m.labels) (ml.where == "node" ? per_node : per_cell) += 8;
+  return base + nodes * per_node + cells * per_cell + conn * 8;
+}
+
+// Rows of `src`, in batches of about 32 MiB of values, through the
+// writer; with `check_only`, every batch is checked and nothing is written.
+// Peak memory is a few batches (the values, the writer's converted copy,
+// HDF5's working set), whatever the file's size.
 void copy_rows(const Reader& src, Writer& w, const std::vector<std::int64_t>& rows,
-               bool keep_ids) {
+               bool keep_ids, const CodeMaps& maps, bool check_only) {
   const Schema& s = src.schema();
   const Mesh& m = s.mesh;
   const std::string group = m.per_group();
-  std::size_t per_row = 64;
-  if (m.kind == "shared") {
-    for (const auto& r : s.results) {
-      if (r.where == "scalar") continue;
-      per_row += dtype_size(r.dtype) * static_cast<std::size_t>(r.where == "node" ? m.n_nodes
-                                                                                   : m.n_cells);
+  const std::size_t budget = std::size_t(32) << 20;
+  const std::size_t base = shared_row_bytes(s);
+  std::size_t a = 0;
+  while (a < rows.size()) {
+    // Rows up to the budget, at least one.
+    std::size_t b = a, bytes = 0;
+    while (b < rows.size() && (b == a || bytes < budget)) {
+      bytes += m.kind == "changing" ? changing_row_bytes(src, rows[b], base) : base;
+      ++b;
     }
-    if (m.per != "fixed") {
-      per_row += dtype_size(m.coordinate_dtype) * static_cast<std::size_t>(m.n_nodes * m.axes);
-    }
-  }
-  // About 64 MiB a batch; a changing mesh's rows differ, so a fixed count.
-  const std::size_t batch_rows =
-      m.kind == "changing" ? 64 : std::max<std::size_t>(1, (std::size_t(64) << 20) / per_row);
-  for (std::size_t a = 0; a < rows.size(); a += batch_rows) {
-    const std::size_t b = std::min(rows.size(), a + batch_rows);
     const std::vector<std::int64_t> pos(rows.begin() + static_cast<std::ptrdiff_t>(a),
                                         rows.begin() + static_cast<std::ptrdiff_t>(b));
+    a = b;
     const Selection sel = Selection::list(pos);
     Batch batch;
     batch.runs = static_cast<std::int64_t>(pos.size());
@@ -136,12 +196,12 @@ void copy_rows(const Reader& src, Writer& w, const std::vector<std::int64_t>& ro
       for (std::size_t i = 0; i < pos.size(); ++i) {
         const std::string& name = members[i];
         if (w.has_member(name) || batch.member_geometry.count(name)) continue;
-        batch.member_geometry[name] = geometry_of(src, pos[i]);
+        batch.member_geometry[name] = geometry_of(src, pos[i], maps);
       }
     } else if (m.per == "run") {
-      for (const std::int64_t row : pos) batch.run_geometry.push_back(geometry_of(src, row));
+      for (const std::int64_t row : pos) batch.run_geometry.push_back(geometry_of(src, row, maps));
     }
-    w.add_runs(batch);
+    w.add_runs(batch, check_only);
   }
 }
 
@@ -217,7 +277,9 @@ std::vector<std::int64_t> positions(const Selection& sel, std::int64_t n) {
 }
 
 // What append needs to hold between two files (interface section 6).
-void check_same(const Reader& dst, const Reader& src) {
+// Returns how the source's mesh-label codes become the destination's.
+CodeMaps check_same(const Reader& dst, const Reader& src) {
+  CodeMaps maps;
   const Schema& d = dst.schema();
   const Schema& s = src.schema();
   auto differ = [](const std::string& what, const std::string& path) {
@@ -263,7 +325,9 @@ void check_same(const Reader& dst, const Reader& src) {
   }
   for (const auto& c : s.constants) {
     const Constant* q = d.constant(c.name);
-    if (q->units != c.units || q->dtype != c.dtype || q->f != c.f || q->i != c.i) {
+    // Compared bit for bit, so a NaN constant equals itself.
+    if (q->units != c.units || q->dtype != c.dtype ||
+        std::memcmp(&q->f, &c.f, sizeof c.f) != 0 || q->i != c.i) {
       differ("the constant " + c.name, c.name);
     }
   }
@@ -271,21 +335,40 @@ void check_same(const Reader& dst, const Reader& src) {
   const Mesh& dm = d.mesh;
   const Mesh& sm = s.mesh;
   if (dm.kind != sm.kind || dm.per != sm.per) differ("their mesh (kind or per)", "mesh");
-  if (sm.kind.empty()) return;
+  if (sm.kind.empty()) return maps;
   if (dm.coordinate_units != sm.coordinate_units || dm.coordinate_dtype != sm.coordinate_dtype ||
       dm.axes != sm.axes) {
     differ("their coordinates (units, dtype or axes)", "coordinates");
   }
   std::set<std::string> dl, sl;
-  for (const auto& ml : dm.labels) dl.insert(mesh_label_path(ml));
-  for (const auto& ml : sm.labels) sl.insert(mesh_label_path(ml));
-  if (dl != sl) differ("their mesh labels", "mesh");
+  for (const auto& ml : dm.labels) dl.insert(mesh_label_path(ml) + (ml.category.empty() ? "" : "+"));
+  for (const auto& ml : sm.labels) sl.insert(mesh_label_path(ml) + (ml.category.empty() ? "" : "+"));
+  if (dl != sl) differ("their mesh labels (names, locations or tables)", "mesh");
+  // A mesh label's codes name entries of its table (spec section 4.3), so
+  // codes are mapped by name; a mesh label's table does not grow, so a name
+  // the destination lacks is refused.
+  for (const auto& ml : sm.labels) {
+    if (ml.category.empty()) continue;
+    const MeshLabel* dml = d.mesh_label(mesh_label_path(ml));
+    const std::vector<std::string> theirs = dst.table(dml->category);
+    std::vector<std::int64_t> to;
+    for (const auto& name : src.table(ml.category)) {
+      const auto at = std::find(theirs.begin(), theirs.end(), name);
+      if (at == theirs.end()) {
+        differ("the table of the mesh label " + ml.name + " (\"" + name + "\" is only in the "
+               "source)", mesh_label_path(ml));
+      }
+      to.push_back(static_cast<std::int64_t>(at - theirs.begin()));
+    }
+    maps[ml.name] = to;
+  }
   const Selection all = Selection::all();
   if (sm.kind == "shared") {
     if (dm.support_id != sm.support_id) differ("their mesh (support_id)", "mesh");
     for (const auto& ml : sm.labels) {
       const std::string p = mesh_label_path(ml);
-      if (read_column(dst, p, all, DType::Int64).bytes != read_column(src, p, all, DType::Int64).bytes) {
+      if (as_i64(read_column(dst, p, all, DType::Int64)) !=
+          mapped(ml.name, as_i64(read_column(src, p, all, DType::Int64)), maps)) {
         differ("the mesh label " + p, p);
       }
     }
@@ -296,12 +379,16 @@ void check_same(const Reader& dst, const Reader& src) {
             read_column(src, "coordinates", all, sm.coordinate_dtype).bytes) {
       differ("their coordinates", "coordinates");
     }
-  } else if (dm.has_cells != sm.has_cells && d.rows > 0 && s.rows > 0) {
-    differ("whether their instances have cells", "mesh");
+  } else if (dm.has_cells != sm.has_cells && s.rows > 0) {
+    // Fixed by the destination's first instance, or at its close from the
+    // cell fields and labels it declared.
+    differ(std::string("whether their instances have cells (the destination's ") +
+               (dm.has_cells == 1 ? "have" : "have none") + ")",
+           "mesh");
   }
   // A member in both files has one geometry.
   const std::string group = sm.per_group();
-  if (group.empty() || d.rows == 0) return;
+  if (group.empty() || d.rows == 0) return maps;
   // Each member's first row, by name, read as codes and the table.
   auto first_rows = [&](const Reader& r) {
     const std::vector<std::string> entries = r.table(r.schema().label(group)->category);
@@ -316,12 +403,13 @@ void check_same(const Reader& dst, const Reader& src) {
   for (const auto& kv : first_rows(src)) {
     const auto it = in_dst.find(kv.first);
     if (it == in_dst.end()) continue;
-    if (!same_geometry(geometry_of(dst, it->second), geometry_of(src, kv.second))) {
+    if (!same_geometry(geometry_of(dst, it->second, {}), geometry_of(src, kv.second, maps))) {
       throw Error("", "the " + group + " \"" + kv.first + "\" has other geometry in the source; "
                       "one member has one geometry",
                   group);
     }
   }
+  return maps;
 }
 
 }  // namespace
@@ -330,19 +418,23 @@ std::int64_t append_file(const std::string& dst, const std::string& src) {
   need_distinct(src, dst);
   need_valid(src);
   std::int64_t n = 0;
+  CodeMaps maps;
   {
     const auto d = Reader::open(dst);
     const auto s = Reader::open(src);
     need(d->schema().kind == "data" && s->schema().kind == "data", "E16",
          "a model file has no rows; append joins data files");
-    check_same(*d, *s);
+    maps = check_same(*d, *s);
     n = s->schema().rows;
   }
-  // Everything is checked; now the rows.
   const auto s = Reader::open(src);
   const std::vector<std::int64_t> rows = positions(Selection::all(), n);
   auto w = Writer::open_append(dst);
-  copy_rows(*s, *w, rows, false);
+  // Every batch is checked before the first is written, so nothing the
+  // writer refuses can leave part of the source behind. (An I/O failure
+  // partway still keeps the rows written before it.)
+  copy_rows(*s, *w, rows, false, maps, true);
+  copy_rows(*s, *w, rows, false, maps, false);
   w->close();
   return n;
 }
@@ -355,7 +447,7 @@ void extract_file(const std::string& src, const std::string& dst, const Selectio
   const std::vector<std::int64_t> pos = positions(rows, s->schema().rows);
   auto w = declare_like(*s, dst);
   try {
-    copy_rows(*s, *w, pos, true);
+    copy_rows(*s, *w, pos, true, {}, false);
     w->close();
   } catch (...) {
     w->abandon(true);
@@ -371,7 +463,7 @@ void write_copy_file(const std::string& src, const std::string& dst) {
   try {
     w->keep_identity(s->schema().file_id, s->schema().created);
     if (s->schema().kind == "data") {
-      copy_rows(*s, *w, positions(Selection::all(), s->schema().rows), true);
+      copy_rows(*s, *w, positions(Selection::all(), s->schema().rows), true, {}, false);
     }
     w->close();
   } catch (...) {

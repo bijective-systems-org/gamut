@@ -101,7 +101,13 @@ class Study:
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         if exc_type is None:
-            self.close()
+            # Nothing can be fixed once the block has ended: a file that
+            # cannot be finished is discarded, and the refusal raised.
+            try:
+                self.close()
+            except MestraError:
+                self._abandon(remove=True)
+                raise
             return
         # Leaving on an error: finish the file if it can be finished, else
         # discard a file this study created; the first error stands.

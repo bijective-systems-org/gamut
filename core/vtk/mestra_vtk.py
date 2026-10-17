@@ -43,6 +43,7 @@ writing a converter for another format.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import sys
@@ -141,7 +142,10 @@ def read_parameters(path: str) -> tuple[pd.DataFrame, dict[str, str], dict[str, 
     """The parameters CSV: its runs, each column's units and role, and the
     problems found (all of them, each naming its line and column)."""
     problems: list[str] = []
-    raw = pd.read_csv(path, header=None, dtype=str, keep_default_na=False)
+    try:
+        raw = pd.read_csv(path, header=None, dtype=str, keep_default_na=False)
+    except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as e:
+        return pd.DataFrame(), {}, {}, [f"{path}: not a readable CSV table ({e})"]
     if raw.shape[0] < 2 or raw.iloc[0, 0].strip() != "file" or raw.iloc[1, 0].strip() != "units":
         return pd.DataFrame(), {}, {}, [f"{path}: line 1 starts with `file` and line 2 with "
                                         "`units`"]
@@ -164,7 +168,10 @@ def read_parameters(path: str) -> tuple[pd.DataFrame, dict[str, str], dict[str, 
 
 
 def read_fields(path: str) -> dict[str, str]:
-    table = pd.read_csv(path, dtype=str, keep_default_na=False)
+    try:
+        table = pd.read_csv(path, dtype=str, keep_default_na=False)
+    except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as e:
+        raise Problems([f"{path}: not a readable CSV table ({e})"]) from None
     if list(table.columns[:2]) != ["name", "units"]:
         raise Problems([f"{path}: the header is `name,units`"])
     return {n.strip(): u.strip() for n, u in zip(table["name"], table["units"])}
@@ -282,18 +289,37 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
     # Declarations from the first run's arrays.
     field_decl: dict[str, dict] = {}
     mesh_labels: dict[str, dict] = {}
+    label_source: dict[str, tuple[str, str]] = {}
     split: dict[tuple[str, str], list[str]] = {}
+    origin: dict[str, str] = {}          # stored name -> the VTK array it comes from
     notes: list[str] = []
+
+    def claim(stored: str, where: str, name: str) -> None:
+        # Names are unique in a file: two arrays giving one name is refused.
+        what = f"the {where} array {name}"
+        if stored in origin:
+            problems.append(f"{what} and {origin[stored]} both give the name {stored}; rename "
+                            "one, or --skip it")
+        origin[stored] = what
     for vtk_type, word in ((11, "voxels stored as hexahedra"), (8, "pixels stored as "
                                                                    "quadrilaterals")):
         if vtk_type in first["converted"]:
             notes.append(word)
     for (where, name), v in sorted(arrays.items()):
+        # A cell array named like a point array (foamToVTK writes both) is
+        # kept as <name>_cell.
+        stored = name
+        if where == "cell" and ("node", name) in arrays:
+            stored = f"{name}_cell"
+            notes.append(f"the cell array {name} is stored as {stored} beside the point array "
+                         f"{name}")
         if v.dtype.kind in "iu":
             if not labels_fixed[(where, name)]:
                 problems.append(f"array {name}: integers that change between runs; give them as "
                                 "floats, or --skip it")
-            mesh_labels[name] = {"at": where}
+            claim(stored, where, name)
+            mesh_labels[stored] = {"at": where}
+            label_source[stored] = (where, name)
             continue
         if v.dtype.kind != "f":
             problems.append(f"array {name}: {v.dtype} arrays are not imported; --skip it")
@@ -308,16 +334,19 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
         if round_bits is not None:
             spec["round_bits"] = round_bits
         if components == 1:
-            field_decl[name] = spec
-            split[(where, name)] = [name]
+            claim(stored, where, name)
+            field_decl[stored] = spec
+            split[(where, name)] = [stored]
         elif components in (2, 3):
-            parts = [f"{name}_{a}" for a in AXES[:components]]
+            parts = [f"{stored}_{a}" for a in AXES[:components]]
             for part, axis in zip(parts, AXES):
-                field_decl[part] = dict(spec, vector=name, axis=axis)
+                claim(part, where, name)
+                field_decl[part] = dict(spec, vector=stored, axis=axis)
             split[(where, name)] = parts
         else:
-            parts = [f"{name}_{i}" for i in range(components)]
+            parts = [f"{stored}_{i}" for i in range(components)]
             for part in parts:
+                claim(part, where, name)
                 field_decl[part] = dict(spec)
             split[(where, name)] = parts
             notes.append(f"array {name}: {components} components, stored as {', '.join(parts)} "
@@ -345,7 +374,7 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
                            per="fixed" if fixed_geometry else "run",
                            coordinates={"units": coordinate_units, "axes": 3}) as study:
             study.set_mesh(first["points"] if fixed_geometry else None, first["cells"],
-                           labels={k: arrays[(m["at"], k)] for k, m in mesh_labels.items()},
+                           labels={k: arrays[label_source[k]] for k in mesh_labels},
                            n_nodes=None if fixed_geometry else len(first["points"]))
             for i, f in enumerate(files):
                 run = first if i == 0 else from_pyvista(pv.read(os.path.join(base, f)))
@@ -403,29 +432,36 @@ def export_study(path: str, folder: str) -> dict[str, Any]:
         table = study.table(params + labels + (["file"] if has_file else []))
         ids = study.get_row_ids()
         names = []
+        stems = [os.path.splitext(os.path.basename(str(table["file"][row])))[0]
+                 if has_file and str(table["file"][row]) else f"run_{ids[row]:06d}"
+                 for row in range(study.row_count)]
         for row in range(study.row_count):
-            given = str(table["file"][row]) if has_file else ""
-            stem = os.path.splitext(os.path.basename(given))[0] if given else f"run_{ids[row]:06d}"
+            # A stem used by more than one row (files appended from several
+            # folders) takes the row id, so no file is written twice.
+            stem = stems[row] if stems.count(stems[row]) == 1 else f"{stems[row]}_{ids[row]}"
             name = f"{stem}.vtu"
             to_pyvista(study, row).save(os.path.join(folder, name))
             names.append(name)
             written.append(name)
         cols = params + labels
-        with open(os.path.join(folder, "parameters.csv"), "w") as fh:
-            fh.write(",".join(["file"] + cols) + "\n")
-            fh.write(",".join(["units"] + [study.describe(c).get("units", "") if c in params
-                                           else "" for c in cols]) + "\n")
-            fh.write(",".join(["role"] + [study.describe(c).get("role", "") for c in cols]) + "\n")
+        with open(os.path.join(folder, "parameters.csv"), "w", newline="") as fh:
+            out = csv.writer(fh)
+            out.writerow(["file"] + cols)
+            out.writerow(["units"] + [study.describe(c).get("units", "") if c in params else ""
+                                      for c in cols])
+            out.writerow(["role"] + [study.describe(c).get("role", "") for c in cols])
             for row in range(study.row_count):
-                fh.write(",".join([names[row]] + [_cell(table[c][row]) for c in cols]) + "\n")
+                out.writerow([names[row]] + [_cell(table[c][row]) for c in cols])
         units = {"coordinates": study.describe("coordinates").get("units", "")}
         for where in ("node", "cell"):
             for name in study.names(f"{where}_fields"):
                 d = study.describe(name)
                 units[d.get("vector") if d.get("vector") and d.get("axis") in AXES else name] = \
                     d.get("units", "")
-        with open(os.path.join(folder, "fields.csv"), "w") as fh:
-            fh.write("name,units\n" + "".join(f"{k},{v}\n" for k, v in units.items()))
+        with open(os.path.join(folder, "fields.csv"), "w", newline="") as fh:
+            out = csv.writer(fh)
+            out.writerow(["name", "units"])
+            out.writerows(units.items())
     return {"ok": True, "folder": folder, "files": written}
 
 

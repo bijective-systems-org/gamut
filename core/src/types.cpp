@@ -95,23 +95,24 @@ std::int64_t Selection::count(std::int64_t length,
     case All: return length;
     case Range:
       if (start < 0 || stop < start || stop > length) {
+        // Positions count from 0 here; the 1-based languages say so too.
         throw Error("", what + ": the range [" + std::to_string(start) + ", " +
-                            std::to_string(stop) + ") is outside [0, " +
-                            std::to_string(length) + ")");
+                            std::to_string(stop) + "), counting from 0, is outside the " +
+                            std::to_string(length) + " positions");
       }
       return stop - start;
     case Index: {
       std::int64_t previous = -1;
       for (const std::int64_t i : index) {
         if (i < 0 || i >= length) {
-          throw Error("", what + ": index " + std::to_string(i) +
-                              " is outside [0, " + std::to_string(length) +
-                              ")");
+          throw Error("", what + ": position " + std::to_string(i) +
+                              ", counting from 0, is outside the " + std::to_string(length) +
+                              " positions");
         }
         if (i <= previous) {
-          throw Error("", what + ": indices must be strictly increasing, and " +
-                              std::to_string(i) + " follows " +
-                              std::to_string(previous));
+          throw Error("", what + ": positions must be strictly increasing, and " +
+                              std::to_string(i) + " follows " + std::to_string(previous) +
+                              " (counting from 0)");
         }
         previous = i;
       }

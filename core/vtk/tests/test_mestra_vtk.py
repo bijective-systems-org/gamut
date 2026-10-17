@@ -176,3 +176,56 @@ def test_command_line_json(tmp_path, capsys):
     assert report["ok"] and report["rows"] == 2
     assert mestra_vtk.main(["export", out, str(tmp_path / "out"), "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["files"] == ["run_000.vtu", "run_001.vtu"]
+
+
+def test_point_and_cell_arrays_sharing_a_name_are_both_kept(tmp_path):
+    folder = str(tmp_path / "runs")
+    files = write_runs(folder, n=2)
+    for f in files:                                       # foamToVTK's habit
+        g = pv.read(os.path.join(folder, f))
+        g.cell_data["p"] = np.arange(g.n_cells, dtype=np.float64) + 0.5
+        g.save(os.path.join(folder, f))
+    fill_tables(folder, files)
+    out = str(tmp_path / "s.mes")
+    report = mestra_vtk.import_folder(folder, out)
+    assert "p" in report["fields"] and "p_cell" in report["fields"]
+    assert any("p_cell" in n for n in report["notes"])
+    with mestra.open(out) as s:
+        assert s.describe("p_cell")["location"] == "cell"
+        np.testing.assert_array_equal(s.get_field("p_cell", rows=0), np.arange(6) + 0.5)
+
+
+def test_a_name_two_arrays_give_is_refused(tmp_path):
+    folder = str(tmp_path / "runs")
+    files = write_runs(folder, n=2)
+    for f in files:
+        g = pv.read(os.path.join(folder, f))
+        g.cell_data["U_x"] = np.zeros(g.n_cells)          # collides with U's x part
+        g.save(os.path.join(folder, f))
+    fill_tables(folder, files)
+    with open(os.path.join(folder, "fields.csv"), "a") as fh:
+        fh.write("U_x,m s-1\n")
+    with pytest.raises(mestra_vtk.Problems) as e:
+        mestra_vtk.import_folder(folder, str(tmp_path / "s.mes"))
+    assert "both give the name U_x" in "\n".join(e.value.problems)
+
+
+def test_export_names_stay_apart_and_csv_is_quoted(tmp_path):
+    a, b = str(tmp_path / "a"), str(tmp_path / "b")
+    for folder in (a, b):
+        files = write_runs(folder, n=2)
+        fill_tables(folder, files)
+    with open(os.path.join(a, "parameters.csv"), "w") as fh:
+        fh.write('file,mach,config\nunits,1,\nrun_000.vtu,0.6,"flaps, down"\nrun_001.vtu,0.7,clean\n')
+    sa, sb = str(tmp_path / "a.mes"), str(tmp_path / "b.mes")
+    assert mestra_vtk.import_folder(a, sa)["ok"] and mestra_vtk.import_folder(b, sb)["ok"]
+    mestra.append(sa, sb)
+    back = str(tmp_path / "back")
+    files = mestra_vtk.export_study(sa, back)["files"]
+    assert len(set(files)) == 4                            # none written twice
+    again = str(tmp_path / "again.mes")
+    assert mestra_vtk.import_folder(back, again)["ok"]
+    with mestra.open(sa) as x, mestra.open(again) as y:
+        assert x.get_label("config").tolist() == y.get_label("config").tolist()
+        assert y.get_label("config")[0] == "flaps, down"
+        np.testing.assert_array_equal(x.get_field("p"), y.get_field("p"))

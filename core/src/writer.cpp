@@ -887,7 +887,7 @@ void Writer::check_preconditions(Schema& s, const Batch* first) {
     need(l != nullptr && l->role == "group", "E6", "per = group:" + group + " must name a group label");
   }
   if (m.kind == "shared") {
-    need(m.set_done, "", "a shared mesh needs set_mesh before the first run");
+    need(m.set_done, "E2", "a shared mesh needs set_mesh before the first run");
     for (const auto& r : s.results) {
       need(r.where != "cell" || m.n_cells > 0, "", r.name + ": a point cloud has no cells",
            r.name);
@@ -1248,7 +1248,7 @@ void Writer::check_relations() const {
   }
 }
 
-std::int64_t Writer::add_runs(const Batch& batch) {
+std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
   need_open();
   need(!model_, "E16", "a model file has no runs; evaluate it to get a data file");
   // Before the first rows, the declarations are resolved against this batch
@@ -1482,6 +1482,7 @@ std::int64_t Writer::add_runs(const Batch& batch) {
     need(s.label(kv.first) != nullptr, "E2", kv.first + " is given by name but is not a label",
          kv.first);
   }
+  if (check_only) return next_id_;   // the guard puts back what was resolved
   // --- write -----------------------------------------------------------------
   if (!datasets_ready_) {
     restore.active = false;

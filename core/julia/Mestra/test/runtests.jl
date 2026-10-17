@@ -4,8 +4,11 @@ using Test
 using Mestra
 
 function grid(nx, ny)
-    pts = Float64[[i, j][a] for j in 0:ny-1 for i in 0:nx-1, a in 1:2]
-    pts = reshape(pts, nx * ny, 2)
+    # Node k = j * nx + i at (i, j), one row per node.
+    pts = zeros(nx * ny, 2)
+    for j in 0:ny-1, i in 0:nx-1
+        pts[j * nx + i + 1, :] = [i, j]
+    end
     conn = Int64[]
     for j in 0:ny-2, i in 0:nx-2
         a = j * nx + i
@@ -138,6 +141,14 @@ mktempdir() do tmp
         end
         @test e isa MestraError && e.rule == "E8" && !isfile(p)
         @test_throws MestraError Mestra.create(p; writer="t", parameter=Dict("x" => "m"))
+        e = try
+            Mestra.create(p; writer="t", mesh="changing", per="run",
+                          coordinates=(units="m", axes="two"))
+            nothing
+        catch x
+            x
+        end
+        @test e isa MestraError && e.rule == "E24" && !isfile(p)
         @test_throws MestraError Mestra.create(p; writer="t", parameters=Dict("x\0y" => "m"))
         Mestra.create(p; writer="t", parameters=Dict("x" => "m")) do s
             e = try Mestra.add_run!(s, Dict("y" => 1.0)); nothing catch x; x end

@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <type_traits>
 
 #include "chunk.hpp"
 #include "codec.hpp"
@@ -152,6 +153,11 @@ class Validator {
   void check_units(const Object& o, bool required);
   std::vector<std::int64_t> ints(const Object& o);
   std::vector<double> floats(const Object& o);
+  // Every element of `o` in blocks along its first axis, with its flat
+  // index: memory stays bounded whatever the file declares. Skipped above
+  // the checker's element cap, as ints() and floats().
+  template <class T, class F>
+  void each(const Object& o, F f);
 
   void root_attrs();
   void walk_links();
@@ -343,6 +349,27 @@ std::size_t elements(const std::vector<hsize_t>& shape, std::size_t cap) {
 
 }  // namespace
 
+template <class T, class F>
+void Validator::each(const Object& o, F f) {
+  const std::size_t n = elements(o.info.shape, kMaxCheckElements);
+  if (n > kMaxCheckElements || n == 0 || o.info.shape.empty()) return;
+  const std::size_t stride = n / static_cast<std::size_t>(o.info.shape[0]);
+  // Small blocks also bound what HDF5 keeps per chunk touched.
+  const std::size_t rows = std::max<std::size_t>(1, (std::size_t(1) << 16) / std::max<std::size_t>(stride, 1));
+  const DType t = std::is_same<T, double>::value ? DType::Float64 : DType::Int64;
+  std::vector<T> block;
+  std::size_t index = 0;
+  for (std::size_t a = 0; a < o.info.shape[0]; a += rows) {
+    const std::size_t b = std::min<std::size_t>(o.info.shape[0], a + rows);
+    block.resize((b - a) * stride);
+    file_->read(o.h5, t, {Selection::range(static_cast<std::int64_t>(a), static_cast<std::int64_t>(b))},
+                block.data(), block.size() * sizeof(T));
+    for (const T x : block) {
+      if (!f(index++, x)) return;   // the callback stops the walk
+    }
+  }
+}
+
 std::vector<std::int64_t> Validator::ints(const Object& o) {
   const std::size_t n = elements(o.info.shape, kMaxCheckElements);
   if (n > kMaxCheckElements) return {};
@@ -472,13 +499,20 @@ void Validator::row() {
     }
     rows_ = static_cast<std::int64_t>(o.info.shape[0]);
     check_storage(o, true, {true});
-    const auto ids = ints(o);
-    std::set<std::int64_t> seen;
-    for (const auto id : ids) {
-      if (!seen.insert(id).second) {
-        add("E14", "row", "the row id " + std::to_string(id) + " is used twice");
-        break;
-      }
+    // Writers give increasing ids, checked as they stream; other orders
+    // are sorted (within the checker's cap) to find a repeat.
+    bool increasing = true;
+    std::int64_t last = 0;
+    each<std::int64_t>(o, [&](std::size_t i, std::int64_t id) {
+      if (i > 0 && id <= last) increasing = false;
+      last = id;
+      return increasing;
+    });
+    if (!increasing) {
+      std::vector<std::int64_t> ids = ints(o);
+      std::sort(ids.begin(), ids.end());
+      const auto rep = std::adjacent_find(ids.begin(), ids.end());
+      if (rep != ids.end()) add("E14", "row", "the row id " + std::to_string(*rep) + " is used twice");
     }
   });
 }
@@ -575,15 +609,13 @@ void Validator::root_objects() {
       add("E9", kv.first, "category must name a table under categories/");
       continue;
     }
-    const auto codes = ints(o);
     const std::int64_t size = static_cast<std::int64_t>(tables_[table].size());
-    for (std::size_t i = 0; i < codes.size(); ++i) {
-      if (codes[i] < 0 || codes[i] >= size) {
-        add("E9", kv.first, "row " + std::to_string(i) + " has code " + std::to_string(codes[i]) +
-                            ", outside its table of " + std::to_string(size));
-        break;
-      }
-    }
+    each<std::int64_t>(o, [&](std::size_t i, std::int64_t c) {
+      if (c >= 0 && c < size) return true;
+      add("E9", kv.first, "row " + std::to_string(i) + " has code " + std::to_string(c) +
+                          ", outside its table of " + std::to_string(size));
+      return false;
+    });
   }
   if (status > 1) add("E15", "", "a file has at most one status label");
   auto is_group_label = [&](const std::string& name) {
@@ -1198,16 +1230,15 @@ void Validator::warnings() {
     if (kv.second.text("role") != "status") continue;
     const std::string table = kv.second.text("category");
     if (!tables_.count(table)) continue;
-    const auto codes = ints(kv.second);
     std::int64_t bad = 0, first = -1;
-    for (std::size_t r = 0; r < codes.size(); ++r) {
-      const auto c = codes[r];
+    each<std::int64_t>(kv.second, [&](std::size_t r, std::int64_t c) {
       if (c >= 0 && c < static_cast<std::int64_t>(tables_[table].size()) &&
           tables_[table][static_cast<std::size_t>(c)] != "converged") {
         if (first < 0) first = static_cast<std::int64_t>(r);
         ++bad;
       }
-    }
+      return true;
+    });
     if (bad > 0) {
       add("W2", kv.first, std::to_string(bad) + " row(s) are not converged, the first row " +
                           std::to_string(first) + "; training skips them by default");
@@ -1215,40 +1246,41 @@ void Validator::warnings() {
   }
   auto nonfinite = [&](const Object& o) {
     if (!o.text("model").empty()) return;
-    const auto v = floats(o);
     std::int64_t bad = 0, first = -1;
-    for (std::size_t i = 0; i < v.size(); ++i) {
-      if (!std::isfinite(v[i])) {
+    bool negative = false;
+    each<double>(o, [&](std::size_t i, double x) {
+      if (!std::isfinite(x)) {
         if (first < 0) first = static_cast<std::int64_t>(i);
         ++bad;
       }
-    }
+      negative = negative || x < 0;
+      return true;
+    });
     if (bad > 0) {
       add("W3", o.concept, std::to_string(bad) + " missing or non-finite value(s), the first at "
                            "element " + std::to_string(first));
     }
-    if (o.text("statistic") == "std") {
-      for (const double x : v) {
-        if (x < 0) {
-          add("W10", o.concept, "a std is never negative");
-          break;
-        }
-      }
-    }
+    if (o.text("statistic") == "std" && negative) add("W10", o.concept, "a std is never negative");
   };
   for (const auto& kv : scalars_) nonfinite(kv.second);
   for (const auto& kv : fields_) nonfinite(kv.second);
   for (const auto& kv : parameters_) {
+    // A parameter is never missing (spec section 3.8): E5, as the writer
+    // refuses it. Bounds give W4.
     const auto lo = kv.second.real("lower"), hi = kv.second.real("upper");
-    if (!lo || !hi) continue;
-    const auto v = floats(kv.second);
-    for (std::size_t r = 0; r < v.size(); ++r) {
-      if (v[r] < *lo || v[r] > *hi) {
+    bool missing = false, outside = false;
+    each<double>(kv.second, [&](std::size_t r, double x) {
+      if (std::isnan(x) && !missing) {
+        missing = true;
+        add("E5", kv.first, "row " + std::to_string(r) + " has no value; a parameter is never "
+                            "missing (spec section 3.8)");
+      } else if (lo && hi && !outside && (x < *lo || x > *hi)) {
+        outside = true;
         add("W4", kv.first, "row " + std::to_string(r) + " is outside the bounds [" +
                             format_f64(*lo) + ", " + format_f64(*hi) + "]");
-        break;
       }
-    }
+      return !(missing && (outside || !lo || !hi));
+    });
   }
   // W1: a published split dividing a generalisation group or a run.
   Object root;

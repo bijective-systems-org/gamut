@@ -3,6 +3,7 @@
 // and the core's C order, keeps a registry of live handles so a stale or
 // forged handle is refused rather than dereferenced, and turns every core
 // error into a MATLAB error with identifier mestra:<rule>.
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <set>
@@ -201,18 +202,20 @@ Sel selection(const mxArray* a) {
   Sel s;
   s.sel.kind = MES_SEL_ALL;
   if (a == nullptr || mxIsEmpty(a)) return s;
-  if (!mxIsNumeric(a)) usage("a selection is a vector of positions");
+  if (!mxIsDouble(a) && !mxIsInt64(a)) usage("positions are double or int64");
   const mwSize n = mxGetNumberOfElements(a);
   s.index.resize(n);
   for (mwSize i = 0; i < n; ++i) {
-    const double v = mxIsDouble(a) ? mxGetPr(a)[i] : static_cast<double>(static_cast<int64_t*>(mxGetData(a))[i]);
-    if (mxIsDouble(a)) {
-      s.index[i] = static_cast<int64_t>(v);
-    } else if (mxIsInt64(a)) {
+    if (mxIsInt64(a)) {
       s.index[i] = static_cast<int64_t*>(mxGetData(a))[i];
-    } else {
-      usage("positions are double or int64");
+      continue;
     }
+    const double v = mxGetPr(a)[i];
+    // A double outside int64's range has no int64 value (undefined to cast).
+    if (!(v == std::floor(v)) || v < -9.2e18 || v > 9.2e18) {
+      usage("positions are whole numbers");
+    }
+    s.index[i] = static_cast<int64_t>(v);
   }
   s.sel.kind = MES_SEL_INDEX;
   s.sel.index = s.index.data();

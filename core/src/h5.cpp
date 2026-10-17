@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "chunk.hpp"
 #include "names.hpp"
 
 namespace mestra {
@@ -625,7 +626,18 @@ std::size_t checked_count(const std::string& path, std::size_t item,
 
 void check_chunks_touched(const std::string& path, const DsetInfo& info,
                           const std::vector<Selection>& sel) {
-  if (!info.chunked || info.chunk.size() != info.shape.size()) return;
+  if (!info.chunked || info.chunk.size() != info.shape.size() || info.shape.empty()) return;
+  // Only chunks smaller than the default layout's (spec section 11.4) are
+  // capped: a file written with the defaults reads to the element cap.
+  {
+    const std::vector<hsize_t> trailing(info.shape.begin() + 1, info.shape.end());
+    const std::vector<hsize_t> dflt =
+        leading_chunk(info.type.size == 0 ? 1 : info.type.size, trailing);
+    std::size_t have = 1, want = 1;
+    for (const hsize_t c : info.chunk) have *= static_cast<std::size_t>(c == 0 ? 1 : c);
+    for (const hsize_t c : dflt) want *= static_cast<std::size_t>(c == 0 ? 1 : c);
+    if (have >= want) return;
+  }
   std::size_t total = 1;
   for (std::size_t a = 0; a < info.shape.size(); ++a) {
     const std::int64_t length = static_cast<std::int64_t>(info.shape[a]);
@@ -653,8 +665,9 @@ void check_chunks_touched(const std::string& path, const DsetInfo& info,
   }
   if (total > kMaxChunksRead) {
     throw Error("E23", "\"" + path + "\": the read touches more than " +
-                           std::to_string(kMaxChunksRead) + " chunks; rewrite the file with "
-                           "the default chunks (write_copy)", path);
+                           std::to_string(kMaxChunksRead) + " chunks smaller than the default "
+                           "layout; read fewer rows, or rewrite the file with the default "
+                           "chunks (write_copy)", path);
   }
 }
 

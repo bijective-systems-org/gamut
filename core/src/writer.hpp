@@ -108,8 +108,10 @@ class Writer {
   // empty and `n_nodes` says how many nodes each geometry has.
   void set_mesh(const Geometry& g);
 
-  // Commits a batch; returns the id of its first run.
-  std::int64_t add_runs(const Batch& batch);
+  // Commits a batch; returns the id of its first run.  With `check_only`,
+  // makes every check and writes nothing (a copy checks all its batches
+  // before the first is written).
+  std::int64_t add_runs(const Batch& batch, bool check_only = false);
 
   // Whether the group member `name` already has its geometry here.
   bool has_member(const std::string& name) const;

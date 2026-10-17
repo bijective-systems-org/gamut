@@ -407,3 +407,21 @@ def test_cli_zone_on_a_changing_mesh_and_bad_rows(tmp_path, capsys):
     capsys.readouterr()
     assert cli.main(["get", p, "q", "--rows", "0,2,", "-o", out, "--json"]) != 0
     assert "--rows takes positions" in capsys.readouterr().out
+
+
+def test_with_block_discards_a_file_its_close_refuses(tmp_path):
+    p = str(tmp_path / "m.mes")
+    with pytest.raises(mestra.MestraError) as e:
+        with mestra.create(p, writer="t", mesh="shared", per="fixed",
+                           coordinates={"units": "m", "axes": 2}, parameters={"x": "m"}):
+            pass                                            # set_mesh never called
+    assert e.value.rule == "E2" and not os.path.exists(p)
+
+
+def test_selection_messages_say_where_positions_start(tmp_path):
+    p = str(tmp_path / "t.mes")
+    with mestra.create(p, writer="t", parameters={"x": "m"}) as s:
+        s.add_runs({"x": [1.0, 2.0, 3.0]})
+    with mestra.open(p) as f:
+        with pytest.raises(mestra.MestraError, match="counting from 0"):
+            f.get_parameter("x", rows=[5])

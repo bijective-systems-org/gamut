@@ -245,3 +245,89 @@ def test_command_line_append_and_smaller_study(tmp_path, capsys):
     with mestra.open(s) as f:
         assert f.get_row_ids().tolist() == [1, 2] and f.get_label("case").tolist() == ["q", "r"]
     assert cli.main(["get", a, "x", "-o", str(tmp_path / "t.mes"), "--json"]) != 0
+
+
+def zoned(path, categories, codes, rows=1):
+    pts, cells = grid(3, 2)
+    with mestra.create(path, writer="t", mesh="changing", per="run",
+                       coordinates={"units": "m", "axes": 2}, parameters={"r": "m"},
+                       mesh_labels={"zone": {"at": "cell", "categories": categories}}) as s:
+        for k in range(rows):
+            s.add_run({"r": float(k)}, points=pts, cells=cells,
+                      mesh_labels={"zone": codes(k)})
+
+
+def test_append_maps_mesh_labels_by_name(tmp_path):
+    a, b = str(tmp_path / "a.mes"), str(tmp_path / "b.mes")
+    zoned(a, ["in", "out"], lambda k: [0, 1])
+    zoned(b, ["out", "in"], lambda k: [0, 0])               # both cells "out"
+    mestra.append(a, b)
+    with mestra.open(a) as f:
+        assert f.get_mesh_label("zone", row=1).tolist() == [1, 1]   # "out" in a's table
+    assert not mestra.validate(a).findings
+
+
+def test_append_refuses_a_mesh_label_name_the_destination_lacks(tmp_path):
+    from h5py import File
+    a, b = str(tmp_path / "a.mes"), str(tmp_path / "b.mes")
+    zoned(a, ["in", "out"], lambda k: [0, 1], rows=2)
+    zoned(b, ["in", "out", "wall"], lambda k: [2, 2] if k >= 70 else [0, 1], rows=100)
+    with File(a, "r") as h:
+        before = h["mesh/coordinates"].shape
+    with pytest.raises(mestra.MestraError, match="wall"):
+        mestra.append(a, b)
+    with mestra.open(a) as f:
+        assert f.row_count == 2                             # nothing of the source
+    with File(a, "r") as h:
+        assert h["mesh/coordinates"].shape == before
+
+
+def test_shared_mesh_labels_compare_by_name(tmp_path):
+    pts, cells = grid(3, 2)
+
+    def make(path, categories, codes):
+        with mestra.create(path, writer="t", mesh="shared", per="fixed",
+                           coordinates={"units": "m", "axes": 2}, parameters={"x": "1"},
+                           mesh_labels={"zone": {"at": "cell", "categories": categories}}) as s:
+            s.set_mesh(pts, cells, labels={"zone": codes})
+            s.add_run({"x": 1.0})
+    a, same, other = (str(tmp_path / n) for n in ("a.mes", "s.mes", "o.mes"))
+    make(a, ["in", "out"], [0, 1])
+    make(same, ["out", "in"], [1, 0])                       # the same names
+    make(other, ["out", "in"], [0, 1])                      # the opposite names
+    assert mestra.append(a, same) == 1
+    with pytest.raises(mestra.MestraError, match="mesh label"):
+        mestra.append(a, other)
+
+
+def test_validate_reports_a_missing_parameter(tmp_path):
+    import h5py
+    p = str(tmp_path / "t.mes")
+    table(p, ["p", "q", "r"], [1.0, 2.0, 3.0])
+    with h5py.File(p, "r+") as h:
+        h["x"][1] = np.nan
+    assert "E5" in {f.rule for f in mestra.validate(p).findings}
+    with pytest.raises(mestra.MestraError):
+        mestra.append(str(tmp_path / "t.mes"), p)
+
+
+def test_nan_constants_are_equal_for_append(tmp_path):
+    a, b = str(tmp_path / "a.mes"), str(tmp_path / "b.mes")
+    for p in (a, b):
+        with mestra.create(p, writer="t", parameters={"x": "m"},
+                           constants={"c": (float("nan"), "1")}) as s:
+            s.add_run({"x": 1.0})
+    assert mestra.append(a, b) == 1
+
+
+def test_cells_mismatch_is_refused_before_writing(tmp_path):
+    a, b = str(tmp_path / "a.mes"), str(tmp_path / "b.mes")
+    with mestra.create(a, writer="t", mesh="changing", per="run",
+                       coordinates={"units": "m", "axes": 2}, parameters={"r": "m"}):
+        pass                                                # closed with no rows and no cells
+    pts, cells = grid(3, 2)
+    with mestra.create(b, writer="t", mesh="changing", per="run",
+                       coordinates={"units": "m", "axes": 2}, parameters={"r": "m"}) as s:
+        s.add_run({"r": 1.0}, points=pts, cells=cells)
+    with pytest.raises(mestra.MestraError, match="cells"):
+        mestra.append(a, b)
