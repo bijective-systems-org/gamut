@@ -63,6 +63,9 @@ class Reader {
  private:
   Reader() = default;
   std::int64_t instance_of_run(std::int64_t run) const;
+  // Entries k and k + 1 of a cumulative count, checked (E21).
+  std::pair<std::int64_t, std::int64_t> span(const std::string& cumulative, std::int64_t k,
+                                             const std::string& path) const;
   std::vector<std::int64_t> row_instances(const Selection& runs) const;
 
   std::unique_ptr<File> file_;

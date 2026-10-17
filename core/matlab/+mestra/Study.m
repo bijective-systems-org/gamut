@@ -228,6 +228,17 @@ classdef Study < handle
     end
 
     methods (Hidden)
+        function abandon(s, remove)
+            %ABANDON Releases the file without finishing it; with remove
+            %true, deletes a file this handle created.  For giving up after
+            %an error.
+            if ~isempty(s.Handle)
+                h = s.Handle;
+                s.Handle = [];
+                mestra_mex('abandon', h, logical(remove));
+            end
+        end
+
         function v = info1(s, key)
             c = mestra_mex('info', s.Handle, key);
             if isempty(c), v = ''; else, v = c{1}; end

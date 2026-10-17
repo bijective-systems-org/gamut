@@ -3,6 +3,7 @@
 #include "mestra/mestra.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <exception>
@@ -121,7 +122,10 @@ std::vector<std::string> list(const char* const* items, int64_t n) {
   std::vector<std::string> out;
   need(n >= 0, "a negative count");
   need(n == 0 || items != nullptr, "a list pointer is NULL");
-  for (int64_t i = 0; i < n; ++i) out.push_back(str(items[i]));
+  for (int64_t i = 0; i < n; ++i) {
+    need(items[i] != nullptr, "list entry " + std::to_string(i) + " is NULL");
+    out.push_back(items[i]);
+  }
   return out;
 }
 
@@ -144,6 +148,7 @@ Column column(int code, const void* values, int64_t count) {
   const DType t = dtype(code);
   need(count >= 0, "a negative count");
   need(count == 0 || values != nullptr, "the values pointer is NULL");
+  need(static_cast<uint64_t>(count) <= SIZE_MAX / mestra::dtype_size(t), "the count is too large");
   Column c;
   c.dtype = t;
   c.count = count;
@@ -489,6 +494,7 @@ int mes_batch_values(mes_file* f, const char* name, int dtype_code, const void* 
     clear(err);
     writer_of(f);
     need(f->batch_open, "call mes_batch_begin first");
+    need(f->batch.values.count(str(name)) == 0, str(name) + " was given twice in this batch");
     f->batch.values[str(name)] = column(dtype_code, values, count);
     return 0;
   } catch (...) {
@@ -502,6 +508,7 @@ int mes_batch_names(mes_file* f, const char* label, const char* const* names, in
     clear(err);
     writer_of(f);
     need(f->batch_open, "call mes_batch_begin first");
+    need(f->batch.names.count(str(label)) == 0, str(label) + " was given twice in this batch");
     f->batch.names[str(label)] = list(names, count);
     return 0;
   } catch (...) {
@@ -527,6 +534,8 @@ int mes_batch_geometry_for_member(mes_file* f, const char* member, mes_error* er
     clear(err);
     writer_of(f);
     need(f->batch_open && f->geometry_open, "begin a batch and stage a geometry first");
+    need(f->batch.member_geometry.count(str(member)) == 0,
+         "\"" + str(member) + "\" was given a geometry twice in this batch");
     f->batch.member_geometry[str(member)] = f->geometry;
     f->geometry_open = false;
     return 0;
@@ -617,6 +626,16 @@ int mes_close(mes_file* f, mes_error* err) {
     return 0;
   } catch (...) {
     return fail(err);
+  }
+}
+
+void mes_abandon(mes_file* f, int remove_file) {
+  if (f == nullptr) return;
+  std::unique_ptr<mes_file> owned(f);
+  try {
+    if (owned->writer) owned->writer->abandon(remove_file != 0);
+  } catch (...) {
+    // Abandoning reports nothing; the handle is freed either way.
   }
 }
 

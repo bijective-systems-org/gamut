@@ -42,7 +42,8 @@ end
 try
     mestra.internal.declare(h, o);
 catch err
-    s.close();
+    % A half-declared file is not wanted; the declaration error stands.
+    s.abandon(true);
     rethrow(err);
 end
 end

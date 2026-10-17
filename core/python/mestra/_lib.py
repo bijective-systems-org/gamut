@@ -140,6 +140,7 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "mes_private_names": (_I, [_P, _PP, _E]),
     "mes_get_private": (_I, [_P, _S, _P, _L, ctypes.POINTER(_L), _E]),
     "mes_close": (_I, [_P, _E]),
+    "mes_abandon": (None, [_P, _I]),
     "mes_open": (_I, [_S, _PP, _E]),
     "mes_set_threads": (_I, [_P, _I, _E]),
     "mes_info": (_I, [_P, _S, _PP, _E]),
@@ -166,8 +167,14 @@ for _name, (_res, _args) in _SIGNATURES.items():
 
 
 def b(text: str | None) -> bytes | None:
-    """UTF-8 for the C side; None stays NULL."""
-    return None if text is None else str(text).encode("utf-8")
+    """UTF-8 for the C side; None stays NULL.  A C string ends at its first
+    NUL, so text holding one is refused rather than cut short."""
+    if text is None:
+        return None
+    raw = str(text).encode("utf-8")
+    if b"\0" in raw:
+        raise MestraError("", f"{text!r} holds a NUL character, which no name or text may hold")
+    return raw
 
 
 def call(name: str, *args: Any) -> None:
@@ -208,7 +215,7 @@ def two_strings_out(name: str, *args: Any) -> tuple[list[str], list[str]]:
 def string_array(items: Sequence[str]) -> Any:
     arr = (ctypes.c_char_p * max(len(items), 1))()
     for i, s in enumerate(items):
-        arr[i] = str(s).encode("utf-8")
+        arr[i] = b(s)
     return arr
 
 
@@ -249,12 +256,16 @@ class Selection:
                 raise MestraError("", f"{what}: a slice must have step 1")
             self.sel.kind = SEL_RANGE
             self._slice = sel
-        elif isinstance(sel, (int, np.integer)):
+        elif isinstance(sel, (int, np.integer)) and not isinstance(sel, (bool, np.bool_)):
             self.single = True
             self._keep = np.array([int(sel)], dtype=np.int64)
             self.sel.kind = SEL_INDEX
         else:
-            self._keep = np.ascontiguousarray(np.asarray(sel, dtype=np.int64).ravel())
+            given = np.asarray(sel)
+            if given.size and given.dtype.kind not in "iu":
+                raise MestraError("", f"{what}: positions are integers, a slice or None; "
+                                      f"got {given.dtype} values")
+            self._keep = np.ascontiguousarray(given.astype(np.int64).ravel())
             self.sel.kind = SEL_INDEX
         self._slice = sel if isinstance(sel, slice) else None
         if self._keep is not None:

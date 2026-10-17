@@ -329,9 +329,22 @@ void Validator::check_storage(const Object& o, bool leading_class,
   }
 }
 
-std::vector<std::int64_t> Validator::ints(const Object& o) {
+namespace {
+
+// Elements in `shape`, or more than `cap` when the product exceeds it.
+std::size_t elements(const std::vector<hsize_t>& shape, std::size_t cap) {
   std::size_t n = 1;
-  for (const hsize_t x : o.info.shape) n *= static_cast<std::size_t>(x);
+  for (const hsize_t x : shape) {
+    if (x != 0 && n > cap / x) return cap + 1;
+    n *= static_cast<std::size_t>(x);
+  }
+  return n;
+}
+
+}  // namespace
+
+std::vector<std::int64_t> Validator::ints(const Object& o) {
+  const std::size_t n = elements(o.info.shape, kMaxCheckElements);
   if (n > kMaxCheckElements) return {};
   std::vector<std::int64_t> out(n);
   if (n) file_->read(o.h5, DType::Int64, {}, out.data(), n * 8);
@@ -339,8 +352,7 @@ std::vector<std::int64_t> Validator::ints(const Object& o) {
 }
 
 std::vector<double> Validator::floats(const Object& o) {
-  std::size_t n = 1;
-  for (const hsize_t x : o.info.shape) n *= static_cast<std::size_t>(x);
+  const std::size_t n = elements(o.info.shape, kMaxCheckElements);
   if (n > kMaxCheckElements) return {};
   std::vector<double> out(n);
   if (n) file_->read(o.h5, DType::Float64, {}, out.data(), n * 8);
@@ -423,7 +435,8 @@ void Validator::tables() {
       }
       check_dims(o, {"category_" + m.name}, {"/category_" + m.name});
       check_storage(o, true, {true});
-      const std::vector<std::string> entries = file_->read_strings(o.h5);
+      const std::vector<std::string> entries =
+          file_->read_strings(o.h5, kMaxTableEntries, kMaxTableBytes);
       std::set<std::string> seen;
       std::size_t longest = 1;
       for (const auto& e : entries) {
@@ -825,16 +838,29 @@ void Validator::mesh() {
   } else {
     // Changing mesh.
     guarded("mesh", [&] {
+      // Without cells, every cell object is absent (spec section 10.4).
+      if (!cells) {
+        for (const char* p : {"/mesh/instance_cells", "/mesh/row_cell_start", "/mesh/cell_value",
+                              "/mesh/cell", "/mesh/cell_plus_one", "/mesh/index"}) {
+          if (file_->exists(p)) {
+            add("E5", "mesh", std::string(p).substr(1) + " is present in a mesh without cells");
+          }
+        }
+      }
       Object in = object("/mesh/instance_nodes", "mesh/instance_nodes", "instance_nodes");
-      Object ic = object("/mesh/instance_cells", "mesh/instance_cells", "instance_cells");
       check_dims(in, {"instance_plus_one"}, {"/mesh/instance_plus_one"});
-      check_dims(ic, {"instance_plus_one"}, {"/mesh/instance_plus_one"});
       check_storage(in, false, {true});
-      check_storage(ic, false, {true});
       if (check_dims(coords, {"node", "axis"}, {"/mesh/node", "/mesh/axis"})) {
         check_storage(coords, false, {true, false});
       }
-      const auto cn = ints(in), cc = ints(ic);
+      const auto cn = ints(in);
+      std::vector<std::int64_t> cc;
+      if (cells) {
+        Object ic = object("/mesh/instance_cells", "mesh/instance_cells", "instance_cells");
+        check_dims(ic, {"instance_plus_one"}, {"/mesh/instance_plus_one"});
+        check_storage(ic, false, {true});
+        cc = ints(ic);
+      }
       auto monotone = [&](const std::vector<std::int64_t>& v, std::int64_t end, const char* what) {
         if (v.empty() || v[0] != 0) {
           add("E21", "mesh", std::string(what) + " must start at 0");
@@ -853,9 +879,12 @@ void Validator::mesh() {
         return true;
       };
       const bool nodes_ok = monotone(cn, n_nodes_, "instance_nodes");
-      const bool cells_ok = monotone(cc, static_cast<std::int64_t>(types.size()), "instance_cells");
+      const bool cells_ok =
+          !cells || monotone(cc, static_cast<std::int64_t>(types.size()), "instance_cells");
       instances_ = std::max<std::int64_t>(0, static_cast<std::int64_t>(cn.size()) - 1);
-      if (cc.size() != cn.size()) add("E21", "mesh", "instance_nodes and instance_cells differ in length");
+      if (cells && cc.size() != cn.size()) {
+        add("E21", "mesh", "instance_nodes and instance_cells differ in length");
+      }
       if (nodes_ok && cells_ok && cells && cc.size() == cn.size()) {
         if (offsets.size() != types.size() + 1 || offsets[0] != 0 ||
             offsets.back() != static_cast<std::int64_t>(conn.size())) {
@@ -897,6 +926,7 @@ void Validator::mesh() {
         for (std::int64_t r = 0; r < rows_; ++r) inst[static_cast<std::size_t>(r)] = r;
       }
       for (const char* which : {"node", "cell"}) {
+        if (!cells && std::string(which) == "cell") continue;
         const std::string p = std::string("/mesh/row_") + which + "_start";
         if (!file_->is_dataset(p)) {
           add("E2", "mesh", std::string("a changing mesh needs row_") + which + "_start");

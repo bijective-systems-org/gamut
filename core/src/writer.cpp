@@ -4,6 +4,7 @@
 #include <chrono>
 #include <climits>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <random>
@@ -69,7 +70,8 @@ double float_at(const Column& c, std::size_t i) {
 }
 
 // Converts `c` to `target`: floats among floats, integers among integers
-// (range-checked), whole floats to int64, integers to floats.
+// (range-checked), integers to floats.  Never floats to integers, even
+// whole ones: a float given for a code or a count is taken as a mistake.
 std::vector<unsigned char> convert(const Column& c, DType target,
                                    const std::string& what) {
   need(c.bytes.size() == static_cast<std::size_t>(c.count) * dtype_size(c.dtype),
@@ -115,16 +117,6 @@ std::vector<unsigned char> convert(const Column& c, DType target,
     }
     return out;
   }
-  if (is_float(c.dtype) && target == DType::Int64) {
-    for (std::size_t i = 0; i < n; ++i) {
-      const double v = float_at(c, i);
-      need(std::isfinite(v) && v == std::floor(v) && std::fabs(v) < 9.0e15, "E4",
-           what + ": " + format_f64(v) + " is not a whole number", what);
-      const std::int64_t x = static_cast<std::int64_t>(v);
-      std::memcpy(&out[i * 8], &x, 8);
-    }
-    return out;
-  }
   if (is_int(c.dtype) && is_float(target)) {
     for (std::size_t i = 0; i < n; ++i) {
       const double v = static_cast<double>(int_at(c, i));
@@ -138,7 +130,8 @@ std::vector<unsigned char> convert(const Column& c, DType target,
     return out;
   }
   throw Error("E4", what + ": " + dtype_name(c.dtype) +
-                        " values cannot be stored as " + dtype_name(target),
+                        " values cannot be stored as " + dtype_name(target) +
+                        (is_float(c.dtype) ? "; give integers" : ""),
               what);
 }
 
@@ -381,6 +374,7 @@ std::unique_ptr<Writer> Writer::create(const std::string& path,
   std::unique_ptr<Writer> w(new Writer());
   w->path_ = path;
   w->file_.reset(new File(File::create(path)));
+  w->created_ = true;
   Schema& s = w->schema_;
   s.kind = "data";
   s.writer = writer_name;
@@ -440,14 +434,19 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
       resume(p);
     }
     for (const auto& ml : m.labels) resume(label_dataset(ml));
+    const bool cells = f.exists("/mesh/cell_types");
+    w->schema_.mesh.has_cells = cells ? 1 : 0;
     const std::vector<std::int64_t> cn = f.read_i64("/mesh/instance_nodes");
-    const std::vector<std::int64_t> cc = f.read_i64("/mesh/instance_cells");
+    const std::vector<std::int64_t> cc = cells ? f.read_i64("/mesh/instance_cells")
+                                               : std::vector<std::int64_t>(cn.size(), 0);
     for (std::size_t k = 0; k + 1 < cn.size(); ++k) {
       w->instance_nodes_.push_back(cn[k + 1] - cn[k]);
       w->instance_cells_.push_back(cc[k + 1] - cc[k]);
     }
     w->node_values_ = static_cast<std::int64_t>(f.dataset_info("/mesh/node_value", false).shape[0]);
-    w->cell_values_ = static_cast<std::int64_t>(f.dataset_info("/mesh/cell_value", false).shape[0]);
+    w->cell_values_ = cells ? static_cast<std::int64_t>(
+                                  f.dataset_info("/mesh/cell_value", false).shape[0])
+                            : 0;
   }
   w->instances_written_ = m.n_instances;
   if (!m.per_group().empty() && s.rows > 0) {
@@ -704,7 +703,6 @@ void Writer::set_constant(const Constant& c) {
   need(c.dtype == DType::Float32 || c.dtype == DType::Float64 ||
            c.dtype == DType::Int64,
        "E4", c.name + ": a constant is float32, float64 or int64", c.name);
-  schema_.constants.push_back(c);
   const std::string p = root(c.name);
   file_->create_dataset(p, c.dtype, 0, {}, {}, {}, {});
   if (c.dtype == DType::Int64) {
@@ -717,6 +715,7 @@ void Writer::set_constant(const Constant& c) {
   }
   file_->write_attr(p, "role", AttrValue::text("constant"));
   file_->write_attr(p, "units", AttrValue::text(c.units));
+  schema_.constants.push_back(c);
 }
 
 void Writer::set_generalisation_group(const std::string& label) {
@@ -746,15 +745,21 @@ void Writer::set_mesh(const Geometry& g) {
     need(g.points.count == g.n_nodes * g.axes, "E5",
          "coordinates: expected n_nodes x axes values");
     need(is_float(g.points.dtype), "E4", "coordinates are float32 or float64");
-    if (m.coordinate_dtype_auto) {
-      m.coordinate_dtype = g.points.dtype;
-      m.coordinate_dtype_auto = false;
-    }
   } else {
     need(g.points.count == 0, "",
          "coordinates that change per run or per group come with the runs");
   }
   check_cells(g.types, g.offsets, g.connectivity, g.n_nodes, "the mesh");
+  // Everything is checked and converted before anything is written (a
+  // refused call adds nothing).
+  check_mesh_labels_fixed(g, g.n_nodes, static_cast<std::int64_t>(g.types.size()));
+  std::vector<unsigned char> stored_points;
+  if (m.per == "fixed") {
+    const DType t = m.coordinate_dtype_auto ? g.points.dtype : m.coordinate_dtype;
+    stored_points = convert(g.points, t, "coordinates");
+    m.coordinate_dtype = t;
+    m.coordinate_dtype_auto = false;
+  }
   m.n_nodes = g.n_nodes;
   m.n_cells = static_cast<std::int64_t>(g.types.size());
   m.n_conn = static_cast<std::int64_t>(g.connectivity.size());
@@ -783,7 +788,12 @@ void Writer::set_mesh(const Geometry& g) {
   }
   std::vector<double> cloud;
   if (m.n_cells == 0 && m.per == "fixed") {
-    const std::vector<unsigned char> b = convert(g.points, DType::Float64, "coordinates");
+    // Spec section 14 hashes the stored coordinates, widened to float64.
+    Column stored;
+    stored.dtype = m.coordinate_dtype;
+    stored.count = g.points.count;
+    stored.bytes = stored_points;
+    const std::vector<unsigned char> b = convert(stored, DType::Float64, "coordinates");
     cloud.resize(b.size() / 8);
     if (!cloud.empty()) std::memcpy(cloud.data(), b.data(), b.size());
   }
@@ -796,10 +806,9 @@ void Writer::set_mesh(const Geometry& g) {
     const DType t = m.coordinate_dtype;
     const hsize_t n = static_cast<hsize_t>(m.n_nodes);
     const hsize_t a = static_cast<hsize_t>(m.axes);
-    const std::vector<unsigned char> b = convert(g.points, t, "coordinates");
     f.create_dataset("/mesh/coordinates", t, 0, {n, a}, {},
                      end_to_end_chunk(dtype_size(t), {a}), filters_);
-    f.write("/mesh/coordinates", t, {0, 0}, {n, a}, b.data());
+    f.write("/mesh/coordinates", t, {0, 0}, {n, a}, stored_points.data());
     f.attach_scale("/mesh/coordinates", "/mesh/node", 0);
     f.attach_scale("/mesh/coordinates", "/mesh/axis", 1);
     f.write_attr("/mesh/coordinates", "units", AttrValue::text(m.coordinate_units));
@@ -808,29 +817,40 @@ void Writer::set_mesh(const Geometry& g) {
   m.set_done = true;
 }
 
+void Writer::check_mesh_labels_fixed(const Geometry& g, std::int64_t n_nodes,
+                                     std::int64_t n_cells) const {
+  const Mesh& m = schema_.mesh;
+  for (const auto& ml : m.labels) {
+    const auto it = g.labels.find(ml.name);
+    const std::string p = mesh_label_path(ml);
+    need(it != g.labels.end(), "E2", p + ": the mesh label's values are missing", p);
+    need(ml.where == "node" || n_cells > 0, "", p + ": a point cloud has no cells", p);
+    const std::size_t len = static_cast<std::size_t>(ml.where == "node" ? n_nodes : n_cells);
+    need(it->second.size() == len, "E5", p + ": expected " + std::to_string(len) + " values", p);
+    for (const std::int64_t x : it->second) {
+      need(x >= INT32_MIN && x <= INT32_MAX, "E4", p + ": a code does not fit in int32", p);
+      if (!ml.category.empty()) {
+        need(x >= 0 && static_cast<std::size_t>(x) < schema_.tables.at(ml.category).size(), "E9",
+             p + ": a code is outside its table", p);
+      }
+    }
+  }
+  for (const auto& kv : g.labels) {
+    bool known = false;
+    for (const auto& ml : m.labels) known = known || ml.name == kv.first;
+    need(known, "E2", kv.first + " is given but not declared as a mesh label", kv.first);
+  }
+}
+
 void Writer::write_mesh_labels_fixed(const Geometry& g) {
+  // check_mesh_labels_fixed() has passed.
   const Mesh& m = schema_.mesh;
   File& f = *file_;
   for (const auto& ml : m.labels) {
-    const auto it = g.labels.find(ml.name);
-    need(it != g.labels.end(), "E2", ml.name + ": the mesh label's values are missing",
-         ml.name);
-    need(ml.where == "node" || m.n_cells > 0, "", ml.name + ": a point cloud has no cells",
-         ml.name);
-    const hsize_t len = static_cast<hsize_t>(ml.where == "node" ? m.n_nodes : m.n_cells);
-    need(it->second.size() == len, "E5",
-         ml.name + ": expected " + std::to_string(len) + " values", ml.name);
-    std::vector<std::int32_t> v(it->second.size());
-    for (std::size_t i = 0; i < v.size(); ++i) {
-      const std::int64_t x = it->second[i];
-      need(x >= INT32_MIN && x <= INT32_MAX, "E4", ml.name + ": a code does not fit in int32",
-           ml.name);
-      if (!ml.category.empty()) {
-        need(x >= 0 && static_cast<std::size_t>(x) < schema_.tables.at(ml.category).size(),
-             "E9", ml.name + ": a code is outside its table", ml.name);
-      }
-      v[i] = static_cast<std::int32_t>(x);
-    }
+    const std::vector<std::int64_t>& codes = g.labels.at(ml.name);
+    const hsize_t len = static_cast<hsize_t>(codes.size());
+    std::vector<std::int32_t> v(codes.size());
+    for (std::size_t i = 0; i < v.size(); ++i) v[i] = static_cast<std::int32_t>(codes[i]);
     const std::string p = label_dataset(ml);
     f.create_dataset(p, DType::Int32, 0, {len}, {}, end_to_end_chunk(4, {}), filters_);
     if (len > 0) f.write(p, DType::Int32, {0}, {len}, v.data());
@@ -857,15 +877,52 @@ void Writer::create_root_dataset(const std::string& path, DType dtype,
   pending_[path] = make_pending(path, dtype, trailing, chunk[0], 0);
 }
 
-void Writer::ensure_datasets(const Batch* first) {
-  if (datasets_ready_) return;
-  check_relations();
-  File& f = *file_;
-  Schema& s = schema_;
-  Mesh& m = s.mesh;
+void Writer::check_preconditions(Schema& s, const Batch* first) {
+  // The structure the first rows need, checked on `s`; nothing here writes.
+  const Mesh& m = s.mesh;
+  const std::string group = m.per_group();
+  if (!group.empty()) {
+    const Label* l = s.label(group);
+    need(l != nullptr && l->role == "group", "E6", "per = group:" + group + " must name a group label");
+  }
+  if (m.kind == "shared") {
+    need(m.set_done, "", "a shared mesh needs set_mesh before the first run");
+    for (const auto& r : s.results) {
+      need(r.where != "cell" || m.n_cells > 0, "", r.name + ": a point cloud has no cells",
+           r.name);
+    }
+  } else if (m.kind == "changing") {
+    need(m.axes >= 1 && m.axes <= 3 && !m.coordinate_units.empty(), "E24",
+         "a changing mesh declares its coordinates (units, precision, axes) before the first run");
+    if (m.has_cells < 0) {
+      // Whether instances have cells is fixed by the first geometry; without
+      // one, by whether cell fields or labels were declared.
+      const Geometry* g = nullptr;
+      if (first != nullptr && !first->run_geometry.empty()) g = &first->run_geometry[0];
+      if (first != nullptr && g == nullptr && !first->member_geometry.empty()) {
+        g = &first->member_geometry.begin()->second;
+      }
+      bool cell_things = false;
+      for (const auto& r : s.results) cell_things = cell_things || r.where == "cell";
+      for (const auto& ml : m.labels) cell_things = cell_things || ml.where == "cell";
+      s.mesh.has_cells = g != nullptr ? (g->types.empty() ? 0 : 1) : (cell_things ? 1 : 0);
+    }
+    if (s.mesh.has_cells == 0) {
+      for (const auto& r : s.results) {
+        need(r.where != "cell", "", r.name + ": a changing mesh without cells has no cell fields",
+             r.name);
+      }
+      for (const auto& ml : m.labels) {
+        need(ml.where != "cell", "", ml.name + ": a changing mesh without cells has no cell labels",
+             ml.name);
+      }
+    }
+  }
+}
+
+void Writer::resolve_autos(Schema& s, const Batch* first) {
   // Precision as given (spec section 11.1): what was declared "as given"
-  // takes the dtype of the first values written, float64 (or for a
-  // parameter float64) when there are none.
+  // takes the dtype of the first values written, float64 when there are none.
   auto given = [&](const std::string& name) -> const Column* {
     if (first == nullptr) return nullptr;
     const auto it = first->values.find(name);
@@ -882,7 +939,12 @@ void Writer::ensure_datasets(const Batch* first) {
     const Column* c = given(r.name);
     r.dtype = c != nullptr && c->dtype == DType::Float32 ? DType::Float32 : DType::Float64;
     r.auto_dtype = false;
+    r.given_precision = true;
+    need(r.round_bits < 0 || r.round_bits < (r.dtype == DType::Float32 ? 23 : 52), "",
+         result_path(r) + ": round_bits keeps 1 to 22 bits of a float32, 1 to 51 of a float64",
+         result_path(r));
   }
+  Mesh& m = s.mesh;
   if (m.coordinate_dtype_auto) {
     const Geometry* g = nullptr;
     if (first != nullptr && !first->run_geometry.empty()) g = &first->run_geometry[0];
@@ -893,6 +955,16 @@ void Writer::ensure_datasets(const Batch* first) {
                                                                            : DType::Float64;
     m.coordinate_dtype_auto = false;
   }
+}
+
+void Writer::ensure_datasets(const Batch* first) {
+  if (datasets_ready_) return;
+  check_relations();
+  check_preconditions(schema_, first);
+  resolve_autos(schema_, first);
+  File& f = *file_;
+  Schema& s = schema_;
+  Mesh& m = s.mesh;
   for (const auto& kv : s.tables) write_table(f, kv.first, kv.second, filters_);
   for (const auto& p : s.parameters) {
     const std::string path = root(p.name);
@@ -936,13 +1008,7 @@ void Writer::ensure_datasets(const Batch* first) {
     write_result_attrs(root(r.name), r);
   }
   const std::string group = m.per_group();
-  if (!group.empty()) {
-    const Label* l = s.label(group);
-    need(l != nullptr && l->role == "group", "E6",
-         "per = group:" + group + " must name a group label");
-  }
   if (m.kind == "shared") {
-    need(m.set_done, "", "a shared mesh needs set_mesh before the first run");
     const hsize_t n = static_cast<hsize_t>(m.n_nodes);
     const hsize_t a = static_cast<hsize_t>(m.axes);
     const DType t = m.coordinate_dtype;
@@ -968,22 +1034,21 @@ void Writer::ensure_datasets(const Batch* first) {
     }
     for (const auto& r : s.results) {
       if (r.where == "scalar") continue;
-      need(r.where == "node" || m.n_cells > 0, "", r.name + ": a point cloud has no cells",
-           r.name);
       const hsize_t len = static_cast<hsize_t>(r.where == "node" ? m.n_nodes : m.n_cells);
       create_root_dataset(field_path(r), r.dtype, {len},
                           {r.where == "node" ? "/mesh/node" : "/mesh/cell"});
       write_result_attrs(field_path(r), r);
     }
   } else if (m.kind == "changing") {
-    need(m.axes >= 1 && m.axes <= 3 && !m.coordinate_units.empty(), "E24",
-         "a changing mesh declares its coordinates (units, precision, axes) "
-         "before the first run");
     f.make_group("/mesh");
-    for (const char* sc : {"/mesh/instance_plus_one", "/mesh/node", "/mesh/cell",
-                           "/mesh/cell_plus_one", "/mesh/index", "/mesh/node_value",
-                           "/mesh/cell_value"}) {
+    const bool cells = m.has_cells == 1;
+    for (const char* sc : {"/mesh/instance_plus_one", "/mesh/node", "/mesh/node_value"}) {
       f.make_scale(sc, 0, true);
+    }
+    if (cells) {
+      for (const char* sc : {"/mesh/cell", "/mesh/cell_plus_one", "/mesh/index", "/mesh/cell_value"}) {
+        f.make_scale(sc, 0, true);
+      }
     }
     f.make_scale("/mesh/axis", static_cast<hsize_t>(m.axes), false);
     auto end_to_end = [&](const std::string& path, DType t,
@@ -1004,13 +1069,15 @@ void Writer::ensure_datasets(const Batch* first) {
       pending_[path] = make_pending(path, t, trailing, chunk[0], 0);
     };
     end_to_end("/mesh/instance_nodes", DType::Int64, {}, "/mesh/instance_plus_one", {});
-    end_to_end("/mesh/instance_cells", DType::Int64, {}, "/mesh/instance_plus_one", {});
+    if (cells) end_to_end("/mesh/instance_cells", DType::Int64, {}, "/mesh/instance_plus_one", {});
     end_to_end("/mesh/coordinates", m.coordinate_dtype, {static_cast<hsize_t>(m.axes)},
                "/mesh/node", {"/mesh/axis"});
     f.write_attr("/mesh/coordinates", "units", AttrValue::text(m.coordinate_units));
-    end_to_end("/mesh/cell_types", DType::UInt8, {}, "/mesh/cell", {});
-    end_to_end("/mesh/cell_offsets", DType::Int64, {}, "/mesh/cell_plus_one", {});
-    end_to_end("/mesh/cell_connectivity", DType::Int64, {}, "/mesh/index", {});
+    if (cells) {
+      end_to_end("/mesh/cell_types", DType::UInt8, {}, "/mesh/cell", {});
+      end_to_end("/mesh/cell_offsets", DType::Int64, {}, "/mesh/cell_plus_one", {});
+      end_to_end("/mesh/cell_connectivity", DType::Int64, {}, "/mesh/index", {});
+    }
     for (const auto& ml : m.labels) {
       const std::string p = label_dataset(ml);
       end_to_end(p, DType::Int32, {}, ml.where == "node" ? "/mesh/node" : "/mesh/cell", {});
@@ -1018,7 +1085,7 @@ void Writer::ensure_datasets(const Batch* first) {
     }
     if (!group.empty()) create_root_dataset("/mesh/row_instance", DType::Int64, {}, {});
     create_root_dataset("/mesh/row_node_start", DType::Int64, {}, {});
-    create_root_dataset("/mesh/row_cell_start", DType::Int64, {}, {});
+    if (cells) create_root_dataset("/mesh/row_cell_start", DType::Int64, {}, {});
     for (const auto& r : s.results) {
       if (r.where == "scalar") continue;
       end_to_end(field_path(r), r.dtype, {},
@@ -1028,8 +1095,10 @@ void Writer::ensure_datasets(const Batch* first) {
     const std::int64_t zero = 0;
     const auto* z = reinterpret_cast<const unsigned char*>(&zero);
     append_rows("/mesh/instance_nodes", z, 1, DType::Int64);
-    append_rows("/mesh/instance_cells", z, 1, DType::Int64);
-    append_rows("/mesh/cell_offsets", z, 1, DType::Int64);
+    if (cells) {
+      append_rows("/mesh/instance_cells", z, 1, DType::Int64);
+      append_rows("/mesh/cell_offsets", z, 1, DType::Int64);
+    }
     f.write_attr("/mesh", "kind", AttrValue::text("changing"));
     f.write_attr("/mesh", "per", AttrValue::text(m.per));
     m.set_done = true;
@@ -1180,7 +1249,32 @@ void Writer::check_relations() const {
 std::int64_t Writer::add_runs(const Batch& batch) {
   need_open();
   need(!model_, "E16", "a model file has no runs; evaluate it to get a data file");
-  ensure_datasets(&batch);
+  // Before the first rows, the declarations are resolved against this batch
+  // (precisions as given, whether a changing mesh has cells) on the schema,
+  // and put back if the batch is refused: a refused call adds nothing.
+  struct Restore {
+    Writer* w;
+    std::vector<Parameter> parameters;
+    std::vector<Result> results;
+    Mesh mesh;
+    bool active = false;
+    ~Restore() {
+      if (active) {
+        w->schema_.parameters = parameters;
+        w->schema_.results = results;
+        w->schema_.mesh = mesh;
+      }
+    }
+  } restore{this, {}, {}, {}, false};
+  if (!datasets_ready_) {
+    check_relations();
+    restore.parameters = schema_.parameters;
+    restore.results = schema_.results;
+    restore.mesh = schema_.mesh;
+    restore.active = true;
+    check_preconditions(schema_, &batch);
+    resolve_autos(schema_, &batch);
+  }
   const Schema& s = schema_;
   const Mesh& m = s.mesh;
   const std::int64_t n = batch.runs;
@@ -1240,6 +1334,10 @@ std::int64_t Writer::add_runs(const Batch& batch) {
     } else {
       need(it->second.count == n, "E5",
            r.name + ": expected " + std::to_string(n) + " values", r.name);
+      need(!(r.given_precision && r.dtype == DType::Float32 && it->second.dtype == DType::Float64),
+           "E4", r.name + ": its first values were float32, so it is stored as float32; give "
+                          "float32 values, or declare its precision to convert",
+           r.name);
       root_bytes[r.name] = convert(it->second, r.dtype, r.name);
     }
     bitround(&root_bytes[r.name], r.dtype, r.round_bits);
@@ -1273,7 +1371,8 @@ std::int64_t Writer::add_runs(const Batch& batch) {
                                  : more[static_cast<std::size_t>(code) - entries.size()];
       const auto g = batch.member_geometry.find(nm);
       need(g != batch.member_geometry.end(), "E2",
-           "the " + group + " \"" + nm + "\" appears for the first time and needs its geometry");
+           "the " + group + " \"" + nm + "\" appears for the first time and needs its geometry",
+           group);
       new_geometry.push_back(&g->second);
     }
     for (const auto& kv : batch.member_geometry) {
@@ -1309,20 +1408,25 @@ std::int64_t Writer::add_runs(const Batch& batch) {
     } else {
       need(g.axes == m.axes && g.n_nodes >= 1 && g.points.count == g.n_nodes * g.axes, "E5",
            who + ": coordinates must be n_nodes x " + std::to_string(m.axes) + " axes");
+      // Whether a changing mesh has cells is fixed by its first instance.
+      need((g.types.empty() ? 0 : 1) == m.has_cells, "",
+           who + (m.has_cells == 1 ? ": this mesh's instances have cells; give them"
+                                   : ": this mesh's instances have no cells"));
       check_cells(g.types, g.offsets, g.connectivity, g.n_nodes, who);
       for (const auto& ml : m.labels) {
         const auto it = g.labels.find(ml.name);
-        need(it != g.labels.end(), "E2", who + ": mesh label " + ml.name + " missing");
+        const std::string p = mesh_label_path(ml);
+        need(it != g.labels.end(), "E2", who + ": mesh label " + ml.name + " missing", p);
         const std::int64_t len =
             ml.where == "node" ? g.n_nodes : static_cast<std::int64_t>(g.types.size());
         need(static_cast<std::int64_t>(it->second.size()) == len, "E5",
-             who + ": mesh label " + ml.name + " expects " + std::to_string(len) + " values");
+             who + ": mesh label " + ml.name + " expects " + std::to_string(len) + " values", p);
         for (const std::int64_t v : it->second) {
           need(v >= INT32_MIN && v <= INT32_MAX, "E4",
-               who + ": a mesh-label code does not fit in int32");
+               who + ": a mesh-label code does not fit in int32", p);
           if (!ml.category.empty()) {
             need(v >= 0 && v < static_cast<std::int64_t>(s.tables.at(ml.category).size()), "E9",
-                 who + ": mesh label " + ml.name + " has a code outside its table");
+                 who + ": mesh label " + ml.name + " has a code outside its table", p);
           }
         }
       }
@@ -1355,8 +1459,12 @@ std::int64_t Writer::add_runs(const Batch& batch) {
           convert(Column::of(DType::Float64, nan.data(), expected), r.dtype, r.name);
     } else {
       need(it->second.count == expected, "E5",
-           r.name + ": expected " + std::to_string(expected) + " values", r.name);
-      field_bytes[r.name] = convert(it->second, r.dtype, r.name);
+           result_path(r) + ": expected " + std::to_string(expected) + " values", result_path(r));
+      need(!(r.given_precision && r.dtype == DType::Float32 && it->second.dtype == DType::Float64),
+           "E4", result_path(r) + ": its first values were float32, so it is stored as float32; "
+                                  "give float32 values, or declare its precision to convert",
+           result_path(r));
+      field_bytes[r.name] = convert(it->second, r.dtype, result_path(r));
     }
     bitround(&field_bytes[r.name], r.dtype, r.round_bits);
   }
@@ -1368,6 +1476,10 @@ std::int64_t Writer::add_runs(const Batch& batch) {
          kv.first);
   }
   // --- write -----------------------------------------------------------------
+  if (!datasets_ready_) {
+    restore.active = false;
+    ensure_datasets(nullptr);
+  }
   for (const auto& kv : added) grow_table(kv.first, kv.second);
   std::vector<std::int64_t> ids(N);
   for (std::size_t i = 0; i < N; ++i) ids[i] = next_id_ + static_cast<std::int64_t>(i);
@@ -1387,7 +1499,8 @@ std::int64_t Writer::add_runs(const Batch& batch) {
     if (m.kind == "shared") {
       append_rows("/mesh/coordinates", b.data(), 1, m.coordinate_dtype);
     } else {
-      const std::int64_t base = pending_.at("/mesh/cell_connectivity")->total();
+      const std::int64_t base =
+          m.has_cells == 1 ? pending_.at("/mesh/cell_connectivity")->total() : 0;
       std::vector<std::int64_t> offs;
       if (!g.offsets.empty()) offs.assign(g.offsets.begin() + 1, g.offsets.end());
       for (auto& o : offs) o += base;
@@ -1399,19 +1512,21 @@ std::int64_t Writer::add_runs(const Batch& batch) {
         append_rows(label_dataset(ml), reinterpret_cast<const unsigned char*>(v.data()),
                     static_cast<std::int64_t>(v.size()), DType::Int32);
       }
-      append_rows("/mesh/cell_types", g.types.data(), static_cast<std::int64_t>(g.types.size()),
-                  DType::UInt8);
-      append_rows("/mesh/cell_offsets", reinterpret_cast<const unsigned char*>(offs.data()),
-                  static_cast<std::int64_t>(offs.size()), DType::Int64);
-      append_rows("/mesh/cell_connectivity",
-                  reinterpret_cast<const unsigned char*>(g.connectivity.data()),
-                  static_cast<std::int64_t>(g.connectivity.size()), DType::Int64);
       const std::int64_t total_nodes = pending_.at("/mesh/coordinates")->total();
-      const std::int64_t total_cells = pending_.at("/mesh/cell_types")->total();
       append_rows("/mesh/instance_nodes", reinterpret_cast<const unsigned char*>(&total_nodes), 1,
                   DType::Int64);
-      append_rows("/mesh/instance_cells", reinterpret_cast<const unsigned char*>(&total_cells), 1,
-                  DType::Int64);
+      if (m.has_cells == 1) {
+        append_rows("/mesh/cell_types", g.types.data(), static_cast<std::int64_t>(g.types.size()),
+                    DType::UInt8);
+        append_rows("/mesh/cell_offsets", reinterpret_cast<const unsigned char*>(offs.data()),
+                    static_cast<std::int64_t>(offs.size()), DType::Int64);
+        append_rows("/mesh/cell_connectivity",
+                    reinterpret_cast<const unsigned char*>(g.connectivity.data()),
+                    static_cast<std::int64_t>(g.connectivity.size()), DType::Int64);
+        const std::int64_t total_cells = pending_.at("/mesh/cell_types")->total();
+        append_rows("/mesh/instance_cells", reinterpret_cast<const unsigned char*>(&total_cells), 1,
+                    DType::Int64);
+      }
       instance_nodes_.push_back(g.n_nodes);
       instance_cells_.push_back(static_cast<std::int64_t>(g.types.size()));
     }
@@ -1432,8 +1547,10 @@ std::int64_t Writer::add_runs(const Batch& batch) {
     }
     append_rows("/mesh/row_node_start", reinterpret_cast<const unsigned char*>(ns.data()), n,
                 DType::Int64);
-    append_rows("/mesh/row_cell_start", reinterpret_cast<const unsigned char*>(cs.data()), n,
-                DType::Int64);
+    if (m.has_cells == 1) {
+      append_rows("/mesh/row_cell_start", reinterpret_cast<const unsigned char*>(cs.data()), n,
+                  DType::Int64);
+    }
   }
   for (const auto& r : s.results) {
     if (r.where == "scalar") continue;
@@ -1528,11 +1645,13 @@ void Writer::flush() {
     };
     f.set_scale_length("/mesh/instance_plus_one", len("/mesh/instance_nodes"));
     f.set_scale_length("/mesh/node", len("/mesh/coordinates"));
-    f.set_scale_length("/mesh/cell", len("/mesh/cell_types"));
-    f.set_scale_length("/mesh/cell_plus_one", len("/mesh/cell_offsets"));
-    f.set_scale_length("/mesh/index", len("/mesh/cell_connectivity"));
     f.set_scale_length("/mesh/node_value", static_cast<hsize_t>(node_values_));
-    f.set_scale_length("/mesh/cell_value", static_cast<hsize_t>(cell_values_));
+    if (m.has_cells == 1) {
+      f.set_scale_length("/mesh/cell", len("/mesh/cell_types"));
+      f.set_scale_length("/mesh/cell_plus_one", len("/mesh/cell_offsets"));
+      f.set_scale_length("/mesh/index", len("/mesh/cell_connectivity"));
+      f.set_scale_length("/mesh/cell_value", static_cast<hsize_t>(cell_values_));
+    }
   }
   f.flush();
 }
@@ -1548,6 +1667,14 @@ void Writer::write_cf_coordinates() {
   for (const auto& r : schema_.results) {
     if (r.where == "scalar") file_->replace_attr(root(r.name), "coordinates", AttrValue::text(joined));
   }
+}
+
+void Writer::abandon(bool remove) {
+  if (closed_) return;
+  closed_ = true;
+  pending_.clear();
+  file_.reset();
+  if (remove && created_) std::remove(path_.c_str());
 }
 
 void Writer::close() {

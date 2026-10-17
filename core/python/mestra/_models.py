@@ -256,14 +256,16 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
             declare(name, spec, spec.get("at", "node"))
         for name, value in (constants or {}).items():
             number, units = value
-            if isinstance(number, (int, np.integer)) and not isinstance(number, bool):
+            if isinstance(number, np.float32):
+                call("mes_set_constant", handle, b(name), b(units), _lib.MES_FLOAT32, float(number), 0)
+            elif isinstance(number, (int, np.integer)) and not isinstance(number, bool):
                 call("mes_set_constant", handle, b(name), b(units), _lib.MES_INT64, 0.0, int(number))
             else:
                 call("mes_set_constant", handle, b(name), b(units), _lib.MES_FLOAT64,
                      float(number), 0)
     except BaseException:
-        study._h = None
-        _lib._lib.mes_close(handle, None)
+        # A half-declared file is not wanted; the declaration error stands.
+        study._abandon(remove=True)
         raise
     return study
 

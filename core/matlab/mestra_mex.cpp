@@ -379,6 +379,10 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     mes_file* f = file(arg(1));
     g_files.erase(reinterpret_cast<std::uintptr_t>(f));
     check(mes_close(f, &e), e);
+  } else if (cmd == "abandon") {
+    mes_file* f = file(arg(1));
+    g_files.erase(reinterpret_cast<std::uintptr_t>(f));
+    mes_abandon(f, nrhs > 2 && mxIsLogicalScalarTrue(prhs[2]) ? 1 : 0);
   } else if (cmd == "info" || cmd == "names" || cmd == "table") {
     mes_strings* s = nullptr;
     const std::string key = text(arg(2), "key");

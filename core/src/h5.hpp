@@ -49,8 +49,10 @@ class Id {
 
 // Every count and length below comes out of the file, so each one is
 // checked against a limit before it sizes a buffer (spec section 9.6).
-const std::size_t kMaxAttributeElements = 1u << 20;
-const std::size_t kMaxAttributeBytes = std::size_t(1) << 30;
+const std::size_t kMaxAttributeBytes = std::size_t(16) << 20;
+// Category tables are read when a file opens, as structure.
+const std::size_t kMaxTableEntries = std::size_t(1) << 24;
+const std::size_t kMaxTableBytes = std::size_t(256) << 20;
 const std::size_t kMaxDatasetElements = std::size_t(1) << 31;
 const std::size_t kMaxDatasetBytes = std::size_t(1) << 33;
 const std::size_t kMaxFilterParameters = 1024;
@@ -137,8 +139,11 @@ class File {
       const std::string& path, const std::vector<Selection>& sel) const;
   std::vector<double> read_f64(const std::string& path) const;
   std::vector<std::int64_t> read_i64(const std::string& path) const;
-  // A whole one-dimensional fixed-length string dataset, NULs stripped.
-  std::vector<std::string> read_strings(const std::string& path) const;
+  // A whole one-dimensional fixed-length string dataset, NULs stripped;
+  // more entries or bytes than the caps is E23, before any allocation.
+  std::vector<std::string> read_strings(const std::string& path,
+                                        std::size_t max_entries = kMaxDatasetElements,
+                                        std::size_t max_bytes = kMaxDatasetBytes) const;
 
   // --- writing -------------------------------------------------------
   void make_group(const std::string& path);
@@ -189,6 +194,10 @@ class File {
 
  private:
   void build_object_index() const;
+  // Reads a selection of many scattered blocks as its bounding box and
+  // gathers; false (nothing read) when the plain path should read it.
+  bool read_gathered(const std::string& path, const std::vector<hsize_t>& shape, DType mem,
+                     const std::vector<Selection>& sel, void* out, std::size_t out_bytes) const;
   std::string dataset_path(hid_t object) const;
 
   Id id_;

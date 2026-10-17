@@ -82,11 +82,22 @@ def main() -> int:
                 failures.append(f"{name}: expected {missing}, found {sorted(found)}: " + "; ".join(
                     f"{f.rule} {f.path}: {f.message}" for f in report.findings))
             if e["group"] == "hostile":
+                # Opened and read without a crash: a refusal is a MestraError,
+                # with the expected rule when the case names one.
                 try:
                     with mestra.open(path) as f:
                         f.names("parameters")
-                except mestra.MestraError:
-                    pass
+                        for r in e.get("reads", []):
+                            try:
+                                f.get_label(r["label"])
+                            except mestra.MestraError:
+                                pass
+                    if "refused" in e:
+                        failures.append(f"{name}: opened; expected refusal {e['refused']}")
+                except mestra.MestraError as exc:
+                    if "refused" in e and exc.rule != e["refused"]:
+                        failures.append(f"{name}: refused with {exc.rule!r}, expected "
+                                        f"{e['refused']}: {exc}")
     total = sum(counts.values())
     print(f"{total} cases ({counts['valid']} valid, {counts['rules']} rule, {counts['hostile']} "
           f"hostile): {total - len({x.split(':')[0] for x in failures})} hold")

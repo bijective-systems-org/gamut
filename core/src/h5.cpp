@@ -2,6 +2,7 @@
 
 #include <hdf5_hl.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
@@ -421,12 +422,12 @@ std::vector<RawAttr> File::attributes(const std::string& path) const {
     Id type(H5Aget_type(attr.get()));
     Id space(H5Aget_space(attr.get()));
     a.type = type_of(type.get(), space.get());
-    // Every buffer is sized from the declared element count, which is
-    // checked first: a crafted file names one encoding and stores
-    // thousands of elements.
+    // Every attribute the format defines is a scalar, so only scalars are
+    // read; anything larger is marked and its contents never allocated (a
+    // crafted file can declare millions of elements).
     const std::size_t points = a.type.points;
-    const bool readable = points >= 1 && points <= kMaxAttributeElements;
-    if (points > kMaxAttributeElements) a.too_large = true;
+    const bool readable = points == 1;
+    if (points > 1) a.too_large = true;
 
     if (a.type.klass == H5T_STRING && readable) {
       if (a.type.variable_length) {
@@ -606,12 +607,93 @@ std::vector<std::int64_t> File::selected_shape(
   return out;
 }
 
+bool File::read_gathered(const std::string& path, const std::vector<hsize_t>& shape, DType mem,
+                         const std::vector<Selection>& sel, void* out,
+                         std::size_t out_bytes) const {
+  // HDF5 joins hyperslabs at a cost that grows faster than their number:
+  // 400 x 400 scattered indices took 2 s against 0.02 s for the whole
+  // field.  Many blocks are read as one bounding box and gathered here.
+  const std::size_t rank = shape.size();
+  if (rank == 0 || sel.empty()) return false;
+  std::vector<std::vector<std::pair<std::int64_t, std::int64_t>>> runs(rank);
+  std::vector<std::int64_t> lo(rank);
+  std::vector<std::size_t> extent(rank);
+  std::vector<Selection> box(rank);
+  std::size_t blocks = 1, box_elems = 1, n = 1;
+  const std::size_t kMaxBlocks = 64;
+  for (std::size_t a = 0; a < rank; ++a) {
+    const std::int64_t length = static_cast<std::int64_t>(shape[a]);
+    if (a < sel.size()) {
+      runs[a] = sel[a].runs(length, path);
+    } else if (length > 0) {
+      runs[a].emplace_back(0, length);
+    }
+    if (runs[a].empty()) return false;
+    blocks = blocks > kMaxBlocks ? blocks : blocks * runs[a].size();
+    lo[a] = runs[a].front().first;
+    const std::int64_t hi = runs[a].back().first + runs[a].back().second;
+    extent[a] = static_cast<std::size_t>(hi - lo[a]);
+    box[a] = Selection::range(lo[a], hi);
+    if (box_elems > kMaxDatasetElements / extent[a]) return false;
+    box_elems *= extent[a];
+    std::size_t selected = 0;
+    for (const auto& r : runs[a]) selected += static_cast<std::size_t>(r.second);
+    n *= selected;
+  }
+  if (blocks <= kMaxBlocks) return false;
+  const std::size_t item = dtype_size(mem);
+  if (out_bytes != n * item) return false;   // the plain path reports it
+  // The box may hold much that is not selected; it is used while it stays
+  // within a few times the result (or 64 MiB).
+  const std::size_t cap = std::max<std::size_t>(std::size_t(64) << 20, 4 * out_bytes);
+  if (box_elems > cap / item) return false;
+  std::vector<unsigned char> tmp(box_elems * item);
+  read(path, mem, box, tmp.data(), tmp.size());
+  std::vector<std::size_t> stride(rank, 1);
+  for (std::size_t a = rank - 1; a > 0; --a) stride[a - 1] = stride[a] * extent[a];
+  // Positions selected on every axis but the last, relative to the box; the
+  // last axis is copied a run at a time.
+  std::vector<std::vector<std::size_t>> at_axis(rank - 1);
+  for (std::size_t a = 0; a + 1 < rank; ++a) {
+    for (const auto& r : runs[a]) {
+      for (std::int64_t j = 0; j < r.second; ++j) {
+        at_axis[a].push_back(static_cast<std::size_t>(r.first + j - lo[a]));
+      }
+    }
+  }
+  unsigned char* dst = static_cast<unsigned char*>(out);
+  std::vector<std::size_t> at(rank - 1, 0);
+  while (true) {
+    std::size_t base = 0;
+    for (std::size_t a = 0; a + 1 < rank; ++a) base += at_axis[a][at[a]] * stride[a];
+    for (const auto& r : runs[rank - 1]) {
+      const std::size_t bytes = static_cast<std::size_t>(r.second) * item;
+      std::memcpy(dst, tmp.data() + (base + static_cast<std::size_t>(r.first - lo[rank - 1])) * item,
+                  bytes);
+      dst += bytes;
+    }
+    std::size_t a = rank - 1;
+    bool done = true;
+    while (a > 0) {
+      --a;
+      if (++at[a] < at_axis[a].size()) {
+        done = false;
+        break;
+      }
+      at[a] = 0;
+    }
+    if (done) break;
+  }
+  return true;
+}
+
 void File::read(const std::string& path, DType mem,
                 const std::vector<Selection>& sel, void* out,
                 std::size_t out_bytes) const {
   need(mem != DType::String, "strings are read with read_strings");
   const DsetInfo info = dataset_info(path, false);
   need(info.is_dataset, "\"" + path + "\" is not a dataset");
+  if (read_gathered(path, info.shape, mem, sel, out, out_bytes)) return;
   Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
   need(dset.valid(), "cannot open \"" + path + "\"");
   Id space(H5Dget_space(dset.get()));
@@ -645,18 +727,18 @@ std::vector<std::int64_t> File::read_i64(const std::string& path) const {
   return out;
 }
 
-std::vector<std::string> File::read_strings(const std::string& path) const {
+std::vector<std::string> File::read_strings(const std::string& path, std::size_t max_entries,
+                                            std::size_t max_bytes) const {
   const DsetInfo info = dataset_info(path, false);
   need(info.is_dataset && info.type.klass == H5T_STRING,
        "\"" + path + "\" is not a string dataset");
   need(!info.type.variable_length,
        "\"" + path + "\" holds variable-length strings");
-  const std::size_t count =
-      checked_product(path, info.shape, kMaxDatasetElements);
+  const std::size_t count = checked_product(path, info.shape, max_entries);
   std::vector<std::string> out;
   if (count == 0) return out;
   const std::size_t item = info.type.size;
-  if (item != 0 && count > kMaxDatasetBytes / item) {
+  if (item != 0 && count > max_bytes / item) {
     throw Error("E23", "\"" + path + "\" declares more bytes than this reader "
                                      "will read");
   }

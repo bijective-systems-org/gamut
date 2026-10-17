@@ -558,6 +558,34 @@ def hostile_cases(out):
     with h5py.File(p, "r+") as f:
         f.create_dataset("notes_huge", shape=(1 << 40,), dtype="<f8", chunks=(1 << 16,))
     cases["hostile_huge_dataset"] = {"rules": []}   # must not allocate; finding optional
+    # A category table that declares 2**28 entries and stores none: read at
+    # open, so it must be refused before its buffer is allocated.
+    p = os.path.join(out, "hostile_table_huge.mes")
+    shutil.copy(os.path.join(out, "table.mes"), p)
+    with h5py.File(p, "r+") as f:
+        n = 1 << 28
+        dim(f, "category_huge", n, True)
+        t = f.create_dataset("categories/huge", shape=(n,), maxshape=(None,),
+                             dtype=h5py.string_dtype("utf-8", 24), chunks=(512,),
+                             compression="gzip", compression_opts=1, shuffle=True)
+        t.dims[0].attach_scale(f["category_huge"])
+    cases["hostile_table_huge"] = {"rules": ["E23"]}
+    # 2**33 rows declared, none stored: reading a label's names must not
+    # allocate for them.
+    p = os.path.join(out, "hostile_rows_huge.mes")
+    shutil.copy(os.path.join(out, "table.mes"), p)
+    with h5py.File(p, "r+") as f:
+        for name in ("row", "run"):
+            f[name].resize((1 << 33,))
+    cases["hostile_rows_huge"] = {"rules": [], "reads": [{"label": "run"}]}
+    # /row as a soft link to the real ids: links are never followed, and a
+    # reader refuses rather than read the file as having no rows.
+    p = os.path.join(out, "hostile_soft_row.mes")
+    shutil.copy(os.path.join(out, "table.mes"), p)
+    with h5py.File(p, "r+") as f:
+        f.move("row", "row_real")
+        f["row"] = h5py.SoftLink("/row_real")
+    cases["hostile_soft_row"] = {"rules": ["E22"], "refused": "E22"}
     return cases
 
 

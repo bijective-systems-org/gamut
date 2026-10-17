@@ -84,8 +84,16 @@ bool read_parallel(const File& f, const std::string& path, DType mem,
   if (threads < 2 || mem == DType::String) return false;
   const DsetInfo info = f.dataset_info(path, false);
   if (!info.is_dataset || !info.chunked || info.shape.empty()) return false;
+  // A set fill value would show in never-written chunks, which this path
+  // fills with zeros; such a dataset reads through HDF5.
+  if (info.has_fill_value_set) return false;
   Plan plan;
   if (!dtype_of(info.type, &plan.file) || plan.file == DType::String) return false;
+  // Conversions here are plain casts: exact for the same type and defined
+  // for float to float.  Others (range checks, integer narrowing) are HDF5's.
+  const bool floats = (plan.file == DType::Float32 || plan.file == DType::Float64) &&
+                      (mem == DType::Float32 || mem == DType::Float64);
+  if (mem != plan.file && !floats) return false;
   plan.item = dtype_size(plan.file);
   for (std::size_t i = 0; i < info.filters.size(); ++i) {
     if (info.filters[i].first == H5Z_FILTER_SHUFFLE) {
@@ -152,9 +160,21 @@ bool read_parallel(const File& f, const std::string& path, DType mem,
     if (done) break;
   }
 
+  // Every worker holds two chunks; a chunk beyond the format's sizes (spec
+  // section 11.4 keeps them near 256 KiB) is left to HDF5.
+  const std::size_t max_chunk = std::size_t(64) << 20;
   std::size_t chunk_elems = 1;
-  for (const hsize_t c : plan.chunk) chunk_elems *= static_cast<std::size_t>(c);
+  for (const hsize_t c : plan.chunk) {
+    if (c == 0 || c > max_chunk || chunk_elems > max_chunk / c) return false;
+    chunk_elems *= static_cast<std::size_t>(c);
+  }
+  if (chunk_elems > max_chunk / plan.item) return false;
   const std::size_t chunk_bytes = chunk_elems * plan.item;
+  // The largest a stored chunk can be: deflate's bound, or the plain bytes
+  // when the filter was skipped for this chunk.
+  const std::size_t max_stored =
+      std::max<std::size_t>(chunk_bytes, plan.deflate ? compressBound(static_cast<uLong>(chunk_bytes))
+                                                      : chunk_bytes);
   const std::size_t out_item = dtype_size(mem);
   unsigned char* dst = static_cast<unsigned char*>(out);
 
@@ -175,6 +195,10 @@ bool read_parallel(const File& f, const std::string& path, DType mem,
       hsize_t stored = 0;
       if (H5Dget_chunk_storage_size(dset.get(), chunks[k].data(), &stored) < 0) stored = 0;
       if (stored == 0) continue;   // never written: zeros, as HDF5 gives
+      if (stored > max_stored) {
+        throw Error("E23", "a chunk of \"" + path + "\" is larger than its contents can be",
+                    path);
+      }
       raw[k - b0].resize(static_cast<std::size_t>(stored));
       std::uint32_t mask = 0;
       if (H5Dread_chunk(dset.get(), H5P_DEFAULT, chunks[k].data(), &mask,
@@ -185,7 +209,13 @@ bool read_parallel(const File& f, const std::string& path, DType mem,
     }
     // Decompress and place in parallel.
     std::atomic<std::size_t> next{b0};
+    auto fail = [&](const std::string& why) {
+      std::lock_guard<std::mutex> guard(failure_lock);
+      if (!failed) failure = why;
+      failed = true;
+    };
     auto work = [&]() {
+     try {
       std::vector<unsigned char> plain(chunk_bytes), scratch(chunk_bytes);
       while (!failed) {
         const std::size_t k = next.fetch_add(1);
@@ -204,16 +234,12 @@ bool read_parallel(const File& f, const std::string& path, DType mem,
             uLongf got = static_cast<uLongf>(chunk_bytes);
             if (uncompress(scratch.data(), &got, in.data(), static_cast<uLong>(in.size())) != Z_OK ||
                 got != chunk_bytes) {
-              std::lock_guard<std::mutex> guard(failure_lock);
-              failure = "a chunk of \"" + path + "\" does not inflate to its size";
-              failed = true;
+              fail("a chunk of \"" + path + "\" does not inflate to its size");
               return;
             }
             src = scratch.data();
           } else if (in.size() != chunk_bytes) {
-            std::lock_guard<std::mutex> guard(failure_lock);
-            failure = "an uncompressed chunk of \"" + path + "\" has the wrong size";
-            failed = true;
+            fail("an uncompressed chunk of \"" + path + "\" has the wrong size");
             return;
           }
           if (shuffled) {
@@ -255,10 +281,21 @@ bool read_parallel(const File& f, const std::string& path, DType mem,
           if (done || rank == 1) break;
         }
       }
+     } catch (const std::exception& e) {
+      // An exception must not leave a thread (std::terminate); the caller
+      // throws it after the join.
+      fail(e.what());
+     } catch (...) {
+      fail("a worker failed reading \"" + path + "\"");
+     }
     };
     const int workers = std::min<int>(threads, static_cast<int>(b1 - b0));
     std::vector<std::thread> pool;
-    for (int t = 1; t < workers; ++t) pool.emplace_back(work);
+    try {
+      for (int t = 1; t < workers; ++t) pool.emplace_back(work);
+    } catch (...) {
+      // Fewer threads than asked: the ones running and this one finish.
+    }
     work();
     for (auto& th : pool) th.join();
     if (failed) throw Error("E23", failure, path);

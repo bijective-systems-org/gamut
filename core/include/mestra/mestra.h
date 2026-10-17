@@ -155,6 +155,11 @@ MES_API int mes_set_private(mes_file* f, const char* name, const void* bytes, in
 /* Closes a file opened by any call and frees the handle; writes what a
  * writer holds.  f may be NULL. */
 MES_API int mes_close(mes_file* f, mes_error* err);
+/* Gives up on a file and frees the handle without finishing it: nothing
+ * more is written.  remove_file (non-zero) deletes a file this handle
+ * created; a file opened for appending is never deleted.  f may be NULL.
+ * For a writer whose earlier call failed and whose file is not wanted. */
+MES_API void mes_abandon(mes_file* f, int remove_file);
 
 /* --- Reading ------------------------------------------------------------- */
 MES_API int mes_open(const char* path, mes_file** out, mes_error* err);

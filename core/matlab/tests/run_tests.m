@@ -82,6 +82,18 @@ try
 catch err
     ok(strcmp(err.identifier, 'mestra:E7'), ['bad units identifier: ' err.identifier]);
 end
+% In a mesh file too, a declaration error is its own, and the half-made
+% file is removed.
+bad = fullfile(tmp, 'badmesh.mes');
+try
+    mestra.create(bad, 'writer', 'w', 'mesh', 'shared', 'per', 'fixed', ...
+        'coordinates', struct('units', 'm', 'axes', 2), ...
+        'fields', struct('q', struct('units', 'm//s', 'at', 'node')));
+    ok(false, 'bad field units refused');
+catch err
+    ok(strcmp(err.identifier, 'mestra:E7'), ['mesh file bad units identifier: ' err.identifier]);
+    ok(~isfile(bad), 'half-declared mesh file removed');
+end
 try
     r = mestra.open(p); r.close(); r.getField('pf');
     ok(false, 'closed file refused');

@@ -112,6 +112,9 @@ class Writer {
   // flushes first.
   void flush();
   void close();
+  // Releases the file without finishing it; with `remove`, deletes a file
+  // this writer created.  For giving up after an error.
+  void abandon(bool remove);
 
  private:
   Writer() = default;
@@ -125,6 +128,12 @@ class Writer {
   void need_no_runs(const std::string& what) const;
   void check_new_root_name(const std::string& name) const;
   void ensure_datasets(const Batch* first);
+  // What must hold before the first rows create datasets, checked on `s`
+  // (where it fixes whether a changing mesh has cells); writes nothing.
+  static void check_preconditions(Schema& s, const Batch* first);
+  static void resolve_autos(Schema& s, const Batch* first);
+  void check_mesh_labels_fixed(const Geometry& g, std::int64_t n_nodes,
+                               std::int64_t n_cells) const;
   void create_root_dataset(const std::string& path, DType dtype,
                            const std::vector<hsize_t>& trailing,
                            const std::vector<std::string>& trailing_scales);
@@ -144,6 +153,7 @@ class Writer {
   FilterPipeline filters_ = default_pipeline();
   bool closed_ = false;
   bool model_ = false;
+  bool created_ = false;
   bool datasets_ready_ = false;
   std::int64_t next_id_ = 0;
   std::int64_t instances_written_ = 0;   // per-group or per-run geometries on disk

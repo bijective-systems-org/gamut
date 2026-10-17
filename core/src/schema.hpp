@@ -53,6 +53,7 @@ struct Result {
   std::string units;
   DType dtype = DType::Float64;
   bool auto_dtype = false;        // taken from the first values written
+  bool given_precision = false;   // resolved from the first values this writer took
   Relation relation;
   std::string vector;             // fields only
   std::string axis;               // fields only, with vector
@@ -92,6 +93,7 @@ struct Mesh {
   std::string coordinate_model, coordinate_output;   // served coordinates
   std::vector<MeshLabel> labels;
   bool set_done = false;          // the writer has set the mesh
+  int has_cells = -1;             // changing mesh: -1 not yet known, 0 no, 1 yes
   std::string per_group() const {
     return per.compare(0, 6, "group:") == 0 ? per.substr(6) : std::string();
   }

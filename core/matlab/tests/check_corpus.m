@@ -39,6 +39,10 @@ for k = 1:numel(names)
                 fails{end + 1} = sprintf('%s: expected %s, found %s', name, rules{j}, strjoin(found, ' ')); %#ok<SAGROW>
             end
         end
+        if strcmp(e.group, 'hostile')
+            why = hostile(path, e);
+            if ~isempty(why), fails{end + 1} = sprintf('%s: %s', name, why); end %#ok<SAGROW>
+        end
     end
 end
 total = counts.valid + counts.rules + counts.hostile;
@@ -46,6 +50,37 @@ fprintf('%d cases (%d valid, %d rule, %d hostile): %d failure(s)\n', total, coun
     counts.rules, counts.hostile, numel(fails));
 for k = 1:numel(fails), fprintf('  FAIL %s\n', fails{k}); end
 if ~isempty(fails), error('mestra:corpus', '%d failures', numel(fails)); end
+
+function why = hostile(path, e)
+% Opened and read without a crash: a refusal is a mestra error, with the
+% expected rule when the case names one.
+why = '';
+try
+    r = mestra.open(path);
+    c = onCleanup(@() r.close());
+    r.names('parameters');
+    if isfield(e, 'reads')
+        reads = e.reads;
+        if ~iscell(reads), reads = num2cell(reads); end
+        for j = 1:numel(reads)
+            try
+                r.getLabel(reads{j}.label);
+            catch err
+                if ~startsWith(err.identifier, 'mestra:'), rethrow(err); end
+            end
+        end
+    end
+    if isfield(e, 'refused')
+        why = sprintf('opened; expected refusal %s', e.refused);
+    end
+catch err
+    if ~startsWith(err.identifier, 'mestra:')
+        why = sprintf('raised %s: %s', err.identifier, err.message);
+    elseif isfield(e, 'refused') && ~strcmp(err.identifier, ['mestra:' e.refused])
+        why = sprintf('refused with %s, expected %s', err.identifier, e.refused);
+    end
+end
+end
 
 function why = probe(path, p)
 why = '';

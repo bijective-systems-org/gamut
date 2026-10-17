@@ -111,9 +111,21 @@ Schema load_schema(const File& f) {
   s.rows = row.is_dataset && row.shape.size() == 1
                ? static_cast<std::int64_t>(row.shape[0])
                : 0;
+  // Links are never followed (spec section 9.6); one where the structure
+  // lives is refused rather than read as absent.
+  auto hard = [](const Member& m, const std::string& group) {
+    const std::string p = (group == "/" ? "" : group) + "/" + m.name;
+    need(m.kind == LinkKind::Hard, "E22",
+         p + " is a soft or external link; links are never followed", p);
+  };
+  for (const std::string& g : {std::string("/"), std::string("/categories"),
+                               std::string("/mesh"), std::string("/models")}) {
+    for (const Member& m : f.members(g)) hard(m, g);
+  }
   for (const Member& m : f.members("/categories")) {
-    if (m.kind != LinkKind::Hard || !m.is_dataset) continue;
-    s.tables[m.name] = f.read_strings("/categories/" + m.name);
+    if (!m.is_dataset) continue;
+    // Tables are read at open, so their size is capped as structure.
+    s.tables[m.name] = f.read_strings("/categories/" + m.name, kMaxTableEntries, kMaxTableBytes);
   }
   for (const Member& m : f.members("/")) {
     if (m.kind != LinkKind::Hard) continue;
@@ -211,6 +223,7 @@ Schema load_schema(const File& f) {
       mesh.n_cells = types.is_dataset && !types.shape.empty()
                          ? static_cast<std::int64_t>(types.shape[0])
                          : 0;
+      mesh.has_cells = types.is_dataset ? 1 : 0;
     }
     const DsetInfo conn = f.dataset_info("/mesh/cell_connectivity", false);
     mesh.n_conn = conn.is_dataset && !conn.shape.empty()
@@ -219,7 +232,8 @@ Schema load_schema(const File& f) {
     for (const char* where : {"node", "cell"}) {
       const std::string lg = std::string("/mesh/") + where + "_labels";
       for (const Member& m : f.members(lg)) {
-        if (m.kind != LinkKind::Hard || !m.is_dataset) continue;
+        hard(m, lg);
+        if (!m.is_dataset) continue;
         MeshLabel ml;
         ml.name = m.name;
         ml.where = where;
@@ -230,7 +244,7 @@ Schema load_schema(const File& f) {
       }
       const std::string fg = std::string("/mesh/") + where + "_fields";
       for (const Member& m : f.members(fg)) {
-        if (m.kind != LinkKind::Hard) continue;
+        hard(m, fg);
         if (!m.is_dataset && !m.is_group) continue;
         s.results.push_back(result_from(f, fg + "/" + m.name, m.name, where, m.is_group));
       }
@@ -377,9 +391,36 @@ std::vector<std::pair<std::string, std::string>> Reader::describe(
   return out;
 }
 
+namespace {
+
+// A count taken from the file, checked before it sizes a buffer.
+std::size_t capped(std::int64_t n, std::size_t item, const std::string& path) {
+  need(n >= 0 && static_cast<std::uint64_t>(n) <= kMaxDatasetElements &&
+           static_cast<std::uint64_t>(n) <= kMaxDatasetBytes / item,
+       "E23", path + ": " + std::to_string(n) + " elements are more than this reader reads at once",
+       path);
+  return static_cast<std::size_t>(n);
+}
+
+}  // namespace
+
+std::pair<std::int64_t, std::int64_t> Reader::span(const std::string& cumulative, std::int64_t k,
+                                                   const std::string& path) const {
+  const DsetInfo info = file_->dataset_info(cumulative, false);
+  const std::int64_t len =
+      info.is_dataset && info.shape.size() == 1 ? static_cast<std::int64_t>(info.shape[0]) : 0;
+  need(k >= 0 && k + 1 < len, "E21",
+       path + ": instance " + std::to_string(k) + " does not exist", path);
+  std::int64_t v[2] = {0, 0};
+  file_->read(cumulative, DType::Int64, {Selection::range(k, k + 2)}, v, sizeof v);
+  need(v[0] >= 0 && v[1] >= v[0], "E21",
+       cumulative + " decreases at instance " + std::to_string(k), path);
+  return {v[0], v[1]};
+}
+
 std::vector<std::int64_t> Reader::row_instances(const Selection& runs) const {
   const std::int64_t n = runs.count(schema_.rows, "rows");
-  std::vector<std::int64_t> out(static_cast<std::size_t>(n));
+  std::vector<std::int64_t> out(capped(n, 8, "/mesh/row_instance"));
   if (n > 0) file_->read("/mesh/row_instance", DType::Int64, {runs}, out.data(), out.size() * 8);
   return out;
 }
@@ -397,7 +438,7 @@ namespace {
 std::int64_t single_run(const Selection& runs, std::int64_t rows,
                         const std::string& path) {
   const std::int64_t n = runs.count(rows, path);
-  need(n == 1, "",
+  need(n == 1 && runs.kind != Selection::All, "",
        path + ": a changing mesh is read one run at a time; select exactly one "
               "run (a selection across runs needs a shared mesh)",
        path);
@@ -464,14 +505,9 @@ std::vector<std::int64_t> Reader::shape(const std::string& path,
     }
     const std::int64_t run = single_run(runs, s.rows, path);
     const std::int64_t k = instance_of_run(run);
-    const std::vector<std::int64_t> cum = file_->read_i64(
-        where == "node" ? "/mesh/instance_nodes" : "/mesh/instance_cells");
-    need(k >= 0 && k + 1 < static_cast<std::int64_t>(cum.size()), "E21",
-         path + ": run " + std::to_string(run) + " names instance " +
-             std::to_string(k) + ", which does not exist",
-         path);
-    const std::int64_t len = cum[static_cast<std::size_t>(k + 1)] - cum[static_cast<std::size_t>(k)];
-    std::vector<std::int64_t> out = {sites.count(len, path)};
+    const auto sp = span(where == "node" ? "/mesh/instance_nodes" : "/mesh/instance_cells", k,
+                         path);
+    std::vector<std::int64_t> out = {sites.count(sp.second - sp.first, path)};
     if (path == "coordinates") out.push_back(m.axes);
     return out;
   }
@@ -486,15 +522,15 @@ std::vector<std::int64_t> Reader::shape(const std::string& path,
     }
     const std::int64_t run = single_run(runs, s.rows, path);
     const std::int64_t k = instance_of_run(run);
-    const std::vector<std::int64_t> cum = file_->read_i64("/mesh/instance_cells");
-    need(k >= 0 && k + 1 < static_cast<std::int64_t>(cum.size()), "E21",
-         path + ": instance " + std::to_string(k) + " does not exist", path);
-    const std::int64_t c0 = cum[static_cast<std::size_t>(k)], c1 = cum[static_cast<std::size_t>(k + 1)];
-    if (path == "cells/types") return {c1 - c0};
-    if (path == "cells/offsets") return {c1 - c0 + 1};
-    std::int64_t o[2] = {0, 0};
-    file_->read("/mesh/cell_offsets", DType::Int64, {Selection::list({c0, c1})}, o, 16);
-    return {o[1] - o[0]};
+    if (m.has_cells == 0) return {0};
+    const auto c = span("/mesh/instance_cells", k, path);
+    if (path == "cells/types") return {c.second - c.first};
+    if (path == "cells/offsets") return {c.second - c.first + 1};
+    std::int64_t lo = 0, hi = 0;
+    file_->read("/mesh/cell_offsets", DType::Int64, {Selection::range(c.first, c.first + 1)}, &lo, 8);
+    file_->read("/mesh/cell_offsets", DType::Int64, {Selection::range(c.second, c.second + 1)}, &hi, 8);
+    need(hi >= lo, "E21", path + ": /mesh/cell_offsets decreases", path);
+    return {hi - lo};
   }
   throw Error("", "nothing is called \"" + path + "\"", path);
 }
@@ -537,8 +573,8 @@ void Reader::read(const std::string& path, const Selection& runs,
     }
     const std::int64_t run = single_run(runs, s.rows, path);
     const std::int64_t k = instance_of_run(run);
-    const std::vector<std::int64_t> cum = f.read_i64("/mesh/instance_cells");
-    const std::int64_t c0 = cum[static_cast<std::size_t>(k)], c1 = cum[static_cast<std::size_t>(k + 1)];
+    const auto c = span("/mesh/instance_cells", k, path);
+    const std::int64_t c0 = c.first, c1 = c.second;
     if (which == "types") {
       f.read("/mesh/cell_types", mem, {Selection::range(c0, c1)}, out, out_bytes);
       return;
@@ -546,6 +582,9 @@ void Reader::read(const std::string& path, const Selection& runs,
     std::vector<std::int64_t> offs(static_cast<std::size_t>(c1 - c0 + 1));
     f.read("/mesh/cell_offsets", DType::Int64, {Selection::range(c0, c1 + 1)},
            offs.data(), offs.size() * 8);
+    for (std::size_t i = 1; i < offs.size(); ++i) {
+      need(offs[i] >= offs[i - 1], "E21", path + ": /mesh/cell_offsets decreases", path);
+    }
     if (which == "offsets") {
       const std::int64_t base = offs[0];
       for (auto& o : offs) o -= base;
@@ -570,18 +609,15 @@ void Reader::read(const std::string& path, const Selection& runs,
       std::int64_t first = 0;
       f.read(start, DType::Int64, {Selection::range(run, run + 1)}, &first, 8);
       const std::int64_t k = instance_of_run(run);
-      const std::vector<std::int64_t> cum = f.read_i64(
-          where == "node" ? "/mesh/instance_nodes" : "/mesh/instance_cells");
-      const std::int64_t len = cum[static_cast<std::size_t>(k + 1)] - cum[static_cast<std::size_t>(k)];
-      f.read(h5, mem, {shifted(sites, len, first, path)}, out, out_bytes);
+      const auto sp = span(where == "node" ? "/mesh/instance_nodes" : "/mesh/instance_cells", k,
+                           path);
+      f.read(h5, mem, {shifted(sites, sp.second - sp.first, first, path)}, out, out_bytes);
       return;
     }
     const std::int64_t k = instance_of_run(run);
-    const std::vector<std::int64_t> cum = f.read_i64(
-        where == "node" ? "/mesh/instance_nodes" : "/mesh/instance_cells");
-    const std::int64_t c0 = cum[static_cast<std::size_t>(k)];
-    const std::int64_t len = cum[static_cast<std::size_t>(k + 1)] - c0;
-    f.read(h5, mem, {shifted(sites, len, c0, path)}, out, out_bytes);
+    const auto sp = span(where == "node" ? "/mesh/instance_nodes" : "/mesh/instance_cells", k,
+                         path);
+    f.read(h5, mem, {shifted(sites, sp.second - sp.first, sp.first, path)}, out, out_bytes);
     return;
   }
   // Shared mesh.
@@ -651,7 +687,7 @@ std::vector<unsigned char> Reader::private_record(const std::string& name) const
   DType t;
   need(dtype_of(info.type, &t) && t == DType::UInt8, "",
        "the private record \"" + name + "\" is not bytes written by this library");
-  std::vector<unsigned char> out(static_cast<std::size_t>(info.shape[0]));
+  std::vector<unsigned char> out(capped(static_cast<std::int64_t>(info.shape[0]), 1, path));
   if (!out.empty()) file_->read(path, DType::UInt8, {}, out.data(), out.size());
   return out;
 }
@@ -675,7 +711,7 @@ std::vector<std::string> Reader::label_names(const std::string& name,
   need(l != nullptr, "", "no label \"" + name + "\"", name);
   const std::vector<std::string>& entries = table(l->category);
   const std::int64_t n = runs.count(schema_.rows, name);
-  std::vector<std::int64_t> codes(static_cast<std::size_t>(n));
+  std::vector<std::int64_t> codes(capped(n, 8, name));
   if (n > 0) file_->read("/" + name, DType::Int64, {runs}, codes.data(), codes.size() * 8);
   std::vector<std::string> out;
   out.reserve(codes.size());

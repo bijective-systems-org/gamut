@@ -12,6 +12,28 @@ from . import _lib, _units
 from ._lib import MestraError, Selection, b, call
 
 
+def _same_geometry(a: tuple, b_: tuple) -> bool:
+    """Points, cells and mesh labels equal value for value."""
+    (pa, ca, la), (pb, cb, lb) = a, b_
+    if not np.array_equal(np.asarray(pa), np.asarray(pb)):
+        return False
+    if (ca is None) != (cb is None):
+        return False
+    if ca is not None and not all(np.array_equal(np.asarray(x), np.asarray(y))
+                                  for x, y in zip(ca, cb)):
+        return False
+    la, lb = la or {}, lb or {}
+    return la.keys() == lb.keys() and all(np.array_equal(np.asarray(la[k]), np.asarray(lb[k]))
+                                          for k in la)
+
+
+def _one_row(row: Any) -> list[int]:
+    """One row position, as the one-element list the core reads."""
+    if isinstance(row, (bool, np.bool_)) or not isinstance(row, (int, np.integer)):
+        raise MestraError("", f"row: one integer position; got {row!r}")
+    return [int(row)]
+
+
 def _spec(value: Any, key: str) -> dict:
     """A declaration given as a plain string (its units) or a mapping."""
     if isinstance(value, Mapping):
@@ -57,6 +79,13 @@ class Study:
         if self._h is not None:
             h, self._h = self._h, None
             call("mes_close", h)
+
+    def _abandon(self, remove: bool) -> None:
+        """Releases the file without finishing it; with `remove`, deletes a
+        file this handle created.  For giving up after an error."""
+        if self._h is not None:
+            h, self._h = self._h, None
+            _lib._lib.mes_abandon(h, int(remove))
 
     def __enter__(self) -> "Study":
         return self
@@ -199,15 +228,24 @@ class Study:
             mesh_labels = list(mesh_labels) if mesh_labels is not None else [None] * len(points)
             if self._group is not None:
                 # One geometry per group member's first run: in run order,
-                # keyed by the member's name; repeats are left out.
+                # keyed by the member's name.  A repeat must be the same
+                # geometry; a different one is refused, not dropped.
                 if group_names is None:
                     raise MestraError("E2", f"give {self._group} by name so geometry can be "
                                             "matched to members")
-                seen: set[str] = set()
+                first: dict[str, int] = {}
                 for i, member in enumerate(group_names):
-                    if points[i] is None or member in seen:
+                    if points[i] is None:
                         continue
-                    seen.add(member)
+                    if member in first:
+                        j = first[member]
+                        if not _same_geometry((points[i], cells[i], mesh_labels[i]),
+                                              (points[j], cells[j], mesh_labels[j])):
+                            raise MestraError("", f"{self._group} \"{member}\" is given two "
+                                                  f"different geometries in one batch (runs {j} "
+                                                  f"and {i})", self._group)
+                        continue
+                    first[member] = i
                     call("mes_geometry_begin", h)
                     self._stage_geometry(points[i], cells[i], mesh_labels[i] or {}, None)
                     call("mes_batch_geometry_for_member", h, b(member))
@@ -319,7 +357,7 @@ class Study:
         return float(self._in_units(name, self._get(name), units))
 
     def get_cells(self, row: int | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        rows = None if row is None else [int(row)]
+        rows = None if row is None else _one_row(row)
         return (self._get("cells/types", rows, dtype=np.uint8),
                 self._get("cells/offsets", rows, dtype=np.int64),
                 self._get("cells/connectivity", rows, dtype=np.int64))
@@ -327,7 +365,7 @@ class Study:
     def get_points(self, row: int | None = None, units: str | None = None) -> np.ndarray:
         if row is None and self._per not in ("fixed",):
             raise MestraError("", "this mesh's geometry changes; give the row")
-        rows = None if row is None else [int(row)]
+        rows = None if row is None else _one_row(row)
         out = self._get("coordinates", rows, dtype=self._coordinate_dtype(), squeeze_row=False)
         if row is not None and self._mesh_kind == "shared":
             out = out[0]
@@ -337,15 +375,16 @@ class Study:
                   units: str | None = None) -> np.ndarray:
         sites = nodes if nodes is not None else cells
         if self._mesh_kind == "changing":
-            if rows is None or (_lib.iterable(rows) and len(list(rows)) != 1):
+            one = isinstance(rows, (list, tuple, np.ndarray)) and len(rows) == 1
+            if not one and (rows is None or _lib.iterable(rows) or isinstance(rows, slice)):
                 raise MestraError("", f"{name}: a changing mesh is read one row at a time; "
                                       "reads across rows need a shared mesh")
-            rows = [int(rows)] if not _lib.iterable(rows) else list(rows)
+            rows = list(rows) if one else _one_row(rows)
         return self._in_units(name, self._get(name, rows, sites, dtype=self._result_dtype(name)),
                               units)
 
     def get_mesh_label(self, name: str, row: int | None = None) -> np.ndarray:
-        rows = None if row is None else [int(row)]
+        rows = None if row is None else _one_row(row)
         return self._get(name, rows, dtype=np.int64, squeeze_row=False)
 
     def table(self, names: Sequence[str] | None = None, rows: Any = None) -> dict[str, np.ndarray]:
@@ -545,12 +584,15 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
             call("mes_set_generalisation_group", handle, b(generalisation_group))
         for name, value in (constants or {}).items():
             number, units = value
-            if isinstance(number, (int, np.integer)) and not isinstance(number, bool):
+            if isinstance(number, np.float32):
+                call("mes_set_constant", handle, b(name), b(units), _lib.MES_FLOAT32, float(number), 0)
+            elif isinstance(number, (int, np.integer)) and not isinstance(number, bool):
                 call("mes_set_constant", handle, b(name), b(units), _lib.MES_INT64, 0.0, int(number))
             else:
                 call("mes_set_constant", handle, b(name), b(units), _lib.MES_FLOAT64, float(number), 0)
     except BaseException:
-        study.close()
+        # A half-declared file is not wanted; the declaration error stands.
+        study._abandon(remove=True)
         raise
     return study
 
