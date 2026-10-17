@@ -17,6 +17,13 @@ endif()
 
 option(MESTRA_BUILD_TESTS "Build the core's unit tests" ON)
 option(MESTRA_SANITIZE "Build with the address and undefined sanitizers" OFF)
+# A process may hold another HDF5 (h5py's, MATLAB's).  Where symbols share
+# one namespace (Linux), a core linked to a shared HDF5 can bind to the
+# other copy; linked statically, with only mes_* exported, it cannot.
+option(MESTRA_STATIC_HDF5 "Link HDF5 statically into the core" OFF)
+if(MESTRA_STATIC_HDF5)
+  set(HDF5_USE_STATIC_LIBRARIES ON)
+endif()
 
 # No multiply and add may fuse into one rounding step: the built-in
 # nearest-neighbour model must give bit-identical distances everywhere.
@@ -75,7 +82,17 @@ target_compile_options(mestra_core_objects PRIVATE ${MESTRA_WARNINGS}
 add_library(mestra SHARED $<TARGET_OBJECTS:mestra_core_objects>)
 target_include_directories(mestra PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(mestra PRIVATE ${HDF5_HL_LIBRARIES} ${HDF5_C_LIBRARIES} ZLIB::ZLIB
-                      Threads::Threads)
+                      Threads::Threads ${CMAKE_DL_LIBS})
+# Nothing but the C interface leaves the library, whatever is linked into it.
+if(APPLE)
+  target_link_options(mestra PRIVATE
+    "LINKER:-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/exports.txt")
+elseif(UNIX)
+  target_link_options(mestra PRIVATE "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports.map")
+  if(NOT MESTRA_SANITIZE)
+    target_link_options(mestra PRIVATE "LINKER:--no-undefined")
+  endif()
+endif()
 set_target_properties(mestra PROPERTIES OUTPUT_NAME mestra)
 
 if(MESTRA_BUILD_TESTS)
