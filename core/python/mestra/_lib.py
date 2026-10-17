@@ -85,6 +85,7 @@ _SS = ctypes.POINTER(ctypes.c_char_p)
 _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "mes_version": (_S, []),
     "mes_format": (_S, []),
+    "mes_units_parse": (_I, [_S]),
     "mes_create": (_I, [_S, _S, _S, _S, _PP, _E]),
     "mes_open_append": (_I, [_S, _PP, _E]),
     "mes_set_attribute": (_I, [_P, _S, _S, _E]),
@@ -272,6 +273,10 @@ def read(handle: Any, name: str, rows: Selection, sites: Selection, dtype: np.dt
     call("mes_read", handle, b(name), rows.pointer(), sites.pointer(), _DTYPE_CODE[np.dtype(dtype)],
          out.ctypes.data_as(ctypes.c_void_p), out.nbytes)
     return out
+
+
+def units_parse(units: str) -> bool:
+    return bool(_lib.mes_units_parse(b(units)))
 
 
 def version() -> str:

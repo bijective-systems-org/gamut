@@ -60,6 +60,8 @@ typedef struct {
  * ("mestra/1").  Static strings; never freed. */
 MES_API const char* mes_version(void);
 MES_API const char* mes_format(void);
+/* 1 when `units` parses by the grammar of spec section 13, else 0. */
+MES_API int mes_units_parse(const char* units);
 
 /* Opaque handles. */
 typedef struct mes_file mes_file;        /* a file open to write or to read */

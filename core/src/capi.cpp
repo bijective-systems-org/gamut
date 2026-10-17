@@ -15,6 +15,7 @@
 #include "reader.hpp"
 #include "select.hpp"
 #include "types.hpp"
+#include "units.hpp"
 #include "validate.hpp"
 #include "writer.hpp"
 
@@ -190,6 +191,14 @@ extern "C" {
 
 const char* mes_version(void) { return kVersion; }
 const char* mes_format(void) { return kFormat; }
+
+int mes_units_parse(const char* units) {
+  try {
+    return units != nullptr && mestra::units_parse(units) ? 1 : 0;
+  } catch (...) {
+    return 0;
+  }
+}
 
 int mes_create(const char* path, const char* writer, const char* mesh_kind, const char* per,
                mes_file** out, mes_error* err) {
