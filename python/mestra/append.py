@@ -32,6 +32,7 @@ import numpy as np
 from .encoding import (
     encode_strings,
     is_fixed_string,
+    leading_bound,
     read_attr,
     scale_name,
     string_dtype,
@@ -455,7 +456,11 @@ def _wider(f: h5py.File, path: str, width: int) -> h5py.Dataset:
     scales = [list(dim.values()) for dim in old.dims]
     kw: dict[str, Any] = {"maxshape": old.maxshape}
     if old.chunks is not None:
-        kw["chunks"] = old.chunks
+        # Wider entries hold fewer to a chunk: keep within the default
+        # of section 12.3 for the new width, so the grown file draws no
+        # W12.
+        kw["chunks"] = (min(old.chunks[0], leading_bound(width, ())),) \
+            + tuple(old.chunks[1:])
     if old.compression is not None:
         kw["compression"] = old.compression
         kw["compression_opts"] = old.compression_opts

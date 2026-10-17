@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import os
 
+import h5py
 import numpy as np
 import pytest
 
@@ -198,3 +199,26 @@ def test_an_empty_append_writes_nothing(tmp_path):
     before = digest(path)
     assert lib.append(empty, path) == 0
     assert digest(path) == before
+
+
+def test_a_widened_id_keeps_the_default_chunk(tmp_path):
+    """40,000 short ids take one chunk of 40,000; a 24-byte id makes the
+    dataset wider, and its chunk shrinks to the default for the new
+    width, so the grown file draws no W12."""
+    def store(ids):
+        ds = lib.Dataset(writer="store", created="2026-10-16T00:00:00Z")
+        ds.add_label("run", np.array(ids), "id")
+        ds.add_scalar("cl", np.zeros(len(ids)), "1")
+        return ds
+
+    path = str(tmp_path / "ids.mes")
+    lib.write(store(["r%05d" % i for i in range(40000)]), path)
+    with h5py.File(path, "r") as f:
+        assert f["run"].chunks == (40000,)
+    assert lib.append(store(["a-much-longer-identifier"]), path) == 1
+    with h5py.File(path, "r") as f:
+        assert f["run"].dtype.itemsize == 24
+        assert f["run"].chunks == (10922,)
+        assert f["run"].shape == (40001,)
+    report = lib.validate(path)
+    assert report.errors == [] and "W12" not in report.warning_ids
