@@ -741,6 +741,48 @@ function related(s::Study, name)
     return out
 end
 
+# --- copies between files --------------------------------------------------------------
+
+"""
+    Mestra.append!(dst, src)
+
+Adds the rows of `src` to `dst` in place and returns how many: new ids
+continuing dst's, tables merged by name. Both need the same declarations
+(bounds may differ), the same mesh, and one geometry for a group member
+found in both; everything is checked before the first row is written.
+"""
+function append!(dst::AbstractString, src::AbstractString)
+    n = Ref{Int64}(0)
+    @mes mes_append (Cstring, Cstring, Ref{Int64}) cs(dst) cs(src) n
+    return Int(n[])
+end
+
+"""
+    Mestra.extract(src, dst, rows)
+
+The selected rows of `src` (1-based positions or a range) as a new file
+`dst`: ids kept, every table whole, a changing mesh's instances reduced to
+those the rows use.
+"""
+function extract(src::AbstractString, dst::AbstractString, rows)
+    r = selection(rows, "rows")
+    rsel = Ref(r.sel)
+    rk = r.keep
+    GC.@preserve rk begin
+        @mes mes_extract (Cstring, Cstring, Ref{CSel}) cs(src) cs(dst) rsel
+    end
+    return nothing
+end
+
+"""
+    Mestra.write_copy(src, dst)
+
+`src` rewritten as `dst` with the default layout (chunks, compression),
+keeping its identity (file_id, created).
+"""
+write_copy(src::AbstractString, dst::AbstractString) =
+    (@mes mes_write_copy (Cstring, Cstring) cs(src) cs(dst); nothing)
+
 # --- validation -------------------------------------------------------------------------
 
 struct Finding

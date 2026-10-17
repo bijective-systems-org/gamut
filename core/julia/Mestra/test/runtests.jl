@@ -151,6 +151,27 @@ mktempdir() do tmp
         end
     end
 
+    @testset "copies between files" begin
+        a, b, e, w = (joinpath(tmp, n) for n in ("ja.mes", "jb.mes", "je.mes", "jw.mes"))
+        for (p, xs, cases) in ((a, [1.0, 2.0], ["p", "q"]), (b, [3.0, 4.0], ["r", "p"]))
+            Mestra.create(p; writer="t", parameters=Dict("x" => "m"),
+                          labels=Dict("case" => "categorical")) do s
+                Mestra.add_runs!(s, Dict("x" => xs, "case" => cases))
+            end
+        end
+        @test Mestra.append!(a, b) == 2
+        Mestra.extract(a, e, [2, 4])
+        Mestra.open(e) do f
+            @test Mestra.get_row_ids(f) == [1, 3] && Mestra.get_label(f, "case") == ["q", "p"]
+        end
+        Mestra.write_copy(a, w)
+        ida = Mestra.open(f -> Mestra.describe(f)["file_id"], a)
+        idw = Mestra.open(f -> Mestra.describe(f)["file_id"], w)
+        @test ida == idw
+        @test_throws MestraError Mestra.append!(a, a)
+        @test isempty(Mestra.validate(e)) && isempty(Mestra.validate(w))
+    end
+
     @testset "the built-in nearest model" begin
         mp = joinpath(tmp, "nearest.mes")
         Mestra.create_model(mp; writer="tests",

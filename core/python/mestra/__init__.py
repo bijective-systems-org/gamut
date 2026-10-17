@@ -8,9 +8,11 @@ from ._lib import MestraError, format_string as _format, version as _version
 from ._study import Study, create, open
 from ._validate import Finding, Report, validate
 from ._models import Nearest, create_model, evaluate, register_model_type
+from ._files import append, extract, write_copy
 
 __version__ = _version()
 FORMAT = _format()
 
-__all__ = ["FORMAT", "Finding", "MestraError", "Nearest", "Report", "Study", "create",
-           "create_model", "evaluate", "open", "register_model_type", "validate"]
+__all__ = ["FORMAT", "Finding", "MestraError", "Nearest", "Report", "Study", "append", "create",
+           "create_model", "evaluate", "extract", "open", "register_model_type", "validate",
+           "write_copy"]

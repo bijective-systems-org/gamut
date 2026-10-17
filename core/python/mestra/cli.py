@@ -27,6 +27,7 @@ import numpy as np
 from . import _lib
 from ._lib import MestraError
 from ._study import create, open as open_file
+from ._files import append as mestra_append, extract as mestra_extract
 from ._validate import validate
 
 EXAMPLE = {
@@ -372,6 +373,15 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 def cmd_append(args: argparse.Namespace) -> int:
     """--json: {"appended": FILE, "rows": n, "problems": [{key, message}]}"""
+    if args.document.lower().endswith(".mes"):
+        # Every row of another study file (interface section 6).
+        try:
+            n = mestra_append(args.file, args.document)
+        except MestraError as e:
+            return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
+        _emit(args, {"appended": args.file, "rows": n, "problems": []},
+              f"appended {n} run(s) from {args.document} to {args.file}")
+        return 0
     with open(args.document) as fh:
         doc = json.load(fh)
     base = os.path.dirname(os.path.abspath(args.document))
@@ -426,11 +436,34 @@ def _rows_arg(text: str | None) -> Any:
                               f"{text!r}") from None
 
 
+def _get_study(args: argparse.Namespace) -> int:
+    """get -o NAME.mes: the selected rows as a smaller study file, every name
+    kept (mestra.extract). --json: {"wrote": OUT, "rows": n}"""
+    if args.names or args.zone:
+        raise MestraError("", "a smaller study file keeps every name and every node; give no "
+                              "names and no --zone")
+    with open_file(args.file) as f:
+        rows = _rows_arg(args.rows)
+        positions = np.arange(f.row_count)
+        if rows is not None:
+            positions = positions[rows]
+        if args.where:
+            positions = np.intersect1d(f.select(args.where), positions)
+    mestra_extract(args.file, args.output, np.asarray(positions, dtype=np.int64))
+    _emit(args, {"wrote": args.output, "rows": int(len(positions))},
+          f"wrote {len(positions)} run(s) to {args.output}")
+    return 0
+
+
 def cmd_get(args: argparse.Namespace) -> int:
     """--json: {"wrote": OUT, "names": [...], "rows": n, "shape": {name: [...]},
     "units": {name: units}}"""
     out = args.output
     ext = os.path.splitext(out)[1].lower()
+    if ext == ".mes":
+        return _get_study(args)
+    if not args.names:
+        raise MestraError("", "name what to write (or write a smaller study file: -o NAME.mes)")
     with open_file(args.file) as f:
         rows = _rows_arg(args.rows)
         if args.where:
@@ -531,14 +564,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--example", action="store_true", help="print a filled-in document")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_build)
-    p = sub.add_parser("append", help="add runs from a document to a file in place")
+    p = sub.add_parser("append", help="add runs to a file in place, from a JSON document or "
+                                      "every row of another study file (.mes)")
     p.add_argument("file")
     p.add_argument("document")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_append)
     p = sub.add_parser("get", help="write selected data to a file")
     p.add_argument("file")
-    p.add_argument("names", nargs="+")
+    p.add_argument("names", nargs="*", help="what to write; none for a smaller study file")
     p.add_argument("--where")
     p.add_argument("--rows", help="a:b or i,j,k")
     p.add_argument("--zone", help="LABEL=NAME: the nodes or cells of one zone")

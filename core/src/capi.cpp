@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "copy.hpp"
 #include "evaluate.hpp"
 #include "names.hpp"
 #include "nearest.hpp"
@@ -628,6 +629,39 @@ int mes_close(mes_file* f, mes_error* err) {
   }
   delete f;
   return 0;
+}
+
+int mes_append(const char* dst_path, const char* src_path, int64_t* rows_added,
+               mes_error* err) {
+  try {
+    clear(err);
+    const int64_t n = mestra::internal::append_file(str(dst_path), str(src_path));
+    if (rows_added != nullptr) *rows_added = n;
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int mes_extract(const char* src_path, const char* dst_path, const mes_sel* rows,
+                mes_error* err) {
+  try {
+    clear(err);
+    mestra::internal::extract_file(str(src_path), str(dst_path), selection(rows));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int mes_write_copy(const char* src_path, const char* dst_path, mes_error* err) {
+  try {
+    clear(err);
+    mestra::internal::write_copy_file(str(src_path), str(dst_path));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
 }
 
 void mes_abandon(mes_file* f, int remove_file) {

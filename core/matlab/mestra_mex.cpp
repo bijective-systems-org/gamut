@@ -721,6 +721,20 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     check(status, e);
     std::vector<int64_t> dims = {rows, per};
     plhs[0] = from_c_order(reinterpret_cast<const unsigned char*>(out.data()), dims, MES_FLOAT64);
+  } else if (cmd == "append") {
+    int64_t n = 0;
+    check(mes_append(text(arg(1), "dst").c_str(), text(arg(2), "src").c_str(), &n, &e), e);
+    plhs[0] = mxCreateDoubleScalar(static_cast<double>(n));
+  } else if (cmd == "extract") {
+    Sel rows = selection(arg(3));
+    if (rows.sel.kind == MES_SEL_ALL) {   // [] here is no rows, not every row
+      rows.sel.kind = MES_SEL_INDEX;
+      rows.sel.count = 0;
+      rows.sel.index = nullptr;
+    }
+    check(mes_extract(text(arg(1), "src").c_str(), text(arg(2), "dst").c_str(), rows.ptr(), &e), e);
+  } else if (cmd == "write_copy") {
+    check(mes_write_copy(text(arg(1), "src").c_str(), text(arg(2), "dst").c_str(), &e), e);
   } else if (cmd == "evaluate_begin") {
     mes_file* w = nullptr;
     check(mes_evaluate_begin(file(arg(1)), text(arg(2), "path").c_str(), &w, &e), e);

@@ -54,6 +54,9 @@ struct Batch {
   std::map<std::string, std::vector<std::string>> names;  // labels by name
   std::vector<Geometry> run_geometry;                     // per = run
   std::map<std::string, Geometry> member_geometry;        // per = group
+  // Row ids to keep instead of assigning new ones: copies only (extract,
+  // write_copy), from a file that has passed validation.
+  std::vector<std::int64_t> ids;
 };
 
 class Writer {
@@ -107,6 +110,11 @@ class Writer {
 
   // Commits a batch; returns the id of its first run.
   std::int64_t add_runs(const Batch& batch);
+
+  // Whether the group member `name` already has its geometry here.
+  bool has_member(const std::string& name) const;
+  // A rewrite of one file keeps its identity: file_id and created.
+  void keep_identity(const std::string& file_id, const std::string& created);
 
   // Writes every staged partial chunk.  Reading through the same handle
   // flushes first.

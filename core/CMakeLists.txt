@@ -56,6 +56,7 @@ set(MESTRA_CORE_SOURCES
   src/codec.cpp
   src/nearest.cpp
   src/evaluate.cpp
+  src/copy.cpp
   src/select.cpp
   src/capi.cpp
 )

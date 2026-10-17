@@ -1283,6 +1283,7 @@ std::int64_t Writer::add_runs(const Batch& batch) {
   need(n >= 0, "", "a batch has zero or more runs");
   if (n == 0) return next_id_;
   const std::size_t N = static_cast<std::size_t>(n);
+  need(batch.ids.empty() || batch.ids.size() == N, "", "internal: one id per run to keep");
   // --- check everything before writing anything --------------------------
   std::set<std::string> known;
   std::map<std::string, std::vector<unsigned char>> root_bytes;
@@ -1489,6 +1490,7 @@ std::int64_t Writer::add_runs(const Batch& batch) {
   for (const auto& kv : added) grow_table(kv.first, kv.second);
   std::vector<std::int64_t> ids(N);
   for (std::size_t i = 0; i < N; ++i) ids[i] = next_id_ + static_cast<std::int64_t>(i);
+  if (!batch.ids.empty()) ids = batch.ids;
   append_rows("/row", reinterpret_cast<const unsigned char*>(ids.data()), n, DType::Int64);
   for (const auto& p : s.parameters) append_rows(root(p.name), root_bytes[p.name].data(), n, p.dtype);
   for (const auto& l : s.labels) {
@@ -1566,11 +1568,33 @@ std::int64_t Writer::add_runs(const Batch& batch) {
             : static_cast<std::int64_t>(field_bytes[r.name].size() / dtype_size(r.dtype));
     append_rows(field_path(r), field_bytes[r.name].data(), rows, r.dtype);
   }
-  const std::int64_t first = next_id_;
+  const std::int64_t first = ids.front();
   next_id_ += n;
+  for (const std::int64_t id : ids) next_id_ = std::max(next_id_, id + 1);
   schema_.rows += n;
   schema_.mesh.n_instances = instances_written_;
   return first;
+}
+
+bool Writer::has_member(const std::string& name) const {
+  const std::string group = schema_.mesh.per_group();
+  if (group.empty()) return false;
+  const Label* l = schema_.label(group);
+  if (l == nullptr) return false;
+  const auto t = schema_.tables.find(l->category);
+  if (t == schema_.tables.end()) return false;
+  for (std::size_t k = 0; k < t->second.size(); ++k) {
+    if (t->second[k] == name) return member_instance_.count(static_cast<std::int64_t>(k)) == 1;
+  }
+  return false;
+}
+
+void Writer::keep_identity(const std::string& file_id, const std::string& created) {
+  need_open();
+  file_->replace_attr("/", "file_id", AttrValue::text(file_id));
+  file_->replace_attr("/", "created", AttrValue::text(created));
+  schema_.file_id = file_id;
+  schema_.created = created;
 }
 
 void Writer::add_model(const std::string& id, const std::string& type,

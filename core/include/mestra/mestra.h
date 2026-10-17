@@ -260,6 +260,19 @@ MES_API int mes_evaluate_begin(const mes_file* model, const char* out_path, mes_
                                mes_error* err);
 
 /* --- Checking ------------------------------------------------------------- */
+/* Copies between files (interface section 6).  Each validates its source
+ * first and checks everything before the first row is written.
+ * mes_append adds src's rows to dst in place (new ids continuing dst's,
+ * tables merged by name); both need the same declarations, mesh and
+ * member geometry.  mes_extract writes the selected rows of src as a new
+ * file, ids kept, tables whole.  mes_write_copy rewrites src as dst with
+ * the default layout, keeping its identity (file_id, created). */
+MES_API int mes_append(const char* dst_path, const char* src_path, int64_t* rows_added,
+                       mes_error* err);
+MES_API int mes_extract(const char* src_path, const char* dst_path, const mes_sel* rows,
+                        mes_error* err);
+MES_API int mes_write_copy(const char* src_path, const char* dst_path, mes_error* err);
+
 typedef struct mes_report mes_report;   /* the findings of a validation */
 /* Validates a file against spec section 16.  A file that breaks rules is
  * not a failure of this call: its findings are in the report.  The call

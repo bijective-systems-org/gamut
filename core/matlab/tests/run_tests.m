@@ -136,6 +136,34 @@ ok(isequal(out.getScalar('y'), [1; 2]) && isequal(out.getScalar('y_std'), [0.25;
 out.close();
 ok(isfile(ep) && isempty(mestra.validate(ep)), 'evaluated file kept and valid');
 
+% Copies between files: append, extract, writeCopy.
+ca = fullfile(tmp, 'ca.mes'); cb = fullfile(tmp, 'cb.mes'); ce = fullfile(tmp, 'ce.mes');
+cw = fullfile(tmp, 'cw.mes');
+s = mestra.create(ca, 'writer', 'w', 'parameters', struct('x', 'm'), ...
+    'labels', struct('case', 'categorical'));
+s.addRuns(struct('x', [1; 2], 'case', {{'p'; 'q'}}));
+s.close();
+s = mestra.create(cb, 'writer', 'w', 'parameters', struct('x', 'm'), ...
+    'labels', struct('case', 'categorical'));
+s.addRuns(struct('x', [3; 4], 'case', {{'r'; 'p'}}));
+s.close();
+ok(mestra.append(ca, cb) == 2, 'append returns the rows added');
+mestra.extract(ca, ce, [2 4]);
+r = mestra.open(ce);
+ok(isequal(r.getRowIds(), [1; 3]) && isequal(r.getLabel('case'), {'q'; 'p'}), 'extract keeps ids');
+r.close();
+mestra.writeCopy(ca, cw);
+r = mestra.open(cw); q = mestra.open(ca);
+ok(strcmp(r.describe().file_id, q.describe().file_id) && isequal(r.getParameter('x'), [1; 2; 3; 4]), ...
+    'writeCopy keeps identity and values');
+r.close(); q.close();
+try
+    mestra.append(ca, ca);
+    ok(false, 'append to itself refused');
+catch err
+    ok(startsWith(err.identifier, 'mestra:'), 'append to itself refused');
+end
+
 % Errors carry their rule.
 try
     mestra.create(fullfile(tmp, 'bad.mes'), 'writer', 'w', 'parameters', struct('x', 'm//s'));
