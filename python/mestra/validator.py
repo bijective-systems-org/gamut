@@ -924,6 +924,10 @@ class _FileValidator:
             self.error("E49", where, "a served slot varies by row, and this "
                                      "one varies by %s" % varies)
         if coordinates and kind == "points":
+            if isinstance(components, int) and not 1 <= components <= 3:
+                self.error("E03", where, "points coordinates have one to "
+                                         "three components, and these have "
+                                         "%d" % components)
             if served:
                 self.error("E49", where, "points coordinates are stored, "
                                          "never served")
@@ -1043,6 +1047,14 @@ class _FileValidator:
         if _is_relation(target):
             self.error("E12", where, "of names %r, which is itself a "
                                      "relation" % (of,))
+            return
+        mine = (_attr(obj, "varies"), _attr(obj, "components"))
+        theirs = (_attr(target, "varies"), _attr(target, "components"))
+        if mine != theirs:
+            self.error("E12", where, "a relation has the shape and varies "
+                                     "of its of; %r varies by %s with %s "
+                                     "component(s), and this by %s with %s"
+                       % (of, theirs[0], theirs[1], mine[0], mine[1]))
             return
         if statistic in ("band", "std") and \
                 _attr(obj, "units") != _attr(target, "units"):
@@ -1243,9 +1255,12 @@ class _FileValidator:
         if kind == "string":
             self.error("E19", where, "the attribute %s is a string and is "
                                      "stored as %s" % (name, dtype))
-        elif kind == "integer" and dtype != np.dtype("int64"):
-            self.error("E19", where, "the integer attribute %s is int64, "
-                                     "and this is %s" % (name, dtype))
+        elif kind == "integer" and dtype != np.dtype("int64") and not (
+                name == _SIGNIFICANT and dtype == np.dtype("int32")):
+            self.error("E19", where, "the integer attribute %s is int64%s, "
+                                     "and this is %s"
+                       % (name, " or int32" if name == _SIGNIFICANT
+                          else "", dtype))
         elif kind == "float":
             if dtype != np.dtype("float64"):
                 self.error("E19", where, "the float attribute %s is "

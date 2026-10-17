@@ -409,7 +409,7 @@ def test_round_bits_keeps_the_relative_error_within_the_bound(tmp_path):
     with h5py.File(path, "r") as f:
         attr = f["mesh/node_arrays/p"].attrs[
             "_QuantizeBitRoundNumberOfSignificantBits"]
-        assert int(attr) == 10 and attr.dtype == np.int64
+        assert int(attr) == 10 and attr.dtype == np.int32   # as netCDF-C
 
 
 def test_round_bits_rounds_half_to_even():
@@ -455,3 +455,63 @@ def test_each_file_validates_without_error(files, name):
     assert report.errors == [], report
     expected = {"family": ["W02"]}.get(name, [])
     assert report.warning_ids == expected, report
+
+
+# ------------------------------------------------- builder defaults
+
+def test_unbounded_parameters_record_their_observed_range():
+    ds = lib.Dataset()
+    span = ds.add_parameter("span", [3.0, np.nan, 1.0, 2.0], "design", "m")
+    assert (span.lower, span.upper) == (1.0, 3.0)
+    ribs = ds.add_parameter("ribs", [4, 9, 6, 5], "design", "1", upper=12)
+    assert (ribs.lower, ribs.upper) == (4.0, 12.0)
+
+
+def test_a_zero_row_parameter_keeps_only_the_bounds_it_is_given():
+    ds = lib.Dataset()
+    mach = ds.add_parameter("mach", [], "condition", "1")
+    assert (mach.lower, mach.upper) == (None, None)
+    alpha = ds.add_parameter("alpha", [], "condition", "degree", lower=0.0)
+    assert (alpha.lower, alpha.upper) == (0.0, None)
+
+
+def test_coordinates_may_be_float32(tmp_path):
+    xyz = np.array([[0.0, 0.5], [1.0, 0.25], [1.5, 2.0]])
+    built = {}
+    for dtype in ("float32", "float64"):
+        ds = lib.Dataset(created="2026-10-16T00:00:00Z")
+        ds.add_parameter("x", [1.0], "design", "1")
+        ds.set_mesh(coordinates=xyz, units="m",
+                    dims=("node", "component"), dtype=dtype)
+        path = str(tmp_path / ("%s.mes" % dtype))
+        lib.write(ds, path)
+        with lib.read(path) as back:
+            assert back.mesh.coordinates.dtype == np.dtype(dtype)
+            built[dtype] = back.mesh.support_id
+    # Points coordinates are widened to float64 before hashing.
+    assert built["float32"] == built["float64"]
+
+
+def test_points_coordinates_have_one_to_three_components():
+    ds = lib.Dataset()
+    with pytest.raises(lib.MestraError) as caught:
+        ds.set_mesh(coordinates=np.zeros((4, 4)), units="m",
+                    dims=("node", "component"))
+    assert caught.value.rule == "E03"
+
+
+def test_a_relation_takes_the_varies_and_width_of_its_of():
+    ds = CASES["family"]()
+    with pytest.raises(lib.MestraError) as caught:
+        ds.mesh.add_node_array("pressure_band", np.ones((6, 3)), "Pa",
+                               ("node", "component"), statistic="band",
+                               of="pressure", level=0.9, method="m")
+    assert caught.value.rule == "E12"
+    ds.add_constant("q", 2.0, "Pa")
+    with pytest.raises(lib.MestraError) as caught:
+        ds.add_scalar("q_std", [0.1] * 6, "Pa", statistic="std", of="q")
+    assert caught.value.rule == "E12"
+    # A derivative with respect to the coordinates is the exception.
+    ds.mesh.add_node_array("dcl_dx", np.zeros((6, 6, 3)), "m-1",
+                           ("row", "node", "component"), of="cl",
+                           with_respect_to="coordinates")

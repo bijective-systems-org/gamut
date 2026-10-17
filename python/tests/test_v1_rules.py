@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 
 from mestra.encoding import (
+    make_scale,
     write_float_attr,
     write_int_attr,
     write_string_attr,
@@ -54,9 +55,10 @@ def warnings_at(report, rule):
 
 
 def recreate(f, path, values=None, dtype=None, chunks="keep",
-             maxshape="keep"):
+             maxshape="keep", dims=None):
     """Replace a dataset with the same attributes and dimension scales
-    and different values, dtype, chunks or maximum shape."""
+    (or the scales at the paths `dims` names, one per axis) and
+    different values, dtype, chunks or maximum shape."""
     old = f[path]
     attrs = {k: (old.attrs[k], old.attrs.get_id(k).get_type())
              for k in old.attrs if k not in ("DIMENSION_LIST",)}
@@ -83,6 +85,8 @@ def recreate(f, path, values=None, dtype=None, chunks="keep",
                        mtype=htype)
         else:
             new.attrs.create(name, value)
+    if dims is not None:
+        scales = [[f[d]] for d in dims]
     for axis, found in enumerate(scales):
         if axis < new.ndim:
             for scale in found:
@@ -204,6 +208,27 @@ def test_e03_two_id_labels(changed):
             del f["n_ribs"].attrs[name]
     report = lib.validate(changed("table", change))
     assert report.error_ids == ["E03"]
+
+
+def test_e03_points_coordinates_of_more_than_three_components(changed,
+                                                              base):
+    from mestra.encoding import support_digest
+
+    def change(f):
+        values = np.zeros((8, 4))
+        values[:, 0] = np.linspace(0.0, 0.2, 8)
+        make_scale(f, "component_4", 4)
+        recreate(f, "mesh/coordinates", values=values, chunks=None)
+        coordinates = f["mesh/coordinates"]
+        coordinates.dims[1].detach_scale(f["component_1"])
+        coordinates.dims[1].attach_scale(f["component_4"])
+        write_int_attr(coordinates, "components", 4)
+        write_string_attr(f["mesh"], "support_id",
+                          support_digest(8, axis_coordinates=values))
+    report = lib.validate(changed("points", change))
+    assert report.error_ids == ["E03"], report
+    assert errors_at(report, "E03") == ["mesh/coordinates"]
+    assert "E03" not in lib.validate(base["points"]).error_ids
 
 
 # ------------------------------------------------------------- E04
@@ -358,6 +383,29 @@ def test_e12_a_std_is_never_served(changed):
     assert errors_at(report, "E12") == ["scalars/cl_band"]
 
 
+def test_e12_a_relation_with_another_varies_than_its_of(changed):
+    def change(f):
+        recreate(f, "mesh/node_arrays/dp_dmach",
+                 values=np.ones((6, 1)), chunks=None,
+                 dims=["mesh/node", "component_1"])
+        write_string_attr(f["mesh/node_arrays/dp_dmach"], "varies", "none")
+    report = lib.validate(changed("relations", change))
+    assert report.error_ids == ["E12"], report
+    assert errors_at(report, "E12") == ["mesh/node_arrays/dp_dmach"]
+
+
+def test_e12_a_scalar_relation_of_a_constant_varies_like_it(changed, base):
+    def change(f):
+        recreate(f, "cl_std", values=np.float64(0.01), chunks=None,
+                 dims=[])
+        write_string_attr(f["cl_std"], "varies", "none")
+        del f["cl_std"].attrs["coordinates"]
+    report = lib.validate(changed("relations", change))
+    assert report.error_ids == ["E12"], report
+    assert errors_at(report, "E12") == ["scalars/cl_std"]
+    assert "E12" not in lib.validate(base["relations"]).error_ids
+
+
 # ------------------------------------------------------------- E16
 
 def test_e16_a_root_dataset_against_the_row_count(changed, base):
@@ -393,6 +441,20 @@ def test_e18_public_information_missing_beside_a_private_group(changed,
         f.create_group("private")
     assert lib.validate(changed("table", private_only)).errors == []
     assert "E18" not in lib.validate(base["table"]).error_ids
+
+
+def test_e19_the_rounding_attribute_is_int32_or_int64(tmp_path):
+    ds = lib.Dataset(created="2026-10-16T00:00:00Z")
+    ds.add_scalar("q", [1.0, 2.0], "1", round_bits=20)
+    path = str(tmp_path / "q.mes")
+    lib.write(ds, path)
+    name = "_QuantizeBitRoundNumberOfSignificantBits"
+    assert lib.validate(path).errors == []
+    for dtype, fires in ((np.int64, False), (np.int16, True),
+                         (np.float64, True)):
+        with h5py.File(path, "r+") as f:
+            f["q"].attrs.create(name, dtype(20))
+        assert ("E19" in lib.validate(path).error_ids) == fires, dtype
 
 
 # ------------------------------------------------------------- E20
@@ -599,11 +661,14 @@ def test_e48_string_ids_are_unique(changed):
 # ------------------------------------------------------------- E49
 
 def test_e49_a_served_slot_varies_by_row(changed, base):
-    path = changed("model", lambda f: write_string_attr(
-        f["mesh/node_arrays/pressure"], "varies", "none"))
-    report = lib.validate(path)
+    def change(f):
+        for name in ("pressure", "pressure_band"):
+            write_string_attr(f["mesh/node_arrays/" + name], "varies",
+                              "none")
+    report = lib.validate(changed("model", change))
     assert report.error_ids == ["E49"]
-    assert errors_at(report, "E49") == ["mesh/node_arrays/pressure"]
+    assert errors_at(report, "E49") == ["mesh/node_arrays/pressure",
+                                        "mesh/node_arrays/pressure_band"]
     assert "E49" not in lib.validate(base["model"]).error_ids
 
 

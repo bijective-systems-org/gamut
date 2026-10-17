@@ -438,7 +438,9 @@ def _write_slot(group: h5py.Group, name: str, slot: Slot,
     _attach(dset, _disk_dims(dims, source.shape), scales)
     _attrs(dset, attributes, _SLOT_ORDER)
     if slot.significant_bits is not None:
-        write_int_attr(dset, SIGNIFICANT_BITS, int(slot.significant_bits))
+        # A 32-bit integer, as netCDF-C writes it for the same algorithm.
+        dset.attrs.create(SIGNIFICANT_BITS,
+                          np.int32(int(slot.significant_bits)))
 
 
 def _write_mesh(mesh: Mesh, f: h5py.File, scales: _Scales) -> None:

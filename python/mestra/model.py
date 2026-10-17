@@ -1016,6 +1016,7 @@ class Mesh:
                     "E49", "a served slot varies by row, and dims says %s"
                     % varies, where)
             width = _served_width(names, components, where)
+            _check_like_of(into, of, with_respect_to, "row", width, where)
             slot = Slot(name, location=location, role=role, units=units,
                         varies="row", components=width,
                         source=_CALLABLE + identifier,
@@ -1046,6 +1047,7 @@ class Mesh:
                 "%d %ss" % (location, int(array.shape[-2]), count,
                             location), where)
         _check_varies(dataset, varies, array, where)
+        _check_like_of(into, of, with_respect_to, varies, width, where)
         if role == "label" and category is not None:
             _check_codes(dataset, category, array, where)
         bits = None
@@ -1281,8 +1283,10 @@ class Dataset:
                       run_group: str | None = None) -> Parameter:
         """Add a parameter: a per-row number with a role (design,
         condition, time) and units. `lower` and `upper` declare its
-        domain; on a time parameter, `run_group` names the group label
-        whose categories are the runs."""
+        domain; a bound not given is the observed finite minimum or
+        maximum, so a zero-row parameter keeps only what it is given.
+        On a time parameter, `run_group` names the group label whose
+        categories are the runs."""
         where = "parameters/" + str(name)
         self._check_root_name(name, where)
         if role not in PARAMETER_ROLES:
@@ -1304,6 +1308,7 @@ class Dataset:
                 "E04", "a parameter has one value per row; these values "
                 "have %d axes" % array.ndim, where)
         _check_bounds(lower, upper, where)
+        lower, upper = _observed_bounds(array, lower, upper)
         if run_group is not None:
             if role != "time":
                 raise MestraError(
@@ -1451,6 +1456,8 @@ class Dataset:
                 "E12", "a derivative with respect to coordinates is a "
                 "node array whose of names a scalar; add it with "
                 "mesh.add_node_array", where)
+        _check_like_of(self.scalars, of, with_respect_to, "row", None,
+                       where)
         if callable is not None:
             if values is not None:
                 raise MestraError(
@@ -1510,8 +1517,8 @@ class Dataset:
 
     def set_mesh(self, cells: Any = None, *, coordinates: Any = None,
                  units: str, dims: Sequence[str] | None,
-                 n_nodes: int | None = None, callable: Any = None,
-                 output: str | None = None,
+                 n_nodes: int | None = None, dtype: Any = None,
+                 callable: Any = None, output: str | None = None,
                  components: int | None = None) -> Mesh:
         """Set the one mesh. With `cells` = (types, offsets,
         connectivity) it is a `mesh`; without, `points`, whose
@@ -1519,9 +1526,10 @@ class Dataset:
 
         `dims` names the axes of `coordinates` in your own order:
         `row` or `group:<k>` for coordinates that vary, then `node`
-        and `component`. Coordinates a callable serves (a `mesh` only)
-        take `callable`, `output`, `n_nodes` and, when `dims` names a
-        component axis, `components`.
+        and `component`. `dtype` is float64 (the default) or float32.
+        Coordinates a callable serves (a `mesh` only) take `callable`,
+        `output`, `n_nodes` and, when `dims` names a component axis,
+        `components`.
         """
         where = "mesh"
         if self.mesh is not None:
@@ -1583,7 +1591,7 @@ class Dataset:
             raise MestraError(
                 "E04", "name the axes of coordinates with dims, for "
                 "example (\"node\", \"component\")", "mesh/coordinates")
-        array = _floats(coordinates, None, "mesh/coordinates")
+        array = _floats(coordinates, dtype, "mesh/coordinates")
         array, varies, width = _array_from_dims(array, dims, "node",
                                                 components,
                                                 "mesh/coordinates")
@@ -1595,8 +1603,9 @@ class Dataset:
                     "mesh/coordinates")
             if not 1 <= width <= 3:
                 raise MestraError(
-                    "", "points coordinates have one to three components, "
-                    "and these have %d" % width, "mesh/coordinates")
+                    "E03", "points coordinates have one to three "
+                    "components, and these have %d" % width,
+                    "mesh/coordinates")
         count = int(array.shape[-2])
         if n_nodes is not None and int(n_nodes) != count:
             raise MestraError(
@@ -1788,6 +1797,23 @@ def _check_bounds(lower: Any, upper: Any, where: str) -> None:
             "", "lower %r is above upper %r" % (lower, upper), where)
 
 
+def _observed_bounds(array: np.ndarray, lower: Any, upper: Any
+                     ) -> tuple[Any, Any]:
+    """The bounds to record: the ones given, and the observed finite
+    minimum and maximum for the ones not given."""
+    if (lower is not None and upper is not None) or not array.size:
+        return lower, upper
+    finite = array[np.isfinite(array)] if array.dtype.kind == "f" \
+        else array
+    if not finite.size:
+        return lower, upper
+    if lower is None:
+        lower = float(np.min(finite))
+    if upper is None:
+        upper = float(np.max(finite))
+    return lower, upper
+
+
 def _check_relation(statistic: str | None, of: str | None,
                     level: float | None, method: str | None,
                     with_respect_to: str | None, *, served: bool,
@@ -1826,6 +1852,25 @@ def _check_relation(statistic: str | None, of: str | None,
             raise MestraError(
                 "E12", "a band says how it was made; pass method= with "
                 "one sentence", where)
+
+
+def _check_like_of(group: dict[str, Any], of: str | None,
+                   with_respect_to: str | None, varies: str,
+                   components: int | None, where: str) -> None:
+    """E12: a relation has the varies and the width of its `of`, which
+    is in its own group; a derivative with respect to the coordinates
+    is the exception. Decided here when `of` is already there."""
+    if of is None or with_respect_to == "coordinates":
+        return
+    target = dict.get(group, of)
+    if target is None:
+        return
+    if (target.varies, target.components) != (varies, components):
+        raise MestraError(
+            "E12", "a relation has the shape and varies of its of; %r "
+            "varies by %s with %s component(s), and this by %s with %s"
+            % (of, target.varies, target.components, varies, components),
+            where)
 
 
 def _callable_id(dataset: Dataset | None, obj: Any, where: str) -> str:
