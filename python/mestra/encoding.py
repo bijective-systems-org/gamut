@@ -356,13 +356,14 @@ def default_chunks(itemsize: int, shape: Sequence[int]) -> tuple[int, ...]:
     """The default chunk of a dataset whose first axis is `row` or
     `group_<k>`, with L the length of that axis at creation.
 
-    An entry of b <= T bytes takes c = max(1, floor(T / b)) entries per
-    chunk, capped at L when L > 0, with the other axes whole. An empty
-    dataset is not capped: it will grow by appends, and HDF5 allows a
-    chunk longer than the current extent of an unlimited axis. A larger
-    entry takes one entry per chunk, with the node or cell axis (the
-    second) in blocks of m and the other axes whole. A chunk extent is
-    never below 1.
+    An entry of b <= T bytes takes c = min(L', max(1, floor(T / b)))
+    entries per chunk, with L' = max(L, 1) and the other axes whole. A
+    dataset created empty therefore starts with one entry per chunk:
+    each later append writes new chunks rather than rewriting a partly
+    filled compressed one, whose old space HDF5 does not reclaim, and a
+    rewrite re-chunks for the final length. A larger entry takes one
+    entry per chunk, with the node or cell axis (the second) in blocks
+    of m and the other axes whole. A chunk extent is never below 1.
     """
     shape = tuple(int(n) for n in shape)
     if not shape:
@@ -370,9 +371,7 @@ def default_chunks(itemsize: int, shape: Sequence[int]) -> tuple[int, ...]:
     rest = shape[1:]
     whole = tuple(max(1, n) for n in rest)
     if entry_bytes(itemsize, rest) <= CHUNK_TARGET:
-        count = leading_bound(itemsize, rest)
-        if shape[0] > 0:
-            count = min(count, shape[0])
+        count = min(max(shape[0], 1), leading_bound(itemsize, rest))
         return (count,) + whole
     if len(shape) < 3:
         return (1,) + whole

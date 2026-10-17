@@ -379,7 +379,7 @@ def test_large_rows_are_chunked_by_node_blocks(tmp_path):
 
 def test_zero_rows_take_a_chunk_of_one(files):
     with h5py.File(files["model"], "r") as f:
-        assert f["mach"].shape == (0,) and f["mach"].chunks == (32768,)
+        assert f["mach"].shape == (0,) and f["mach"].chunks == (1,)
         assert isinstance(f["cl"], h5py.Group)
         assert f["cl"].attrs["source"].decode() == "callable:m1"
         assert f["callables/m1"].attrs["inputs"].decode() == "alpha mach"
@@ -640,7 +640,7 @@ def test_a_zero_length_cell_axis_is_refused_by_rule(tmp_path):
     ((3, 1000, 3), "<f4", (3, 1000, 3)),           # b < T, a field
     ((2, 1048576, 1), "<f4", (1, 65536, 1)),       # b > T, node blocks
     ((2, 262144, 3), "<f8", (1, 10922, 3)),        # b > T, 3 components
-    ((0, 6, 1), "<f8", (5461, 6, 1)),              # L = 0: not capped
+    ((0, 6, 1), "<f8", (1, 6, 1)),                 # L = 0: one entry
     ((0, 262144, 3), "<f8", (1, 10922, 3)),        # L = 0, b > T
 ])
 def test_the_chunk_rule_by_hand(tmp_path, shape, dtype, chunks):
@@ -710,8 +710,9 @@ def test_kept_groups_keep_the_root_scales_they_use(files, tmp_path, case,
 
 def test_a_study_started_empty_grows_in_sensible_chunks(tmp_path):
     """Created with no rows, a node field of 10,000 float64 nodes takes
-    three rows a chunk, not one value a chunk, so twenty appends make
-    seven chunks of 240 kB and the file draws no W12."""
+    one whole row a chunk, never one value a chunk, so twenty appends
+    make twenty chunks of 80 kB and the file draws no W12; a rewrite
+    re-chunks for the final length."""
     def study(ids, values):
         ds = lib.Dataset(writer="store", created="2026-10-16T00:00:00Z")
         ds.add_label("run", np.array(ids, dtype=np.int64), "id")
@@ -724,17 +725,23 @@ def test_a_study_started_empty_grows_in_sensible_chunks(tmp_path):
     path = str(tmp_path / "grown.mes")
     lib.write(study([], np.zeros((0, 10000))), path)
     with h5py.File(path, "r") as f:
-        assert f["mesh/node_arrays/p"].chunks == (3, 10000, 1)
-        assert f["run"].chunks == (32768,)
+        assert f["mesh/node_arrays/p"].chunks == (1, 10000, 1)
+        assert f["run"].chunks == (1,)
     for row in range(20):
         assert lib.append(study([row], np.full((1, 10000), row)), path) == 1
     with h5py.File(path, "r") as f:
         field = f["mesh/node_arrays/p"]
         assert field.shape == (20, 10000, 1)
-        assert field.id.get_num_chunks() == 7
+        assert field.id.get_num_chunks() == 20
     assert os.path.getsize(path) < 2_000_000
     report = lib.validate(path)
     assert report.errors == [] and report.warnings == []
+    compact = str(tmp_path / "compact.mes")
+    with lib.read(path) as ds:
+        lib.write(ds, compact)
+    with h5py.File(compact, "r") as f:
+        assert f["mesh/node_arrays/p"].chunks == (3, 10000, 1)
+        assert f["run"].chunks == (20,)
 
 
 def test_deep_copies(files):
@@ -871,3 +878,41 @@ def test_an_attribute_that_cannot_be_copied_refuses_the_write(files,
             lib.write(ds, str(tmp_path / "out.mes"))
     assert caught.value.rule == "E41"
     assert "parameters/mach" in caught.value.message
+
+
+
+def test_growing_one_row_at_a_time_from_empty_stays_linear(tmp_path):
+    """Six float64 columns grown by one-row appends: started empty, the
+    file is the size of one started with a row, it grows linearly, and
+    a rewrite compacts it to the default chunks."""
+    rng = np.random.default_rng(0)
+    data = rng.random((200, 6))
+
+    def table(values, ids):
+        ds = lib.Dataset(writer="store", created="2026-10-16T00:00:00Z")
+        ds.add_label("run", np.array(ids, dtype=np.int64), "id",
+                     dtype="int64")
+        for column in range(6):
+            ds.add_scalar("c%d" % column, values[:, column], "1")
+        return ds
+
+    sizes = {}
+    for start in ("empty", "one row"):
+        path = str(tmp_path / ("%s.mes" % start.replace(" ", "_")))
+        first = 0 if start == "empty" else 1
+        lib.write(table(data[:first], list(range(first))), path)
+        for row in range(first, 200):
+            lib.append(table(data[row:row + 1], [row]), path)
+            if row == 99:
+                sizes[(start, 100)] = os.path.getsize(path)
+        sizes[(start, 200)] = os.path.getsize(path)
+        assert "W12" not in lib.validate(path).warning_ids
+        compact = path + ".compact.mes"
+        with lib.read(path) as ds:
+            lib.write(ds, compact)
+        with h5py.File(compact, "r") as f:
+            assert f["c0"].chunks == (200,)
+        sizes[(start, "compact")] = os.path.getsize(compact)
+    assert sizes[("empty", 200)] < 1.1 * sizes[("one row", 200)]
+    assert sizes[("empty", 200)] < 2.5 * sizes[("empty", 100)]
+    assert sizes[("empty", "compact")] < sizes[("empty", 200)] / 2
