@@ -32,7 +32,7 @@ import shutil
 import h5py
 import numpy as np
 
-import mestra
+from mestra import _v0 as mestra
 from tests import corpus
 
 DIM_NAME = "This is a netCDF dimension but not a netCDF variable."

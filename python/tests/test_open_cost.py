@@ -54,7 +54,7 @@ from typing import Any
 import h5py
 import pytest
 
-import mestra
+from mestra import _v0 as mestra
 from tests import corpus
 
 #: The two column counts compared. The larger is four times the

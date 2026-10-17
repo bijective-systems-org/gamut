@@ -27,8 +27,8 @@ from typing import Any
 
 import numpy as np
 
+from ..errors import MestraError
 from .callables import Prediction, keys_table
-from .errors import MestraError
 from .model import ArraySlot, Dataset, Key, ScalarSlot, Support
 from .weights import compute_weights, measures
 

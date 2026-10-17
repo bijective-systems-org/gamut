@@ -27,7 +27,7 @@ from typing import Any
 
 import numpy as np
 
-from .errors import MestraError
+from ..errors import MestraError
 from .model import ArraySlot, Support
 
 __all__ = [

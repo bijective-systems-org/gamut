@@ -21,7 +21,7 @@ import sys
 
 import pytest
 
-import mestra
+from mestra import _v0 as mestra
 from mestra import limits
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -38,8 +38,8 @@ RULES = ("E01", "E16", "E19", "E25", "E26", "E29", "E30", "E40",
 #: What the driver runs against one file.
 DRIVER = r"""
 import json, sys
-import mestra
-from mestra.cli import main as cli
+from mestra import _v0 as mestra
+from mestra._v0.cli import main as cli
 
 path = sys.argv[1]
 out = {}
@@ -140,7 +140,7 @@ def read(name, lazy=True, strict=False):
 @pytest.mark.parametrize("name", CASES)
 def test_info_prints_something_about_every_one(name, capsys):
     """`mestra info` on a stranger says what it found or why not."""
-    from mestra.cli import main as cli
+    from mestra._v0.cli import main as cli
     status = cli(["info", os.path.join(HOSTILE, name)])
     out = capsys.readouterr().out
     assert status in (0, 1)

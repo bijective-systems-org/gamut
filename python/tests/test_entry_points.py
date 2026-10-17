@@ -38,9 +38,9 @@ import os
 
 import pytest
 
-import mestra
+from mestra import _v0 as mestra
+from mestra._v0.reader import REFUSED
 from mestra.errors import MestraError
-from mestra.reader import REFUSED
 from tests import corpus
 
 HOSTILE = os.path.join(corpus.VECTORS, "hostile")

@@ -25,7 +25,7 @@ import sys
 
 import pytest
 
-import mestra
+from mestra import _v0 as mestra
 from tests import corpus
 
 HOSTILE = os.path.join(corpus.VECTORS, "hostile")
@@ -33,8 +33,8 @@ HOSTILE = os.path.join(corpus.VECTORS, "hostile")
 #: What the driver reports back about one file.
 DRIVER = r"""
 import json, sys
-import mestra
-from mestra.cli import main as cli
+from mestra import _v0 as mestra
+from mestra._v0.cli import main as cli
 
 path = sys.argv[1]
 out = {}

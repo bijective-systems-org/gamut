@@ -32,10 +32,10 @@ from typing import Any
 
 import numpy as np
 
-from . import h5safe
-from .encoding import decode_string, support_digest
-from .errors import Finding, MestraError
-from .names import is_legal_name, is_reserved
+from .. import h5safe
+from ..encoding import decode_string, support_digest
+from ..errors import Finding, MestraError
+from ..names import is_legal_name, is_reserved
 
 __all__ = [
     "NamedArray",
@@ -1748,7 +1748,7 @@ def _slot_attributes(slot: Slot) -> dict[str, Any]:
 def _xarray_dimension(dim: str, support: str, many: bool,
                       length: int) -> str:
     """The dimension name to give xarray (section 21 on disk)."""
-    from .names import disk_dimension
+    from ..names import disk_dimension
     if dim in ("node", "cell", "row") and many:
         return "%s_%s" % (support, dim)
     return disk_dimension(dim, length)

@@ -13,9 +13,9 @@ import stat
 
 import pytest
 
-import mestra
-from mestra import writer
-from mestra.model import FileSource
+from mestra import _v0 as mestra
+from mestra._v0 import writer
+from mestra._v0.model import FileSource
 from tests import corpus
 
 VALID = corpus.valid_case_names()

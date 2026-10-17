@@ -11,7 +11,7 @@ import os
 import numpy as np
 import pytest
 
-import mestra
+from mestra import _v0 as mestra
 from mestra.errors import MestraError
 from tests import corpus
 

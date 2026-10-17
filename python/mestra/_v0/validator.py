@@ -19,8 +19,8 @@ from typing import Any
 import h5py
 import numpy as np
 
-from . import h5safe, limits
-from .encoding import (
+from .. import h5safe, limits
+from ..encoding import (
     NULL_SENTINEL,
     SCALE_ATTR_ORDER,
     default_chunk_rows,
@@ -29,7 +29,9 @@ from .encoding import (
     string_length,
     support_digest,
 )
-from .errors import Finding, MestraError, TooLarge
+from ..errors import Finding, MestraError, TooLarge
+from ..names import MACHINERY, RESERVED_PREFIX, is_legal_name
+from ..units import is_parseable
 from .model import (
     ARRAY_ROLES,
     KEY_ROLES,
@@ -39,8 +41,6 @@ from .model import (
     Dataset,
     is_callable_source,
 )
-from .names import MACHINERY, RESERVED_PREFIX, is_legal_name
-from .units import is_parseable
 
 __all__ = ["Report", "validate"]
 
@@ -1934,7 +1934,7 @@ def _logical(dset: h5py.Dataset,
 
 def _logical_of(attached: list[tuple[str, ...]]) -> tuple[str, ...]:
     """The same, from names a caller has already read once."""
-    from .names import logical_dimension
+    from ..names import logical_dimension
     return tuple(logical_dimension(names[0]) if len(names) == 1 else ""
                  for names in attached)
 

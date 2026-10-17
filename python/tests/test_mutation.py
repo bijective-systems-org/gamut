@@ -54,7 +54,7 @@ RULES = ("E01", "E16", "E19", "E25", "E26", "E29", "E30", "E40", "E41")
 
 DRIVER = r"""
 import json, sys
-import mestra
+from mestra import _v0 as mestra
 path = sys.argv[1]
 out = {}
 for label in ("read", "read_eager", "validate"):

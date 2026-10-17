@@ -6,14 +6,14 @@ check the lines themselves and not only that something was said.
 
 from __future__ import annotations
 
-from mestra.cli import main
+from mestra._v0.cli import main
 from tests import corpus
 
 
 def test_version(capsys):
     import pytest
 
-    import mestra
+    from mestra import _v0 as mestra
     with pytest.raises(SystemExit) as left:
         main(["--version"])
     assert left.value.code == 0
@@ -151,7 +151,7 @@ def test_a_reader_that_stops_early_is_not_a_file_that_cannot_be_read():
     import subprocess
     import sys
 
-    run = ("import sys; from mestra.cli import main; "
+    run = ("import sys; from mestra._v0.cli import main; "
            "sys.exit(main(sys.argv[1:]))")
     for command in ("info", "validate"):
         child = subprocess.Popen(

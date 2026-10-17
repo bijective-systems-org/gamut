@@ -10,10 +10,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import mestra
-from mestra import post
+from mestra import _v0 as mestra
+from mestra._v0 import post
+from mestra._v0.weights import cell_measures, node_measures
 from mestra.errors import MestraError
-from mestra.weights import cell_measures, node_measures
 
 XY = np.array([[0., 0.], [1., 0.], [2., 0.],
                [0., 1.], [1., 1.], [2., 1.]])

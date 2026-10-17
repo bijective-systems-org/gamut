@@ -33,7 +33,7 @@ from typing import Any, ClassVar
 
 import numpy as np
 
-from .errors import MestraError
+from ..errors import MestraError
 
 __all__ = [
     "Prediction",

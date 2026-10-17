@@ -16,7 +16,7 @@ import h5py
 import numpy as np
 import pytest
 
-from mestra.model import NamedArray
+from mestra._v0.model import NamedArray
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))

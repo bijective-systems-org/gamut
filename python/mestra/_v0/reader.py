@@ -25,16 +25,17 @@ from typing import Any
 
 import h5py
 
-from . import h5safe, limits, opaque
-from .callables import callable_from_dict
-from .codec import decode_dict
-from .encoding import (
+from .. import h5safe, limits, opaque
+from ..codec import decode_dict
+from ..encoding import (
     is_fixed_string,
     read_attr,
     string_length,
     support_digest,
 )
-from .errors import Finding, MestraError
+from ..errors import Finding, MestraError
+from ..names import logical_dimension
+from .callables import callable_from_dict
 from .model import (
     SUPPORT_KINDS,
     ArraySlot,
@@ -47,7 +48,6 @@ from .model import (
     Storage,
     Support,
 )
-from .names import logical_dimension
 
 __all__ = ["read", "support_ids", "REFUSED"]
 

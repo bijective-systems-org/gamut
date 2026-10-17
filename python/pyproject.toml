@@ -51,7 +51,7 @@ dev = ["pytest>=7", "ruff>=0.4", "mypy>=1.5"]
 mestra = "mestra.cli:main"
 
 [tool.setuptools]
-packages = ["mestra"]
+packages = ["mestra", "mestra._v0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

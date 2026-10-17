@@ -43,8 +43,8 @@ from typing import Any
 
 import numpy as np
 
+from ..errors import MestraError
 from .callables import Prediction, keys_table, table_length
-from .errors import MestraError
 from .model import (
     ArraySlot,
     Dataset,

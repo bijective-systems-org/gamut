@@ -36,9 +36,9 @@ from typing import Any
 import h5py
 import numpy as np
 
-from . import opaque
-from .codec import encode_dict
-from .encoding import (
+from .. import opaque
+from ..codec import encode_dict
+from ..encoding import (
     default_row_chunk,
     encode_strings,
     make_scale,
@@ -48,9 +48,9 @@ from .encoding import (
     write_int_attr,
     write_string_attr,
 )
-from .errors import MestraError
+from ..errors import MestraError
+from ..names import disk_dimension, is_legal_name, is_reserved
 from .model import ArraySlot, Dataset, Key, Support
-from .names import disk_dimension, is_legal_name, is_reserved
 
 __all__ = ["write"]
 

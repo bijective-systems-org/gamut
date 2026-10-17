@@ -66,7 +66,7 @@ def test_dimensions_decide_what_may_be_combined():
 
 
 def test_the_corpus_units_all_parse_except_the_ones_that_must_not():
-    import mestra
+    from mestra import _v0 as mestra
     from tests import corpus
     for name in corpus.valid_case_names():
         report = mestra.validate(corpus.case_path(name))
@@ -119,7 +119,7 @@ def test_an_empty_units_string_is_w10_in_memory_as_on_disk():
     text that does not parse. The in-memory validator took it for an
     absent attribute and said E39, where the file's validator says
     W10."""
-    import mestra
+    from mestra import _v0 as mestra
     from tests import corpus
     with mestra.read(corpus.case_path("mesh_two_rows")) as ds:
         ds.keys["mach"].units = ""

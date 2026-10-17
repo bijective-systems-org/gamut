@@ -21,7 +21,7 @@ import h5py
 import numpy as np
 import pytest
 
-import mestra
+from mestra import _v0 as mestra
 from tests import corpus
 
 
@@ -325,7 +325,7 @@ def test_a_support_without_a_kind_it_declares_has_no_digest():
     so a support that declares none, or one section 6 does not have,
     has no digest. The reader's digest took a kind-less support for a
     mesh, and the model's hashed an unknown kind's node count alone."""
-    from mestra.model import Support
+    from mestra._v0.model import Support
     cells = {"n_nodes": 6, "cell_types": [9, 9], "cell_offsets": [0, 4, 8],
              "cell_connectivity": [0, 1, 4, 3, 1, 2, 5, 4]}
     with pytest.raises(mestra.MestraError) as refused:

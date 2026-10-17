@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import mestra
+from mestra import _v0 as mestra
 from tests import corpus
 
 CASES = corpus.case_names()
