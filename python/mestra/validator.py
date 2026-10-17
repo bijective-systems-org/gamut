@@ -123,7 +123,7 @@ class Report:
         return not self.errors
 
     @property
-    def unclassified(self) -> list[Finding]:
+    def _unclassified(self) -> list[Finding]:
         """E40 and E41: what the reader could not do, rather than what
         the file says."""
         return [f for f in self.errors if f.rule in ("E40", "E41")]

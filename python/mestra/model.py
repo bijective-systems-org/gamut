@@ -1368,13 +1368,17 @@ class Dataset:
         return table
 
     def add_label(self, name: str, values: Any, role: str,
-                  category: str | None = None, *,
+                  category: str | None = None, dtype: Any = None, *,
                   categories: Sequence[str] | None = None) -> Label:
         """Add a row label. A group, categorical, status or split
         label stores integer codes into the category table it names
         with `category`; `categories=[...]` makes that table first,
         named `category` or after the label. An id label stores unique
-        integers or strings and has no table."""
+        integers or strings and has no table.
+
+        `dtype` chooses the storage where the values do not: "str" or
+        "int64" for an id label (so an empty one can start as text),
+        "int32" or "int64" for codes."""
         where = "labels/" + str(name)
         self._check_root_name(name, where)
         if role not in LABEL_ROLES:
@@ -1385,11 +1389,28 @@ class Dataset:
                 lab.role == role for lab in self.labels.values()):
             raise MestraError(
                 "E03", "a file has at most one %s label" % role, where)
+        kinds = {None: None, "str": "U", "int64": "i8", "int32": "i4"}
+        hint = kinds.get(dtype if dtype is None or isinstance(dtype, str)
+                         else str(np.dtype(dtype)), "?")
+        if hint == "?" or (role == "id" and hint == "i4") or \
+                (role != "id" and hint == "U"):
+            raise MestraError(
+                "E20", "dtype for a%s label is %s, and this is %r"
+                % ("n id" if role == "id" else " table-backed",
+                   "\"str\" or \"int64\"" if role == "id"
+                   else "\"int32\" or \"int64\"", dtype), where)
         if role == "id":
             if category is not None or categories is not None:
                 raise MestraError(
                     "E39", "an id label has no category table", where)
             array = _numbers(values, None, where)
+            if hint is not None and array.size and \
+                    (array.dtype.kind in "US") != (hint == "U"):
+                raise MestraError(
+                    "E20", "dtype says %s and the values are %s"
+                    % (dtype, array.dtype), where)
+            if hint == "U" and array.size == 0:
+                array = np.zeros(0, dtype=np.str_)
             if array.dtype.kind in "US":
                 array = array.astype(np.str_)
                 if any("\x00" in v for v in array.reshape(-1)):
@@ -1425,6 +1446,8 @@ class Dataset:
                     "E39", "this dataset has no category table %r; call "
                     "add_category_table first" % category, where)
             array = _label_codes(values, where)
+            if hint is not None:
+                array = _exact(array, "<" + hint, where)
             if array.ndim != 1:
                 raise MestraError(
                     "E04", "a label has one value per row", where)

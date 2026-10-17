@@ -28,7 +28,7 @@
         "add_callable": "method (self, id, callable, inputs=None)",
         "add_category_table": "method (self, name, entries)",
         "add_constant": "method (self, name, value, units, *, dtype=None)",
-        "add_label": "method (self, name, values, role, category=None, *, categories=None)",
+        "add_label": "method (self, name, values, role, category=None, dtype=None, *, categories=None)",
         "add_parameter": "method (self, name, values, role, units, lower=None, upper=None, run_group=None)",
         "add_scalar": "method (self, name, values, units, *, dtype=None, statistic=None, of=None, level=None, method=None, with_respect_to=None, round_bits=None, callable=None, output=None)",
         "addons": "property",
@@ -160,7 +160,6 @@
         "errors": "attribute",
         "findings": "property",
         "ok": "property",
-        "unclassified": "property",
         "warning_ids": "property",
         "warnings": "attribute"
       }

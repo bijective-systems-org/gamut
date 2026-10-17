@@ -237,3 +237,46 @@ def test_append_with_another_handle_open_is_refused_clearly(tmp_path):
         assert held.row_count == 1
     assert digest(path) == before
     assert lib.append(rows(["b@0.5"]), path) == 1     # once it is closed
+
+
+def test_a_store_started_empty_takes_text_ids(tmp_path):
+    def store(ids, dtype=None):
+        ds = lib.Dataset(writer="store", created="2026-10-16T00:00:00Z")
+        ds.add_label("member", ids, "id", dtype=dtype)
+        ds.add_scalar("iterations", np.zeros(len(ids)), "1")
+        return ds
+
+    path = str(tmp_path / "empty.mes")
+    lib.write(store([], dtype="str"), path)
+    with lib.read(path) as ds:
+        assert ds.row_count == 0 and ds.labels["member"].dtype.kind == "S"
+    assert lib.append(store(["capsule_0000"]), path) == 1
+    assert lib.append(store(["capsule_0001"]), path) == 1
+    with lib.read(path) as ds:
+        assert list(ds.labels["member"].names().values) == [
+            "capsule_0000", "capsule_0001"]
+    assert lib.validate(path).errors == []
+    integers = str(tmp_path / "integers.mes")
+    lib.write(store([]), integers)                 # no hint: int64
+    with pytest.raises(lib.MestraError):
+        lib.append(store(["capsule_0000"]), integers)
+
+
+@pytest.mark.parametrize("values, role, dtype", [
+    ([1, 2], "id", "str"), (["a"], "id", "int64"), ([1], "id", "int32"),
+    ([0], "categorical", "str"), ([0], "categorical", "float64")])
+def test_a_label_dtype_that_does_not_fit_is_refused(values, role, dtype):
+    ds = lib.Dataset()
+    if role != "id":
+        ds.add_category_table("t", ["x"])
+    with pytest.raises(lib.MestraError) as caught:
+        ds.add_label("lab", values, role, "t" if role != "id" else None,
+                     dtype)
+    assert caught.value.rule == "E20"
+
+
+def test_codes_may_be_asked_for_as_int64():
+    ds = lib.Dataset()
+    label = ds.add_label("fid", [0, 1], "categorical", dtype="int64",
+                         categories=["a", "b"])
+    assert label.dtype == np.dtype("<i8")
