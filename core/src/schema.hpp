@@ -34,6 +34,7 @@ struct Parameter {
   std::string role;               // design | condition | time | unknown
   std::string units;
   DType dtype = DType::Float64;
+  bool auto_dtype = false;        // taken from the first values written
   std::optional<double> lower, upper;
   std::string run_group;
 };
@@ -51,6 +52,7 @@ struct Result {
   std::string where;
   std::string units;
   DType dtype = DType::Float64;
+  bool auto_dtype = false;        // taken from the first values written
   Relation relation;
   std::string vector;             // fields only
   std::string axis;               // fields only, with vector
@@ -85,6 +87,7 @@ struct Mesh {
   int axes = 0;                   // 1 to 3; 0 until set
   std::string coordinate_units;
   DType coordinate_dtype = DType::Float64;
+  bool coordinate_dtype_auto = false;
   std::string support_id;         // shared
   std::string coordinate_model, coordinate_output;   // served coordinates
   std::vector<MeshLabel> labels;

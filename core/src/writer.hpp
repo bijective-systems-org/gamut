@@ -108,7 +108,7 @@ class Writer {
   void need_open() const;
   void need_no_runs(const std::string& what) const;
   void check_new_root_name(const std::string& name) const;
-  void ensure_datasets();
+  void ensure_datasets(const Batch* first);
   void create_root_dataset(const std::string& path, DType dtype,
                            const std::vector<hsize_t>& trailing,
                            const std::vector<std::string>& trailing_scales);

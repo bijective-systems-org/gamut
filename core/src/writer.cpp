@@ -509,7 +509,7 @@ void Writer::declare_parameter(const Parameter& p) {
        p.name + ": the role \"" + p.role + "\" is not design, condition or time",
        p.name);
   check_units(p.units, p.name);
-  need(p.dtype == DType::Float64 || p.dtype == DType::Int64, "E4",
+  need(p.auto_dtype || p.dtype == DType::Float64 || p.dtype == DType::Int64, "E4",
        p.name + ": a parameter is float64 or int64", p.name);
   need(p.lower.has_value() == p.upper.has_value(), "E16",
        p.name + ": give both bounds or neither", p.name);
@@ -562,7 +562,8 @@ void Writer::declare_result(const Result& r) {
          path + ": a field needs a mesh; create the file with one", path);
   }
   check_units(r.units, path);
-  need(is_float(r.dtype), "E4", path + ": results are float32 or float64", path);
+  need(r.auto_dtype || is_float(r.dtype), "E4", path + ": results are float32 or float64",
+       path);
   need(!r.served(), "E16", path + ": a data file stores its results", path);
   const Relation& rel = r.relation;
   need(rel.statistic.empty() || rel.statistic == "std" || rel.statistic == "quantile",
@@ -590,7 +591,7 @@ void Writer::declare_result(const Result& r) {
          path + ": axis is x, y or z", path);
   }
   need(r.round_bits < 0 ||
-           (r.round_bits >= 1 && r.round_bits < (r.dtype == DType::Float32 ? 23 : 52)),
+           (r.round_bits >= 1 && r.round_bits < (!r.auto_dtype && r.dtype == DType::Float32 ? 23 : 52)),
        "", path + ": round_bits keeps 1 to 22 bits of a float32, 1 to 51 of a "
                   "float64",
        path);
@@ -630,10 +631,12 @@ void Writer::declare_coordinates(const std::string& units, DType dtype, int axes
        "the coordinates are declared before the mesh is set and before the "
        "first run");
   check_units(units, "coordinates");
-  need(is_float(dtype), "E4", "coordinates are float32 or float64");
   need(axes >= 1 && axes <= 3, "E24", "coordinates have 1 to 3 axes");
   schema_.mesh.coordinate_units = units;
-  schema_.mesh.coordinate_dtype = dtype;
+  schema_.mesh.coordinate_dtype_auto = dtype == DType::String;   // String: "as given"
+  need(schema_.mesh.coordinate_dtype_auto || is_float(dtype), "E4",
+       "coordinates are float32 or float64");
+  schema_.mesh.coordinate_dtype = schema_.mesh.coordinate_dtype_auto ? DType::Float64 : dtype;
   schema_.mesh.axes = axes;
 }
 
@@ -686,6 +689,10 @@ void Writer::set_mesh(const Geometry& g) {
     need(g.points.count == g.n_nodes * g.axes, "E5",
          "coordinates: expected n_nodes x axes values");
     need(is_float(g.points.dtype), "E4", "coordinates are float32 or float64");
+    if (m.coordinate_dtype_auto) {
+      m.coordinate_dtype = g.points.dtype;
+      m.coordinate_dtype_auto = false;
+    }
   } else {
     need(g.points.count == 0, "",
          "coordinates that change per run or per group come with the runs");
@@ -793,12 +800,42 @@ void Writer::create_root_dataset(const std::string& path, DType dtype,
   pending_[path] = make_pending(path, dtype, trailing, chunk[0], 0);
 }
 
-void Writer::ensure_datasets() {
+void Writer::ensure_datasets(const Batch* first) {
   if (datasets_ready_) return;
   check_relations();
   File& f = *file_;
   Schema& s = schema_;
   Mesh& m = s.mesh;
+  // Precision as given (spec section 11.1): what was declared "as given"
+  // takes the dtype of the first values written, float64 (or for a
+  // parameter float64) when there are none.
+  auto given = [&](const std::string& name) -> const Column* {
+    if (first == nullptr) return nullptr;
+    const auto it = first->values.find(name);
+    return it == first->values.end() ? nullptr : &it->second;
+  };
+  for (auto& p : s.parameters) {
+    if (!p.auto_dtype) continue;
+    const Column* c = given(p.name);
+    p.dtype = c != nullptr && is_int(c->dtype) ? DType::Int64 : DType::Float64;
+    p.auto_dtype = false;
+  }
+  for (auto& r : s.results) {
+    if (!r.auto_dtype) continue;
+    const Column* c = given(r.name);
+    r.dtype = c != nullptr && c->dtype == DType::Float32 ? DType::Float32 : DType::Float64;
+    r.auto_dtype = false;
+  }
+  if (m.coordinate_dtype_auto) {
+    const Geometry* g = nullptr;
+    if (first != nullptr && !first->run_geometry.empty()) g = &first->run_geometry[0];
+    if (first != nullptr && g == nullptr && !first->member_geometry.empty()) {
+      g = &first->member_geometry.begin()->second;
+    }
+    m.coordinate_dtype = g != nullptr && g->points.dtype == DType::Float32 ? DType::Float32
+                                                                           : DType::Float64;
+    m.coordinate_dtype_auto = false;
+  }
   for (const auto& kv : s.tables) write_table(f, kv.first, kv.second, filters_);
   for (const auto& p : s.parameters) {
     const std::string path = root(p.name);
@@ -1079,7 +1116,7 @@ void Writer::check_relations() const {
 
 std::int64_t Writer::add_runs(const Batch& batch) {
   need_open();
-  ensure_datasets();
+  ensure_datasets(&batch);
   const Schema& s = schema_;
   const Mesh& m = s.mesh;
   const std::int64_t n = batch.runs;
@@ -1405,7 +1442,7 @@ void Writer::write_cf_coordinates() {
 
 void Writer::close() {
   if (closed_) return;
-  ensure_datasets();
+  ensure_datasets(nullptr);
   flush();
   write_cf_coordinates();
   file_->flush();
