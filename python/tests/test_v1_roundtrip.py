@@ -755,9 +755,17 @@ def test_deep_copies(files):
 # ------------------------- unknown attributes, kept exactly on rewrite
 
 def attribute_as_stored(obj, name):
-    """Everything about an attribute that a rewrite must keep."""
+    """Everything about an attribute that a rewrite must keep: its type
+    as HDF5 encodes it (byte order, enum names, members, padding), its
+    shape and its value."""
     attr = obj.attrs.get_id(name)
     kind = attr.get_type()
+    if not (isinstance(kind, h5py.h5t.TypeStringID)
+            and kind.is_variable_str()):
+        value = obj.attrs[name]
+        return [kind.encode(), attr.get_space().get_simple_extent_type(),
+                None if isinstance(value, h5py.Empty) else
+                np.asarray(value).tobytes(), attr.shape]
     out = [tuple(attr.shape), kind.get_class(), kind.get_size()
            if not (isinstance(kind, h5py.h5t.TypeStringID)
                    and kind.is_variable_str()) else "vlen"]
@@ -777,9 +785,16 @@ def add_foreign_attributes(obj):
                      dtype=h5py.string_dtype("ascii", 3))
     obj.attrs["note_array"] = np.array([1.5, 2.5, 3.5], np.float32)
     obj.attrs["note_int16"] = np.int16(-7)
+    obj.attrs.create("note_big", np.array([1, 2], dtype=">i4"))
+    obj.attrs.create("note_enum", 1, dtype=h5py.enum_dtype(
+        {"low": 0, "high": 1}, basetype="i1"))
+    obj.attrs["note_empty"] = h5py.Empty("f4")
+    obj.attrs.create("note_record", np.array(
+        (3, 2.5), dtype=[("count", "<i2"), ("scale", ">f8")]))
 
 
-FOREIGN = ("note_vlen", "note_fixed", "note_array", "note_int16")
+FOREIGN = ("note_vlen", "note_fixed", "note_array", "note_int16",
+           "note_big", "note_enum", "note_empty", "note_record")
 
 #: Every kind of object W11 can name an unknown attribute on.
 HOLDERS = {

@@ -387,6 +387,9 @@ def test_upgrade_keeps_unknown_attributes_exactly(tmp_path):
     src = write_v0(v0_dataset(), tmp_path)
     with h5py.File(src, "r+") as f:
         f["keys/t"].attrs["sensor_offsets"] = np.array([0.1, 0.2, 0.3])
+        f["keys/t"].attrs.create("raw_counts", np.array([1, 2], ">i4"))
+        f["scalars/cl"].attrs.create("quality", 1, dtype=h5py.enum_dtype(
+            {"bad": 0, "good": 1}, basetype="i1"))
         f.attrs["campaign_codes"] = np.array([3, 1, 4], np.int32)
         from mestra.encoding import write_string_attr
         write_string_attr(f["categories/member"], "note", "from the plan")
@@ -398,3 +401,16 @@ def test_upgrade_keeps_unknown_attributes_exactly(tmp_path):
         codes = f.attrs["campaign_codes"]
         assert codes.dtype == np.int32 and codes.tolist() == [3, 1, 4]
         assert f["categories/member"].attrs["note"] == b"from the plan"
+        assert f["t"].attrs.get_id("raw_counts").dtype == np.dtype(">i4")
+        assert h5py.check_enum_dtype(f["cl"].attrs.get_id("quality").dtype) \
+            == {"bad": 0, "good": 1}
+
+
+def test_upgrade_refuses_an_attribute_it_cannot_copy(tmp_path):
+    src = write_v0(v0_dataset(), tmp_path)
+    with h5py.File(src, "r+") as f:
+        f["keys/t"].attrs["points_at"] = f["scalars/cl"].ref
+    dst, report = upgraded(src, tmp_path)
+    assert report.error_ids == ["E41"]
+    assert "points_at" in report.errors[0].message
+    assert not os.path.exists(dst)

@@ -429,11 +429,14 @@ def restore_member(parent: h5py.Group, name: str, kind: str,
 # ------------------------------------------------ one attribute, exact
 
 class Attribute:
-    """An attribute this reader does not interpret, kept as stored:
-    its value with its shape and dtype, and for a string its kind
-    (fixed-length with size, character set and padding, or variable
-    length with character set). Plain data, so a dataset holding one
-    copies and deep-copies."""
+    """An attribute this reader does not interpret, kept as stored.
+
+    `string` says how: ("typed", type) for any fixed-size type, with
+    the value as its raw bytes and the HDF5 type serialised, so byte
+    order, enum names, compound members and string padding all come
+    back; ("vlen", character set) for a variable-length string, kept as
+    text; ("empty", type) for an attribute with no dataspace. Plain
+    data, so a dataset holding one copies and deep-copies."""
 
     __slots__ = ("value", "string", "shape")
 
@@ -446,32 +449,55 @@ class Attribute:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Attribute):
             return NotImplemented
-        return (self.string == other.string and self.shape == other.shape
-                and np.array_equal(np.asarray(self.value, dtype=object),
+        if (self.string, self.shape) != (other.string, other.shape):
+            return False
+        if isinstance(self.value, np.ndarray) and \
+                self.value.dtype.kind == "V":
+            return bool(self.value.tobytes() == np.asarray(
+                other.value).tobytes())
+        return bool(np.array_equal(np.asarray(self.value, dtype=object),
                                    np.asarray(other.value, dtype=object)))
 
     def __repr__(self) -> str:
-        return "Attribute(%r)" % (self.value,)
+        return "Attribute(%s)" % (self.string[0] if self.string else "?")
+
+
+def _copyable(kind: Any) -> bool:
+    """False for a type whose bytes mean nothing in another file: a
+    reference, or variable-length data other than a string, at any
+    depth of a compound or an array."""
+    cls = kind.get_class()
+    if cls in (h5py.h5t.REFERENCE, h5py.h5t.VLEN):
+        return False
+    if cls == h5py.h5t.COMPOUND:
+        return all(_copyable(kind.get_member_type(at))
+                   for at in range(kind.get_nmembers()))
+    if cls == h5py.h5t.ARRAY:
+        return _copyable(kind.get_super())
+    if cls == h5py.h5t.STRING:
+        return not kind.is_variable_str()
+    return True
 
 
 def capture_attribute(obj: Any, name: str) -> Attribute:
-    """One attribute exactly as stored. Raises when it cannot be read,
-    so that the caller can refuse a rewrite rather than drop it."""
+    """One attribute exactly as stored. Raises (E41) for a type this
+    reader cannot copy exactly, so that the caller refuses a rewrite
+    rather than drop or change it."""
     attr = obj.attrs.get_id(name)
     kind = attr.get_type()
-    if isinstance(kind, h5py.h5t.TypeStringID):
-        if kind.is_variable_str():
-            return Attribute(obj.attrs[name], ("vlen", kind.get_cset()),
-                             tuple(attr.shape))
-        raw = np.empty(attr.shape, dtype="S%d" % kind.get_size())
-        attr.read(raw, mtype=kind)
-        return Attribute(raw, ("fixed", kind.get_size(), kind.get_cset(),
-                               kind.get_strpad()))
-    value = np.array(obj.attrs[name])
-    if value.dtype.kind == "O":
+    if attr.get_space().get_simple_extent_type() == h5py.h5s.NULL:
+        return Attribute(None, ("empty", kind.encode()))
+    if isinstance(kind, h5py.h5t.TypeStringID) and kind.is_variable_str():
+        return Attribute(obj.attrs[name], ("vlen", kind.get_cset()),
+                         tuple(attr.shape))
+    if not _copyable(kind):
         raise MestraError("E41", "the attribute %s is of a type this reader "
-                                 "cannot copy" % name)
-    return Attribute(value)
+                                 "cannot copy (a reference or "
+                                 "variable-length data)" % name)
+    shape = tuple(attr.shape)
+    raw = np.empty(shape, dtype="V%d" % kind.get_size())
+    attr.read(raw, mtype=kind)
+    return Attribute(raw, ("typed", kind.encode()), shape)
 
 
 def capture_attributes(obj: Any, known: Any, where: str,
@@ -499,23 +525,19 @@ def capture_attributes(obj: Any, known: Any, where: str,
 
 
 def restore_attribute(obj: Any, name: str, attribute: Attribute) -> None:
-    """Write a captured attribute back as it was stored."""
+    """Write a captured attribute back exactly as it was stored."""
     string = attribute.string
-    if string is None:
-        value = np.asarray(attribute.value)
-        obj.attrs.create(name, value, dtype=value.dtype)
-    elif string[0] == "fixed":
-        _, size, cset, pad = string
-        kind = h5py.h5t.C_S1.copy()
-        kind.set_size(size)
-        kind.set_cset(cset)
-        kind.set_strpad(pad)
-        raw = attribute.value
-        space = (h5py.h5s.create(h5py.h5s.SCALAR) if raw.shape == ()
-                 else h5py.h5s.create_simple(raw.shape))
-        made = h5py.h5a.create(obj.id, name.encode("utf-8"), kind, space)
-        made.write(raw, mtype=kind)
-    else:
+    if string[0] == "vlen":
         encoding = "utf-8" if string[1] == h5py.h5t.CSET_UTF8 else "ascii"
         obj.attrs.create(name, attribute.value, shape=attribute.shape,
                          dtype=h5py.string_dtype(encoding))
+        return
+    kind = h5py.h5t.decode(string[1])
+    if string[0] == "empty":
+        h5py.h5a.create(obj.id, name.encode("utf-8"), kind,
+                        h5py.h5s.create(h5py.h5s.NULL))
+        return
+    space = (h5py.h5s.create(h5py.h5s.SCALAR) if attribute.shape == ()
+             else h5py.h5s.create_simple(attribute.shape))
+    made = h5py.h5a.create(obj.id, name.encode("utf-8"), kind, space)
+    made.write(attribute.value, mtype=kind)

@@ -99,8 +99,8 @@ def upgrade(src: str, dst: str) -> Report:
         _refuse(old, report)
         if report.errors:
             return report
-        new = _convert(old, report)
         try:
+            new = _convert(old, report)
             write(new, str(dst))
         except MestraError as exc:
             report.errors.append(Finding(exc.rule, exc.path, exc.message))
