@@ -11,6 +11,7 @@
 #include "names.hpp"
 #include "reader.hpp"
 #include "types.hpp"
+#include "validate.hpp"
 #include "writer.hpp"
 
 using mestra::DType;
@@ -34,6 +35,10 @@ struct mes_file {
 
 struct mes_strings {
   std::vector<std::string> items;
+};
+
+struct mes_report {
+  mestra::internal::Report report;
 };
 
 namespace {
@@ -678,6 +683,37 @@ int mes_table(const mes_file* f, const char* table, mes_strings** out, mes_error
     return fail(err);
   }
 }
+
+int mes_validate(const char* path, mes_report** out, mes_error* err) {
+  try {
+    clear(err);
+    need(out != nullptr, "out is NULL");
+    need(path != nullptr, "path is NULL");
+    auto r = std::make_unique<mes_report>();
+    r->report = mestra::internal::validate_file(path);
+    *out = r.release();
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int64_t mes_report_count(const mes_report* r) {
+  return r == nullptr ? 0 : static_cast<int64_t>(r->report.findings.size());
+}
+
+int mes_report_get(const mes_report* r, int64_t i, const char** rule, const char** severity,
+                   const char** path, const char** message) {
+  if (r == nullptr || i < 0 || i >= static_cast<int64_t>(r->report.findings.size())) return 1;
+  const auto& f = r->report.findings[static_cast<std::size_t>(i)];
+  if (rule != nullptr) *rule = f.rule.c_str();
+  if (severity != nullptr) *severity = f.severity.c_str();
+  if (path != nullptr) *path = f.path.c_str();
+  if (message != nullptr) *message = f.message.c_str();
+  return 0;
+}
+
+void mes_report_free(mes_report* r) { delete r; }
 
 int64_t mes_strings_count(const mes_strings* s) {
   return s == nullptr ? 0 : static_cast<int64_t>(s->items.size());

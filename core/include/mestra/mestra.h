@@ -171,6 +171,18 @@ MES_API int mes_label_names(const mes_file* f, const char* label, const mes_sel*
 MES_API int mes_table(const mes_file* f, const char* table, mes_strings** out,
                       mes_error* err);
 
+/* --- Checking ------------------------------------------------------------- */
+typedef struct mes_report mes_report;   /* the findings of a validation */
+/* Validates a file against spec section 16.  A file that breaks rules is
+ * not a failure of this call: its findings are in the report.  The call
+ * fails only for a bad argument. */
+MES_API int mes_validate(const char* path, mes_report** out, mes_error* err);
+MES_API int64_t mes_report_count(const mes_report* r);
+/* Pointers stay valid until mes_report_free. */
+MES_API int mes_report_get(const mes_report* r, int64_t i, const char** rule,
+                           const char** severity, const char** path, const char** message);
+MES_API void mes_report_free(mes_report* r);
+
 /* --- Strings --------------------------------------------------------------- */
 MES_API int64_t mes_strings_count(const mes_strings* s);
 MES_API const char* mes_strings_get(const mes_strings* s, int64_t i);

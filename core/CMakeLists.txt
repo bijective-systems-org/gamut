@@ -51,6 +51,7 @@ set(MESTRA_CORE_SOURCES
   src/reader.cpp
   src/writer.cpp
   src/parallel.cpp
+  src/validate.cpp
   src/capi.cpp
 )
 
