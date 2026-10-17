@@ -473,7 +473,16 @@ void Validator::row() {
 void Validator::root_objects() {
   for (const Member& m : file_->members("/")) {
     if (m.kind != LinkKind::Hard) continue;
-    if (m.name == "row" || m.name.compare(0, 9, "category_") == 0) continue;
+    if (m.name == "row") continue;
+    // category_<t> is a table's dimension scale; anything else by that
+    // name takes a reserved prefix (E8, through check_name below).
+    if (m.name.compare(0, 9, "category_") == 0 && m.is_dataset &&
+        file_->dataset_info("/" + m.name, false).is_dataset &&
+        file_->attributes("/" + m.name).size() > 0) {
+      bool scale = false;
+      for (const auto& a : file_->attributes("/" + m.name)) scale = scale || a.name == "CLASS";
+      if (scale) continue;
+    }
     if (m.is_group) {
       if (m.name == "categories" || m.name == "mesh" || m.name == "models" ||
           m.name == "notes" || m.name == "private" || m.name == "VTKHDF") {
