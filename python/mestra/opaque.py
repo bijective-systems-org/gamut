@@ -55,7 +55,8 @@ import numpy as np
 from . import h5safe, limits
 from .errors import Finding, MestraError
 
-__all__ = ["capture", "restore", "read_all"]
+__all__ = ["capture", "restore", "read_all", "capture_member",
+           "restore_member", "read_member"]
 
 #: What a member is replaced by when it could not be copied.
 LOST = "mestra.opaque.lost"
@@ -376,3 +377,49 @@ def _put_dataset(group: h5py.Group, name: str,
                                 track_times=False, **kw)
     _put_attrs(dset, body["attrs"])
     return dset
+
+
+# ------------------------------------------- one member at the root
+
+def capture_member(obj: Any, path: str,
+                   problems: list[Finding] | None = None,
+                   lossy: list[str] | None = None, lazy: bool = False,
+                   scales: Mapping[int, str] | None = None
+                   ) -> tuple[str, dict[str, Any]]:
+    """Copy one dataset or group this reader does not interpret, such
+    as a root object with a role it does not know. Returns the kind
+    ("dataset" or "group") and the copy."""
+    if isinstance(obj, h5py.Group):
+        return "group", capture(obj, path, 0, problems, lossy, lazy,
+                                scales)
+    walk = _Walk(problems, lossy, lazy, scales or {})
+    body = walk.dataset(obj, path, path.rsplit("/", 1)[-1])
+    walk.resolve()
+    return "dataset", body
+
+
+def read_member(kind: str, body: dict[str, Any]) -> None:
+    """Read every value a lazy `capture_member` left in the file."""
+    if kind == "group":
+        read_all(body)
+    else:
+        values(body)
+
+
+def restore_member(parent: h5py.Group, name: str, kind: str,
+                   body: dict[str, Any]) -> None:
+    """Write a `capture_member` copy back under `parent`, attaching a
+    dataset's axes to scales by name where it hangs or at the root."""
+    if kind == "group":
+        restore(parent, name, body)
+        return
+    dset = _put_dataset(parent, name, body)
+    for axis, dim in enumerate(body.get("dims") or []):
+        if dim is None:
+            continue
+        scale = _by_name(parent, dim[1])
+        if scale is not None:
+            try:
+                dset.dims[axis].attach_scale(scale)
+            except Exception:                           # pragma: no cover
+                continue

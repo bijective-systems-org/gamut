@@ -37,7 +37,7 @@ import h5py
 import numpy as np
 
 from .. import opaque
-from ..codec import encode_dict
+from ..codec import RESERVED_V0, encode_dict
 from ..encoding import (
     default_row_chunk,
     encode_strings,
@@ -558,7 +558,7 @@ def _write_callables(ds: Dataset, f: h5py.File) -> None:
         line = _repr_line(obj)
         if line is not None:
             write_string_attr(sub, "repr", line)
-        encode_dict(sub, obj.to_dict())
+        encode_dict(sub, obj.to_dict(), reserved=RESERVED_V0)
 
 
 def _repr_line(obj: Any) -> str | None:

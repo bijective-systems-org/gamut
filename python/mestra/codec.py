@@ -33,12 +33,17 @@ from .encoding import (
 from .errors import Finding, MestraError
 from .names import RESERVED_PREFIX, is_legal_name
 
-__all__ = ["encode_dict", "decode_dict", "ALLOWED_DTYPES"]
+__all__ = ["encode_dict", "decode_dict", "ALLOWED_DTYPES", "RESERVED",
+           "RESERVED_V0"]
 
 #: Section 25: the dtypes a dictionary dataset may have.
 ALLOWED_DTYPES = ("int8", "int32", "int64", "float64")
 
-_TOP_LEVEL_RESERVED = ("type", "repr")
+#: The names a callable's group holds as the container's own
+#: attributes, so that a dictionary may not use them at its top level.
+#: Version 1 adds `inputs` to the two version 0 reserved.
+RESERVED = ("type", "repr", "inputs")
+RESERVED_V0 = ("type", "repr")
 
 
 def _sorted_keys(d: Mapping[str, Any]) -> list[str]:
@@ -49,7 +54,8 @@ def _sorted_keys(d: Mapping[str, Any]) -> list[str]:
 # ------------------------------------------------------------- writing
 
 def encode_dict(group: h5py.Group, d: Mapping[str, Any],
-                top_level: bool = True, depth: int = 0) -> None:
+                top_level: bool = True, depth: int = 0,
+                reserved: tuple[str, ...] = RESERVED) -> None:
     """Write a dictionary into `group` (sections 17 and 25).
 
     A dictionary that nests deeper than `limits.MAX_DEPTH` is
@@ -69,11 +75,11 @@ def encode_dict(group: h5py.Group, d: Mapping[str, Any],
             raise MestraError(
                 "E33", "a dictionary key must not begin with %s"
                 % RESERVED_PREFIX, key)
-        if top_level and key in _TOP_LEVEL_RESERVED:
+        if top_level and key in reserved:
             raise MestraError(
-                "E32", "type and repr are the container's attributes "
-                "on the callable's group, so a dictionary may not use "
-                "them at its top level", key)
+                "E32", "%s are the container's attributes on the "
+                "callable's group, so a dictionary may not use them at "
+                "its top level" % ", ".join(reserved), key)
         _encode_value(group, key, value, depth)
 
 
@@ -197,13 +203,14 @@ def _attach_scales(group: h5py.Group, key: str, dset: h5py.Dataset,
 
 def decode_dict(group: h5py.Group, top_level: bool = True,
                 depth: int = 0,
-                problems: list[Finding] | None = None
+                problems: list[Finding] | None = None,
+                reserved: tuple[str, ...] = RESERVED
                 ) -> dict[str, Any]:
     """Read back the dictionary stored in `group`.
 
     Every member and every attribute whose name begins with
     `mestra_` is skipped, and so are the machinery attributes of
-    section 18. At the top level `type` and `repr` are the
+    section 18. At the top level the names in `reserved` are the
     container's and are not entries of the dictionary.
 
     A dictionary is somebody else's data structure, so this walk
@@ -223,7 +230,7 @@ def decode_dict(group: h5py.Group, top_level: bool = True,
     for name in h5safe.attr_names(group):
         if name.startswith(RESERVED_PREFIX):
             continue
-        if top_level and name in _TOP_LEVEL_RESERVED:
+        if top_level and name in reserved:
             continue
         out[name] = read_attr(group, name)
     for member in h5safe.members(group):

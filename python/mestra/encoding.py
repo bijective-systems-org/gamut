@@ -42,6 +42,12 @@ __all__ = [
     "default_row_chunk",
     "support_digest",
     "chunk_bytes_per_row",
+    "CHUNK_TARGET",
+    "entry_bytes",
+    "leading_bound",
+    "site_block",
+    "default_chunks",
+    "scale_name",
 ]
 
 #: Section 21: the NAME attribute of a dimension scale with no
@@ -317,6 +323,62 @@ def default_row_chunk(itemsize: int, shape: Sequence[int],
     """The whole default chunk shape of a row-dimensioned dataset."""
     rest = tuple(int(e) for e in shape[1:])
     return (default_chunk_rows(itemsize, rest, n_rows),) + rest
+
+
+# ------------------------------------------------- chunk rule, version 1
+
+#: T of the version 1 chunk rule: 256 KiB.
+CHUNK_TARGET = 262144
+
+
+def entry_bytes(itemsize: int, rest: Sequence[int]) -> int:
+    """b of the version 1 chunk rule: the bytes of one entry along the
+    leading (row or group) axis, the dtype size times the other
+    extents, a zero extent counting as 1."""
+    return chunk_bytes_per_row(itemsize, rest)
+
+
+def leading_bound(itemsize: int, rest: Sequence[int]) -> int:
+    """max(1, floor(T / b)): the most entries along the leading axis a
+    default chunk holds. Any count from 1 to this is the default."""
+    return max(1, CHUNK_TARGET // entry_bytes(itemsize, rest))
+
+
+def site_block(itemsize: int, n_sites: int, components: int) -> int:
+    """m of the version 1 chunk rule, for an entry larger than T: the
+    node or cell axis in blocks of
+    min(n, max(1, floor(T / (dtype size x components))))."""
+    width = int(itemsize) * max(1, int(components))
+    return min(int(n_sites), max(1, CHUNK_TARGET // width))
+
+
+def default_chunks(itemsize: int, shape: Sequence[int]) -> tuple[int, ...]:
+    """The default chunk of a dataset whose first axis is `row` or
+    `group_<k>`, with L the length of that axis at creation.
+
+    L = 0 is a chunk of 1 on every axis. Otherwise an entry of b <= T
+    bytes takes c = min(L, max(1, floor(T / b))) entries per chunk with
+    the other axes whole, and a larger entry takes one entry per chunk
+    with the node or cell axis (the second) in blocks of m and the
+    component axis whole.
+    """
+    shape = tuple(int(n) for n in shape)
+    if not shape:
+        raise ValueError("a dataset with no axes has no chunks")
+    if shape[0] == 0:
+        return (1,) * len(shape)
+    rest = shape[1:]
+    if entry_bytes(itemsize, rest) <= CHUNK_TARGET:
+        return (min(shape[0], leading_bound(itemsize, rest)),) + rest
+    if len(shape) < 3:
+        return (1,) + rest
+    block = site_block(itemsize, max(1, shape[1]), shape[2])
+    return (1, max(1, block)) + rest[1:]
+
+
+def scale_name(length: int) -> str:
+    """The NAME attribute of a dimension scale of this length (21)."""
+    return "%s%10d" % (DIMENSION_SCALE_NAME, int(length))
 
 
 # ------------------------------------------------------------ support_id

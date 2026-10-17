@@ -26,7 +26,7 @@ from typing import Any
 import h5py
 
 from .. import h5safe, limits, opaque
-from ..codec import decode_dict
+from ..codec import RESERVED_V0, decode_dict
 from ..encoding import (
     is_fixed_string,
     read_attr,
@@ -620,7 +620,7 @@ def _build_callable(ds: Dataset, where: str, group: h5py.Group,
     this callable: decode the dictionary and hand it to its type."""
     def build() -> Any:
         trouble: list[Finding] = []
-        body = decode_dict(group, problems=trouble)
+        body = decode_dict(group, problems=trouble, reserved=RESERVED_V0)
         if trouble:
             ds.problems.extend(trouble)
             ds.lossy.append(where)
