@@ -44,6 +44,11 @@ if(MESTRA_SANITIZE)
 endif()
 
 find_package(HDF5 REQUIRED COMPONENTS C HL)
+# 1.12 brought the object-token API the core uses; packages bundle 1.14.
+if(HDF5_VERSION AND HDF5_VERSION VERSION_LESS 1.12)
+  message(FATAL_ERROR "the mestra core needs HDF5 1.12 or later; found ${HDF5_VERSION}. "
+                      "Point HDF5_ROOT at a newer HDF5.")
+endif()
 find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)
 
