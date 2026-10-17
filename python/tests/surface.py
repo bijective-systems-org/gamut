@@ -8,6 +8,9 @@ carry parameter names, kinds and defaults, not annotations, so the
 file changes when the interface does and not when a type hint does.
 A class the library makes for the caller (a slot, a mesh, a report)
 lists its members but not its constructor, which is not for callers.
+Types that public calls return without being exported themselves
+(the input table, a category table, the callables mapping) are pinned
+under `returned`, by their members.
 
 `python -m tests.surface` (from python/) writes docs/surface/python.json;
 `tests/test_v1_surface.py` regenerates it and compares.
@@ -97,6 +100,20 @@ def _members(cls: type, sample: Any) -> dict[str, str]:
     return out
 
 
+def _returned(lib: Any, samples: dict[str, Any]) -> dict[str, Any]:
+    """The members of types public calls return: `input_table(...)`,
+    `Label.table` and `Dataset.categories`, `Dataset.callables`."""
+    ds = samples["Dataset"]
+    found = {
+        "InputTable": lib.input_table(ds),
+        "CategoryTable": ds.categories["member"],
+        "Callables": ds.callables,
+    }
+    return {name: {"kind": "class",
+                   "members": _members(type(value), value)}
+            for name, value in sorted(found.items())}
+
+
 def generate() -> dict[str, Any]:
     import mestra as lib
 
@@ -118,7 +135,8 @@ def generate() -> dict[str, Any]:
         else:
             entry = {"kind": "constant", "value": obj}
         names[name] = entry
-    return {"package": "mestra", "names": names}
+    return {"package": "mestra", "names": names,
+            "returned": _returned(lib, samples)}
 
 
 def text() -> str:

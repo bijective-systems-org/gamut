@@ -73,3 +73,23 @@ def test_no_member_hands_out_an_internal_type(name):
         assert member not in ("data", "extra", "opaque", "unknown",
                               "present", "lossy", "problems",
                               "callable_inputs")
+
+
+def test_the_types_public_calls_return_are_pinned(monkeypatch):
+    returned = committed()["returned"]
+    assert returned["InputTable"]["members"]["row_count"] == "attribute"
+    assert "code_of" in returned["CategoryTable"]["members"]
+    assert "entries" in returned["CategoryTable"]["members"]
+    assert "keys" in returned["Callables"]["members"]
+    assert committed()["names"]["Prediction"]["members"][
+        "has_uncertainty"] == "property"
+    from mestra import callables
+
+    original = callables.InputTable.__init__
+
+    def renamed(self, columns, row_count):
+        original(self, columns, row_count)
+        self.rows = self.__dict__.pop("row_count")
+
+    monkeypatch.setattr(callables.InputTable, "__init__", renamed)
+    assert surface.generate() != committed()

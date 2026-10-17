@@ -234,5 +234,29 @@
       "signature": "(ds, path, check=True)"
     }
   },
-  "package": "mestra"
+  "package": "mestra",
+  "returned": {
+    "Callables": {
+      "kind": "class",
+      "members": {
+        "get": "method (self, name, default=None)",
+        "items": "method (self)",
+        "keys": "method (self)",
+        "values": "method (self)"
+      }
+    },
+    "CategoryTable": {
+      "kind": "class",
+      "members": {
+        "code_of": "method (self, name)",
+        "entries": "attribute"
+      }
+    },
+    "InputTable": {
+      "kind": "class",
+      "members": {
+        "row_count": "attribute"
+      }
+    }
+  }
 }
