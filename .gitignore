@@ -25,3 +25,4 @@ vectors/cases/wide_keys/case.mes
 
 # shared core build trees
 core/build*/
+core/matlab/*.mex*
