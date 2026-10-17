@@ -44,6 +44,10 @@ set(MESTRA_CORE_SOURCES
   src/units.cpp
   src/sha256.cpp
   src/h5.cpp
+  src/chunk.cpp
+  src/schema.cpp
+  src/reader.cpp
+  src/writer.cpp
   src/capi.cpp
 )
 
@@ -73,5 +77,15 @@ if(MESTRA_BUILD_TESTS)
                          ${MESTRA_FP_FLAGS} ${MESTRA_SANITIZER_FLAGS})
   target_link_libraries(core_unit_tests PRIVATE ${HDF5_HL_LIBRARIES} ${HDF5_C_LIBRARIES})
   add_test(NAME core_unit_tests COMMAND core_unit_tests
+           WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  add_executable(core_writer_reader_tests tests/writer_reader_tests.cpp
+                 $<TARGET_OBJECTS:mestra_core_objects>)
+  target_include_directories(core_writer_reader_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src ${HDF5_INCLUDE_DIRS})
+  target_compile_definitions(core_writer_reader_tests PRIVATE ${HDF5_DEFINITIONS})
+  target_compile_options(core_writer_reader_tests PRIVATE ${MESTRA_WARNINGS}
+                         ${MESTRA_FP_FLAGS} ${MESTRA_SANITIZER_FLAGS})
+  target_link_libraries(core_writer_reader_tests PRIVATE ${HDF5_HL_LIBRARIES} ${HDF5_C_LIBRARIES})
+  add_test(NAME core_writer_reader_tests COMMAND core_writer_reader_tests
            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 endif()

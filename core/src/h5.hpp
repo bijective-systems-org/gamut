@@ -154,7 +154,8 @@ class File {
                       const std::vector<hsize_t>& shape,
                       const std::vector<hsize_t>& maxshape,
                       const std::vector<hsize_t>& chunk,
-                      const FilterPipeline& filters);
+                      const FilterPipeline& filters,
+                      bool scale_properties = false);
   // Writes a block: `start` and `count` per axis (all axes given).
   void write(const std::string& path, DType mem,
              const std::vector<hsize_t>& start,
@@ -173,6 +174,10 @@ class File {
   // whose NAME is its own name (the `row` ids).
   void mark_coordinate_scale(const std::string& path, const std::string& name);
   void attach_scale(const std::string& dataset, const std::string& scale,
+                    unsigned axis);
+  // Before a dataset with an attached scale is deleted, so the scale's
+  // REFERENCE_LIST does not keep a reference to it.
+  void detach_scale(const std::string& dataset, const std::string& scale,
                     unsigned axis);
 
   std::string dataset_link_name(hid_t object) const;

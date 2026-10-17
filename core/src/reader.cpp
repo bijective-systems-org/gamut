@@ -1,0 +1,636 @@
+#include "reader.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <set>
+
+#include "names.hpp"
+
+namespace mestra {
+namespace internal {
+
+namespace {
+
+void need(bool ok, const std::string& rule, const std::string& message,
+          const std::string& path = {}) {
+  if (!ok) throw Error(rule, message, path);
+}
+
+const std::set<std::string> kParameterRoles = {"design", "condition", "time"};
+const std::set<std::string> kLabelRoles = {"group", "categorical", "status",
+                                           "split"};
+
+struct Attrs {
+  std::vector<RawAttr> list;
+  const RawAttr* find(const std::string& name) const {
+    for (const auto& a : list) {
+      if (a.name == name) return &a;
+    }
+    return nullptr;
+  }
+  std::string text(const std::string& name) const {
+    const RawAttr* a = find(name);
+    return a != nullptr && a->value.kind() == AttrValue::Kind::Str
+               ? a->value.as_text()
+               : std::string();
+  }
+  std::optional<double> real(const std::string& name) const {
+    const RawAttr* a = find(name);
+    if (a == nullptr) return std::nullopt;
+    if (a->value.kind() == AttrValue::Kind::Float) return a->value.as_float();
+    if (a->value.kind() == AttrValue::Kind::Int) {
+      return static_cast<double>(a->value.as_int());
+    }
+    return std::nullopt;
+  }
+  std::optional<std::int64_t> integer(const std::string& name) const {
+    const RawAttr* a = find(name);
+    if (a == nullptr || a->value.kind() != AttrValue::Kind::Int) {
+      return std::nullopt;
+    }
+    return a->value.as_int();
+  }
+};
+
+Relation relation_of(const Attrs& a) {
+  Relation r;
+  r.of = a.text("of");
+  r.statistic = a.text("statistic");
+  r.q = a.real("q");
+  r.method = a.text("method");
+  r.with_respect_to = a.text("with_respect_to");
+  if (!r.with_respect_to.empty()) r.axis = a.text("axis");
+  return r;
+}
+
+Result result_from(const File& f, const std::string& h5path,
+                   const std::string& name, const std::string& where,
+                   bool is_group) {
+  const Attrs a{f.attributes(h5path)};
+  Result r;
+  r.name = name;
+  r.where = where;
+  r.units = a.text("units");
+  r.relation = relation_of(a);
+  r.vector = a.text("vector");
+  if (!r.vector.empty() || r.relation.with_respect_to.empty()) {
+    r.axis = r.vector.empty() ? std::string() : a.text("axis");
+  }
+  r.model = a.text("model");
+  r.output = a.text("output");
+  const auto bits = a.integer("_QuantizeBitRoundNumberOfSignificantBits");
+  if (bits) r.round_bits = static_cast<int>(*bits);
+  if (!is_group) {
+    DType t;
+    if (dtype_of(f.dataset_info(h5path).type, &t)) r.dtype = t;
+  }
+  return r;
+}
+
+
+}  // namespace
+
+Schema load_schema(const File& f) {
+  Schema s;
+  const Attrs root{f.attributes("/")};
+  s.kind = root.text("kind");
+  s.writer = root.text("writer");
+  s.created = root.text("created");
+  s.file_id = root.text("file_id");
+  s.title = root.text("title");
+  s.license = root.text("license");
+  s.references = root.text("references");
+  s.source = root.text("source");
+  s.generalisation_group = root.text("generalisation_group");
+  s.trained_on = root.text("trained_on");
+  s.evaluated_from = root.text("evaluated_from");
+  const DsetInfo row = f.dataset_info("/row");
+  s.rows = row.is_dataset && row.shape.size() == 1
+               ? static_cast<std::int64_t>(row.shape[0])
+               : 0;
+  for (const Member& m : f.members("/categories")) {
+    if (m.kind != LinkKind::Hard || !m.is_dataset) continue;
+    s.tables[m.name] = f.read_strings("/categories/" + m.name);
+  }
+  for (const Member& m : f.members("/")) {
+    if (m.kind != LinkKind::Hard) continue;
+    const std::string h5 = "/" + m.name;
+    if (m.name == "row") continue;
+    const Attrs a{f.attributes(h5)};
+    const std::string role = a.text("role");
+    if (role.empty()) continue;
+    if (m.is_group) {
+      if (role == "scalar") s.results.push_back(result_from(f, h5, m.name, "scalar", true));
+      continue;
+    }
+    const DsetInfo info = f.dataset_info(h5);
+    DType t = DType::Float64;
+    const bool typed = dtype_of(info.type, &t);
+    // An unknown role is ignored (spec section 17); the validator reports it.
+    if (kParameterRoles.count(role) == 1) {
+      Parameter p;
+      p.name = m.name;
+      p.role = role;
+      p.units = a.text("units");
+      if (typed) p.dtype = t;
+      p.lower = a.real("lower");
+      p.upper = a.real("upper");
+      p.run_group = a.text("run_group");
+      s.parameters.push_back(p);
+    } else if (kLabelRoles.count(role) == 1) {
+      Label l;
+      l.name = m.name;
+      l.role = role;
+      l.category = a.text("category");
+      if (typed) l.dtype = t;
+      s.labels.push_back(l);
+    } else if (role == "scalar") {
+      s.results.push_back(result_from(f, h5, m.name, "scalar", false));
+    } else if (role == "constant") {
+      Constant c;
+      c.name = m.name;
+      c.units = a.text("units");
+      if (typed) c.dtype = t;
+      if (info.shape.empty()) {
+        if (c.dtype == DType::Int64) {
+          f.read(h5, DType::Int64, {}, &c.i, 8);
+        } else if (typed && t != DType::String) {
+          f.read(h5, DType::Float64, {}, &c.f, 8);
+        }
+      }
+      s.constants.push_back(c);
+    }
+  }
+  auto by_name = [](auto& v) {
+    std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) {
+      return bytes_less(a.name, b.name);
+    });
+  };
+  by_name(s.parameters);
+  by_name(s.labels);
+  by_name(s.constants);
+  if (f.is_group("/mesh")) {
+    const Attrs ma{f.attributes("/mesh")};
+    Mesh& mesh = s.mesh;
+    mesh.kind = ma.text("kind");
+    mesh.per = ma.text("per");
+    mesh.support_id = ma.text("support_id");
+    auto length = [&](const std::string& p) -> std::int64_t {
+      const DsetInfo i = f.dataset_info(p);
+      return i.is_dataset && i.shape.size() == 1 ? static_cast<std::int64_t>(i.shape[0]) : 0;
+    };
+    const DsetInfo coords = f.dataset_info("/mesh/coordinates");
+    if (coords.is_dataset) {
+      DType t;
+      if (dtype_of(coords.type, &t)) mesh.coordinate_dtype = t;
+      if (!coords.shape.empty()) mesh.axes = static_cast<int>(coords.shape.back());
+    } else if (f.is_group("/mesh/coordinates")) {
+      const Attrs ca{f.attributes("/mesh/coordinates")};
+      mesh.coordinate_model = ca.text("model");
+      mesh.coordinate_output = ca.text("output");
+      if (const auto ax = ca.integer("axes")) mesh.axes = static_cast<int>(*ax);
+    }
+    mesh.coordinate_units = Attrs{f.attributes("/mesh/coordinates")}.text("units");
+    if (mesh.kind == "shared") {
+      mesh.n_nodes = length("/mesh/node");
+      mesh.n_cells = length("/mesh/cell");
+      if (mesh.per == "run") {
+        mesh.n_instances = s.rows;
+      } else if (!mesh.per_group().empty()) {
+        mesh.n_instances = length("/mesh/instance");
+      }
+    } else {
+      mesh.n_instances = std::max<std::int64_t>(0, length("/mesh/instance_nodes") - 1);
+      const DsetInfo types = f.dataset_info("/mesh/cell_types");
+      mesh.n_nodes = coords.is_dataset && !coords.shape.empty()
+                         ? static_cast<std::int64_t>(coords.shape[0])
+                         : 0;
+      mesh.n_cells = types.is_dataset && !types.shape.empty()
+                         ? static_cast<std::int64_t>(types.shape[0])
+                         : 0;
+    }
+    const DsetInfo conn = f.dataset_info("/mesh/cell_connectivity");
+    mesh.n_conn = conn.is_dataset && !conn.shape.empty()
+                      ? static_cast<std::int64_t>(conn.shape[0])
+                      : 0;
+    for (const char* where : {"node", "cell"}) {
+      const std::string lg = std::string("/mesh/") + where + "_labels";
+      for (const Member& m : f.members(lg)) {
+        if (m.kind != LinkKind::Hard || !m.is_dataset) continue;
+        MeshLabel ml;
+        ml.name = m.name;
+        ml.where = where;
+        ml.category = Attrs{f.attributes(lg + "/" + m.name)}.text("category");
+        DType t;
+        if (dtype_of(f.dataset_info(lg + "/" + m.name).type, &t)) ml.dtype = t;
+        mesh.labels.push_back(ml);
+      }
+      const std::string fg = std::string("/mesh/") + where + "_fields";
+      for (const Member& m : f.members(fg)) {
+        if (m.kind != LinkKind::Hard) continue;
+        if (!m.is_dataset && !m.is_group) continue;
+        s.results.push_back(result_from(f, fg + "/" + m.name, m.name, where, m.is_group));
+      }
+    }
+  }
+  std::stable_sort(s.results.begin(), s.results.end(),
+                   [](const Result& a, const Result& b) {
+                     return bytes_less(result_path(a), result_path(b));
+                   });
+  for (const Member& m : f.members("/models")) {
+    if (m.kind != LinkKind::Hard || !m.is_group) continue;
+    const Attrs a{f.attributes("/models/" + m.name)};
+    Model model;
+    model.id = m.name;
+    model.type = a.text("type");
+    model.inputs = split_spaces(a.text("inputs"));
+    model.repr = a.text("repr");
+    s.models.push_back(model);
+  }
+  return s;
+}
+
+std::unique_ptr<Reader> Reader::open(const std::string& path) {
+  std::unique_ptr<Reader> r(new Reader());
+  r->file_.reset(new File(File::open_read(path)));
+  const Attrs root{r->file_->attributes("/")};
+  const std::string format = root.text("format");
+  need(format == "mestra/1", "E1",
+       format.empty() ? "\"" + path + "\" has no format attribute; it is not a "
+                                      "file of this format"
+                      : "\"" + path + "\" is " + format +
+                            ", and this library reads mestra/1");
+  r->schema_ = load_schema(*r->file_);
+  need(r->schema_.kind == "data" || r->schema_.kind == "model", "E1",
+       "kind must be data or model");
+  return r;
+}
+
+std::vector<std::string> Reader::names(const std::string& group) const {
+  std::vector<std::string> out;
+  const Schema& s = schema_;
+  if (group == "parameters") {
+    for (const auto& p : s.parameters) out.push_back(p.name);
+  } else if (group == "labels") {
+    for (const auto& l : s.labels) out.push_back(l.name);
+  } else if (group == "scalars") {
+    for (const auto& r : s.results) {
+      if (r.where == "scalar") out.push_back(r.name);
+    }
+  } else if (group == "constants") {
+    for (const auto& c : s.constants) out.push_back(c.name);
+  } else if (group == "node_fields" || group == "cell_fields") {
+    const std::string where = group == "node_fields" ? "node" : "cell";
+    for (const auto& r : s.results) {
+      if (r.where == where) out.push_back(r.name);
+    }
+  } else if (group == "node_labels" || group == "cell_labels") {
+    const std::string where = group == "node_labels" ? "node" : "cell";
+    for (const auto& m : s.mesh.labels) {
+      if (m.where == where) out.push_back(m.name);
+    }
+  } else if (group == "tables") {
+    for (const auto& kv : s.tables) out.push_back(kv.first);
+  } else if (group == "models") {
+    for (const auto& m : s.models) out.push_back(m.id);
+  } else {
+    throw Error("", "no group \"" + group + "\"");
+  }
+  std::sort(out.begin(), out.end(), bytes_less);
+  return out;
+}
+
+std::vector<std::pair<std::string, std::string>> Reader::describe(
+    const std::string& path) const {
+  const Schema& s = schema_;
+  std::vector<std::pair<std::string, std::string>> out;
+  auto add = [&](const std::string& k, const std::string& v) {
+    if (!v.empty()) out.emplace_back(k, v);
+  };
+  auto real = [](const std::optional<double>& v) {
+    return v ? format_f64(*v) : std::string();
+  };
+  if (const Parameter* p = s.parameter(path)) {
+    add("kind", "parameter");
+    add("role", p->role);
+    add("units", p->units);
+    add("dtype", dtype_name(p->dtype));
+    add("lower", real(p->lower));
+    add("upper", real(p->upper));
+    add("run_group", p->run_group);
+  } else if (const Label* l = s.label(path)) {
+    add("kind", "label");
+    add("role", l->role);
+    add("category", l->category);
+    add("dtype", dtype_name(l->dtype));
+  } else if (const Constant* c = s.constant(path)) {
+    add("kind", "constant");
+    add("units", c->units);
+    add("dtype", dtype_name(c->dtype));
+    add("value", c->dtype == DType::Int64 ? format_i64(c->i) : format_f64(c->f));
+  } else if (const Result* r = s.result(path)) {
+    add("kind", r->where == "scalar" ? "scalar" : "field");
+    add("location", r->where == "scalar" ? "run" : r->where);
+    add("units", r->units);
+    add("dtype", r->served() ? "" : dtype_name(r->dtype));
+    add("of", r->relation.of);
+    add("statistic", r->relation.statistic);
+    add("q", real(r->relation.q));
+    add("method", r->relation.method);
+    add("with_respect_to", r->relation.with_respect_to);
+    add("axis", !r->relation.axis.empty() ? r->relation.axis : r->axis);
+    add("vector", r->vector);
+    add("model", r->model);
+    add("output", r->output);
+    if (r->round_bits >= 0) add("round_bits", format_i64(r->round_bits));
+  } else if (const MeshLabel* m = s.mesh_label(path)) {
+    add("kind", "mesh_label");
+    add("location", m->where);
+    add("category", m->category);
+    add("per", s.mesh.per);
+  } else if (path == "coordinates" && !s.mesh.kind.empty()) {
+    add("kind", "coordinates");
+    add("units", s.mesh.coordinate_units);
+    add("dtype", dtype_name(s.mesh.coordinate_dtype));
+    add("axes", format_i64(s.mesh.axes));
+    add("per", s.mesh.per);
+    add("model", s.mesh.coordinate_model);
+  } else {
+    throw Error("", "nothing is called \"" + path + "\"", path);
+  }
+  return out;
+}
+
+std::vector<std::int64_t> Reader::row_instances(const Selection& runs) const {
+  const std::int64_t n = runs.count(schema_.rows, "rows");
+  std::vector<std::int64_t> out(static_cast<std::size_t>(n));
+  if (n > 0) file_->read("/mesh/row_instance", DType::Int64, {runs}, out.data(), out.size() * 8);
+  return out;
+}
+
+std::int64_t Reader::instance_of_run(std::int64_t run) const {
+  if (schema_.mesh.per == "run") return run;
+  std::int64_t inst = 0;
+  file_->read("/mesh/row_instance", DType::Int64, {Selection::range(run, run + 1)}, &inst, 8);
+  return inst;
+}
+
+namespace {
+
+// The one run a changing-mesh read takes.
+std::int64_t single_run(const Selection& runs, std::int64_t rows,
+                        const std::string& path) {
+  const std::int64_t n = runs.count(rows, path);
+  need(n == 1, "",
+       path + ": a changing mesh is read one run at a time; select exactly one "
+              "run (a selection across runs needs a shared mesh)",
+       path);
+  if (runs.kind == Selection::Range) return runs.start;
+  if (runs.kind == Selection::Index) return runs.index[0];
+  return 0;
+}
+
+// `sites` relative to an instance, shifted to the end-to-end dataset.
+Selection shifted(const Selection& sites, std::int64_t length,
+                  std::int64_t offset, const std::string& path) {
+  sites.count(length, path);
+  switch (sites.kind) {
+    case Selection::All: return Selection::range(offset, offset + length);
+    case Selection::Range:
+      return Selection::range(offset + sites.start, offset + sites.stop);
+    case Selection::Index: {
+      std::vector<std::int64_t> idx = sites.index;
+      for (auto& i : idx) i += offset;
+      return Selection::list(idx);
+    }
+  }
+  return Selection::all();
+}
+
+}  // namespace
+
+std::vector<std::int64_t> Reader::shape(const std::string& path,
+                                        const Selection& runs,
+                                        const Selection& sites) const {
+  const Schema& s = schema_;
+  const Mesh& m = s.mesh;
+  if (path == "row" || s.parameter(path) || s.label(path) ||
+      (s.result(path) && s.result(path)->where == "scalar")) {
+    need(sites.kind == Selection::All, "", path + ": a run-table column has no "
+                                                  "sites to select",
+         path);
+    const Result* r = s.result(path);
+    need(!(r && r->served()), "", path + " is computed by a model; evaluate "
+                                         "the model file to get values",
+         path);
+    return {runs.count(s.rows, path)};
+  }
+  if (s.constant(path)) return {};
+  const Result* r = s.result(path);
+  const MeshLabel* ml = s.mesh_label(path);
+  if (r != nullptr || ml != nullptr || path == "coordinates") {
+    need(!m.kind.empty(), "", path + ": the file has no mesh", path);
+    need(!(r && r->served()), "", path + " is computed by a model; evaluate "
+                                         "the model file to get values",
+         path);
+    const std::string where = r ? r->where : (ml ? ml->where : "node");
+    if (m.kind == "shared") {
+      const std::int64_t len = where == "node" ? m.n_nodes : m.n_cells;
+      const std::int64_t ns = sites.count(len, path);
+      const bool fixed_geometry = ml != nullptr || (path == "coordinates" && m.per == "fixed");
+      std::vector<std::int64_t> out;
+      if (!(fixed_geometry && runs.kind == Selection::All)) {
+        out.push_back(runs.count(s.rows, path));
+      }
+      out.push_back(ns);
+      if (path == "coordinates") out.push_back(m.axes);
+      return out;
+    }
+    const std::int64_t run = single_run(runs, s.rows, path);
+    const std::int64_t k = instance_of_run(run);
+    const std::vector<std::int64_t> cum = file_->read_i64(
+        where == "node" ? "/mesh/instance_nodes" : "/mesh/instance_cells");
+    need(k >= 0 && k + 1 < static_cast<std::int64_t>(cum.size()), "E21",
+         path + ": run " + std::to_string(run) + " names instance " +
+             std::to_string(k) + ", which does not exist",
+         path);
+    const std::int64_t len = cum[static_cast<std::size_t>(k + 1)] - cum[static_cast<std::size_t>(k)];
+    std::vector<std::int64_t> out = {sites.count(len, path)};
+    if (path == "coordinates") out.push_back(m.axes);
+    return out;
+  }
+  if (path == "cells/types" || path == "cells/offsets" ||
+      path == "cells/connectivity") {
+    need(!m.kind.empty() && m.n_cells >= 0, "", path + ": the file has no mesh");
+    need(sites.kind == Selection::All, "", path + ": cells are read whole", path);
+    if (m.kind == "shared") {
+      if (path == "cells/types") return {m.n_cells};
+      if (path == "cells/offsets") return {m.n_cells == 0 ? 0 : m.n_cells + 1};
+      return {m.n_conn};
+    }
+    const std::int64_t run = single_run(runs, s.rows, path);
+    const std::int64_t k = instance_of_run(run);
+    const std::vector<std::int64_t> cum = file_->read_i64("/mesh/instance_cells");
+    need(k >= 0 && k + 1 < static_cast<std::int64_t>(cum.size()), "E21",
+         path + ": instance " + std::to_string(k) + " does not exist", path);
+    const std::int64_t c0 = cum[static_cast<std::size_t>(k)], c1 = cum[static_cast<std::size_t>(k + 1)];
+    if (path == "cells/types") return {c1 - c0};
+    if (path == "cells/offsets") return {c1 - c0 + 1};
+    std::int64_t o[2] = {0, 0};
+    file_->read("/mesh/cell_offsets", DType::Int64, {Selection::list({c0, c1})}, o, 16);
+    return {o[1] - o[0]};
+  }
+  throw Error("", "nothing is called \"" + path + "\"", path);
+}
+
+void Reader::read(const std::string& path, const Selection& runs,
+                  const Selection& sites, DType mem, void* out,
+                  std::size_t out_bytes) const {
+  const Schema& s = schema_;
+  const Mesh& m = s.mesh;
+  const std::vector<std::int64_t> shp = shape(path, runs, sites);
+  std::int64_t count = 1;
+  for (const auto x : shp) count *= x;
+  need(out_bytes == static_cast<std::size_t>(count) * dtype_size(mem), "",
+       path + ": the buffer holds " + std::to_string(out_bytes) +
+           " bytes and the read needs " +
+           std::to_string(static_cast<std::size_t>(count) * dtype_size(mem)),
+       path);
+  if (count == 0) return;
+  const File& f = *file_;
+  if (path == "row") {
+    f.read("/row", mem, {runs}, out, out_bytes);
+    return;
+  }
+  if (s.parameter(path) || s.label(path) ||
+      (s.result(path) && s.result(path)->where == "scalar") || s.constant(path)) {
+    if (s.constant(path)) {
+      f.read("/" + path, mem, {}, out, out_bytes);
+    } else {
+      f.read("/" + path, mem, {runs}, out, out_bytes);
+    }
+    return;
+  }
+  const Result* r = s.result(path);
+  const MeshLabel* ml = s.mesh_label(path);
+  if (path.compare(0, 6, "cells/") == 0) {
+    const std::string which = path.substr(6);
+    if (m.kind == "shared") {
+      f.read("/mesh/cell_" + which, mem, {}, out, out_bytes);
+      return;
+    }
+    const std::int64_t run = single_run(runs, s.rows, path);
+    const std::int64_t k = instance_of_run(run);
+    const std::vector<std::int64_t> cum = f.read_i64("/mesh/instance_cells");
+    const std::int64_t c0 = cum[static_cast<std::size_t>(k)], c1 = cum[static_cast<std::size_t>(k + 1)];
+    if (which == "types") {
+      f.read("/mesh/cell_types", mem, {Selection::range(c0, c1)}, out, out_bytes);
+      return;
+    }
+    std::vector<std::int64_t> offs(static_cast<std::size_t>(c1 - c0 + 1));
+    f.read("/mesh/cell_offsets", DType::Int64, {Selection::range(c0, c1 + 1)},
+           offs.data(), offs.size() * 8);
+    if (which == "offsets") {
+      const std::int64_t base = offs[0];
+      for (auto& o : offs) o -= base;
+      need(mem == DType::Int64, "", path + " is read as int64", path);
+      std::memcpy(out, offs.data(), out_bytes);
+      return;
+    }
+    f.read("/mesh/cell_connectivity", mem,
+           {Selection::range(offs.front(), offs.back())}, out, out_bytes);
+    return;
+  }
+  const std::string where = r ? r->where : (ml ? ml->where : "node");
+  const std::string h5 =
+      path == "coordinates" ? "/mesh/coordinates"
+      : r ? (where == "node" ? "/mesh/node_fields/" : "/mesh/cell_fields/") + r->name
+          : (where == "node" ? "/mesh/node_labels/" : "/mesh/cell_labels/") + ml->name;
+  if (m.kind == "changing") {
+    const std::int64_t run = single_run(runs, s.rows, path);
+    if (r != nullptr) {
+      const std::string start = where == "node" ? "/mesh/row_node_start"
+                                                : "/mesh/row_cell_start";
+      std::int64_t first = 0;
+      f.read(start, DType::Int64, {Selection::range(run, run + 1)}, &first, 8);
+      const std::int64_t k = instance_of_run(run);
+      const std::vector<std::int64_t> cum = f.read_i64(
+          where == "node" ? "/mesh/instance_nodes" : "/mesh/instance_cells");
+      const std::int64_t len = cum[static_cast<std::size_t>(k + 1)] - cum[static_cast<std::size_t>(k)];
+      f.read(h5, mem, {shifted(sites, len, first, path)}, out, out_bytes);
+      return;
+    }
+    const std::int64_t k = instance_of_run(run);
+    const std::vector<std::int64_t> cum = f.read_i64(
+        where == "node" ? "/mesh/instance_nodes" : "/mesh/instance_cells");
+    const std::int64_t c0 = cum[static_cast<std::size_t>(k)];
+    const std::int64_t len = cum[static_cast<std::size_t>(k + 1)] - c0;
+    f.read(h5, mem, {shifted(sites, len, c0, path)}, out, out_bytes);
+    return;
+  }
+  // Shared mesh.
+  if (r != nullptr) {
+    f.read(h5, mem, {runs, sites}, out, out_bytes);
+    return;
+  }
+  // Mesh labels are fixed; coordinates follow `per`.
+  if (ml != nullptr || m.per == "fixed") {
+    if (runs.kind == Selection::All) {
+      f.read(h5, mem, {sites}, out, out_bytes);
+      return;
+    }
+    // One copy of the fixed geometry per selected run.
+    const std::int64_t nruns = runs.count(s.rows, path);
+    const std::size_t one = out_bytes / static_cast<std::size_t>(nruns);
+    f.read(h5, mem, {sites}, out, one);
+    for (std::int64_t i = 1; i < nruns; ++i) {
+      std::memcpy(static_cast<char*>(out) + static_cast<std::size_t>(i) * one, out, one);
+    }
+    return;
+  }
+  if (m.per == "run") {
+    f.read(h5, mem, {runs, sites}, out, out_bytes);
+    return;
+  }
+  // Per group: read each geometry the selected runs use once, then place.
+  const std::vector<std::int64_t> codes = row_instances(runs);
+  std::vector<std::int64_t> uniq = codes;
+  std::sort(uniq.begin(), uniq.end());
+  uniq.erase(std::unique(uniq.begin(), uniq.end()), uniq.end());
+  const std::size_t one = out_bytes / codes.size();
+  std::vector<unsigned char> block(one * uniq.size());
+  f.read(h5, mem, {Selection::list(uniq), sites}, block.data(), block.size());
+  for (std::size_t i = 0; i < codes.size(); ++i) {
+    const std::size_t at = static_cast<std::size_t>(
+        std::lower_bound(uniq.begin(), uniq.end(), codes[i]) - uniq.begin());
+    std::memcpy(static_cast<char*>(out) + i * one, block.data() + at * one, one);
+  }
+}
+
+std::vector<std::string> Reader::table(const std::string& name) const {
+  const auto it = schema_.tables.find(name);
+  need(it != schema_.tables.end(), "", "no table \"" + name + "\"");
+  return it->second;
+}
+
+std::vector<std::string> Reader::label_names(const std::string& name,
+                                             const Selection& runs) const {
+  const Label* l = schema_.label(name);
+  need(l != nullptr, "", "no label \"" + name + "\"", name);
+  const std::vector<std::string>& entries = table(l->category);
+  const std::int64_t n = runs.count(schema_.rows, name);
+  std::vector<std::int64_t> codes(static_cast<std::size_t>(n));
+  if (n > 0) file_->read("/" + name, DType::Int64, {runs}, codes.data(), codes.size() * 8);
+  std::vector<std::string> out;
+  out.reserve(codes.size());
+  for (const std::int64_t c : codes) {
+    need(c >= 0 && c < static_cast<std::int64_t>(entries.size()), "E9",
+         name + ": code " + std::to_string(c) + " is outside its table", name);
+    out.push_back(entries[static_cast<std::size_t>(c)]);
+  }
+  return out;
+}
+
+}  // namespace internal
+}  // namespace mestra

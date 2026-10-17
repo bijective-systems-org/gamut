@@ -325,7 +325,16 @@ File File::create(const std::string& path) {
   File f;
   Id fcpl(H5Pcreate(H5P_FILE_CREATE));
   H5Pset_obj_track_times(fcpl.get(), 0);
-  f.id_ = Id(H5Fcreate(path.c_str(), H5F_ACC_TRUNC, fcpl.get(), H5P_DEFAULT));
+  // Spec section 11.4: persistent free-space management, so the space a
+  // rewritten compressed chunk leaves is reused, also after the file is
+  // closed and reopened; it needs the 1.10 file format.
+  need(H5Pset_file_space_strategy(fcpl.get(), H5F_FSPACE_STRATEGY_FSM_AGGR, 1,
+                                  1) >= 0,
+       "cannot set the file-space strategy");
+  Id fapl(H5Pcreate(H5P_FILE_ACCESS));
+  need(H5Pset_libver_bounds(fapl.get(), H5F_LIBVER_EARLIEST, H5F_LIBVER_V110) >= 0,
+       "cannot set the library version bounds");
+  f.id_ = Id(H5Fcreate(path.c_str(), H5F_ACC_TRUNC, fcpl.get(), fapl.get()));
   if (!f.id_.valid()) throw Error("", "cannot create \"" + path + "\"");
   return f;
 }
@@ -747,10 +756,23 @@ void File::create_dataset(const std::string& path, DType dtype,
                           const std::vector<hsize_t>& shape,
                           const std::vector<hsize_t>& maxshape,
                           const std::vector<hsize_t>& chunk,
-                          const FilterPipeline& filters) {
+                          const FilterPipeline& filters,
+                          bool scale_properties) {
   make_group(parent_of(path));
   Id space = make_space(shape, maxshape);
-  Id dcpl = make_dcpl(chunk, filters);
+  // A chunk may not exceed a fixed extent: clamp it, keeping at least 1.
+  std::vector<hsize_t> fitted = chunk;
+  for (std::size_t i = 0; i < fitted.size() && i < shape.size(); ++i) {
+    const hsize_t limit = maxshape.empty() ? shape[i] : maxshape[i];
+    if (limit != H5S_UNLIMITED && fitted[i] > limit) fitted[i] = limit == 0 ? 1 : limit;
+  }
+  Id dcpl = make_dcpl(fitted, filters);
+  if (scale_properties) {
+    // A dataset that will be a dimension scale (the `row` coordinate
+    // variable) gets the creation order every scale has (section 9.4).
+    H5Pset_attr_creation_order(dcpl.get(),
+                               H5P_CRT_ORDER_TRACKED | H5P_CRT_ORDER_INDEXED);
+  }
   Id strtype;
   hid_t ftype;
   if (dtype == DType::String) {
@@ -890,6 +912,16 @@ void File::attach_scale(const std::string& dataset, const std::string& scale,
        "cannot attach \"" + scale + "\" to \"" + dataset +
            "\"; the scale's REFERENCE_LIST was lost and the file must be "
            "discarded");
+}
+
+void File::detach_scale(const std::string& dataset, const std::string& scale,
+                        unsigned axis) {
+  Id d(H5Dopen2(id_.get(), dataset.c_str(), H5P_DEFAULT));
+  need(d.valid(), "cannot open \"" + dataset + "\"");
+  Id s(H5Dopen2(id_.get(), scale.c_str(), H5P_DEFAULT));
+  need(s.valid(), "cannot open the dimension scale \"" + scale + "\"");
+  need(H5DSdetach_scale(d.get(), s.get(), axis) >= 0,
+       "cannot detach \"" + scale + "\" from \"" + dataset + "\"");
 }
 
 void File::build_object_index() const {
