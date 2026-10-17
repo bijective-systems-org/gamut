@@ -360,7 +360,7 @@ def default_chunks(itemsize: int, shape: Sequence[int]) -> tuple[int, ...]:
     bytes takes c = min(L, max(1, floor(T / b))) entries per chunk with
     the other axes whole, and a larger entry takes one entry per chunk
     with the node or cell axis (the second) in blocks of m and the
-    component axis whole.
+    component axis whole. A chunk extent is never below 1.
     """
     shape = tuple(int(n) for n in shape)
     if not shape:
@@ -368,12 +368,14 @@ def default_chunks(itemsize: int, shape: Sequence[int]) -> tuple[int, ...]:
     if shape[0] == 0:
         return (1,) * len(shape)
     rest = shape[1:]
+    # A chunk extent is at least 1, whatever the axis's length.
+    whole = tuple(max(1, n) for n in rest)
     if entry_bytes(itemsize, rest) <= CHUNK_TARGET:
-        return (min(shape[0], leading_bound(itemsize, rest)),) + rest
+        return (min(shape[0], leading_bound(itemsize, rest)),) + whole
     if len(shape) < 3:
-        return (1,) + rest
+        return (1,) + whole
     block = site_block(itemsize, max(1, shape[1]), shape[2])
-    return (1, max(1, block)) + rest[1:]
+    return (1, max(1, block)) + whole[1:]
 
 
 def scale_name(length: int) -> str:

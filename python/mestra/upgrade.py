@@ -195,7 +195,7 @@ def _convert(old: Any, report: Report) -> Dataset:
                               "1 defines and the version 0 file did not "
                               "mean in that sense" % name)
         else:
-            new.extra[name] = attribute
+            new._extra[name] = attribute
     for name, table in old.categories.items():
         new.categories[name] = CategoryTable(table.entries)
 
@@ -238,7 +238,7 @@ def _convert(old: Any, report: Report) -> Dataset:
                     n_nodes=support.n_nodes, n_cells=support.n_cells,
                     stored_support_id=support.stored_support_id,
                     extra=_kept(support.extra, _V1_MESH, report, "mesh"))
-        mesh.dataset = new
+        mesh._dataset = new
         for which in ("cell_types", "cell_offsets", "cell_connectivity"):
             if support._cells.get(which) is not None:
                 mesh._cells[which] = _source(holder, f,
@@ -254,7 +254,7 @@ def _convert(old: Any, report: Report) -> Dataset:
                 ("cell_arrays", "cell", support.cell_arrays,
                  mesh.cell_arrays)):
             if which in support.present:
-                mesh.present.add(which)
+                mesh._present.add(which)
             for name, array in sorted(arrays.items()):
                 where = "mesh/%s/%s" % (which, name)
                 if array.role == "weight":
@@ -274,11 +274,11 @@ def _convert(old: Any, report: Report) -> Dataset:
                                          "1")
                 dict.__setitem__(into, name, slot)
         for name, captured in support.opaque.items():
-            mesh.opaque[name] = captured
+            mesh._opaque[name] = captured
         new.mesh = mesh
 
     if f is not None and isinstance(f.get("callables"), h5py.Group):
-        new.present.add("callables")
+        new._present.add("callables")
         for name in sorted(f["callables"]):
             group = f["callables"][name]
             if not isinstance(group, h5py.Group):
@@ -291,10 +291,10 @@ def _convert(old: Any, report: Report) -> Dataset:
             new.callables[name] = OpaqueCallable(
                 kind if isinstance(kind, str) else "", body,
                 line if isinstance(line, str) else None)
-            new.callable_inputs[name] = None
+            new._callable_inputs[name] = None
 
     if f is not None and isinstance(f.get("notes"), h5py.Group):
-        new.present.add("notes")
+        new._present.add("notes")
         group = f["notes"]
         for name in h5safe.attr_names(group):
             raw = group.attrs[name]
@@ -313,7 +313,7 @@ def _convert(old: Any, report: Report) -> Dataset:
                 continue
             new.notes[name] = value
     for name, captured in old.opaque.items():
-        new.opaque[name] = captured
+        new._opaque[name] = captured
     return new
 
 
@@ -345,7 +345,7 @@ def _slot(holder: _Handle, f: h5py.File, old: Any, path: str,
                 extra=_kept(old.extra, _V1_SLOT, report, where))
     slot._dataset = dataset
     if old.data is not None:
-        slot.data = _source(holder, f, path)
+        slot._data = _source(holder, f, path)
         slot._dims = old.dims
     return slot
 

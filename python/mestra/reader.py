@@ -8,7 +8,7 @@ and closes the file.
 
 A file is untrusted input. The reader follows no soft or external
 link, applies the limits in `mestra.limits`, and reports what it could
-not read on `dataset.problems`. A strict read (the default) refuses a
+not read on `dataset._problems`. A strict read (the default) refuses a
 file that breaks a structural rule; a semantic fault never stops a
 read. A version 0 file is refused with the rule E01 and the name of
 the upgrade.
@@ -85,7 +85,7 @@ def read(path: str, lazy: bool = True, strict: bool = True) -> Dataset:
     names `mestra.upgrade`), E40 for a link this reader does not
     follow, E41 for an object it could not read, and the other rules
     of `REFUSED`. `strict=False` takes what could be read, with the
-    findings on `dataset.problems`.
+    findings on `dataset._problems`.
     """
     handle = h5safe.open_file(str(path))
     if strict:
@@ -104,7 +104,7 @@ def read(path: str, lazy: bool = True, strict: bool = True) -> Dataset:
     dataset.path = str(path)
     dataset._handle = holder
     if not lazy:
-        dataset.callables.read_all()
+        dataset.callables._read_all()
         holder.close()
     return dataset
 
@@ -154,7 +154,7 @@ def _read(f: h5py.File, holder: _Handle, lazy: bool) -> Dataset:
             setattr(ds, name, read_attr(f, name))
     for name in names:
         if name not in _ROOT_ATTRS:
-            ds.extra[name] = read_attr(f, name)
+            ds._extra[name] = read_attr(f, name)
     scales = h5safe.scale_index(f)
     reader = _Reader(ds, holder, lazy, scales)
     found = root.get("row")
@@ -190,9 +190,9 @@ class _Reader:
 
     def problem(self, where: str, message: str, rule: str = "E41",
                 lossy: bool = False) -> None:
-        self.ds.problems.append(Finding(rule, where, message))
+        self.ds._problems.append(Finding(rule, where, message))
         if lossy:
-            self.ds.lossy.append(where)
+            self.ds._lossy.append(where)
 
     def unusable(self, where: str, member: h5safe.Member) -> None:
         self.problem(where, member.problem or "this member cannot be read",
@@ -248,7 +248,7 @@ class _Reader:
             self.problem(name, "this is a dataset where the format has a "
                                "group, so it is not read")
             return None
-        self.ds.present.add(name)
+        self.ds._present.add(name)
         return found.obj
 
     def root_member(self, name: str, member: h5safe.Member) -> None:
@@ -260,17 +260,18 @@ class _Reader:
             return
         obj = member.obj
         if isinstance(obj, h5py.Dataset) and h5safe.is_scale(obj):
+            ds._scales[("", name)] = _scale_info(obj)
             return
         if name in ("private", "VTKHDF") or (
                 isinstance(obj, h5py.Group)
                 and "role" not in h5safe.attr_names(obj)):
             if isinstance(obj, h5py.Group):
-                ds.opaque[name] = opaque.capture(
-                    obj, "/" + name, 0, ds.problems, ds.lossy, self.lazy,
+                ds._opaque[name] = opaque.capture(
+                    obj, "/" + name, 0, ds._problems, ds._lossy, self.lazy,
                     self.scales)
             else:
-                ds.unknown[name] = opaque.capture_member(
-                    obj, "/" + name, ds.problems, ds.lossy, self.lazy,
+                ds._unknown[name] = opaque.capture_member(
+                    obj, "/" + name, ds._problems, ds._lossy, self.lazy,
                     self.scales)
             return
         attrs = h5safe.attr_names(obj)
@@ -292,8 +293,8 @@ class _Reader:
         else:
             # A role this reader does not know (W11), or an object of
             # the wrong kind for its role: kept whole for a rewrite.
-            ds.unknown[name] = opaque.capture_member(
-                obj, "/" + name, ds.problems, ds.lossy, self.lazy,
+            ds._unknown[name] = opaque.capture_member(
+                obj, "/" + name, ds._problems, ds._lossy, self.lazy,
                 self.scales)
 
     def slot(self, obj: Any, name: str, path: str,
@@ -326,7 +327,7 @@ class _Reader:
             extra=_extra(obj, _SLOT_ATTRS))
         slot._dataset = self.ds
         if isinstance(obj, h5py.Dataset):
-            slot.data = self.source(path, obj)
+            slot._data = self.source(path, obj)
             slot._dims = self.dims(obj, slot.dims)
         return slot
 
@@ -347,7 +348,7 @@ class _Reader:
                     stored_support_id=_get(group, "support_id")
                     if "support_id" in attrs else None,
                     extra=_extra(group, _MESH_ATTRS))
-        mesh.dataset = ds
+        mesh._dataset = ds
         ds.mesh = mesh
         inside = {m.name: m for m in h5safe.members(group)}
         for which in ("cell_types", "cell_offsets", "cell_connectivity"):
@@ -380,7 +381,7 @@ class _Reader:
                              holder.problem or "this is not a group",
                              holder.rule)
                 continue
-            mesh.present.add(which)
+            mesh._present.add(which)
             for array in h5safe.members(holder.obj):
                 where = "mesh/%s/%s" % (which, array.name)
                 if not array.usable:
@@ -389,6 +390,9 @@ class _Reader:
                 dict.__setitem__(into, array.name, self.slot(
                     array.obj, array.name, "/" + where, location))
         for name, member in inside.items():
+            if member.usable and isinstance(member.obj, h5py.Dataset) \
+                    and h5safe.is_scale(member.obj):
+                ds._scales[("mesh", name)] = _scale_info(member.obj)
             if name in _MESH_MEMBERS:
                 continue
             where = "mesh/" + name
@@ -396,8 +400,12 @@ class _Reader:
                 self.unusable(where, member)
                 continue
             if isinstance(member.obj, h5py.Group):
-                mesh.opaque[name] = opaque.capture(
-                    member.obj, "/" + where, 0, ds.problems, ds.lossy,
+                mesh._opaque[name] = opaque.capture(
+                    member.obj, "/" + where, 0, ds._problems, ds._lossy,
+                    self.lazy, self.scales)
+            elif not h5safe.is_scale(member.obj):
+                mesh._unknown[name] = opaque.capture_member(
+                    member.obj, "/" + where, ds._problems, ds._lossy,
                     self.lazy, self.scales)
 
     # -- callables and notes
@@ -421,10 +429,11 @@ class _Reader:
             declared = _get(member.obj, "inputs")
             inputs = frozenset(declared.split()) \
                 if isinstance(declared, str) else None
-            ds.callable_inputs[member.name] = inputs
-            ds.callables.defer(member.name, _build_callable(
+            ds._callable_inputs[member.name] = inputs
+            ds.callables._defer(member.name, _build_callable(
                 ds, where, member.obj, kind if isinstance(kind, str)
-                else "", line if isinstance(line, str) else None, inputs))
+                else "", line if isinstance(line, str) else None, inputs,
+                self.holder))
 
     def notes(self, found: h5safe.Member | None) -> None:
         group = self.group(found, "notes")
@@ -444,6 +453,16 @@ class _Reader:
                                  read_attr(group, name))
 
 
+def _scale_info(dset: h5py.Dataset) -> tuple[int, bool]:
+    """A dimension scale's length, and whether it is unlimited."""
+    try:
+        length = int(dset.shape[0]) if dset.shape else 0
+        unlimited = bool(dset.maxshape) and dset.maxshape[0] is None
+    except Exception:                                   # pragma: no cover
+        return 0, False
+    return length, unlimited
+
+
 def _get(obj: Any, name: str) -> Any:
     if name in h5safe.attr_names(obj):
         return read_attr(obj, name)
@@ -457,19 +476,26 @@ def _extra(obj: Any, known: tuple[str, ...]) -> dict[str, Any]:
 
 def _build_callable(ds: Dataset, where: str, group: h5py.Group,
                     kind: str, line: str | None,
-                    inputs: frozenset[str] | None) -> Any:
+                    inputs: frozenset[str] | None,
+                    holder: _Handle) -> Any:
     """What `Dataset.callables` runs the first time it is asked for
-    this callable: decode the dictionary and hand it to its type."""
+    this callable: decode the dictionary and hand it to its type. The
+    dictionary is in the file, so a closed dataset refuses, as every
+    other read of a closed dataset does."""
     def build() -> Any:
+        if holder.file is None:
+            raise MestraError(
+                "", "this dataset has been closed; read it again, or read "
+                "with lazy=False to keep the values", where)
         trouble: list[Finding] = []
         body = decode_dict(group, problems=trouble, reserved=RESERVED)
         if trouble:
-            ds.problems.extend(trouble)
-            ds.lossy.append(where)
+            ds._problems.extend(trouble)
+            ds._lossy.append(where)
         try:
             made = callable_from_dict(kind, body, line, inputs)
         except MestraError as exc:
-            ds.problems.append(Finding(
+            ds._problems.append(Finding(
                 "E41", where, "this callable's dictionary does not fit "
                 "its type: %s" % exc.message))
             made = OpaqueCallable(kind, body, line, inputs)

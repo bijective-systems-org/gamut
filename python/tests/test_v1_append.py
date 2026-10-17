@@ -141,7 +141,7 @@ def test_a_longer_id_widens_its_dataset_and_a_rewrite_compacts(tmp_path):
     one = rows(["b@0.8"])
     long_id = "b@0.8-recomputed-with-a-much-longer-identifier"
     from mestra.model import MemorySource
-    one.labels["run"].data = MemorySource(np.array([long_id]))
+    one.labels["run"]._data = MemorySource(np.array([long_id]))
     before = os.path.getsize(path)
     assert lib.append(one, path) == 1
     grown = os.path.getsize(path)
@@ -172,7 +172,7 @@ def test_a_refused_append_leaves_the_file_as_it_was(tmp_path, change,
     elif change == "replace_by":
         replace_by = "member"
     elif change == "geometry":
-        one.mesh.coordinates.data.array[...] *= 2.0
+        one.mesh.coordinates._data.array[...] *= 2.0
     elif change == "mesh":
         one.mesh._cells["cell_connectivity"].array[0] = 2
     else:
@@ -189,11 +189,11 @@ def test_an_empty_append_writes_nothing(tmp_path):
     empty = rows(["a@0.5"])
     for group in (empty.parameters, empty.labels):
         for item in group.values():
-            item.data.array = item.data.array[:0]
-    empty.scalars["cl"].data.array = empty.scalars["cl"].data.array[:0]
-    for slot in empty.mesh.arrays().values():
+            item._data.array = item._data.array[:0]
+    empty.scalars["cl"]._data.array = empty.scalars["cl"]._data.array[:0]
+    for slot in empty.mesh._arrays().values():
         if slot.varies == "row":
-            slot.data.array = slot.data.array[:0]
+            slot._data.array = slot._data.array[:0]
     empty._row_count = 0
     before = digest(path)
     assert lib.append(empty, path) == 0

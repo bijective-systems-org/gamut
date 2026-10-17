@@ -151,7 +151,7 @@ def test_model_reads_back_with_its_slots_served(files):
         model = ds.callables["m1"]
         assert isinstance(model, lib.Affine)
         assert model.inputs == frozenset(["mach", "alpha"])
-        assert ds.callable_inputs["m1"] == frozenset(["mach", "alpha"])
+        assert ds._callable_inputs["m1"] == frozenset(["mach", "alpha"])
 
 
 # ------------------------------------------------- selective reads
@@ -536,3 +536,133 @@ def test_the_builder_owns_its_values():
     assert ds.parameters["ribs"].values().values.tolist() == [4, 5]
     assert ds.labels["case"].names().values.tolist() == [7, 8]
     assert mesh.cells()[2].tolist() == QUAD_CONNECTIVITY.tolist()
+
+
+# --------------------------- what a rewrite keeps that it cannot read
+
+def test_a_foreign_root_object_keeps_its_own_dimension(files, tmp_path):
+    """A later 1.x object, a dataset of an unknown role over a scale of
+    its own, survives a rewrite with that scale, and the result is
+    still a netCDF-4 file."""
+    netCDF4 = pytest.importorskip("netCDF4")
+    assert_this_package()
+    from tests.test_v1_rules import foreign_gradient
+    path = str(tmp_path / "foreign.mes")
+    import shutil
+    shutil.copy(files["table"], path)
+    with h5py.File(path, "r+") as f:
+        foreign_gradient(f, unlimited=True)
+    again = str(tmp_path / "again.mes")
+    with lib.read(path) as ds:
+        lib.write(ds, again)
+    with h5py.File(again, "r") as f:
+        grad = f["grad_cl"]
+        assert [s.name for s in grad.dims[1].values()] == ["/parameter"]
+        assert f["parameter"].maxshape == (None,)
+        np.testing.assert_array_equal(grad[()], np.ones((4, 3)))
+    with netCDF4.Dataset(again) as nc:
+        assert nc.variables["grad_cl"].dimensions == ("row", "parameter")
+    report = lib.validate(again)
+    assert report.errors == [] and report.warning_ids == ["W11"]
+
+
+def test_an_unknown_dataset_in_the_mesh_survives_a_rewrite(files,
+                                                           tmp_path):
+    path = str(tmp_path / "mesh_extra.mes")
+    import shutil
+    shutil.copy(files["family"], path)
+    with h5py.File(path, "r+") as f:
+        extra = f["mesh"].create_dataset("vendor_flags",
+                                         data=np.arange(6, dtype="<i4"),
+                                         track_times=False)
+        extra.dims[0].attach_scale(f["mesh/node"])
+    again = str(tmp_path / "again.mes")
+    with lib.read(path) as ds:
+        lib.write(ds, again)
+    with h5py.File(again, "r") as f:
+        np.testing.assert_array_equal(f["mesh/vendor_flags"][()],
+                                      np.arange(6))
+        assert [s.name for s in f["mesh/vendor_flags"].dims[0].values()] \
+            == ["/mesh/node"]
+    assert lib.validate(again).warning_ids == ["W02", "W11"]
+
+
+def test_a_callable_after_close_is_refused_clearly(files):
+    ds = lib.read(files["model"])
+    ds.close()
+    with pytest.raises(lib.MestraError) as caught:
+        ds.callables["m1"]
+    assert caught.value.rule == ""
+    assert "closed" in caught.value.message
+    with pytest.raises(lib.MestraError) as caught:
+        lib.validate(ds)
+    assert caught.value.rule == ""
+    with lib.read(files["model"]) as ds:
+        model = ds.callables["m1"]               # decoded while open
+    assert isinstance(model, lib.Affine)
+
+
+def test_a_zero_length_node_axis_is_refused_by_rule(tmp_path):
+    ds = lib.Dataset(created="2026-10-16T00:00:00Z")
+    ds.add_parameter("x", [0.0, 1.0], "design", "1")
+    mesh = ds.set_mesh(coordinates=np.zeros((0, 1)), units="m",
+                       dims=("node", "component"))
+    mesh.add_node_array("p", np.zeros((2, 0)), "Pa", ("row", "node"))
+    path = str(tmp_path / "empty_nodes.mes")
+    with pytest.raises(lib.MestraError) as caught:
+        lib.write(ds, path)
+    assert caught.value.rule == "E43"
+    assert not (tmp_path / "empty_nodes.mes").exists()
+    lib.write(ds, path, check=False)
+    with h5py.File(path, "r") as f:
+        assert f["mesh/node_arrays/p"].chunks == (2, 1, 1)
+
+
+def test_a_zero_length_cell_axis_is_refused_by_rule(tmp_path):
+    ds = lib.Dataset(created="2026-10-16T00:00:00Z")
+    ds.add_parameter("x", [0.0], "design", "1")
+    mesh = ds.set_mesh((np.zeros(0, "u1"), [0], np.zeros(0, "i8")),
+                       coordinates=QUAD_XY, units="m",
+                       dims=("node", "component"))
+    mesh.add_cell_array("c", np.zeros((1, 0)), "1", ("row", "cell"))
+    with pytest.raises(lib.MestraError) as caught:
+        lib.write(ds, str(tmp_path / "empty_cells.mes"))
+    assert caught.value.rule == "E43"
+
+
+# ----------------------------------------- the chunk rule, literally
+
+@pytest.mark.parametrize("shape, dtype, chunks", [
+    ((10,), "<f8", (10,)),                         # b < T, L small
+    ((100000,), "<f8", (32768,)),                  # b < T, L large
+    ((3, 32768, 1), "<f8", (1, 32768, 1)),         # b = T
+    ((3, 1000, 3), "<f4", (3, 1000, 3)),           # b < T, a field
+    ((2, 1048576, 1), "<f4", (1, 65536, 1)),       # b > T, node blocks
+    ((2, 262144, 3), "<f8", (1, 10922, 3)),        # b > T, 3 components
+    ((0, 6, 1), "<f8", (1, 1, 1)),                 # L = 0
+])
+def test_the_chunk_rule_by_hand(tmp_path, shape, dtype, chunks):
+    ds = lib.Dataset(created="2026-10-16T00:00:00Z")
+    rows = shape[0]
+    ds.add_parameter("x", np.arange(float(rows)), "design", "1")
+    if len(shape) == 1:
+        ds.add_scalar("y", np.zeros(rows), "1", dtype=dtype)
+        where = "y"
+    else:
+        mesh = ds.set_mesh(coordinates=np.zeros((shape[1], 1)), units="m",
+                           dims=("node", "component"))
+        mesh.add_node_array("f", np.zeros(shape, dtype=dtype), "Pa",
+                            ("row", "node", "component"), dtype=dtype)
+        where = "mesh/node_arrays/f"
+    path = str(tmp_path / "chunks.mes")
+    lib.write(ds, path)
+    with h5py.File(path, "r") as f:
+        assert f[where].chunks == chunks
+    assert "W12" not in lib.validate(path).warning_ids
+
+
+def test_a_group_dimensioned_dataset_by_hand(files):
+    with h5py.File(files["family"], "r") as f:
+        # 3 members of 6 nodes x 3 float64: 144 bytes an entry.
+        assert f["mesh/coordinates"].chunks == (3, 6, 3)
+        assert f["category_member"].maxshape == (None,)

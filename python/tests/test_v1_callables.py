@@ -42,13 +42,13 @@ def test_affine_evaluates_the_worked_example(model_file, tmp_path):
     np.testing.assert_array_equal(band.read().values[0, :, 0],
                                   [0.05, 0.10, 0.15, 0.20, 0.25, 0.30])
     assert not out.callables and all(not s.served
-                                     for s in out.slots().values())
+                                     for s in out._slots().values())
     path = str(tmp_path / "evaluated.mes")
     lib.write(out, path)
     report = lib.validate(path)
     assert report.errors == []
     with lib.read(path) as back:
-        assert "callables" not in back.present
+        assert "callables" not in back._present
         assert back.scalars["cl"].read().values.tolist() == [1.45]
 
 
@@ -147,14 +147,14 @@ def test_inputs_are_written_and_read_back(tmp_path):
     path = str(tmp_path / "m.mes")
     lib.write(model(["mach", "alpha"]), path)
     with lib.read(path) as ds:
-        assert ds.callable_inputs["m1"] == frozenset(["mach", "alpha"])
+        assert ds._callable_inputs["m1"] == frozenset(["mach", "alpha"])
         assert ds.callables["m1"].inputs == frozenset(["mach", "alpha"])
         np.testing.assert_array_equal(
             lib.evaluate(ds).scalars["cl"].read().values, [4.5, 2.6])
         again = str(tmp_path / "again.mes")
         lib.write(ds, again)
     with lib.read(again) as ds:
-        assert ds.callable_inputs["m1"] == frozenset(["mach", "alpha"])
+        assert ds._callable_inputs["m1"] == frozenset(["mach", "alpha"])
 
 
 def test_an_inputs_entry_must_be_a_name():

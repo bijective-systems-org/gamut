@@ -38,7 +38,7 @@ def test_a_soft_link_in_the_root_is_never_followed(family):
         lib.read(family)
     assert caught.value.rule == "E40"
     with lib.read(family, strict=False) as ds:
-        assert [p.rule for p in ds.problems] == ["E40", "E40"]
+        assert [p.rule for p in ds._problems] == ["E40", "E40"]
 
 
 def test_an_external_link_in_the_mesh_is_never_followed(family):
@@ -49,7 +49,7 @@ def test_an_external_link_in_the_mesh_is_never_followed(family):
     assert [x.path for x in report.errors if x.rule == "E40"] == [
         "mesh/node_arrays/elsewhere"]
     with lib.read(family, strict=False) as ds:
-        assert ds.lossy == ["mesh/node_arrays/elsewhere"]
+        assert ds._lossy == ["mesh/node_arrays/elsewhere"]
         with pytest.raises(lib.MestraError) as caught:
             lib.write(ds, family + ".copy.mes")
         assert caught.value.rule == "E41"
@@ -68,7 +68,7 @@ def test_a_dictionary_deeper_than_the_cap(family, tmp_path):
     assert caught.value.rule == "E41"
     with lib.read(model, strict=False) as ds:
         assert ds.callables["m1"].type == "affine"
-        assert any(p.rule == "E41" for p in ds.problems)
+        assert any(p.rule == "E41" for p in ds._problems)
 
 
 def test_a_huge_declared_parameter_is_not_allocated(family):
@@ -104,7 +104,7 @@ def test_member_kinds_the_format_does_not_expect(family):
     assert report.errors, report
     with lib.read(family, strict=False) as ds:
         assert "oops" not in ds.categories
-        assert any(p.path == "categories/oops" for p in ds.problems)
+        assert any(p.path == "categories/oops" for p in ds._problems)
 
 
 def test_unknown_groups_are_kept_and_not_walked(family):

@@ -139,7 +139,7 @@ def test_topolink_families_upgrade(src, tmp_path):
         assert list(new.labels["member"].names().values) == list(
             old.keys["member"].values.values)
         assert dict(new.notes).keys() == dict(old.notes).keys()
-        assert "private" in new.opaque
+        assert "private" in new._opaque
 
 
 def test_the_upgraded_capsule_is_one_row_per_member(tmp_path):

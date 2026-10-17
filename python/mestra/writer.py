@@ -82,19 +82,21 @@ def write(dataset: Dataset, path: str, check: bool = True) -> None:
     do not stop a write. `check=False` publishes whatever was staged,
     which is how a test makes a file to be refused.
     """
-    dataset.callables.read_all()
-    for captured in list(dataset.opaque.values()):
+    dataset.callables._read_all()
+    for captured in list(dataset._opaque.values()):
         opaque.read_all(captured)
-    for kind, body in dataset.unknown.values():
+    for kind, body in dataset._unknown.values():
         opaque.read_member(kind, body)
     if dataset.mesh is not None:
-        for captured in dataset.mesh.opaque.values():
+        for captured in dataset.mesh._opaque.values():
             opaque.read_all(captured)
-    if dataset.lossy:
+        for kind, body in dataset.mesh._unknown.values():
+            opaque.read_member(kind, body)
+    if dataset._lossy:
         raise MestraError(
             "E41", "this dataset was read from a file with parts that "
             "could not be copied (%s), so writing it would lose them"
-            % ", ".join(sorted(dataset.lossy)[:4]), str(path))
+            % ", ".join(sorted(dataset._lossy)[:4]), str(path))
     target = Path(path)
     _refuse_a_destination_that_cannot_take_a_file(str(path), target)
     _refuse_unwritable_names(dataset)
@@ -230,14 +232,15 @@ def _write(ds: Dataset, f: h5py.File) -> None:
     if ds.mesh is not None:
         _write_mesh(ds.mesh, f, scales)
     _write_callables(ds, f)
-    if ds.notes or "notes" in ds.present:
+    if ds.notes or "notes" in ds._present:
         notes = f.create_group("notes")
         for name in sorted(ds.notes, key=lambda n: n.encode("utf-8")):
             _write_note(notes, name, ds.notes[name])
-    for name in sorted(ds.opaque):
-        opaque.restore(f, name, ds.opaque[name])
-    for name in sorted(ds.unknown):
-        kind, body = ds.unknown[name]
+    for name in sorted(ds._opaque):
+        opaque.restore(f, name, ds._opaque[name])
+    for name in sorted(ds._unknown):
+        kind, body = ds._unknown[name]
+        _foreign_scales(ds, f, "", body)
         opaque.restore_member(f, name, kind, body)
     for dset in scales.keep:
         dset.id.close()
@@ -253,8 +256,8 @@ def _root_attrs(ds: Dataset, f: h5py.File) -> None:
         value = getattr(ds, name)
         if value is not None:
             write_string_attr(f, name, value)
-    for name in sorted(ds.extra):
-        write_attr(f, name, ds.extra[name])
+    for name in sorted(ds._extra):
+        write_attr(f, name, ds._extra[name])
 
 
 def _make_scales(ds: Dataset, f: h5py.File) -> _Scales:
@@ -279,9 +282,9 @@ def _make_scales(ds: Dataset, f: h5py.File) -> _Scales:
 def _component_counts(ds: Dataset) -> set[int]:
     out = set()
     if ds.mesh is not None:
-        for slot in ds.mesh.arrays().values():
-            if slot.data is not None and len(slot.data.shape) >= 2:
-                out.add(int(slot.data.shape[-1]))
+        for slot in ds.mesh._arrays().values():
+            if slot._data is not None and len(slot._data.shape) >= 2:
+                out.add(int(slot._data.shape[-1]))
     return out
 
 
@@ -298,8 +301,8 @@ def _attrs(obj: Any, item: Any, order: Sequence[str],
         else:
             write_attr(obj, name, value)
     for name in sorted(extra if extra is not None
-                       else getattr(item, "extra", {})):
-        write_attr(obj, name, item.extra[name])
+                       else getattr(item, "_extra", {})):
+        write_attr(obj, name, item._extra[name])
 
 
 # ----------------------------------------------------------- datasets
@@ -322,10 +325,15 @@ def _growable(group: h5py.Group, name: str, source: Any, dtype: Any,
     shape = tuple(int(n) for n in source.shape)
     dtype = np.dtype(dtype)
     chunks = default_chunks(dtype.itemsize, shape)
+    # HDF5 takes no chunk wider than a fixed axis, so an axis of length
+    # zero beside the leading one can only be written unlimited; the
+    # validator then refuses it by rule (E43) rather than the library
+    # by exception.
+    maxshape = (None,) + tuple(None if n == 0 else n for n in shape[1:])
     dset = group.create_dataset(
-        name, shape=shape, dtype=dtype, chunks=chunks,
-        maxshape=(None,) + shape[1:], compression="gzip",
-        compression_opts=1, shuffle=True, track_times=False)
+        name, shape=shape, dtype=dtype, chunks=chunks, maxshape=maxshape,
+        compression="gzip", compression_opts=1, shuffle=True,
+        track_times=False)
     keep.append(dset)
     if not shape[0]:
         return dset
@@ -367,7 +375,7 @@ def _strings(group: h5py.Group, name: str, values: Any, *,
 
 
 def _write_categories(ds: Dataset, f: h5py.File, scales: _Scales) -> None:
-    if not ds.categories and "categories" not in ds.present:
+    if not ds.categories and "categories" not in ds._present:
         return
     group = f.create_group("categories")
     for name in sorted(ds.categories):
@@ -378,7 +386,7 @@ def _write_categories(ds: Dataset, f: h5py.File, scales: _Scales) -> None:
 
 def _write_parameter(f: h5py.File, name: str, item: Parameter,
                      scales: _Scales) -> None:
-    source = item.data if item.data is not None else \
+    source = item._data if item._data is not None else \
         MemorySource(np.zeros(0, "<f8"))
     dset = _growable(f, name, source, source.dtype.newbyteorder("<"),
                      scales.keep)
@@ -388,7 +396,7 @@ def _write_parameter(f: h5py.File, name: str, item: Parameter,
 
 def _write_label(f: h5py.File, name: str, item: Label,
                  scales: _Scales) -> None:
-    source = item.data if item.data is not None else \
+    source = item._data if item._data is not None else \
         MemorySource(np.zeros(0, "<i4"))
     if source.dtype.kind in "USO":
         dset = _strings(f, name, source.read(), growable=True,
@@ -406,7 +414,7 @@ class _Attributes:
     def __init__(self, slot: Slot, coordinates: str) -> None:
         self.slot = slot
         self.coordinates = coordinates or None
-        self.extra = slot.extra
+        self._extra = slot._extra
 
     def __getattr__(self, name: str) -> Any:
         if name == "components":
@@ -421,11 +429,11 @@ class _Attributes:
 def _write_slot(group: h5py.Group, name: str, slot: Slot,
                 scales: _Scales, coordinates: str = "") -> None:
     attributes = _Attributes(slot, coordinates)
-    if slot.data is None:
+    if slot._data is None:
         holder = group.create_group(name)
         _attrs(holder, attributes, _SLOT_ORDER)
         return
-    source = slot.data
+    source = slot._data
     dtype = source.dtype.newbyteorder("<")
     dims = slot.dims
     if dims and (dims[0] == "row" or dims[0].startswith("group:")):
@@ -452,8 +460,8 @@ def _write_mesh(mesh: Mesh, f: h5py.File, scales: _Scales) -> None:
     write_int_attr(group, "n_nodes", mesh.n_nodes)
     write_int_attr(group, "n_cells", mesh.n_cells)
     write_string_attr(group, "support_id", mesh.support_id)
-    for name in sorted(mesh.extra):
-        write_attr(group, name, mesh.extra[name])
+    for name in sorted(mesh._extra):
+        write_attr(group, name, mesh._extra[name])
     scales.mesh["node"] = make_scale(group, "node", mesh.n_nodes)
     cells = {which: mesh._cell_array(which) for which, _, _ in _CELLS}
     for which, scale, _ in _CELLS:
@@ -473,17 +481,48 @@ def _write_mesh(mesh: Mesh, f: h5py.File, scales: _Scales) -> None:
         _write_slot(group, "coordinates", mesh.coordinates, scales)
     for which, arrays in (("node_arrays", mesh.node_arrays),
                           ("cell_arrays", mesh.cell_arrays)):
-        if not arrays and which not in mesh.present:
+        if not arrays and which not in mesh._present:
             continue
         sub = group.create_group(which)
         for name in arrays:
             _write_slot(sub, name, arrays[name], scales)
-    for name in sorted(mesh.opaque):
-        opaque.restore(group, name, mesh.opaque[name])
+    for name in sorted(mesh._opaque):
+        opaque.restore(group, name, mesh._opaque[name])
+    dataset = mesh._dataset
+    for name in sorted(mesh._unknown):
+        kind, body = mesh._unknown[name]
+        if dataset is not None:
+            _foreign_scales(dataset, group, "mesh", body)
+        opaque.restore_member(group, name, kind, body)
+
+
+def _foreign_scales(ds: Dataset, group: h5py.Group, where: str,
+                    body: dict[str, Any]) -> None:
+    """Make again, before an object kept whole is put back, every
+    dimension scale it was attached to that this file does not have:
+    a scale only foreign objects use is not one the writer makes."""
+    for dim in body.get("dims") or []:
+        if dim is None or dim[0] != "named":
+            continue
+        name = dim[1]
+        if name in group or name in group.file:
+            continue
+        info = ds._scales.get((where, name))
+        home = group
+        if info is None:
+            info = ds._scales.get(("", name))
+            home = group.file
+        if info is None:
+            continue
+        length, unlimited = info
+        make_scale(home, name, length, unlimited=unlimited)
+    for kind, member in (body.get("members") or {}).values():
+        if kind == "dataset":
+            _foreign_scales(ds, group, where, member)
 
 
 def _write_callables(ds: Dataset, f: h5py.File) -> None:
-    if not ds.callables and "callables" not in ds.present:
+    if not ds.callables and "callables" not in ds._present:
         return
     group = f.create_group("callables")
     for name in ds.callables:
@@ -497,7 +536,7 @@ def _write_callables(ds: Dataset, f: h5py.File) -> None:
         line = _repr_line(obj)
         if line is not None:
             write_string_attr(sub, "repr", line)
-        declared = ds.callable_inputs.get(name)
+        declared = ds._callable_inputs.get(name)
         if declared is not None:
             write_string_attr(sub, "inputs", " ".join(
                 sorted(declared, key=lambda n: n.encode("utf-8"))))

@@ -114,7 +114,7 @@ def _validate(path: str, as_json: bool) -> int:
 def _info(path: str, as_json: bool) -> int:
     try:
         with read(path, strict=False) as ds:
-            report = Report(errors=list(ds.problems))
+            report = Report(errors=list(ds._problems))
             document = _document(path, report, ds)
             document.update(_describe(ds))
             lines = _lines(ds)
@@ -237,8 +237,8 @@ def _describe(ds: Dataset) -> dict[str, Any]:
         "mesh": None,
         "callables": [
             {"id": n, "type": _type_of(ds, n),
-             "inputs": None if ds.callable_inputs.get(n) is None
-             else sorted(ds.callable_inputs[n] or ())}
+             "inputs": None if ds._callable_inputs.get(n) is None
+             else sorted(ds._callable_inputs[n] or ())}
             for n in ds.callables],
     }
     for key in ("title", "license", "references", "source"):
@@ -293,12 +293,12 @@ def _lines(ds: Dataset) -> list[str]:
         lines.append("  mesh  %s, %d node(s), %d cell(s), id %s"
                      % (mesh.kind, mesh.n_nodes, mesh.n_cells,
                         mesh.support_id))
-        for where, slot in mesh.arrays().items():
+        for where, slot in mesh._arrays().items():
             lines.append("    %-28s %s" % (where, _slot_line(slot)))
     if ds.callables:
         lines.append("  callables")
         for name in ds.callables:
-            declared = ds.callable_inputs.get(name)
+            declared = ds._callable_inputs.get(name)
             lines.append("    %-16s %s%s" % (
                 name, _type_of(ds, name),
                 "" if declared is None else "  inputs %s"
@@ -311,8 +311,8 @@ def _lines(ds: Dataset) -> list[str]:
 
 
 def _slot_line(slot: Slot) -> str:
-    shape = "" if slot.data is None else \
-        "x".join(str(n) for n in slot.data.shape)
+    shape = "" if slot._data is None else \
+        "x".join(str(n) for n in slot._data.shape)
     parts = ["(%s) %s" % (", ".join(slot.dims), shape), slot.role]
     if slot.units:
         parts.append("units %s" % slot.units)

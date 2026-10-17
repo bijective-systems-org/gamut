@@ -403,13 +403,13 @@ class CategoryTable(Sequence[str]):
     """The named categories of a label. A category code is the
     position of its entry: the first entry is code 0."""
 
-    __slots__ = ("entries", "itemsize")
+    __slots__ = ("entries", "_itemsize")
 
     def __init__(self, entries: Sequence[str],
                  itemsize: int | None = None) -> None:
         self.entries = [str(e) for e in entries]
         #: The stored byte size, when a file declared a larger one.
-        self.itemsize = itemsize
+        self._itemsize = itemsize
 
     def __getitem__(self, at: Any) -> Any:
         return self.entries[at]
@@ -458,21 +458,21 @@ class Parameter:
         self.lower = lower
         self.upper = upper
         self.run_group = run_group
-        self.data = data
+        self._data = data
         #: Attributes this reader does not know, kept for a rewrite.
-        self.extra = dict(extra or {})
+        self._extra = dict(extra or {})
 
     @property
     def dtype(self) -> np.dtype | None:
-        return self.data.dtype if self.data is not None else None
+        return self._data.dtype if self._data is not None else None
 
     def values(self, rows: Any = None) -> NamedArray:
         """The column, or the rows selected (a slice or a strictly
         increasing index array)."""
-        if self.data is None:
+        if self._data is None:
             return NamedArray(np.zeros(0), ("row",))
-        lead = _selector(rows, self.data.shape[0], "rows")
-        return NamedArray(self.data.read(lead), ("row",))
+        lead = _selector(rows, self._data.shape[0], "rows")
+        return NamedArray(self._data.read(lead), ("row",))
 
     def __repr__(self) -> str:
         return "Parameter(%r, role=%r, units=%r)" % (
@@ -492,13 +492,13 @@ class Label:
         self.name = name
         self.role = role
         self.category = category
-        self.data = data
-        self.extra = dict(extra or {})
+        self._data = data
+        self._extra = dict(extra or {})
         self._dataset = dataset
 
     @property
     def dtype(self) -> np.dtype | None:
-        return self.data.dtype if self.data is not None else None
+        return self._data.dtype if self._data is not None else None
 
     @property
     def table(self) -> CategoryTable | None:
@@ -508,10 +508,10 @@ class Label:
         return self._dataset.categories.get(self.category or "")
 
     def _read(self, rows: Any) -> np.ndarray:
-        if self.data is None:
+        if self._data is None:
             return np.zeros(0, dtype=np.int64)
-        lead = _selector(rows, self.data.shape[0], "rows")
-        return self.data.read(lead)
+        lead = _selector(rows, self._data.shape[0], "rows")
+        return self._data.read(lead)
 
     def codes(self, rows: Any = None) -> NamedArray:
         """The category codes. An id label has no codes; use
@@ -592,9 +592,9 @@ class Slot:
         self.category = category
         #: The CF `coordinates` attribute a file carried, kept so that
         #: a reader can see it; the writer computes its own.
-        self.coordinates_attr = coordinates_attr
-        self.data = data
-        self.extra = dict(extra or {})
+        self._coordinates_attr = coordinates_attr
+        self._data = data
+        self._extra = dict(extra or {})
         self._dims = tuple(dims) if dims is not None else None
         self._dataset: Dataset | None = None
 
@@ -611,7 +611,7 @@ class Slot:
     @property
     def dtype(self) -> np.dtype | None:
         """The stored dtype; None for a served slot."""
-        return self.data.dtype if self.data is not None else None
+        return self._data.dtype if self._data is not None else None
 
     @property
     def dims(self) -> tuple[str, ...]:
@@ -633,16 +633,19 @@ class Slot:
              cells: Any = None, instances: Any = None) -> NamedArray:
         """The values, or part of them.
 
-        With no selection the array comes back as stored. `rows`
-        always means file rows: for a slot that varies by
-        `group:<k>` each requested row gets the instance its group
-        code selects, and for one that does not vary each requested
-        row gets the one instance. `instances` reads a group axis
-        directly. `nodes` (on node arrays and coordinates) and
-        `cells` (on cell arrays) select along the mesh axis. Each
+        With no selection the slot comes back as stored: one entry per
+        row for a slot that varies by row, one per group category
+        (along `group:<k>`) for a slot that varies by group, and one
+        value set (one value for a constant) for a slot that does not
+        vary. `rows` always means file rows and gives one entry per
+        requested row: for a slot that varies by `group:<k>` each row
+        gets the instance its group code selects, and for one that does
+        not vary each row gets the one value set. `instances` reads a
+        group axis directly. `nodes` (on node arrays and coordinates)
+        and `cells` (on cell arrays) select along the mesh axis. Each
         selection is a slice or a strictly increasing index array.
         """
-        if self.data is None:
+        if self._data is None:
             raise MestraError(
                 "E30", "this slot is served by %s and holds no data; "
                 "evaluate the file first" % self.source, self.path)
@@ -656,22 +659,22 @@ class Slot:
             if rows is not None:
                 raise MestraError(
                     "", "pass rows= or instances=, not both", self.path)
-            lead = _selector(instances, self.data.shape[0], "instances")
-            return NamedArray(self.data.read(lead, sites), self.dims)
+            lead = _selector(instances, self._data.shape[0], "instances")
+            return NamedArray(self._data.read(lead, sites), self.dims)
         if rows is None:
-            return NamedArray(self.data.read(None, sites), self.dims)
+            return NamedArray(self._data.read(None, sites), self.dims)
         dataset = self._dataset
         row_count = dataset.row_count if dataset is not None else (
-            self.data.shape[0] if self.varies == "row" else 0)
+            self._data.shape[0] if self.varies == "row" else 0)
         selected = _selector(rows, row_count, "rows")
         row_dims = ("row",) + self.dims[1 if self.varies != "none"
                                         else 0:]
         if self.varies == "row":
-            return NamedArray(self.data.read(selected, sites), self.dims)
+            return NamedArray(self._data.read(selected, sites), self.dims)
         wanted = np.arange(row_count)[selected] \
             if isinstance(selected, slice) else selected
         if self.varies == "none":
-            one = self.data.read(None, sites)
+            one = self._data.read(None, sites)
             return NamedArray(
                 np.array(np.broadcast_to(one, (len(wanted),) + one.shape)),
                 row_dims)
@@ -684,11 +687,11 @@ class Slot:
         codes = np.asarray(label.codes(wanted).values, dtype=np.int64)
         unique, back = np.unique(codes, return_inverse=True)
         if unique.size and (unique[0] < 0 or
-                            unique[-1] >= self.data.shape[0]):
+                            unique[-1] >= self._data.shape[0]):
             raise MestraError(
                 "E10", "a row's code for %s selects no instance of this "
                 "slot" % group, self.path)
-        held = self.data.read(unique if unique.size else
+        held = self._data.read(unique if unique.size else
                               np.zeros(0, np.int64), sites)
         return NamedArray(np.take(held, back.reshape(-1), axis=0),
                           row_dims)
@@ -707,8 +710,8 @@ class Slot:
                     self.location, self.location), self.path)
         if mine is None:
             return None
-        assert self.data is not None
-        length = self.data.shape[-2] if len(self.data.shape) >= 2 else 0
+        assert self._data is not None
+        length = self._data.shape[-2] if len(self._data.shape) >= 2 else 0
         return _selector(mine, length, self.location + "s")
 
     def __repr__(self) -> str:
@@ -844,13 +847,16 @@ class Mesh:
         self.coordinates: Slot | None = None
         self.node_arrays: _Arrays = _Arrays("node")
         self.cell_arrays: _Arrays = _Arrays("cell")
-        self.stored_support_id = stored_support_id
-        self.extra = dict(extra or {})
-        self.dataset: Dataset | None = None
+        self._stored_support_id = stored_support_id
+        self._extra = dict(extra or {})
+        self._dataset: Dataset | None = None
         #: Optional groups the mesh carried, empty ones included.
-        self.present: set[str] = set()
+        self._present: set[str] = set()
         #: Groups under /mesh this reader does not know, kept whole.
-        self.opaque: dict[str, Any] = {}
+        self._opaque: dict[str, Any] = {}
+        #: Datasets under /mesh this reader does not know (W11), kept
+        #: whole for a rewrite.
+        self._unknown: dict[str, Any] = {}
 
     def cells(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """(cell_types, cell_offsets, cell_connectivity), as stored."""
@@ -870,11 +876,11 @@ class Mesh:
     def support_id(self) -> str:
         """The digest the file stored, or the one computed from the
         arrays for a mesh built in memory."""
-        if self.stored_support_id is not None:
-            return self.stored_support_id
-        return self.computed_support_id()
+        if self._stored_support_id is not None:
+            return self._stored_support_id
+        return self._computed_support_id()
 
-    def computed_support_id(self) -> str:
+    def _computed_support_id(self) -> str:
         """SHA-256 over the node count and the connectivity and, for
         points, the coordinates widened to float64 (section 5.3)."""
         if self.kind not in MESH_KINDS:
@@ -884,8 +890,8 @@ class Mesh:
         if self.kind == "points":
             coords = None
             if self.coordinates is not None and \
-                    self.coordinates.data is not None:
-                coords = np.asarray(self.coordinates.data.read(),
+                    self.coordinates._data is not None:
+                coords = np.asarray(self.coordinates._data.read(),
                                     dtype="<f8")
             return support_digest(self.n_nodes, axis_coordinates=coords)
         return support_digest(self.n_nodes,
@@ -893,7 +899,7 @@ class Mesh:
                               self._cell_array("cell_offsets"),
                               self._cell_array("cell_connectivity"))
 
-    def arrays(self) -> dict[str, Slot]:
+    def _arrays(self) -> dict[str, Slot]:
         """Every array, coordinates included, by its concept path
         below `mesh/`."""
         out: dict[str, Slot] = {}
@@ -977,7 +983,7 @@ class Mesh:
             raise MestraError(
                 "E02", "%r is not a role of a mesh array; pass role= "
                 "\"field\" or \"label\"" % (role,), where)
-        dataset = self.dataset
+        dataset = self._dataset
         if role == "field":
             _check_units(units, where)
         elif units is not None:
@@ -1093,14 +1099,16 @@ class Callables(dict):
         super().__init__(*args, **kw)
         self._pending: dict[str, Any] = {}
 
-    def defer(self, name: str, build: Any) -> None:
+    def _defer(self, name: str, build: Any) -> None:
         self._pending[name] = build
         dict.__setitem__(self, name, None)
 
     def __getitem__(self, name: Any) -> Any:
-        build = self._pending.pop(name, None)
+        build = self._pending.get(name)
         if build is not None:
-            dict.__setitem__(self, name, build())
+            made = build()                  # may refuse; then still pending
+            del self._pending[name]
+            dict.__setitem__(self, name, made)
         return dict.__getitem__(self, name)
 
     def __setitem__(self, name: Any, value: Any) -> None:
@@ -1117,11 +1125,11 @@ class Callables(dict):
         return self[name]      # noqa: SIM401 - self.get would recurse
 
     def values(self) -> Any:
-        self.read_all()
+        self._read_all()
         return dict.values(self)
 
     def items(self) -> Any:
-        self.read_all()
+        self._read_all()
         return dict.items(self)
 
     def __iter__(self) -> Any:
@@ -1131,10 +1139,10 @@ class Callables(dict):
         return list(iter(self))
 
     def __repr__(self) -> str:
-        self.read_all()
+        self._read_all()
         return dict.__repr__(self)
 
-    def read_all(self) -> None:
+    def _read_all(self) -> None:
         """Decode every dictionary still in the file."""
         for name in list(self._pending):
             self[name]
@@ -1175,24 +1183,29 @@ class Dataset:
         self.mesh: Mesh | None = None
         self.callables: Callables = Callables()
         #: The `inputs` each callable declares, by id; None when absent.
-        self.callable_inputs: dict[str, frozenset[str] | None] = {}
+        self._callable_inputs: dict[str, frozenset[str] | None] = {}
         self.notes: _Notes = _Notes()
         #: Root attributes this reader does not know (W11), kept.
-        self.extra: dict[str, Any] = {}
+        self._extra: dict[str, Any] = {}
         #: Groups this reader does not know, and /private, kept whole.
-        self.opaque: dict[str, Any] = {}
+        self._opaque: dict[str, Any] = {}
         #: Root objects with a role this reader does not know (W11),
         #: kept whole for a rewrite.
-        self.unknown: dict[str, Any] = {}
+        self._unknown: dict[str, Any] = {}
+        #: Every dimension scale the file had, by (group, name), with its
+        #: length and whether it was unlimited, so that a rewrite can
+        #: make again the scales the objects it keeps whole are attached
+        #: to. The group is "" for the root and "mesh".
+        self._scales: dict[tuple[str, str], tuple[int, bool]] = {}
         #: Optional groups the file carried, so that an empty one
         #: survives a rewrite.
-        self.present: set[str] = set()
+        self._present: set[str] = set()
         #: What the reader met and could not read: links it does not
         #: follow, members of the wrong kind.
-        self.problems: list[Finding] = []
+        self._problems: list[Finding] = []
         #: Paths a rewrite could not copy. `write` refuses while any
         #: remain.
-        self.lossy: list[str] = []
+        self._lossy: list[str] = []
         self._row_count: int | None = None
         self._handle = _Handle()
         self.path: str | None = None
@@ -1206,11 +1219,11 @@ class Dataset:
             return self._row_count
         for group in (self.parameters, self.labels):
             for item in group.values():
-                if item.data is not None:
-                    return int(item.data.shape[0])
+                if item._data is not None:
+                    return int(item._data.shape[0])
         for slot in self.scalars.values():
-            if slot.data is not None and slot.varies == "row":
-                return int(slot.data.shape[0])
+            if slot._data is not None and slot.varies == "row":
+                return int(slot._data.shape[0])
         return 0
 
     def _note_rows(self, count: int, where: str) -> None:
@@ -1225,16 +1238,16 @@ class Dataset:
         self._row_count = count
 
     def _has_rows(self) -> bool:
-        if any(p.data is not None for p in self.parameters.values()):
+        if any(p._data is not None for p in self.parameters.values()):
             return True
-        if any(lab.data is not None for lab in self.labels.values()):
+        if any(lab._data is not None for lab in self.labels.values()):
             return True
-        if any(s.data is not None and s.varies == "row"
+        if any(s._data is not None and s.varies == "row"
                for s in self.scalars.values()):
             return True
         if self.mesh is not None:
-            return any(s.data is not None and s.varies == "row"
-                       for s in self.mesh.arrays().values())
+            return any(s._data is not None and s.varies == "row"
+                       for s in self.mesh._arrays().values())
         return False
 
     @property
@@ -1250,7 +1263,7 @@ class Dataset:
         gradients, uncertainty, model (section 9)."""
         slots = list(self.scalars.values())
         if self.mesh is not None:
-            slots += list(self.mesh.arrays().values())
+            slots += list(self.mesh._arrays().values())
         out = []
         if any(p.role == "time" for p in self.parameters.values()):
             out.append("time")
@@ -1262,13 +1275,13 @@ class Dataset:
             out.append("model")
         return out
 
-    def slots(self) -> dict[str, Slot]:
+    def _slots(self) -> dict[str, Slot]:
         """Every scalar and mesh array, by concept path."""
         out: dict[str, Slot] = {}
         for name, slot in self.scalars.items():
             out["scalars/" + name] = slot
         if self.mesh is not None:
-            for where, slot in self.mesh.arrays().items():
+            for where, slot in self.mesh._arrays().items():
                 out["mesh/" + where] = slot
         return out
 
@@ -1539,7 +1552,7 @@ class Dataset:
         kind = "mesh" if cells is not None else "points"
         _check_units(units, "mesh/coordinates")
         mesh = Mesh(kind)
-        mesh.dataset = self
+        mesh._dataset = self
         if cells is not None:
             try:
                 types, offsets, connectivity = cells
@@ -1655,7 +1668,7 @@ class Dataset:
                         "E45", "an inputs entry is a name without spaces, "
                         "and %r is not" % entry, where)
         self.callables[id] = callable
-        self.callable_inputs[id] = declared
+        self._callable_inputs[id] = declared
         return callable
 
     # -- adapters
@@ -1679,13 +1692,13 @@ class Dataset:
             coords[name] = (("row",), label.names().values,
                             {"role": label.role})
         for name, slot in self.scalars.items():
-            if slot.data is None:
+            if slot._data is None:
                 continue
             values = slot.read().values
             variables[name] = (slot.dims, values, _attrs_of(slot))
         if self.mesh is not None:
-            for where, slot in self.mesh.arrays().items():
-                if slot.data is None:
+            for where, slot in self.mesh._arrays().items():
+                if slot._data is None:
                     continue
                 values = slot.read().values
                 dims = tuple(disk_dimension(d, values.shape[at])
@@ -2089,8 +2102,11 @@ def _array_from_dims(array: np.ndarray, dims: Sequence[str],
 def _round(array: np.ndarray, bits: Any, where: str
            ) -> tuple[np.ndarray, int]:
     """Keep `bits` explicit mantissa bits, round half to even, NaN and
-    the infinities unchanged (section 12.2). A finite value that would
-    round to infinity is truncated instead, so the bound holds."""
+    the infinities unchanged (section 12.2). For a normal value the
+    relative error is at most 2**-(bits + 1); a subnormal value keeps an
+    absolute error of at most 2**-(bits + 1) times the smallest normal
+    value. A finite value that would round to infinity is truncated
+    instead, so it stays finite and within the bound."""
     if isinstance(bits, (bool, np.bool_)) or \
             not isinstance(bits, (int, np.integer)):
         raise MestraError("", "round_bits is an integer", where)

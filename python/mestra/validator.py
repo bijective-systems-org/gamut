@@ -183,14 +183,16 @@ def _validate_dataset(ds: Dataset) -> Report:
     from .writer import write
 
     report = Report()
-    for problem in ds.problems:
+    for problem in ds._problems:
         _once(report.errors, problem.rule, problem.path, problem.message)
     with tempfile.TemporaryDirectory(prefix="mestra-validate-") as tmp:
         path = os.path.join(tmp, "dataset.mes")
         try:
             write(ds, path, check=False)
         except MestraError as exc:
-            _once(report.errors, exc.rule or "E41", exc.path, exc.message)
+            if not exc.rule:
+                raise                       # the caller's mistake
+            _once(report.errors, exc.rule, exc.path, exc.message)
             return report
         found = validate(path)
     for one in found.errors:
@@ -717,6 +719,10 @@ class _FileValidator:
                 self.error("E39", where, "a row-varying scalar carries the "
                                          "CF coordinates attribute naming "
                                          "the parameters and labels")
+            if varies == "none" and "coordinates" in attrs:
+                self.error("E39", where, "a constant has no row axis, so it "
+                                         "carries no CF coordinates "
+                                         "attribute")
             if not isinstance(obj, h5py.Dataset):
                 continue
             if obj.dtype not in _FLOATS:
@@ -791,10 +797,16 @@ class _FileValidator:
         self.guarded(where, self._support_id, group, kind, n_nodes, cells,
                      coordinates)
         for name, obj in inside.items():
-            if name not in _MESH_MEMBERS and isinstance(obj, h5py.Group):
+            if name in _MESH_MEMBERS:
+                continue
+            if isinstance(obj, h5py.Group):
                 self.warn("W11", "mesh/" + name, "this reader does not know "
                                                  "the group %s, and ignores "
                                                  "it" % name)
+            elif not h5safe.is_scale(obj):
+                self.warn("W11", "mesh/" + name, "this reader does not know "
+                                                 "the dataset %s, and "
+                                                 "ignores it" % name)
 
     def _cells(self, cells: dict[str, h5py.Dataset], n_nodes: int,
                n_cells: int | None) -> None:
@@ -1308,9 +1320,13 @@ class _FileValidator:
                                          "unlimited")
             else:
                 self._chunk(dset, where)
-        elif leading is not None and leading.startswith("group_") and \
-                dset.chunks is not None:
-            self._chunk(dset, where)
+        elif leading is not None and leading.startswith("group_"):
+            if dset.chunks is None:
+                self.error("E27", where, "a group-dimensioned dataset is "
+                                         "chunked, because its group may "
+                                         "grow")
+            else:
+                self._chunk(dset, where)
 
     def _unlimited(self, dset: h5py.Dataset, path: str,
                    dims: Sequence[str | None]) -> None:
@@ -1326,10 +1342,14 @@ class _FileValidator:
             if path.startswith("/callables/") and \
                     axis < len(dset.shape) and dset.shape[axis] == 0:
                 continue
+            empty = axis < len(dset.shape) and dset.shape[axis] == 0
             self.error("E43", self.concept(path),
                        "axis %d is unlimited, and %s is not row, a group or "
-                       "a category table" % (axis, "the dimension %s" % name
-                                             if name else "it"))
+                       "a category table%s"
+                       % (axis, "the dimension %s" % name if name else "it",
+                          "; an axis of length zero can only be stored "
+                          "unlimited, so a mesh needs at least one node and "
+                          "one cell for its arrays" if empty else ""))
 
     def _filters(self, dset: h5py.Dataset, where: str) -> None:
         """E29: gzip at levels 1 to 9 and shuffle, and nothing else."""
@@ -1466,6 +1486,12 @@ class _FileValidator:
         if (statistic is not None or wrt) and "of" not in attrs:
             self.error("E12", where, "a relation names the result it is "
                                      "about with of")
+        if "of" in attrs and statistic is None and not wrt:
+            self.error("E12", where, "of names the base of a relation, and "
+                                     "this slot carries neither statistic "
+                                     "nor with_respect_to")
+        if statistic != "band" and ("level" in attrs or "method" in attrs):
+            self.error("E12", where, "level and method belong to a band")
         if statistic == "std" and served:
             self.error("E12", where, "a std is stored, never served")
         if statistic == "band" and not served:
@@ -1706,8 +1732,12 @@ def _outside(prefix: str, name: str, obj: Any, ignored: set[str]) -> bool:
             if name in _ROOT_GROUPS:
                 return False
             return "role" not in _names(obj)
-        return False
-    if prefix == "/mesh" and isinstance(obj, h5py.Group):
+        # A scale the format does not name serves only objects this
+        # reader ignores; a public dataset attached to it is E25.
+        return h5safe.is_scale(obj) and not (
+            name == "row" or name.startswith(("component_", "group_",
+                                              "category_")))
+    if prefix == "/mesh":
         return name not in _MESH_MEMBERS
     return False
 

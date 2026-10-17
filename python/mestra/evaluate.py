@@ -58,7 +58,7 @@ def evaluate(ds: Dataset, inputs: Any = None) -> Dataset:
                 "generalisation_group"):
         setattr(out, key, getattr(ds, key))
     out.categories = copy.deepcopy(ds.categories)
-    out.extra = dict(ds.extra)
+    out._extra = dict(ds._extra)
     out.notes.update(dict(ds.notes))
     out._row_count = rows
     for name, parameter in ds.parameters.items():
@@ -68,14 +68,14 @@ def evaluate(ds: Dataset, inputs: Any = None) -> Dataset:
             lower=parameter.lower, upper=parameter.upper,
             run_group=parameter.run_group,
             data=MemorySource(_as(values, parameter.dtype)),
-            extra=dict(parameter.extra))
+            extra=dict(parameter._extra))
     for name, label in ds.labels.items():
         reader = label.names if label.role == "id" else label.codes
         values = _column(ds, table, name, reader)
         out.labels[name] = Label(
             name, label.role, category=label.category,
             data=MemorySource(_as(values, label.dtype)),
-            extra=dict(label.extra), dataset=out)
+            extra=dict(label._extra), dataset=out)
     records = _records(ds, table)
     for name, slot in ds.scalars.items():
         dict.__setitem__(out.scalars, name,
@@ -83,9 +83,9 @@ def evaluate(ds: Dataset, inputs: Any = None) -> Dataset:
     if ds.mesh is not None:
         mesh = Mesh(ds.mesh.kind, n_nodes=ds.mesh.n_nodes,
                     n_cells=ds.mesh.n_cells,
-                    stored_support_id=ds.mesh.stored_support_id,
-                    extra=dict(ds.mesh.extra))
-        mesh.dataset = out
+                    stored_support_id=ds.mesh._stored_support_id,
+                    extra=dict(ds.mesh._extra))
+        mesh._dataset = out
         for which, source in ds.mesh._cells.items():
             mesh._cells[which] = None if source is None else \
                 MemorySource(source.read())
@@ -168,7 +168,7 @@ def _as(values: np.ndarray, dtype: Any) -> np.ndarray:
 
 
 def _records(ds: Dataset, table: InputTable | None) -> dict[str, Any]:
-    wanted = sorted({s.callable_id or "" for s in ds.slots().values()
+    wanted = sorted({s.callable_id or "" for s in ds._slots().values()
                      if s.served})
     return {identifier: _call(ds, identifier, table)
             for identifier in wanted}
@@ -182,7 +182,7 @@ def _call(ds: Dataset, identifier: str,
             "E14", "the file holds no callable called %r" % identifier,
             "callables/" + identifier)
     obj = ds.callables[identifier]
-    declared = ds.callable_inputs.get(identifier)
+    declared = ds._callable_inputs.get(identifier)
     if declared is not None and isinstance(obj, Affine) and \
             frozenset(obj.keys) != declared:
         raise MestraError(
@@ -218,17 +218,17 @@ def _call(ds: Dataset, identifier: str,
 def _fill(slot: Slot, records: dict[str, Any], rows: int,
           out: Dataset) -> Slot:
     made = copy.copy(slot)
-    made.extra = dict(slot.extra)
+    made._extra = dict(slot._extra)
     made._dataset = out
     if not slot.served:
-        if slot.data is not None:
-            if slot.varies == "row" and int(slot.data.shape[0]) != rows:
+        if slot._data is not None:
+            if slot.varies == "row" and int(slot._data.shape[0]) != rows:
                 raise MestraError(
                     "E16", "this slot holds %d rows of data and the input "
                     "table has %d; evaluate on the file's own rows, or on "
                     "a file whose row-varying slots are all served"
-                    % (int(slot.data.shape[0]), rows), slot.path)
-            made.data = MemorySource(slot.data.read())
+                    % (int(slot._data.shape[0]), rows), slot.path)
+            made._data = MemorySource(slot._data.read())
         return made
     record = records[slot.callable_id or ""].get(slot.output or slot.name)
     if not isinstance(record, Prediction):
@@ -251,7 +251,7 @@ def _fill(slot: Slot, records: dict[str, Any], rows: int,
     dtype = slot.dtype if slot.dtype is not None else np.dtype("<f8")
     array = np.asarray(values, dtype="<f8").astype(dtype)
     _check_shape(slot, array, rows)
-    made.data = MemorySource(array)
+    made._data = MemorySource(array)
     made.source = "data"
     made.output = None
     made._dims = None

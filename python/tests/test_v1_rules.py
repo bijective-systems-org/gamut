@@ -406,6 +406,30 @@ def test_e12_a_scalar_relation_of_a_constant_varies_like_it(changed, base):
     assert "E12" not in lib.validate(base["relations"]).error_ids
 
 
+def test_e12_of_belongs_to_a_relation(changed, base):
+    path = changed("table", lambda f: write_string_attr(f["cl"], "of",
+                                                        "cd"))
+    report = lib.validate(path)
+    assert report.error_ids == ["E12"]
+    assert errors_at(report, "E12") == ["scalars/cl"]
+    assert "E12" not in lib.validate(base["table"]).error_ids
+
+
+@pytest.mark.parametrize("path, attribute", [
+    ("cl_std", "level"), ("cl_std", "method"),
+    ("mesh/node_arrays/dp_dmach", "method")])
+def test_e12_level_and_method_belong_to_a_band(changed, path, attribute):
+    def change(f):
+        if attribute == "level":
+            write_float_attr(f[path], "level", 0.9)
+        else:
+            write_string_attr(f[path], "method", "spread of samples")
+    report = lib.validate(changed("relations", change))
+    concept = path if "/" in path else "scalars/" + path
+    assert report.error_ids == ["E12"], report
+    assert errors_at(report, "E12") == [concept]
+
+
 # ------------------------------------------------------------- E16
 
 def test_e16_a_root_dataset_against_the_row_count(changed, base):
@@ -498,6 +522,17 @@ def test_e25_an_axis_carrying_the_wrong_dimension(changed, base):
     assert "E25" not in lib.validate(base["family"]).error_ids
 
 
+def test_e27_a_group_dimensioned_dataset_is_chunked(changed, base):
+    path = changed("family", lambda f: recreate(
+        f, "mesh/coordinates", chunks=None))
+    with h5py.File(path, "r") as f:
+        assert f["mesh/coordinates"].chunks is None
+    report = lib.validate(path)
+    assert report.error_ids == ["E27"]
+    assert errors_at(report, "E27") == ["mesh/coordinates"]
+    assert "E27" not in lib.validate(base["family"]).error_ids
+
+
 # ------------------------------------------------------------- E32
 
 def test_e32_a_dictionary_may_not_use_inputs_at_its_top_level(changed,
@@ -582,7 +617,12 @@ def test_e39_a_root_dataset_says_what_it_is(changed):
     assert errors_at(report, "E39") == ["mach"]
 
 
-def test_e39_a_constant_carries_no_coordinates(base):
+def test_e39_a_constant_carries_no_coordinates(changed, base):
+    path = changed("table", lambda f: write_string_attr(
+        f["s_ref"], "coordinates", "alpha case"))
+    report = lib.validate(path)
+    assert report.error_ids == ["E39"]
+    assert errors_at(report, "E39") == ["scalars/s_ref"]
     with h5py.File(base["table"], "r") as f:
         assert "coordinates" not in f["s_ref"].attrs
     assert lib.validate(base["table"]).errors == []
@@ -600,6 +640,40 @@ def test_e43_only_row_group_and_category_dimensions_grow(changed, base):
         assert f["group_member"].maxshape == (None,)
         assert f["category_flag"].maxshape == (None,)
     assert lib.validate(base["family"]).errors == []
+
+
+def foreign_gradient(f, unlimited=False):
+    """A later 1.x object: a dataset of a role this reader does not
+    know, over a dimension of its own."""
+    scale = make_scale(f, "parameter", 3, unlimited=unlimited)
+    grad = f.create_dataset("grad_cl", data=np.ones((4, 3)),
+                            chunks=(4, 3), maxshape=(None, 3),
+                            track_times=False)
+    grad.dims[0].attach_scale(f["row"])
+    grad.dims[1].attach_scale(scale)
+    write_string_attr(grad, "role", "gradient")
+
+
+@pytest.mark.parametrize("unlimited", [False, True])
+def test_e43_a_scale_only_foreign_objects_use_is_exempt(changed,
+                                                        unlimited):
+    path = changed("table", lambda f: foreign_gradient(f, unlimited))
+    report = lib.validate(path)
+    assert report.errors == []
+    assert warnings_at(report, "W11") == ["grad_cl"]
+
+
+def test_w11_an_unknown_dataset_in_the_mesh(changed, base):
+    def change(f):
+        extra = f["mesh"].create_dataset("vendor_flags",
+                                         data=np.zeros((6, 1), "<i4"),
+                                         track_times=False)
+        extra.dims[0].attach_scale(f["mesh/node"])
+        extra.dims[1].attach_scale(f["component_1"])
+    report = lib.validate(changed("family", change))
+    assert report.errors == []
+    assert warnings_at(report, "W11") == ["mesh/vendor_flags"]
+    assert "W11" not in lib.validate(base["family"]).warning_ids
 
 
 # ------------------------------------------------------------- E45
