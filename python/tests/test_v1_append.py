@@ -280,3 +280,52 @@ def test_codes_may_be_asked_for_as_int64():
     label = ds.add_label("fid", [0, 1], "categorical", dtype="int64",
                          categories=["a", "b"])
     assert label.dtype == np.dtype("<i8")
+
+
+def test_an_append_that_widens_strings_keeps_attributes_exactly(tmp_path):
+    from tests.test_v1_roundtrip import (
+        FOREIGN,
+        add_foreign_attributes,
+        attribute_as_stored,
+    )
+    path = str(tmp_path / "store.mes")
+    lib.write(rows(["a@0.5", "b@0.5"]), path)
+    holders = ["run", "categories/member", "categories/status", "mach",
+               "member", "mesh/node_arrays/pressure", "category_status"]
+    with h5py.File(path, "r+") as f:
+        for holder in holders:
+            add_foreign_attributes(f[holder])
+        before = {(h, n): attribute_as_stored(f[h], n)
+                  for h in holders for n in FOREIGN}
+        widths = {p: f[p].dtype.itemsize for p in ("run",
+                                                   "categories/status")}
+    one = rows(["c@0.8"], statuses=["failed", "failed-after-two-restarts"])
+    from mestra.model import MemorySource
+    one.labels["run"]._data = MemorySource(
+        np.array(["c@0.8-recomputed-on-the-new-mesh"]))
+    assert lib.append(one, path) == 1
+    with h5py.File(path, "r") as f:
+        assert f["run"].dtype.itemsize > widths["run"]
+        assert f["categories/status"].dtype.itemsize > \
+            widths["categories/status"]
+        after = {(h, n): attribute_as_stored(f[h], n)
+                 for h in holders for n in FOREIGN}
+    assert after == before
+    assert lib.validate(path).errors == []
+
+
+def test_an_append_refuses_to_widen_past_an_attribute_it_cannot_copy(
+        tmp_path):
+    path = str(tmp_path / "store.mes")
+    lib.write(rows(["a@0.5"]), path)
+    with h5py.File(path, "r+") as f:
+        f["run"].attrs["points_at"] = f["cl"].ref
+    before = digest(path)
+    one = rows(["b@0.5"])
+    from mestra.model import MemorySource
+    one.labels["run"]._data = MemorySource(np.array(["b@0.5-a-longer-id"]))
+    with pytest.raises(lib.MestraError) as caught:
+        lib.append(one, path)
+    assert caught.value.rule == "E41"
+    assert "points_at" in caught.value.message
+    assert digest(path) == before

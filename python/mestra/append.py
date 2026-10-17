@@ -30,11 +30,11 @@ from typing import Any
 import h5py
 import numpy as np
 
+from . import h5safe, opaque
 from .encoding import (
     encode_strings,
     is_fixed_string,
     leading_bound,
-    read_attr,
     scale_name,
     string_dtype,
     string_length,
@@ -373,8 +373,22 @@ def _widened(parameter: Parameter, values: np.ndarray) -> tuple[Any, Any]:
 
 def _apply(f: h5py.File, plan: _Plan) -> None:
     grown = plan.n_old + int(plan.new_rows.size)
+    # Every string dataset that must grow wider is recreated; its
+    # attributes are captured exactly first, before anything in the
+    # file changes, so one that cannot be copied refuses the append
+    # with the file as it was.
+    widths: dict[str, int] = {}
     for name, added in plan.entries.items():
-        table = _extend_strings(f, "/categories/" + name, added)
+        widths["/categories/" + name] = encode_strings(list(added))[1]
+    for path, values in plan.rows.items():
+        if is_fixed_string(f[path].dtype):
+            widths[path] = encode_strings(
+                [str(v) for v in values.reshape(-1)])[1]
+    kept = {path: _exact_attributes(f[path], path)
+            for path, width in widths.items()
+            if width > (string_length(f[path].dtype) or 1)}
+    for name, added in plan.entries.items():
+        table = _extend_strings(f, "/categories/" + name, added, kept)
         _resize_scale(f, "/category_" + name, table.shape[0])
     for name, count in plan.new_categories.items():
         scale = f["/group_" + name]
@@ -386,7 +400,7 @@ def _apply(f: h5py.File, plan: _Plan) -> None:
             dset.resize(start + values.shape[0], axis=0)
             dset[start:] = values
     for path, values in plan.rows.items():
-        _write_rows(f, path, values, plan, grown)
+        _write_rows(f, path, values, plan, grown, kept)
     _resize_scale(f, "/row", grown)
     for path, (lower, upper) in plan.bounds.items():
         dset = f[path]
@@ -404,13 +418,13 @@ def _resize_scale(f: h5py.File, path: str, length: int) -> None:
 
 
 def _write_rows(f: h5py.File, path: str, values: np.ndarray, plan: _Plan,
-                grown: int) -> None:
+                grown: int, kept: dict[str, Any]) -> None:
     dset = f[path]
     if is_fixed_string(dset.dtype):
         flat = [str(v) for v in values.reshape(-1)]
         _, width = encode_strings(flat)
         if width > (string_length(dset.dtype) or 1):
-            dset = _wider(f, path, width)
+            dset = _wider(f, path, width, kept[path])
         size = string_length(dset.dtype) or 1
         values = np.array([v.encode("utf-8").ljust(size, b"\x00")
                            for v in flat], dtype="S%d" % size) \
@@ -438,12 +452,12 @@ def _put(dset: h5py.Dataset, where: Any, values: np.ndarray) -> None:
     dset[where] = values
 
 
-def _extend_strings(f: h5py.File, path: str,
-                    added: Sequence[str]) -> h5py.Dataset:
+def _extend_strings(f: h5py.File, path: str, added: Sequence[str],
+                    kept: dict[str, Any]) -> h5py.Dataset:
     dset = f[path]
     _, width = encode_strings(list(added))
     if width > (string_length(dset.dtype) or 1):
-        dset = _wider(f, path, width)
+        dset = _wider(f, path, width, kept[path])
     start = dset.shape[0]
     dset.resize(start + len(added), axis=0)
     size = string_length(dset.dtype) or 1
@@ -452,17 +466,30 @@ def _extend_strings(f: h5py.File, path: str,
     return dset
 
 
-def _wider(f: h5py.File, path: str, width: int) -> h5py.Dataset:
+def _exact_attributes(obj: Any, path: str) -> dict[str, Any]:
+    """Every attribute of a dataset about to be recreated, exactly as
+    stored, or a refusal (E41) naming the one that cannot be copied."""
+    out = {}
+    for name in h5safe.attr_names(obj):
+        try:
+            out[name] = opaque.capture_attribute(obj, name)
+        except Exception as exc:
+            reason = exc.message if isinstance(exc, MestraError) else \
+                "the attribute %s cannot be copied" % name
+            raise _refuse("%s, and this append would recreate the dataset "
+                          "wider and so lose it" % reason, path,
+                          "E41") from None
+    return out
+
+
+def _wider(f: h5py.File, path: str, width: int,
+           kept: dict[str, Any]) -> h5py.Dataset:
     """Recreate a fixed-length string dataset wider, with its values,
-    attributes, chunking and dimension scales. HDF5 does not reclaim
-    the old space; rewriting the file compacts it."""
+    its attributes exactly as they were, its chunking and its dimension
+    scales. HDF5 does not reclaim the old space; rewriting the file
+    compacts it."""
     old = f[path]
     values = [bytes(v).rstrip(b"\x00") for v in old[()]]
-    attrs = []
-    for name in old.attrs:
-        if name in ("DIMENSION_LIST", "REFERENCE_LIST", "CLASS", "NAME"):
-            continue
-        attrs.append((name, read_attr(old, name)))
     scales = [list(dim.values()) for dim in old.dims]
     kw: dict[str, Any] = {"maxshape": old.maxshape}
     if old.chunks is not None:
@@ -487,9 +514,8 @@ def _wider(f: h5py.File, path: str, width: int) -> h5py.Dataset:
                                 dtype=string_dtype(width),
                                 data=raw if raw else None,
                                 track_times=False, **kw)
-    from .encoding import write_attr
-    for key, value in attrs:
-        write_attr(new, key, value)
+    for key in sorted(kept):
+        opaque.restore_attribute(new, key, kept[key])
     for axis, found in enumerate(scales):
         for scale in found:
             new.dims[axis].attach_scale(scale)
