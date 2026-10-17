@@ -759,18 +759,18 @@ def test_a_ragged_array_is_refused_by_name():
     with pytest.raises(MestraError) as caught:
         ds.add_scalar("cl", [[0.1, 0.2], [0.3]], units="1")
     assert caught.value.rule == "E20"
-    assert caught.value.where == "cl"
+    assert caught.value.path == "cl"
     assert "rectangular" in caught.value.message
     axis = ds.add_support("t", coordinates=[0.0, 1.0, 2.0], units="s")
     with pytest.raises(MestraError) as caught:
         axis.add_node_array("p", [[[1.0], [2.0], [3.0]], [[1.0], [2.0]]],
                             units="Pa", dims=("row", "node", "component"))
     assert caught.value.rule == "E20"
-    assert caught.value.where == "p"
+    assert caught.value.path == "p"
     with pytest.raises(MestraError) as caught:
         ds.add_support("u", coordinates=[[0.0], [1.0, 2.0]], units="s")
     assert caught.value.rule == "E20"
-    assert caught.value.where == "u/coordinates"
+    assert caught.value.path == "u/coordinates"
 
 
 def test_text_where_a_number_belongs_is_refused_by_name():
@@ -778,7 +778,7 @@ def test_text_where_a_number_belongs_is_refused_by_name():
     with pytest.raises(MestraError) as caught:
         ds.add_key("mach", ["fast", "faster"], role="condition", units="1")
     assert caught.value.rule == "E20"
-    assert caught.value.where == "mach"
+    assert caught.value.path == "mach"
 
 
 def test_a_bound_that_is_not_finite_is_refused(tmp_path):
@@ -790,7 +790,7 @@ def test_a_bound_that_is_not_finite_is_refused(tmp_path):
         ds.add_key("mach", [0.4, 0.8], role="condition", units="1",
                    lower=float("nan"), upper=1.0)
     assert caught.value.rule == "E19"
-    assert caught.value.where == "mach"
+    assert caught.value.path == "mach"
     assert "lower" in caught.value.message
     ds.add_key("mach", [0.4, 0.8], role="condition", units="1")
     ds.keys["mach"].upper = float("inf")
@@ -807,7 +807,7 @@ def test_units_that_are_not_text_are_refused(tmp_path):
     with pytest.raises(MestraError) as caught:
         ds.add_key("mach", [0.4, 0.8], role="condition", units=1)
     assert caught.value.rule == "E19"
-    assert caught.value.where == "mach"
+    assert caught.value.path == "mach"
     ds.add_key("mach", [0.4, 0.8], role="condition", units="1")
     with pytest.raises(MestraError) as caught:
         ds.add_scalar("cl", [0.1, 0.2], units=1)

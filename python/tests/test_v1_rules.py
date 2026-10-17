@@ -55,7 +55,7 @@ def warnings_at(report, rule):
 
 
 def recreate(f, path, values=None, dtype=None, chunks="keep",
-             maxshape="keep", dims=None):
+             maxshape="keep", dims=None, **extra):
     """Replace a dataset with the same attributes and dimension scales
     (or the scales at the paths `dims` names, one per axis) and
     different values, dtype, chunks or maximum shape."""
@@ -76,7 +76,7 @@ def recreate(f, path, values=None, dtype=None, chunks="keep",
             old.dims[axis].detach_scale(scale)
     del f[path]
     new = f.create_dataset(path, data=data.astype(dtype), dtype=dtype,
-                           track_times=False, **kw)
+                           track_times=False, **kw, **extra)
     for name, (value, htype) in attrs.items():
         if isinstance(htype, h5py.h5t.TypeStringID):
             space = h5py.h5s.create(h5py.h5s.SCALAR)

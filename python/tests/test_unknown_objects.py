@@ -57,7 +57,7 @@ def test_an_unknown_dataset_in_a_support_is_checked_like_any_other(
         stray.dims[0].attach_scale(f["row"])
     report = mestra.validate(path)
     assert report.error_ids == ["E27"]
-    assert [f.where for f in report.errors] == ["/supports/s0/row"]
+    assert [f.path for f in report.errors] == ["/supports/s0/row"]
     # Not W11: that rule is "an attribute or a group this reader does
     # not know", and section 28 adds groups and attributes, never
     # datasets.
@@ -93,4 +93,4 @@ def test_an_unknown_group_in_a_support_is_left_alone(tmp_path):
     report = mestra.validate(path)
     assert report.error_ids == []
     assert report.warning_ids == ["W11"]
-    assert [f.where for f in report.warnings] == ["/supports/s0/fitted"]
+    assert [f.path for f in report.warnings] == ["/supports/s0/fitted"]

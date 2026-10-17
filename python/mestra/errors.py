@@ -33,11 +33,6 @@ class MestraError(Exception):
         super().__init__(": ".join(
             [part for part in (rule, path) if part] + [message]))
 
-    @property
-    def where(self) -> str:
-        """The same as `path`, under the name version 0 used."""
-        return self.path
-
 
 class TooLarge(MestraError):
     """A read that would materialise more than the limit allows.
@@ -72,11 +67,6 @@ class Finding:
             object.__setattr__(
                 self, "severity",
                 "warning" if self.rule.startswith("W") else "error")
-
-    @property
-    def where(self) -> str:
-        """The same as `path`, under the name version 0 used."""
-        return self.path
 
     def __str__(self) -> str:
         head = " ".join(part for part in (self.rule, _one_line(self.path))

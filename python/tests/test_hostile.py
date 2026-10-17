@@ -151,7 +151,7 @@ def test_array_attributes_are_e19():
     """Section 18 gives every attribute a scalar dataspace."""
     report = validate("attrs_as_arrays.mes")
     assert "E19" in report.error_ids
-    where = [f.where for f in report.errors if f.rule == "E19"]
+    where = [f.path for f in report.errors if f.rule == "E19"]
     assert "/" in where and "/keys/mach" in where
     assert "/scalars/cl" in where
     with read("attrs_as_arrays.mes") as ds:
@@ -209,7 +209,7 @@ def test_members_of_the_wrong_kind():
     # An object of the wrong kind is one the reader cannot read as
     # what its place says it is (E41), in every language; a callable
     # that is a dataset is not a callable group without a type (E15).
-    wrong_kind = {f.where for f in report.errors if f.rule == "E41"}
+    wrong_kind = {f.path for f in report.errors if f.rule == "E41"}
     assert {"/keys/alpha", "/supports/s1", "/callables/m1"} <= wrong_kind
     assert "E15" not in report.error_ids
     # The scalar that is a group with `source = data` is E30.
@@ -257,10 +257,10 @@ def test_the_validator_carries_on_past_what_it_cannot_read():
     """The rules after the unreadable object are still reported."""
     report = validate("unreadable_dataset.mes")
     assert report.unclassified
-    assert any("/categories/" in f.where for f in report.unclassified)
+    assert any("/categories/" in f.path for f in report.unclassified)
     # E11 is about a field that sits after the unreadable objects.
     assert "E11" in report.error_ids
-    assert any(f.where.endswith("zeta") for f in report.errors)
+    assert any(f.path.endswith("zeta") for f in report.errors)
 
 
 @pytest.mark.parametrize("name", ["not_hdf5.mes", "truncated.mes"])

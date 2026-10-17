@@ -65,7 +65,7 @@ def test_a_key_of_the_wrong_dtype(tmp_path):
         fresh.dims[0].attach_scale(f["/row"])
     report = mestra.validate(path)
     assert report.error_ids == ["E20"]
-    assert [f.where for f in report.errors] == ["/keys/mach"]
+    assert [f.path for f in report.errors] == ["/keys/mach"]
     _reads(path)
 
 
@@ -78,7 +78,7 @@ def test_a_support_declaring_no_nodes(tmp_path):
         f["/supports/s0"].attrs.modify("n_nodes", np.int64(0))
     report = mestra.validate(path)
     assert report.error_ids == ["E05", "E08", "E24"]
-    assert sorted(f.where for f in report.errors if f.rule == "E05") == [
+    assert sorted(f.path for f in report.errors if f.rule == "E05") == [
         "/supports/s0/coordinates", "/supports/s0/node_arrays/pressure"]
     _reads(path)
 
@@ -93,7 +93,7 @@ def test_a_mesh_declaring_more_cells_than_it_has(tmp_path):
         f["/supports/s0"].attrs.modify("n_cells", np.int64(3))
     report = mestra.validate(path)
     assert report.error_ids == ["E05"]
-    assert [f.where for f in report.errors] == ["/supports/s0/cell_types"]
+    assert [f.path for f in report.errors] == ["/supports/s0/cell_types"]
     assert "declares 3 cells" in report.errors[0].message
 
 
@@ -105,7 +105,7 @@ def test_a_negative_cell_count(tmp_path):
         f["/supports/s0"].attrs.modify("n_cells", np.int64(-1))
     report = mestra.validate(path)
     assert report.error_ids == ["E05"]
-    assert sorted(f.where for f in report.errors) == [
+    assert sorted(f.path for f in report.errors) == [
         "/supports/s0/cell_arrays/region", "/supports/s0/cell_types"]
     _reads(path)
 
@@ -127,7 +127,7 @@ def test_a_slot_axis_carrying_a_strangers_scale(tmp_path):
         slot.dims[1].attach_scale(stranger)
     report = mestra.validate(path)
     assert report.error_ids == ["E25", "E42"]
-    assert [f.where for f in report.errors if f.rule == "E25"] == [
+    assert [f.path for f in report.errors if f.rule == "E25"] == [
         "/supports/s0/node_arrays/pressure"]
     _refuses(path, "E25")
 
@@ -144,7 +144,7 @@ def test_units_that_are_not_a_string(tmp_path):
     report = mestra.validate(path)
     assert report.error_ids == ["E19"]
     assert report.warning_ids == []
-    assert [f.where for f in report.errors] == [
+    assert [f.path for f in report.errors] == [
         "/supports/s0/node_arrays/pressure"]
     _refuses(path, "E19")
 
@@ -181,7 +181,7 @@ def test_an_affine_output_with_no_offset():
         mestra.Affine(["mach"], {"cl": {"A": [[1.0]], "shape": []}})
     assert caught.value.rule == "section 27"
     assert "no b" in caught.value.message
-    assert caught.value.where == "cl"
+    assert caught.value.path == "cl"
 
 
 def test_duplicated_entries_in_a_category_table(tmp_path):
@@ -231,7 +231,7 @@ def test_a_key_one_group_too_deep(tmp_path):
         f.move("/keys/mach", "/keys/nested/mach")
     report = mestra.validate(path)
     assert report.error_ids == ["E41"]
-    assert [f.where for f in report.errors] == ["/keys/nested"]
+    assert [f.path for f in report.errors] == ["/keys/nested"]
     _refuses(path, "E41")
 
 
@@ -261,7 +261,7 @@ def test_a_bound_that_is_not_finite(tmp_path):
         f["/keys/mach"].attrs.modify("lower", np.float64("nan"))
     report = mestra.validate(path)
     assert report.error_ids == ["E19"]
-    assert [f.where for f in report.errors] == ["/keys/mach"]
+    assert [f.path for f in report.errors] == ["/keys/mach"]
     _refuses(path, "E19")
     path = _case(tmp_path, "band_stored", "inf_level")
     with h5py.File(path, "r+") as f:
@@ -294,7 +294,7 @@ def test_a_big_endian_array_in_a_dictionary(tmp_path):
         data.dims[0].attach_scale(dim)
     report = mestra.validate(path)
     assert report.error_ids == ["E32"]
-    assert [f.where for f in report.errors] == ["/callables/m2/weights"]
+    assert [f.path for f in report.errors] == ["/callables/m2/weights"]
 
 
 @pytest.mark.parametrize("name", ["err_e16_row_support",

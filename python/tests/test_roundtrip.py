@@ -93,7 +93,7 @@ def test_a_destination_that_cannot_take_a_file_is_refused_first(tmp_path):
             with pytest.raises(mestra.MestraError) as caught:
                 mestra.write(ds, path)
             assert caught.value.rule == ""
-            assert caught.value.where == path
+            assert caught.value.path == path
             assert said in caught.value.message
     finally:
         read_only.chmod(stat.S_IRWXU)

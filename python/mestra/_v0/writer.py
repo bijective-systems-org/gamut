@@ -194,8 +194,8 @@ def _refuse_what_the_validator_would(dataset: Dataset,
     errors = validate(dataset).errors
     if not errors:
         return
-    listed = "\n".join("  %s %s: %s" % (f.rule, f.where, f.message)
-                       if f.where else "  %s %s" % (f.rule, f.message)
+    listed = "\n".join("  %s %s: %s" % (f.rule, f.path, f.message)
+                       if f.path else "  %s %s" % (f.rule, f.message)
                        for f in errors[:8])
     if len(errors) > 8:
         listed += "\n  ... and %d more" % (len(errors) - 8)

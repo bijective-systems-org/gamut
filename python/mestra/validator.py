@@ -158,7 +158,7 @@ def scan(f: h5py.File, limit: int | None = None,
     return checker.run()
 
 
-def validate(target: Any) -> Report:
+def validate(path_or_ds: Any) -> Report:
     """Validate a file by path, or a dataset.
 
     A file that cannot be opened at all is a report saying so (E01),
@@ -167,10 +167,10 @@ def validate(target: Any) -> Report:
     same rules as its file; what the dataset cannot be written as is
     reported with the rule the writer named.
     """
-    if isinstance(target, Dataset):
-        return _validate_dataset(target)
+    if isinstance(path_or_ds, Dataset):
+        return _validate_dataset(path_or_ds)
     try:
-        f = h5safe.open_file(str(target))
+        f = h5safe.open_file(str(path_or_ds))
     except MestraError as exc:
         return Report(errors=[Finding(exc.rule, "", exc.message)])
     try:

@@ -1,0 +1,239 @@
+{
+  "names": {
+    "Affine": {
+      "kind": "class",
+      "members": {
+        "from_dict": "classmethod (d)",
+        "inputs": "attribute",
+        "keys": "attribute",
+        "outputs": "attribute",
+        "to_dict": "method (self)",
+        "type": "attribute"
+      },
+      "signature": "(keys, outputs, repr_line=None)"
+    },
+    "Callable": {
+      "kind": "class",
+      "members": {
+        "from_dict": "classmethod (d)",
+        "inputs": "attribute",
+        "to_dict": "method (self)",
+        "type": "attribute"
+      },
+      "signature": "()"
+    },
+    "Dataset": {
+      "kind": "class",
+      "members": {
+        "add_callable": "method (self, id, callable, inputs=None)",
+        "add_category_table": "method (self, name, entries)",
+        "add_constant": "method (self, name, value, units, *, dtype=None)",
+        "add_label": "method (self, name, values, role, category=None, *, categories=None)",
+        "add_parameter": "method (self, name, values, role, units, lower=None, upper=None, run_group=None)",
+        "add_scalar": "method (self, name, values, units, *, dtype=None, statistic=None, of=None, level=None, method=None, with_respect_to=None, round_bits=None, callable=None, output=None)",
+        "addons": "property",
+        "callables": "attribute",
+        "categories": "attribute",
+        "close": "method (self)",
+        "created": "attribute",
+        "format": "attribute",
+        "generalisation_group": "attribute",
+        "kind": "property",
+        "labels": "attribute",
+        "license": "attribute",
+        "mesh": "attribute",
+        "notes": "attribute",
+        "parameters": "attribute",
+        "path": "attribute",
+        "references": "attribute",
+        "row_count": "property",
+        "scalars": "attribute",
+        "set_generalisation_group": "method (self, name)",
+        "set_mesh": "method (self, cells=None, *, coordinates=None, units, dims, n_nodes=None, dtype=None, callable=None, output=None, components=None)",
+        "source": "attribute",
+        "title": "attribute",
+        "to_xarray": "method (self)",
+        "writer": "attribute"
+      },
+      "signature": "(writer='mestra python', created=None)"
+    },
+    "FORMAT": {
+      "kind": "constant",
+      "value": "mestra/1"
+    },
+    "Finding": {
+      "kind": "class",
+      "members": {
+        "message": "attribute",
+        "path": "attribute",
+        "rule": "attribute",
+        "severity": "attribute"
+      }
+    },
+    "Label": {
+      "kind": "class",
+      "members": {
+        "category": "attribute",
+        "codes": "method (self, rows=None)",
+        "dtype": "property",
+        "name": "attribute",
+        "names": "method (self, rows=None)",
+        "role": "attribute",
+        "table": "property"
+      }
+    },
+    "Mesh": {
+      "kind": "class",
+      "members": {
+        "add_cell_array": "method (self, name, values, units, dims, *, role='field', category=None, dtype=None, statistic=None, of=None, level=None, method=None, with_respect_to=None, round_bits=None, callable=None, output=None, components=None)",
+        "add_node_array": "method (self, name, values, units, dims, *, role='field', category=None, dtype=None, statistic=None, of=None, level=None, method=None, with_respect_to=None, round_bits=None, callable=None, output=None, components=None)",
+        "cell_arrays": "attribute",
+        "cells": "method (self)",
+        "coordinates": "attribute",
+        "kind": "attribute",
+        "n_cells": "attribute",
+        "n_nodes": "attribute",
+        "node_arrays": "attribute",
+        "support_id": "property"
+      }
+    },
+    "MestraError": {
+      "kind": "exception",
+      "members": {
+        "message": "attribute",
+        "path": "attribute",
+        "rule": "attribute"
+      },
+      "signature": "(rule, message, path='')"
+    },
+    "NamedArray": {
+      "kind": "class",
+      "members": {
+        "at": "method (self, **where)",
+        "axis": "method (self, name)",
+        "dims": "attribute",
+        "dtype": "property",
+        "ndim": "property",
+        "shape": "property",
+        "transpose": "method (self, *dims)",
+        "values": "attribute"
+      },
+      "signature": "(values, dims)"
+    },
+    "OpaqueCallable": {
+      "kind": "class",
+      "members": {
+        "from_dict": "classmethod (d)",
+        "inputs": "attribute",
+        "to_dict": "method (self)",
+        "type": "attribute"
+      }
+    },
+    "Parameter": {
+      "kind": "class",
+      "members": {
+        "dtype": "property",
+        "lower": "attribute",
+        "name": "attribute",
+        "role": "attribute",
+        "run_group": "attribute",
+        "units": "attribute",
+        "upper": "attribute",
+        "values": "method (self, rows=None)"
+      }
+    },
+    "Prediction": {
+      "kind": "class",
+      "members": {
+        "has_uncertainty": "property",
+        "level": "attribute",
+        "mean": "attribute",
+        "method": "attribute",
+        "uncertainty": "attribute"
+      },
+      "signature": "(mean, uncertainty=None, level=None, method=None)"
+    },
+    "Report": {
+      "kind": "class",
+      "members": {
+        "error_ids": "property",
+        "errors": "attribute",
+        "findings": "property",
+        "ok": "property",
+        "unclassified": "property",
+        "warning_ids": "property",
+        "warnings": "attribute"
+      }
+    },
+    "Slot": {
+      "kind": "class",
+      "members": {
+        "callable_id": "property",
+        "category": "attribute",
+        "components": "attribute",
+        "dims": "property",
+        "dtype": "property",
+        "level": "attribute",
+        "location": "attribute",
+        "method": "attribute",
+        "name": "attribute",
+        "of": "attribute",
+        "output": "attribute",
+        "path": "property",
+        "read": "method (self, rows=None, nodes=None, cells=None, instances=None)",
+        "role": "attribute",
+        "served": "property",
+        "significant_bits": "attribute",
+        "source": "attribute",
+        "statistic": "attribute",
+        "units": "attribute",
+        "varies": "attribute",
+        "with_respect_to": "attribute"
+      }
+    },
+    "__version__": {
+      "kind": "constant"
+    },
+    "append": {
+      "kind": "function",
+      "signature": "(ds, path, replace_by=None)"
+    },
+    "callable_types": {
+      "kind": "function",
+      "signature": "()"
+    },
+    "evaluate": {
+      "kind": "function",
+      "signature": "(ds, inputs=None)"
+    },
+    "input_table": {
+      "kind": "function",
+      "signature": "(ds_or_mapping, names=None)"
+    },
+    "prediction": {
+      "kind": "function",
+      "signature": "(ds, slot_name, inputs=None)"
+    },
+    "read": {
+      "kind": "function",
+      "signature": "(path, lazy=True, strict=True)"
+    },
+    "register_callable": {
+      "kind": "function",
+      "signature": "(cls)"
+    },
+    "upgrade": {
+      "kind": "function",
+      "signature": "(src, dst)"
+    },
+    "validate": {
+      "kind": "function",
+      "signature": "(path_or_ds)"
+    },
+    "write": {
+      "kind": "function",
+      "signature": "(ds, path, check=True)"
+    }
+  },
+  "package": "mestra"
+}

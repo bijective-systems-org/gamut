@@ -23,7 +23,7 @@ CELLS = (np.array([9, 9]), np.array([0, 4, 8]),
 
 
 def pairs(report):
-    return collections.Counter((f.rule, f.where) for f in report.findings)
+    return collections.Counter((f.rule, f.path) for f in report.findings)
 
 
 @pytest.mark.parametrize("name", corpus.case_names())
@@ -140,7 +140,7 @@ def test_findings_from_opening_a_file_reach_the_dataset_report():
         Finding("E40", "/keys/elsewhere", "an external link"))
     report = mestra.validate(ds)
     assert "E40" in report.error_ids
-    assert [f.where for f in report.unclassified] == ["/keys/elsewhere"]
+    assert [f.path for f in report.unclassified] == ["/keys/elsewhere"]
 
 
 def test_a_support_may_carry_weights_at_both_locations(tmp_path):
@@ -182,7 +182,7 @@ def test_an_illegal_dictionary_key_is_one_finding_at_its_group():
     three implementations report it; the dictionary check also
     reported it at a path naming the attribute, which is no object."""
     report = mestra.validate(corpus.case_path("err_e33_dictionary"))
-    assert [(f.rule, f.where) for f in report.errors] == [
+    assert [(f.rule, f.path) for f in report.errors] == [
         ("E33", "/callables/m1/outputs/cl")]
 
 
@@ -191,7 +191,7 @@ def test_a_wrong_node_count_is_reported_at_the_offsets():
     there; Python reported it at the support and MATLAB at the
     connectivity, so one file gave one rule at three paths."""
     report = mestra.validate(corpus.case_path("err_e22"))
-    assert [(f.rule, f.where) for f in report.errors] == [
+    assert [(f.rule, f.path) for f in report.errors] == [
         ("E22", "/supports/s0/cell_offsets")]
 
 
@@ -203,11 +203,11 @@ def test_e18_is_reported_at_each_object_something_is_missing_from(tmp_path):
 
     import h5py
     report = mestra.validate(corpus.case_path("err_e18"))
-    assert [f.where for f in report.findings if f.rule == "E18"] == ["/"]
+    assert [f.path for f in report.findings if f.rule == "E18"] == ["/"]
     path = str(tmp_path / "two_objects.mes")
     shutil.copy(corpus.case_path("err_e18_role"), path)
     with h5py.File(path, "r+") as f:
         del f["/keys/mach"].attrs["units"]
     report = mestra.validate(path)
-    assert sorted(f.where for f in report.findings if f.rule == "E18") == [
+    assert sorted(f.path for f in report.findings if f.rule == "E18") == [
         "/keys/flow", "/keys/mach"]

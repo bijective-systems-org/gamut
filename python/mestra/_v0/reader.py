@@ -157,7 +157,7 @@ def _refuse(handle: h5py.File, path: str) -> None:
             "cannot vouch for what it would return; read it with "
             "strict=False to take what there is"
             % (bad[0].message, ", ".join(sorted({f.rule for f in bad}))),
-            bad[0].where or path)
+            bad[0].path or path)
 
 
 def support_ids(path: str) -> dict[str, str]:

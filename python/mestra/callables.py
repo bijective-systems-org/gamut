@@ -78,7 +78,7 @@ class InputTable(Mapping[str, NamedArray]):
             self.row_count, ", ".join(self._columns))
 
 
-def input_table(source: Any, names: Sequence[str] | None = None
+def input_table(ds_or_mapping: Any, names: Sequence[str] | None = None
                 ) -> InputTable:
     """The table a callable receives.
 
@@ -93,20 +93,20 @@ def input_table(source: Any, names: Sequence[str] | None = None
     """
     from .model import Dataset
 
-    if isinstance(source, InputTable) and names is None:
-        return source
-    if isinstance(source, Dataset):
-        return _from_dataset(source, names)
-    if isinstance(source, Mapping):
-        wanted = list(source) if names is None else list(names)
+    if isinstance(ds_or_mapping, InputTable) and names is None:
+        return ds_or_mapping
+    if isinstance(ds_or_mapping, Dataset):
+        return _from_dataset(ds_or_mapping, names)
+    if isinstance(ds_or_mapping, Mapping):
+        wanted = list(ds_or_mapping) if names is None else list(names)
         columns: dict[str, NamedArray] = {}
         for name in wanted:
-            if name not in source:
+            if name not in ds_or_mapping:
                 raise MestraError(
                     "", "the table has no column %r" % (name,))
-            columns[str(name)] = _column(str(name), source[name])
+            columns[str(name)] = _column(str(name), ds_or_mapping[name])
         return _checked(columns)
-    values = np.asarray(source)
+    values = np.asarray(ds_or_mapping)
     if values.ndim != 2 or names is None or len(names) != values.shape[1]:
         raise MestraError(
             "", "an input table is a mapping of name to column, a "
@@ -253,14 +253,14 @@ class Callable(ABC):
 _REGISTRY: dict[str, Any] = {}
 
 
-def register_callable(kind: Any) -> Any:
+def register_callable(cls: Any) -> Any:
     """Register a callable class under its `type` string. Usable as a
     decorator; a second registration of a type replaces the first."""
-    if not getattr(kind, "type", ""):
+    if not getattr(cls, "type", ""):
         raise MestraError("E15", "a callable class sets a type string",
-                          getattr(kind, "__name__", ""))
-    _REGISTRY[kind.type] = kind
-    return kind
+                          getattr(cls, "__name__", ""))
+    _REGISTRY[cls.type] = cls
+    return cls
 
 
 def callable_types() -> dict[str, Any]:

@@ -87,7 +87,7 @@ def upgrade(src: str, dst: str) -> Report:
         found = _v0.validate(old)
         for finding in found.errors:
             report.errors.append(Finding(
-                finding.rule, finding.where, "the version 0 file breaks "
+                finding.rule, finding.path, "the version 0 file breaks "
                 "this rule, so it is not upgraded: %s" % finding.message))
         if report.errors:
             return report

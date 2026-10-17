@@ -73,8 +73,8 @@ _SLOT_ORDER = ("role", "units", "varies", "components", "source",
                "level", "method", "with_respect_to")
 
 
-def write(dataset: Dataset, path: str, check: bool = True) -> None:
-    """Write `dataset` to `path` as a version 1 file.
+def write(ds: Dataset, path: str, check: bool = True) -> None:
+    """Write `ds` to `path` as a version 1 file.
 
     The file is staged beside the destination and, unless `check` is
     false, validated there; any error refuses the write with the
@@ -82,24 +82,24 @@ def write(dataset: Dataset, path: str, check: bool = True) -> None:
     do not stop a write. `check=False` publishes whatever was staged,
     which is how a test makes a file to be refused.
     """
-    dataset.callables._read_all()
-    for captured in list(dataset._opaque.values()):
+    ds.callables._read_all()
+    for captured in list(ds._opaque.values()):
         opaque.read_all(captured)
-    for kind, body in dataset._unknown.values():
+    for kind, body in ds._unknown.values():
         opaque.read_member(kind, body)
-    if dataset.mesh is not None:
-        for captured in dataset.mesh._opaque.values():
+    if ds.mesh is not None:
+        for captured in ds.mesh._opaque.values():
             opaque.read_all(captured)
-        for kind, body in dataset.mesh._unknown.values():
+        for kind, body in ds.mesh._unknown.values():
             opaque.read_member(kind, body)
-    if dataset._lossy:
+    if ds._lossy:
         raise MestraError(
             "E41", "this dataset was read from a file with parts that "
             "could not be copied (%s), so writing it would lose them"
-            % ", ".join(sorted(dataset._lossy)[:4]), str(path))
+            % ", ".join(sorted(ds._lossy)[:4]), str(path))
     target = Path(path)
     _refuse_a_destination_that_cannot_take_a_file(str(path), target)
-    _refuse_unwritable_names(dataset)
+    _refuse_unwritable_names(ds)
     try:
         mode = stat.S_IMODE(target.stat().st_mode)
     except FileNotFoundError:
@@ -108,7 +108,7 @@ def write(dataset: Dataset, path: str, check: bool = True) -> None:
                                      dir=target.parent) as directory:
         staged = Path(directory) / "data.mes"
         with h5py.File(staged, "w") as f:
-            _write(dataset, f)
+            _write(ds, f)
         if check:
             _refuse_what_the_validator_finds(str(staged), str(path))
         if mode is not None:

@@ -184,7 +184,7 @@ def validate(target: Any) -> Report:
     try:
         f = h5safe.open_file(str(target))
     except MestraError as exc:
-        return Report(errors=[Finding(exc.rule, exc.where, exc.message)])
+        return Report(errors=[Finding(exc.rule, exc.path, exc.message)])
     try:
         return _FileValidator(f).run()
     finally:
@@ -252,7 +252,7 @@ class _FileValidator:
         try:
             return step(*args)
         except MestraError as exc:
-            self.note(exc.where or where, exc.message,
+            self.note(exc.path or where, exc.message,
                       exc.rule if exc.rule in ("E40", "E41") else "E41")
         except RecursionError:
             self.note(where, "this object nests deeper than this "
@@ -474,7 +474,7 @@ class _FileValidator:
         missing: dict[str, set[str]] = {}
         for found in self.report.errors:
             if found.rule in _MISSING_PUBLIC:
-                missing.setdefault(found.where, set()).add(found.rule)
+                missing.setdefault(found.path, set()).add(found.rule)
         for where, rules in missing.items():
             self.error(
                 "E18", where, "public information is missing here (%s) "
@@ -1759,7 +1759,7 @@ def _once(into: list[Finding], rule: str, where: str,
     is the net under all of them, so that no rule has to remember.
     """
     for found in into:
-        if found.rule == rule and found.where == where:
+        if found.rule == rule and found.path == where:
             return
     into.append(Finding(rule, where, message))
 
@@ -2072,7 +2072,7 @@ def _validate_dataset(ds: Dataset) -> Report:
     # something the library would not read. `unclassified` is a view
     # of `errors`, so these belong in `errors`.
     for problem in ds.problems:
-        error(problem.rule, problem.where, problem.message)
+        error(problem.rule, problem.path, problem.message)
 
     if ds.format != "mestra/0":
         error("E01", "/", "this reader accepts mestra/0 and the "
