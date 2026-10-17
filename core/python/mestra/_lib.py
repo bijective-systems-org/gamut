@@ -141,6 +141,7 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "mes_read": (_I, [_P, _S, _SEL, _SEL, _I, _P, _L, _E]),
     "mes_label_names": (_I, [_P, _S, _SEL, _PP, _E]),
     "mes_table": (_I, [_P, _S, _PP, _E]),
+    "mes_select": (_I, [_P, _S, ctypes.POINTER(_L), _L, ctypes.POINTER(_L), _E]),
     "mes_validate": (_I, [_S, _PP, _E]),
     "mes_report_count": (_L, [_P]),
     "mes_report_get": (_I, [_P, _L, _SS, _SS, _SS, _SS]),

@@ -351,6 +351,16 @@ class Study:
                 out[n] = self.get_scalar(n, rows)
         return out
 
+    def select(self, where: str) -> np.ndarray:
+        """The positions of the rows `where` selects, e.g.
+        "mach > 0.5 and status == converged" (interface section 4)."""
+        self._need_reader()
+        out = np.empty(max(self.row_count, 1), dtype=np.int64)
+        n = ctypes.c_int64()
+        call("mes_select", self._handle(), b(where), out.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
+             out.size, ctypes.byref(n))
+        return out[: n.value].copy()
+
     def related(self, name: str) -> dict[str, Any]:
         """What describes `name`: its std, quantiles, derivatives, and the
         other parts of its vector."""

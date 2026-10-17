@@ -13,6 +13,7 @@
 #include "names.hpp"
 #include "nearest.hpp"
 #include "reader.hpp"
+#include "select.hpp"
 #include "types.hpp"
 #include "validate.hpp"
 #include "writer.hpp"
@@ -709,6 +710,23 @@ int mes_label_names(const mes_file* f, const char* label, const mes_sel* rows, m
     clear(err);
     need(out != nullptr, "out is NULL");
     *out = strings(reader_of(f).label_names(str(label), selection(rows)));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int mes_select(const mes_file* f, const char* where, int64_t* out, int64_t capacity, int64_t* n,
+               mes_error* err) {
+  try {
+    clear(err);
+    need(n != nullptr, "n is NULL");
+    const auto rows = mestra::internal::select_rows(reader_of(f), str(where));
+    need(static_cast<int64_t>(rows.size()) <= capacity && (rows.empty() || out != nullptr),
+         "the output buffer holds " + std::to_string(capacity) + " positions and " +
+             std::to_string(rows.size()) + " rows are selected");
+    if (!rows.empty()) std::memcpy(out, rows.data(), rows.size() * sizeof(int64_t));
+    *n = static_cast<int64_t>(rows.size());
     return 0;
   } catch (...) {
     return fail(err);

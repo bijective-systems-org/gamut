@@ -238,3 +238,30 @@ def test_parallel_reads_equal_serial_reads(tmp_path):
         # Index selections fall back to the serial path and still agree.
         np.testing.assert_array_equal(par.get_field("a", rows=[1, 5]),
                                       serial.get_field("a", rows=[1, 5]))
+
+
+def test_select_where(tmp_path):
+    p = str(tmp_path / "sel.mes")
+    with mestra.create(p, writer="t", parameters={"mach": "1", "alpha": "degree"},
+                       labels={"status": {"role": "status", "categories": ["converged", "failed"]},
+                               "model": {"role": "categorical", "categories": ["k-omega SST", "SA"]}},
+                       scalars={"cl": "1"}) as s:
+        s.add_runs({"mach": [0.3, 0.5, 0.7, 0.9], "alpha": [0.0, 2.0, 4.0, 6.0],
+                    "status": ["converged", "failed", "converged", "converged"],
+                    "model": ["SA", "k-omega SST", "SA", "k-omega SST"],
+                    "cl": [0.1, np.nan, 0.5, 0.7]})
+    with mestra.open(p) as f:
+        assert f.select("mach > 0.4").tolist() == [1, 2, 3]
+        assert f.select("mach > 0.4 and status == converged").tolist() == [2, 3]
+        assert f.select('model == "k-omega SST" or alpha <= 0').tolist() == [0, 1, 3]
+        assert f.select("not (mach > 0.4)").tolist() == [0]
+        with pytest.raises(mestra.MestraError, match="operator"):
+            f.select("(mach>0.4)and(alpha<5)")   # tokens are separated by spaces
+    with mestra.open(p) as f:
+        # NaN compares false, so these differ on row 1.
+        assert f.select("cl <= 0.5").tolist() == [0, 2]
+        assert f.select("not (cl > 0.5)").tolist() == [0, 1, 2]
+        for bad in ("mach >", "status < converged", "status == unknown", "nothing > 1",
+                    "mach > big", "(mach > 1"):
+            with pytest.raises(mestra.MestraError):
+                f.select(bad)
