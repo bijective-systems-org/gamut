@@ -344,3 +344,39 @@ def test_an_upgraded_axis_is_points(tmp_path):
         assert new.kind == "points"
         assert new.mesh.support_id == old.supports["s0"].support_id
         assert new.mesh.coordinates.read().shape == (3, 1)
+
+
+@pytest.mark.parametrize("how", ["same name", "another spelling",
+                                 "symbolic link", "hard link"])
+def test_upgrade_never_writes_over_its_source(tmp_path, how):
+    src = write_v0(v0_dataset(), tmp_path)
+    if how == "same name":
+        dst = src
+    elif how == "another spelling":
+        dst = str(tmp_path / "." / "v0.mes")
+    elif how == "symbolic link":
+        dst = str(tmp_path / "link.mes")
+        os.symlink(src, dst)
+    else:
+        dst = str(tmp_path / "hard.mes")
+        os.link(src, dst)
+    before = digest(src)
+    with pytest.raises(lib.MestraError) as caught:
+        lib.upgrade(src, dst)
+    assert caught.value.rule == ""
+    assert "same file" in caught.value.message
+    assert digest(src) == before
+    with h5py.File(src, "r") as f:
+        assert f.attrs["format"] == b"mestra/0"
+
+
+def test_the_command_line_refuses_to_upgrade_a_file_onto_itself(tmp_path,
+                                                                capsys):
+    from mestra.cli import main
+    src = write_v0(v0_dataset(), tmp_path)
+    before = digest(src)
+    assert main(["upgrade", src, src, "--json"]) == 1
+    document = json.loads(capsys.readouterr().out)
+    assert document["errors"] == 1
+    assert "same file" in document["findings"][0]["message"]
+    assert digest(src) == before

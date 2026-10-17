@@ -20,6 +20,7 @@ creates constants.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import h5py
@@ -69,9 +70,12 @@ def upgrade(src: str, dst: str) -> Report:
     feature or the clash, and nothing is written. On success the
     report carries a line (rule "", a warning) for each thing version
     1 does not keep, followed by the findings of validating `dst`.
-    `src` is never changed.
+    `src` is never changed: a `dst` that names the same file is refused
+    with a `MestraError` before anything is read or written.
     """
     from . import _v0
+
+    _refuse_the_same_file(str(src), str(dst))
 
     report = Report()
     try:
@@ -106,6 +110,22 @@ def upgrade(src: str, dst: str) -> Report:
     report.errors.extend(checked.errors)
     report.warnings.extend(checked.warnings)
     return report
+
+
+def _refuse_the_same_file(src: str, dst: str) -> None:
+    """The upgrade writes a new file; it never replaces its source, by
+    the same name, another name for it, or a link to it."""
+    same = os.path.realpath(src) == os.path.realpath(dst)
+    if not same and os.path.exists(src) and os.path.exists(dst):
+        try:
+            same = os.path.samefile(src, dst)
+        except OSError:
+            same = False
+    if same:
+        raise MestraError(
+            "", "dst names the same file as src; upgrade writes a new file "
+            "and never changes the original, so give dst another name",
+            dst)
 
 
 def _format_of(path: str) -> Any:

@@ -139,7 +139,11 @@ def _info(path: str, as_json: bool) -> int:
 
 
 def _upgrade(src: str, dst: str, as_json: bool) -> int:
-    report = upgrade(src, dst)
+    try:
+        report = upgrade(src, dst)
+    except MestraError as exc:
+        report = Report(errors=[Finding(exc.rule, exc.path, exc.message,
+                                        "error")])
     written = not report.errors and os.path.exists(dst)
     document = _document(dst if written else src, report,
                          kind_from=dst if written else None)
