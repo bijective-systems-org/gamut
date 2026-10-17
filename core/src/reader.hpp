@@ -50,6 +50,8 @@ class Reader {
   std::vector<std::string> label_names(const std::string& name,
                                        const Selection& runs) const;
   std::vector<std::string> table(const std::string& name) const;
+  // Worker threads for reading fields (1: serial through HDF5).
+  void set_threads(int n) { threads_ = n < 1 ? 1 : n; }
 
  private:
   Reader() = default;
@@ -58,6 +60,7 @@ class Reader {
 
   std::unique_ptr<File> file_;
   Schema schema_;
+  int threads_ = 1;
 };
 
 }  // namespace internal

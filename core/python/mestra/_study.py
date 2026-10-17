@@ -44,6 +44,8 @@ class Study:
         self._mesh_kind = ""
         self._per = ""
         self._axes = 3
+        self._described: dict[str, dict[str, str]] = {}
+        self._rows: int | None = None
         if not writing:
             self._mesh_kind = self._info("mesh_kind")
             self._per = self._info("per")
@@ -225,7 +227,9 @@ class Study:
     @property
     def row_count(self) -> int:
         self._need_reader()
-        return int(self._info("row_count"))
+        if self._rows is None:
+            self._rows = int(self._info("row_count"))
+        return self._rows
 
     def names(self, group: str) -> list[str]:
         self._need_reader()
@@ -234,8 +238,12 @@ class Study:
     def describe(self, name: str | None = None) -> dict[str, str]:
         """A concept's attributes as text, or with no name the file's own."""
         self._need_reader()
-        keys, values = _lib.two_strings_out("mes_describe", self._handle(), b(name or ""))
-        return dict(zip(keys, values))
+        key = name or ""
+        cached = self._described.get(key)
+        if cached is None:
+            keys, values = _lib.two_strings_out("mes_describe", self._handle(), b(key))
+            cached = self._described[key] = dict(zip(keys, values))
+        return dict(cached)
 
     def _get(self, name: str, rows: Any = None, sites: Any = None,
              dtype: Any = np.float64, squeeze_row: bool = True) -> np.ndarray:
@@ -447,11 +455,14 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
     return study
 
 
-def open(path: str, mode: str = "r") -> Study:  # noqa: A001 - the interface's name
-    """Opens a file to read (mode "r") or to add runs in place (mode "a")."""
+def open(path: str, mode: str = "r", threads: int = 1) -> Study:  # noqa: A001
+    """Opens a file to read (mode "r") or to add runs in place (mode "a").
+    `threads` decompresses field reads in that many threads."""
     handle = ctypes.c_void_p()
     if mode == "r":
         call("mes_open", b(path), ctypes.byref(handle))
+        if threads != 1:
+            call("mes_set_threads", handle, int(threads))
         return Study(handle, path, writing=False)
     if mode == "a":
         reader = open(path, "r")

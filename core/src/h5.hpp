@@ -122,7 +122,8 @@ class File {
   std::vector<Member> members(const std::string& path) const;
 
   std::vector<RawAttr> attributes(const std::string& path) const;
-  DsetInfo dataset_info(const std::string& path) const;
+  // `scales = false` skips the dimension-scale lookups, for reads.
+  DsetInfo dataset_info(const std::string& path, bool scales = true) const;
 
   // Reads the selection into `out`, converting to `mem`.  `sel` gives
   // one selection per leading axis; axes beyond it are read whole.

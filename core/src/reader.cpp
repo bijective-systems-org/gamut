@@ -6,6 +6,7 @@
 #include <set>
 
 #include "names.hpp"
+#include "parallel.hpp"
 
 namespace mestra {
 namespace internal {
@@ -83,7 +84,7 @@ Result result_from(const File& f, const std::string& h5path,
   if (bits) r.round_bits = static_cast<int>(*bits);
   if (!is_group) {
     DType t;
-    if (dtype_of(f.dataset_info(h5path).type, &t)) r.dtype = t;
+    if (dtype_of(f.dataset_info(h5path, false).type, &t)) r.dtype = t;
   }
   return r;
 }
@@ -105,7 +106,7 @@ Schema load_schema(const File& f) {
   s.generalisation_group = root.text("generalisation_group");
   s.trained_on = root.text("trained_on");
   s.evaluated_from = root.text("evaluated_from");
-  const DsetInfo row = f.dataset_info("/row");
+  const DsetInfo row = f.dataset_info("/row", false);
   s.rows = row.is_dataset && row.shape.size() == 1
                ? static_cast<std::int64_t>(row.shape[0])
                : 0;
@@ -124,7 +125,7 @@ Schema load_schema(const File& f) {
       if (role == "scalar") s.results.push_back(result_from(f, h5, m.name, "scalar", true));
       continue;
     }
-    const DsetInfo info = f.dataset_info(h5);
+    const DsetInfo info = f.dataset_info(h5, false);
     DType t = DType::Float64;
     const bool typed = dtype_of(info.type, &t);
     // An unknown role is ignored (spec section 17); the validator reports it.
@@ -177,10 +178,10 @@ Schema load_schema(const File& f) {
     mesh.per = ma.text("per");
     mesh.support_id = ma.text("support_id");
     auto length = [&](const std::string& p) -> std::int64_t {
-      const DsetInfo i = f.dataset_info(p);
+      const DsetInfo i = f.dataset_info(p, false);
       return i.is_dataset && i.shape.size() == 1 ? static_cast<std::int64_t>(i.shape[0]) : 0;
     };
-    const DsetInfo coords = f.dataset_info("/mesh/coordinates");
+    const DsetInfo coords = f.dataset_info("/mesh/coordinates", false);
     if (coords.is_dataset) {
       DType t;
       if (dtype_of(coords.type, &t)) mesh.coordinate_dtype = t;
@@ -202,7 +203,7 @@ Schema load_schema(const File& f) {
       }
     } else {
       mesh.n_instances = std::max<std::int64_t>(0, length("/mesh/instance_nodes") - 1);
-      const DsetInfo types = f.dataset_info("/mesh/cell_types");
+      const DsetInfo types = f.dataset_info("/mesh/cell_types", false);
       mesh.n_nodes = coords.is_dataset && !coords.shape.empty()
                          ? static_cast<std::int64_t>(coords.shape[0])
                          : 0;
@@ -210,7 +211,7 @@ Schema load_schema(const File& f) {
                          ? static_cast<std::int64_t>(types.shape[0])
                          : 0;
     }
-    const DsetInfo conn = f.dataset_info("/mesh/cell_connectivity");
+    const DsetInfo conn = f.dataset_info("/mesh/cell_connectivity", false);
     mesh.n_conn = conn.is_dataset && !conn.shape.empty()
                       ? static_cast<std::int64_t>(conn.shape[0])
                       : 0;
@@ -223,7 +224,7 @@ Schema load_schema(const File& f) {
         ml.where = where;
         ml.category = Attrs{f.attributes(lg + "/" + m.name)}.text("category");
         DType t;
-        if (dtype_of(f.dataset_info(lg + "/" + m.name).type, &t)) ml.dtype = t;
+        if (dtype_of(f.dataset_info(lg + "/" + m.name, false).type, &t)) ml.dtype = t;
         mesh.labels.push_back(ml);
       }
       const std::string fg = std::string("/mesh/") + where + "_fields";
@@ -571,6 +572,9 @@ void Reader::read(const std::string& path, const Selection& runs,
   }
   // Shared mesh.
   if (r != nullptr) {
+    if (threads_ > 1 && read_parallel(f, h5, mem, {runs, sites}, out, out_bytes, threads_)) {
+      return;
+    }
     f.read(h5, mem, {runs, sites}, out, out_bytes);
     return;
   }

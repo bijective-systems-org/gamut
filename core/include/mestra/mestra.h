@@ -140,6 +140,10 @@ MES_API int mes_close(mes_file* f, mes_error* err);
 
 /* --- Reading ------------------------------------------------------------- */
 MES_API int mes_open(const char* path, mes_file** out, mes_error* err);
+/* Worker threads for reading fields: raw chunks come through HDF5 one at a
+ * time and are decompressed in parallel outside it.  1 (the default) reads
+ * serially. */
+MES_API int mes_set_threads(mes_file* f, int threads, mes_error* err);
 /* key: "format", "kind", "type", "addons", "row_count", or a file-level
  * attribute ("writer", "created", "file_id", "title", "license",
  * "references", "source", "generalisation_group", "trained_on",

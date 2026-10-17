@@ -408,11 +408,11 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
   need(w->schema_.kind == "data", "E16",
        "runs are appended to data files, and \"" + path + "\" is a model file");
   File& f = *w->file_;
-  w->filters_ = pipeline_of(f.dataset_info("/row"));
+  w->filters_ = pipeline_of(f.dataset_info("/row", false));
   w->datasets_ready_ = true;
   w->schema_.mesh.set_done = !w->schema_.mesh.kind.empty();
   auto resume = [&](const std::string& p) {
-    const DsetInfo info = f.dataset_info(p);
+    const DsetInfo info = f.dataset_info(p, false);
     if (!info.is_dataset || info.shape.empty()) return;
     DType t;
     if (!dtype_of(info.type, &t) || t == DType::String) return;
@@ -444,8 +444,8 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
       w->instance_nodes_.push_back(cn[k + 1] - cn[k]);
       w->instance_cells_.push_back(cc[k + 1] - cc[k]);
     }
-    w->node_values_ = static_cast<std::int64_t>(f.dataset_info("/mesh/node_value").shape[0]);
-    w->cell_values_ = static_cast<std::int64_t>(f.dataset_info("/mesh/cell_value").shape[0]);
+    w->node_values_ = static_cast<std::int64_t>(f.dataset_info("/mesh/node_value", false).shape[0]);
+    w->cell_values_ = static_cast<std::int64_t>(f.dataset_info("/mesh/cell_value", false).shape[0]);
   }
   w->instances_written_ = m.n_instances;
   if (!m.per_group().empty() && s.rows > 0) {
@@ -1027,7 +1027,7 @@ void Writer::grow_table(const std::string& table, const std::vector<std::string>
   std::vector<std::string>& entries = schema_.tables[table];
   const std::string path = "/categories/" + table;
   const std::string scale = "/category_" + table;
-  const DsetInfo info = f.dataset_info(path);
+  const DsetInfo info = f.dataset_info(path, false);
   std::size_t width = info.type.size;
   bool wider = false;
   for (const auto& a : added) {
@@ -1413,7 +1413,7 @@ void Writer::flush() {
   }
   if (datasets_ready_ && m.kind == "changing") {
     auto len = [&](const std::string& p) {
-      const DsetInfo i = f.dataset_info(p);
+      const DsetInfo i = f.dataset_info(p, false);
       return i.shape.empty() ? hsize_t(0) : i.shape[0];
     };
     f.set_scale_length("/mesh/instance_plus_one", len("/mesh/instance_nodes"));

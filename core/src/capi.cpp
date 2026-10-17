@@ -532,6 +532,18 @@ int mes_open(const char* path, mes_file** out, mes_error* err) {
   }
 }
 
+int mes_set_threads(mes_file* f, int threads, mes_error* err) {
+  try {
+    clear(err);
+    need(f != nullptr && f->reader != nullptr, "threads apply to a file open to read");
+    need(threads >= 1 && threads <= 256, "threads is 1 to 256");
+    f->reader->set_threads(threads);
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
 int mes_info(const mes_file* f, const char* key, mes_strings** out, mes_error* err) {
   try {
     clear(err);

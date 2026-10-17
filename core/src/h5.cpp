@@ -469,7 +469,7 @@ std::vector<RawAttr> File::attributes(const std::string& path) const {
   return out;
 }
 
-DsetInfo File::dataset_info(const std::string& path) const {
+DsetInfo File::dataset_info(const std::string& path, bool scales) const {
   DsetInfo info;
   if (!is_dataset(path)) return info;
   info.is_dataset = true;
@@ -519,6 +519,7 @@ DsetInfo File::dataset_info(const std::string& path) const {
     info.attr_order_tracked = (crt_order & H5P_CRT_ORDER_TRACKED) != 0;
     info.attr_order_indexed = (crt_order & H5P_CRT_ORDER_INDEXED) != 0;
   }
+  if (!scales) return info;
   info.is_scale = H5DSis_scale(dset.get()) > 0;
   info.scales.resize(static_cast<std::size_t>(rank > 0 ? rank : 0));
   if (!info.is_scale) {
@@ -595,7 +596,7 @@ std::vector<hsize_t> select(hid_t space, const std::string& path,
 
 std::vector<std::int64_t> File::selected_shape(
     const std::string& path, const std::vector<Selection>& sel) const {
-  const DsetInfo info = dataset_info(path);
+  const DsetInfo info = dataset_info(path, false);
   need(info.is_dataset, "\"" + path + "\" is not a dataset");
   std::vector<std::int64_t> out;
   for (std::size_t a = 0; a < info.shape.size(); ++a) {
@@ -609,7 +610,7 @@ void File::read(const std::string& path, DType mem,
                 const std::vector<Selection>& sel, void* out,
                 std::size_t out_bytes) const {
   need(mem != DType::String, "strings are read with read_strings");
-  const DsetInfo info = dataset_info(path);
+  const DsetInfo info = dataset_info(path, false);
   need(info.is_dataset, "\"" + path + "\" is not a dataset");
   Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
   need(dset.valid(), "cannot open \"" + path + "\"");
@@ -630,14 +631,14 @@ void File::read(const std::string& path, DType mem,
 }
 
 std::vector<double> File::read_f64(const std::string& path) const {
-  const DsetInfo info = dataset_info(path);
+  const DsetInfo info = dataset_info(path, false);
   std::vector<double> out(checked_product(path, info.shape, kMaxDatasetElements));
   read(path, DType::Float64, {}, out.data(), out.size() * sizeof(double));
   return out;
 }
 
 std::vector<std::int64_t> File::read_i64(const std::string& path) const {
-  const DsetInfo info = dataset_info(path);
+  const DsetInfo info = dataset_info(path, false);
   std::vector<std::int64_t> out(
       checked_product(path, info.shape, kMaxDatasetElements));
   read(path, DType::Int64, {}, out.data(), out.size() * sizeof(std::int64_t));
@@ -645,7 +646,7 @@ std::vector<std::int64_t> File::read_i64(const std::string& path) const {
 }
 
 std::vector<std::string> File::read_strings(const std::string& path) const {
-  const DsetInfo info = dataset_info(path);
+  const DsetInfo info = dataset_info(path, false);
   need(info.is_dataset && info.type.klass == H5T_STRING,
        "\"" + path + "\" is not a string dataset");
   need(!info.type.variable_length,
@@ -817,7 +818,7 @@ void File::write(const std::string& path, DType mem,
 void File::write_strings(const std::string& path, hsize_t start,
                          const std::vector<std::string>& values) {
   if (values.empty()) return;
-  const DsetInfo info = dataset_info(path);
+  const DsetInfo info = dataset_info(path, false);
   need(info.is_dataset && info.type.klass == H5T_STRING &&
            !info.type.variable_length && info.shape.size() == 1,
        "\"" + path + "\" is not a one-dimensional fixed-length string dataset");

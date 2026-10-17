@@ -215,3 +215,26 @@ def test_generic_tools_still_see_the_table(tmp_path):
         s.add_runs({"mach": [0.5, 0.6], "cl": [0.1, 0.2]})
     ds = xr.open_dataset(p)
     assert ds.sizes["row"] == 2 and list(ds["cl"].values) == [0.1, 0.2]
+
+
+def test_parallel_reads_equal_serial_reads(tmp_path):
+    p = str(tmp_path / "par.mes")
+    rng = np.random.default_rng(1)
+    pts = np.zeros((70_000, 1))
+    with mestra.create(p, writer="t", mesh="shared", per="fixed",
+                       coordinates={"units": "m", "axes": 1}, parameters={"k": "1"},
+                       fields={"a": {"units": "1", "at": "node"},
+                               "b": {"units": "1", "at": "node", "precision": "float64"}}) as s:
+        s.set_mesh(pts)
+        s.add_runs({"k": np.arange(9.0)},
+                   fields={"a": rng.normal(size=(9, 70_000)).astype(np.float32),
+                           "b": rng.normal(size=(9, 70_000))})
+    with mestra.open(p) as serial, mestra.open(p, threads=4) as par:
+        for name in ("a", "b"):
+            for rows, nodes in [(None, None), (slice(2, 7), None), (None, slice(65_000, 70_000)),
+                                (3, slice(100, 66_000)), (slice(0, 1), slice(0, 1))]:
+                np.testing.assert_array_equal(par.get_field(name, rows=rows, nodes=nodes),
+                                              serial.get_field(name, rows=rows, nodes=nodes))
+        # Index selections fall back to the serial path and still agree.
+        np.testing.assert_array_equal(par.get_field("a", rows=[1, 5]),
+                                      serial.get_field("a", rows=[1, 5]))

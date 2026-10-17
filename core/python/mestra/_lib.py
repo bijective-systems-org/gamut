@@ -110,6 +110,7 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "mes_flush": (_I, [_P, _E]),
     "mes_close": (_I, [_P, _E]),
     "mes_open": (_I, [_S, _PP, _E]),
+    "mes_set_threads": (_I, [_P, _I, _E]),
     "mes_info": (_I, [_P, _S, _PP, _E]),
     "mes_names": (_I, [_P, _S, _PP, _E]),
     "mes_describe": (_I, [_P, _S, _PP, _PP, _E]),

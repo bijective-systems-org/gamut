@@ -37,6 +37,8 @@ if(MESTRA_SANITIZE)
 endif()
 
 find_package(HDF5 REQUIRED COMPONENTS C HL)
+find_package(ZLIB REQUIRED)
+find_package(Threads REQUIRED)
 
 set(MESTRA_CORE_SOURCES
   src/types.cpp
@@ -48,6 +50,7 @@ set(MESTRA_CORE_SOURCES
   src/schema.cpp
   src/reader.cpp
   src/writer.cpp
+  src/parallel.cpp
   src/capi.cpp
 )
 
@@ -64,7 +67,8 @@ target_compile_options(mestra_core_objects PRIVATE ${MESTRA_WARNINGS}
 
 add_library(mestra SHARED $<TARGET_OBJECTS:mestra_core_objects>)
 target_include_directories(mestra PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(mestra PRIVATE ${HDF5_HL_LIBRARIES} ${HDF5_C_LIBRARIES})
+target_link_libraries(mestra PRIVATE ${HDF5_HL_LIBRARIES} ${HDF5_C_LIBRARIES} ZLIB::ZLIB
+                      Threads::Threads)
 set_target_properties(mestra PROPERTIES OUTPUT_NAME mestra)
 
 if(MESTRA_BUILD_TESTS)
@@ -75,7 +79,8 @@ if(MESTRA_BUILD_TESTS)
   target_compile_definitions(core_unit_tests PRIVATE ${HDF5_DEFINITIONS})
   target_compile_options(core_unit_tests PRIVATE ${MESTRA_WARNINGS}
                          ${MESTRA_FP_FLAGS} ${MESTRA_SANITIZER_FLAGS})
-  target_link_libraries(core_unit_tests PRIVATE ${HDF5_HL_LIBRARIES} ${HDF5_C_LIBRARIES})
+  target_link_libraries(core_unit_tests PRIVATE ${HDF5_HL_LIBRARIES} ${HDF5_C_LIBRARIES}
+                        ZLIB::ZLIB Threads::Threads)
   add_test(NAME core_unit_tests COMMAND core_unit_tests
            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
   add_executable(core_writer_reader_tests tests/writer_reader_tests.cpp
@@ -85,7 +90,8 @@ if(MESTRA_BUILD_TESTS)
   target_compile_definitions(core_writer_reader_tests PRIVATE ${HDF5_DEFINITIONS})
   target_compile_options(core_writer_reader_tests PRIVATE ${MESTRA_WARNINGS}
                          ${MESTRA_FP_FLAGS} ${MESTRA_SANITIZER_FLAGS})
-  target_link_libraries(core_writer_reader_tests PRIVATE ${HDF5_HL_LIBRARIES} ${HDF5_C_LIBRARIES})
+  target_link_libraries(core_writer_reader_tests PRIVATE ${HDF5_HL_LIBRARIES} ${HDF5_C_LIBRARIES}
+                        ZLIB::ZLIB Threads::Threads)
   add_test(NAME core_writer_reader_tests COMMAND core_writer_reader_tests
            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 endif()

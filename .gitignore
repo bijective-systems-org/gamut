@@ -22,3 +22,6 @@ dist/
 vectors/hostile/deep_groups_callables/case.mes
 vectors/hostile/deep_groups_keys/case.mes
 vectors/cases/wide_keys/case.mes
+
+# shared core build trees
+core/build*/
