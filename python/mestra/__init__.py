@@ -39,7 +39,7 @@ from .upgrade import upgrade
 from .validator import Report, validate
 from .writer import write
 
-__version__ = "0.1.3"
+__version__ = "1.0.0.dev0"
 
 __all__ = [
     "Affine",
