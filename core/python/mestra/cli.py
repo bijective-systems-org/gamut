@@ -106,8 +106,11 @@ def _summary(path: str) -> dict:
                 if k in p:
                     entry[k] = float(p[k]) if k in ("lower", "upper") else p[k]
             if f.row_count:
-                v = f.get_parameter(name)
-                entry["range"] = [float(np.nanmin(v)), float(np.nanmax(v))]
+                lo, hi = np.inf, -np.inf
+                for v in _blocks(f, f.get_parameter, name):
+                    if v.size and not np.all(np.isnan(v)):
+                        lo, hi = min(lo, float(np.nanmin(v))), max(hi, float(np.nanmax(v)))
+                entry["range"] = [lo, hi]
             doc["parameters"].append(entry)
         for name in f.names("labels"):
             l = f.describe(name)
@@ -115,8 +118,12 @@ def _summary(path: str) -> dict:
             table = _lib.strings_out("mes_table", f._handle(), _lib.b(l.get("category", name)))
             entry["categories"] = table
             if f.row_count:
-                names = f.get_label(name).tolist()
-                entry["counts"] = {c: names.count(c) for c in table}
+                # Counted from the codes a block at a time: no string per row.
+                counts = np.zeros(len(table), dtype=np.int64)
+                for codes in _blocks(f, f.get_label_codes, name):
+                    counts += np.bincount(codes[(codes >= 0) & (codes < len(table))],
+                                          minlength=len(table))
+                entry["counts"] = {c: int(counts[i]) for i, c in enumerate(table)}
             doc["labels"].append(entry)
         for name in f.names("scalars"):
             doc["scalars"].append({"name": name, **f.describe(name)})
@@ -204,6 +211,12 @@ def _human(doc: dict) -> str:
     scale = 1e3 if unit == "KB" else (1e6 if unit == "MB" else 1e9)
     lines.append(f"  file        {size / scale:.1f} {unit}")
     return "\n".join(lines)
+
+
+def _blocks(f: Any, read: Any, name: str, size: int = 1 << 20) -> Any:
+    """A column of every row, a block of rows at a time."""
+    for start in range(0, f.row_count, size):
+        yield np.atleast_1d(read(name, rows=slice(start, min(f.row_count, start + size))))
 
 
 def cmd_info(args: argparse.Namespace) -> int:
