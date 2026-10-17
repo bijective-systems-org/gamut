@@ -5,6 +5,7 @@
 #include <cstring>
 #include <set>
 
+#include "codec.hpp"
 #include "names.hpp"
 #include "parallel.hpp"
 
@@ -350,6 +351,18 @@ std::vector<std::pair<std::string, std::string>> Reader::describe(
     add("location", m->where);
     add("category", m->category);
     add("per", s.mesh.per);
+  } else if (path.compare(0, 7, "models/") == 0) {
+    const Model* found = nullptr;
+    for (const auto& model : s.models) {
+      if ("models/" + model.id == path) found = &model;
+    }
+    need(found != nullptr, "", "nothing is called \"" + path + "\"", path);
+    std::string inputs;
+    for (const auto& in : found->inputs) inputs += (inputs.empty() ? "" : " ") + in;
+    add("kind", "model");
+    add("type", found->type);
+    add("inputs", inputs);
+    add("repr", found->repr);
   } else if (path == "coordinates" && !s.mesh.kind.empty()) {
     add("kind", "coordinates");
     add("units", s.mesh.coordinate_units);
@@ -357,6 +370,7 @@ std::vector<std::pair<std::string, std::string>> Reader::describe(
     add("axes", format_i64(s.mesh.axes));
     add("per", s.mesh.per);
     add("model", s.mesh.coordinate_model);
+    add("output", s.mesh.coordinate_output);
   } else {
     throw Error("", "nothing is called \"" + path + "\"", path);
   }
@@ -610,6 +624,13 @@ void Reader::read(const std::string& path, const Selection& runs,
         std::lower_bound(uniq.begin(), uniq.end(), codes[i]) - uniq.begin());
     std::memcpy(static_cast<char*>(out) + i * one, block.data() + at * one, one);
   }
+}
+
+Dict Reader::model_numbers(const std::string& id) const {
+  bool found = false;
+  for (const auto& m : schema_.models) found = found || m.id == id;
+  need(found, "", "no model called \"" + id + "\"");
+  return read_dict_group(*file_, "/models/" + id, true);
 }
 
 std::vector<std::string> Reader::table(const std::string& name) const {

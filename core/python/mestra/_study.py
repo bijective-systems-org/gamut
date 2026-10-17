@@ -60,8 +60,16 @@ class Study:
     def __enter__(self) -> "Study":
         return self
 
-    def __exit__(self, *exc: Any) -> None:
-        self.close()
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        if exc_type is None:
+            self.close()
+            return
+        # Leaving on an error: release the file, and let the first error
+        # stand rather than one the half-finished file raises on close.
+        try:
+            self.close()
+        except MestraError:
+            pass
 
     def __del__(self) -> None:
         try:
@@ -420,7 +428,8 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
                  b(spec.get("run_group", "")))
         if coordinates is not None:
             call("mes_declare_coordinates", handle, b(coordinates.get("units")),
-                 _precision(coordinates.get("precision")), int(coordinates.get("axes", 3)))
+                 _precision(coordinates.get("precision")), int(coordinates.get("axes", 3)),
+                 b(coordinates.get("model", "")), b(coordinates.get("output", "")))
         for name, value in (mesh_labels or {}).items():
             spec = dict(value)
             cats = list(spec.get("categories", []))
@@ -434,7 +443,8 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
                  b(spec.get("of", "")), b(spec.get("statistic", "")), 0 if q is None else 1,
                  float(q or 0.0), b(spec.get("method", "")), b(spec.get("with_respect_to", "")),
                  b(spec.get("axis", "")), b(spec.get("vector", "")),
-                 int(round_bits.get(name, spec.get("round_bits", -1))))
+                 int(round_bits.get(name, spec.get("round_bits", -1))),
+                 b(spec.get("model", "")), b(spec.get("output", "")))
 
         for name, value in (scalars or {}).items():
             declare(name, _spec(value, "units"), "scalar")

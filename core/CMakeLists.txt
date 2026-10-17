@@ -52,6 +52,10 @@ set(MESTRA_CORE_SOURCES
   src/writer.cpp
   src/parallel.cpp
   src/validate.cpp
+  src/value.cpp
+  src/codec.cpp
+  src/nearest.cpp
+  src/evaluate.cpp
   src/capi.cpp
 )
 

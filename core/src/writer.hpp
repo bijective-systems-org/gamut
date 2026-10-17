@@ -13,6 +13,7 @@
 #include "h5.hpp"
 #include "schema.hpp"
 #include "types.hpp"
+#include "value.hpp"
 
 namespace mestra {
 namespace internal {
@@ -65,6 +66,12 @@ class Writer {
                                         const std::string& per);
   // An existing data file, to add runs in place.
   static std::unique_ptr<Writer> open_append(const std::string& path);
+  // A new model file (spec section 7): no runs; inputs with bounds; results
+  // served by models.  `mesh_kind` is "" or "shared", `per` "fixed" or "run".
+  static std::unique_ptr<Writer> create_model(const std::string& path,
+                                              const std::string& writer_name,
+                                              const std::string& mesh_kind,
+                                              const std::string& per);
 
   ~Writer();
 
@@ -79,7 +86,12 @@ class Writer {
                           const std::vector<std::string>& categories);
   // The coordinates' units, precision and axis count (1 to 3), before
   // set_mesh or the first run.
-  void declare_coordinates(const std::string& units, DType dtype, int axes);
+  void declare_coordinates(const std::string& units, DType dtype, int axes,
+                           const std::string& model = "", const std::string& output = "");
+  // A model of a model file: its type, the inputs it reads, its numbers.
+  void add_model(const std::string& id, const std::string& type,
+                 const std::vector<std::string>& inputs, const Dict& numbers,
+                 const std::string& repr);
   void set_constant(const Constant& c);
   void set_generalisation_group(const std::string& label);
   void set_compression(const FilterPipeline& filters) { filters_ = filters; }
@@ -127,6 +139,7 @@ class Writer {
   Schema schema_;
   FilterPipeline filters_ = default_pipeline();
   bool closed_ = false;
+  bool model_ = false;
   bool datasets_ready_ = false;
   std::int64_t next_id_ = 0;
   std::int64_t instances_written_ = 0;   // per-group or per-run geometries on disk

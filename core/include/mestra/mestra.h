@@ -73,7 +73,12 @@ MES_API int mes_create(const char* path, const char* writer, const char* mesh_ki
 /* An existing data file, to add rows in place. */
 MES_API int mes_open_append(const char* path, mes_file** out, mes_error* err);
 
-/* title, license, references or source. */
+/* A new model file (spec section 7).  mesh_kind: NULL or "" or "shared";
+ * per: "fixed" or "run". */
+MES_API int mes_create_model(const char* path, const char* writer, const char* mesh_kind,
+                             const char* per, mes_file** out, mes_error* err);
+
+/* title, license, references or source; trained_on in a model file. */
 MES_API int mes_set_attribute(mes_file* f, const char* name, const char* value,
                               mes_error* err);
 MES_API int mes_declare_parameter(mes_file* f, const char* name, const char* role,
@@ -84,18 +89,21 @@ MES_API int mes_declare_label(mes_file* f, const char* name, const char* role,
                               const char* const* categories, int64_t n_categories,
                               mes_error* err);
 /* where: "scalar", "node" or "cell".  Empty strings and has_q = 0 mean
- * absent; round_bits < 0 means no rounding. */
+ * absent; round_bits < 0 means no rounding.  model and output name what
+ * computes the result in a model file (empty in a data file). */
 MES_API int mes_declare_result(mes_file* f, const char* name, const char* where,
                                const char* units, int dtype, const char* of,
                                const char* statistic, int has_q, double q,
                                const char* method, const char* with_respect_to,
                                const char* axis, const char* vector, int round_bits,
-                               mes_error* err);
+                               const char* model, const char* output, mes_error* err);
 MES_API int mes_declare_mesh_label(mes_file* f, const char* name, const char* where,
                                    const char* const* categories, int64_t n_categories,
                                    mes_error* err);
+/* model and output: coordinates computed by a model (a model file whose
+ * mesh is per run); empty otherwise. */
 MES_API int mes_declare_coordinates(mes_file* f, const char* units, int dtype, int axes,
-                                    mes_error* err);
+                                    const char* model, const char* output, mes_error* err);
 /* dtype MES_INT64 uses integer_value; MES_FLOAT32 or MES_FLOAT64 float_value. */
 MES_API int mes_set_constant(mes_file* f, const char* name, const char* units, int dtype,
                              double float_value, int64_t integer_value, mes_error* err);
@@ -170,6 +178,65 @@ MES_API int mes_label_names(const mes_file* f, const char* label, const mes_sel*
                             mes_strings** out, mes_error* err);
 MES_API int mes_table(const mes_file* f, const char* table, mes_strings** out,
                       mes_error* err);
+
+/* --- Models ----------------------------------------------------------------
+ * A model's numbers cross the interface as a tree: a dictionary built and
+ * read by key paths ("a/b" for nested dictionaries). */
+typedef struct mes_tree mes_tree;
+enum { MES_TREE_NULL = 0, MES_TREE_BOOL = 1, MES_TREE_INT = 2, MES_TREE_FLOAT = 3,
+       MES_TREE_STRING = 4, MES_TREE_NUMBERS = 5, MES_TREE_STRINGS = 6, MES_TREE_DICT = 7,
+       MES_TREE_ABSENT = -1 };
+MES_API int mes_tree_new(mes_tree** out, mes_error* err);
+MES_API void mes_tree_free(mes_tree* t);
+MES_API int mes_tree_set_null(mes_tree* t, const char* key, mes_error* err);
+MES_API int mes_tree_set_bool(mes_tree* t, const char* key, int value, mes_error* err);
+MES_API int mes_tree_set_int(mes_tree* t, const char* key, int64_t value, mes_error* err);
+MES_API int mes_tree_set_float(mes_tree* t, const char* key, double value, mes_error* err);
+MES_API int mes_tree_set_string(mes_tree* t, const char* key, const char* value, mes_error* err);
+/* dtype MES_INT8 (booleans), MES_INT32, MES_INT64 or MES_FLOAT64; C order. */
+MES_API int mes_tree_set_array(mes_tree* t, const char* key, int dtype, const void* data,
+                               int rank, const int64_t* shape, mes_error* err);
+MES_API int mes_tree_set_strings(mes_tree* t, const char* key, const char* const* items,
+                                 int64_t n, mes_error* err);
+MES_API int mes_tree_set_dict(mes_tree* t, const char* key, mes_error* err);
+/* The keys of the dictionary at key ("" for the root). */
+MES_API int mes_tree_keys(const mes_tree* t, const char* key, mes_strings** out, mes_error* err);
+MES_API int mes_tree_kind(const mes_tree* t, const char* key, int* kind, mes_error* err);
+/* Booleans and integers in *integer, floats in *real. */
+MES_API int mes_tree_scalar(const mes_tree* t, const char* key, int64_t* integer, double* real,
+                            mes_error* err);
+/* A string (one item) or a list of strings. */
+MES_API int mes_tree_strings(const mes_tree* t, const char* key, mes_strings** out,
+                             mes_error* err);
+/* shape holds up to 8 extents. */
+MES_API int mes_tree_array_info(const mes_tree* t, const char* key, int* dtype, int* rank,
+                                int64_t* shape, mes_error* err);
+MES_API int mes_tree_array(const mes_tree* t, const char* key, void* out, int64_t out_bytes,
+                           mes_error* err);
+
+/* Adds a model to a model file: its type, the inputs it reads (parameters,
+ * labels, "coordinates"), its numbers, and an optional one-line repr. */
+MES_API int mes_add_model(mes_file* f, const char* id, const char* type,
+                          const char* const* inputs, int64_t n_inputs, const mes_tree* numbers,
+                          const char* repr, mes_error* err);
+/* A model's type and inputs come from mes_names(f, "models") and
+ * mes_describe(f, "models/<id>"); its numbers from here. */
+MES_API int mes_model_numbers(const mes_file* f, const char* id, mes_tree** out, mes_error* err);
+
+/* The built-in nearest-neighbour model (spec section 7.5), so every
+ * binding gets the same answers. */
+MES_API int mes_nearest_check(const mes_tree* numbers, mes_error* err);
+MES_API int mes_nearest_output_size(const mes_tree* numbers, const char* output,
+                                    int64_t* per_row, mes_error* err);
+MES_API int mes_nearest_call(const mes_tree* numbers, const char* const* input_names,
+                             const double* const* columns, int n_inputs, int64_t n_rows,
+                             const char* output, double* out, int64_t out_count, mes_error* err);
+
+/* Evaluation, driven by the binding: a data file declaring what the open
+ * model file declares; the caller adds the rows (inputs and the models'
+ * outputs) with mes_batch_* and closes it. */
+MES_API int mes_evaluate_begin(const mes_file* model, const char* out_path, mes_file** out,
+                               mes_error* err);
 
 /* --- Checking ------------------------------------------------------------- */
 typedef struct mes_report mes_report;   /* the findings of a validation */

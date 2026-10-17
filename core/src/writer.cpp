@@ -10,7 +10,9 @@
 #include <set>
 
 #include "chunk.hpp"
+#include "codec.hpp"
 #include "names.hpp"
+#include "nearest.hpp"
 #include "reader.hpp"
 #include "sha256.hpp"
 #include "units.hpp"
@@ -460,6 +462,21 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
   return w;
 }
 
+std::unique_ptr<Writer> Writer::create_model(const std::string& path,
+                                             const std::string& writer_name,
+                                             const std::string& mesh_kind,
+                                             const std::string& per) {
+  need(mesh_kind.empty() || mesh_kind == "shared", "E6",
+       "a model file's mesh is shared (spec section 10.3)");
+  need(mesh_kind.empty() || per == "fixed" || per == "run", "E6",
+       "a model file's mesh is fixed, or computed per run by a model");
+  std::unique_ptr<Writer> w = create(path, writer_name, mesh_kind, mesh_kind.empty() ? "fixed" : per);
+  w->model_ = true;
+  w->schema_.kind = "model";
+  w->file_->replace_attr("/", "kind", AttrValue::text("model"));
+  return w;
+}
+
 Writer::~Writer() {
   if (!closed_ && file_) {
     try {
@@ -491,14 +508,18 @@ void Writer::set_attribute(const std::string& name, const std::string& value) {
   need_open();
   static const std::set<std::string> allowed = {"title", "license",
                                                 "references", "source"};
-  need(allowed.count(name) == 1, "",
-       "\"" + name + "\" is not one of title, license, references, source");
+  const bool special = (name == "trained_on" && model_) || (name == "evaluated_from" && !model_);
+  need(allowed.count(name) == 1 || special, "",
+       "\"" + name + "\" is not one of title, license, references, source" +
+           std::string(model_ ? ", trained_on" : ", evaluated_from"));
   need(valid_utf8(value), "E3", name + " is not valid UTF-8");
   file_->replace_attr("/", name, AttrValue::text(value));
   if (name == "title") schema_.title = value;
   if (name == "license") schema_.license = value;
   if (name == "references") schema_.references = value;
   if (name == "source") schema_.source = value;
+  if (name == "trained_on") schema_.trained_on = value;
+  if (name == "evaluated_from") schema_.evaluated_from = value;
 }
 
 void Writer::declare_parameter(const Parameter& p) {
@@ -519,6 +540,8 @@ void Writer::declare_parameter(const Parameter& p) {
   }
   need(p.run_group.empty() || p.role == "time", "E15",
        p.name + ": run_group belongs on a time parameter", p.name);
+  need(!model_ || p.lower.has_value(), "E16",
+       p.name + ": a model file's parameters need bounds, the model's domain", p.name);
   schema_.parameters.push_back(p);
 }
 
@@ -564,7 +587,12 @@ void Writer::declare_result(const Result& r) {
   check_units(r.units, path);
   need(r.auto_dtype || is_float(r.dtype), "E4", path + ": results are float32 or float64",
        path);
-  need(!r.served(), "E16", path + ": a data file stores its results", path);
+  if (model_) {
+    need(r.served() && !r.output.empty(), "E16",
+         path + ": every result of a model file names its model and output", path);
+  } else {
+    need(!r.served(), "E16", path + ": a data file stores its results", path);
+  }
   const Relation& rel = r.relation;
   need(rel.statistic.empty() || rel.statistic == "std" || rel.statistic == "quantile",
        "E12", path + ": statistic is std or quantile", path);
@@ -624,8 +652,15 @@ void Writer::declare_mesh_label(const MeshLabel& m,
   schema_.mesh.labels.push_back(copy);
 }
 
-void Writer::declare_coordinates(const std::string& units, DType dtype, int axes) {
+void Writer::declare_coordinates(const std::string& units, DType dtype, int axes,
+                                 const std::string& model, const std::string& output) {
   need_open();
+  need(model.empty() || (model_ && schema_.mesh.per == "run"), "E16",
+       "coordinates computed by a model belong to a model file whose mesh is per run");
+  need(!model_ || schema_.mesh.per == "fixed" || !model.empty(), "E16",
+       "a model file's coordinates per run are computed by a model; name it");
+  schema_.mesh.coordinate_model = model;
+  schema_.mesh.coordinate_output = output;
   need(!schema_.mesh.kind.empty(), "", "coordinates need a mesh");
   need(!schema_.mesh.set_done && !datasets_ready_, "",
        "the coordinates are declared before the mesh is set and before the "
@@ -866,6 +901,8 @@ void Writer::ensure_datasets(const Batch* first) {
     const std::string axis = !rel.axis.empty() ? rel.axis : r.axis;
     if (!axis.empty()) f.write_attr(path, "axis", AttrValue::text(axis));
     if (!r.vector.empty()) f.write_attr(path, "vector", AttrValue::text(r.vector));
+    if (!r.model.empty()) f.write_attr(path, "model", AttrValue::text(r.model));
+    if (!r.output.empty()) f.write_attr(path, "output", AttrValue::text(r.output));
     if (r.round_bits >= 0) {
       f.write_attr(path, "_QuantizeBitRoundNumberOfSignificantBits",
                    AttrValue::integer(r.round_bits));
@@ -902,6 +939,10 @@ void Writer::ensure_datasets(const Batch* first) {
     }
     if (m.per != "fixed") {
       f.write_attr("/mesh/coordinates", "units", AttrValue::text(m.coordinate_units));
+      if (!m.coordinate_model.empty()) {
+        f.write_attr("/mesh/coordinates", "model", AttrValue::text(m.coordinate_model));
+        f.write_attr("/mesh/coordinates", "output", AttrValue::text(m.coordinate_output));
+      }
     }
     for (const auto& r : s.results) {
       if (r.where == "scalar") continue;
@@ -1116,6 +1157,7 @@ void Writer::check_relations() const {
 
 std::int64_t Writer::add_runs(const Batch& batch) {
   need_open();
+  need(!model_, "E16", "a model file has no runs; evaluate it to get a data file");
   ensure_datasets(&batch);
   const Schema& s = schema_;
   const Mesh& m = s.mesh;
@@ -1386,6 +1428,52 @@ std::int64_t Writer::add_runs(const Batch& batch) {
   return first;
 }
 
+void Writer::add_model(const std::string& id, const std::string& type,
+                       const std::vector<std::string>& inputs, const Dict& numbers,
+                       const std::string& repr) {
+  need_open();
+  need(model_, "E16", "models belong to model files (mestra.create_model)");
+  need(legal_netcdf_name(id) && !reserved_name(id), "E8", "\"" + id + "\" is not a legal model id");
+  for (const auto& m : schema_.models) {
+    need(m.id != id, "E8", "a model called \"" + id + "\" already exists");
+  }
+  need(!type.empty(), "E17", id + ": a model names its type");
+  need(!inputs.empty(), "E17", id + ": a model lists the inputs it reads");
+  std::set<std::string> seen;
+  for (const auto& in : inputs) {
+    need(seen.insert(in).second, "E17", id + ": the input " + in + " is listed twice");
+    need(in == "coordinates" ? !schema_.mesh.kind.empty()
+                             : (schema_.parameter(in) != nullptr || schema_.label(in) != nullptr),
+         "E17", id + ": the input \"" + in + "\" is not a parameter, a label or coordinates");
+  }
+  if (type == "nearest") {
+    const Nearest nm = nearest_from(numbers);
+    std::set<std::string> want(inputs.begin(), inputs.end());
+    std::set<std::string> have(nm.columns.begin(), nm.columns.end());
+    need(want == have, "E17", id + ": a nearest model's columns are exactly its inputs");
+    for (std::size_t j = 0; j < nm.columns.size(); ++j) {
+      const Parameter* p = schema_.parameter(nm.columns[j]);
+      need(p != nullptr, "E17", id + ": a nearest model reads parameters only");
+      need(p->lower && *p->lower == nm.lower[j] && *p->upper == nm.upper[j], "E17",
+           id + ": a nearest model's bounds equal its parameters' bounds (" + nm.columns[j] + ")");
+    }
+  }
+  const std::string group = "/models/" + id;
+  file_->make_group(group);
+  file_->write_attr(group, "type", AttrValue::text(type));
+  std::string joined;
+  for (const auto& in : inputs) joined += (joined.empty() ? "" : " ") + in;
+  file_->write_attr(group, "inputs", AttrValue::text(joined));
+  if (!repr.empty()) file_->write_attr(group, "repr", AttrValue::text(repr));
+  write_dict_group(*file_, group, numbers, true);
+  Model m;
+  m.id = id;
+  m.type = type;
+  m.inputs = inputs;
+  m.repr = repr;
+  schema_.models.push_back(m);
+}
+
 void Writer::flush() {
   if (closed_ || !file_) return;
   File& f = *file_;
@@ -1443,6 +1531,23 @@ void Writer::write_cf_coordinates() {
 void Writer::close() {
   if (closed_) return;
   ensure_datasets(nullptr);
+  if (model_) {
+    need(!schema_.models.empty(), "E16", "a model file holds at least one model; add one with "
+                                         "add_model before closing");
+    auto has = [&](const std::string& id) {
+      for (const auto& m : schema_.models) {
+        if (m.id == id) return true;
+      }
+      return false;
+    };
+    for (const auto& r : schema_.results) {
+      need(has(r.model), "E17", result_path(r) + ": names the model \"" + r.model +
+                                    "\", which was never added");
+    }
+    if (!schema_.mesh.coordinate_model.empty()) {
+      need(has(schema_.mesh.coordinate_model), "E17", "coordinates: name a model that was added");
+    }
+  }
   flush();
   write_cf_coordinates();
   file_->flush();

@@ -10,7 +10,9 @@
 #include <set>
 
 #include "chunk.hpp"
+#include "codec.hpp"
 #include "h5.hpp"
+#include "nearest.hpp"
 #include "names.hpp"
 #include "sha256.hpp"
 #include "types.hpp"
@@ -994,12 +996,34 @@ void Validator::models() {
     check_attrs(only, kModelAttrs);
     if (o.text("type").empty()) add("E17", concept, "a model needs its type");
     if (!o.has("inputs")) add("E17", concept, "a model lists its inputs");
-    for (const auto& in : split_spaces(o.text("inputs"))) {
+    const auto inputs = split_spaces(o.text("inputs"));
+    for (const auto& in : inputs) {
       if (in != "coordinates" && !parameters_.count(in) && !labels_.count(in)) {
         add("E17", concept, "the input \"" + in + "\" is not a parameter, a label or coordinates");
       }
     }
     model_ids_.insert(m.name);
+    guarded(concept, [&] {
+      const Dict numbers = read_dict_group(*file_, o.h5, true);
+      if (o.text("type") != "nearest") return;
+      const Nearest nm = nearest_from(numbers);
+      if (std::set<std::string>(nm.columns.begin(), nm.columns.end()) !=
+          std::set<std::string>(inputs.begin(), inputs.end())) {
+        add("E17", concept, "a nearest model's columns are exactly its inputs");
+      }
+      for (std::size_t j = 0; j < nm.columns.size(); ++j) {
+        const auto it = parameters_.find(nm.columns[j]);
+        if (it == parameters_.end()) {
+          add("E17", concept, "a nearest model reads parameters only (" + nm.columns[j] + ")");
+          continue;
+        }
+        const auto lo = it->second.real("lower"), hi = it->second.real("upper");
+        if (!lo || !hi || *lo != nm.lower[j] || *hi != nm.upper[j]) {
+          add("E17", concept, "a nearest model's bounds equal its parameters' bounds (" +
+                              nm.columns[j] + ")");
+        }
+      }
+    });
   }
   if (model_ids_.empty()) add("E16", "models", "a model file holds at least one model");
   for (const auto* group : {&scalars_, &fields_}) {
