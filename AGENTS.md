@@ -58,8 +58,3 @@ lists every lane as CI runs it. Generate the three on-demand corpus files
 once before any suite. Each language's README covers its own setup;
 [cpp/README.md](cpp/README.md) says what `HDF5_ROOT` must hold. Releases and
 downstream pin updates: [docs/releasing.md](docs/releasing.md).
-
-## Shared workspace process
-
-When the private workspace `notes/` checkout is present, read `notes/how-we-work.md`
-for shared process authority; `notes/backlog.md` and `notes/state/` hold current work.
