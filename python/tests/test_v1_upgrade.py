@@ -380,3 +380,21 @@ def test_the_command_line_refuses_to_upgrade_a_file_onto_itself(tmp_path,
     assert document["errors"] == 1
     assert "same file" in document["findings"][0]["message"]
     assert digest(src) == before
+
+
+
+def test_upgrade_keeps_unknown_attributes_exactly(tmp_path):
+    src = write_v0(v0_dataset(), tmp_path)
+    with h5py.File(src, "r+") as f:
+        f["keys/t"].attrs["sensor_offsets"] = np.array([0.1, 0.2, 0.3])
+        f.attrs["campaign_codes"] = np.array([3, 1, 4], np.int32)
+        from mestra.encoding import write_string_attr
+        write_string_attr(f["categories/member"], "note", "from the plan")
+    dst, report = upgraded(src, tmp_path)
+    assert report.errors == []
+    with h5py.File(dst, "r") as f:
+        np.testing.assert_array_equal(f["t"].attrs["sensor_offsets"],
+                                      [0.1, 0.2, 0.3])
+        codes = f.attrs["campaign_codes"]
+        assert codes.dtype == np.int32 and codes.tolist() == [3, 1, 4]
+        assert f["categories/member"].attrs["note"] == b"from the plan"

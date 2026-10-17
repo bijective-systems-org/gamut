@@ -243,6 +243,7 @@ def _write(ds: Dataset, f: h5py.File) -> None:
         kind, body = ds._unknown[name]
         _foreign_scales(ds, f, "", body)
         opaque.restore_member(f, name, kind, body)
+    _scale_attributes(ds, f)
     for dset in scales.keep:
         dset.id.close()
     scales.keep.clear()
@@ -257,8 +258,7 @@ def _root_attrs(ds: Dataset, f: h5py.File) -> None:
         value = getattr(ds, name)
         if value is not None:
             write_string_attr(f, name, value)
-    for name in sorted(ds._extra):
-        write_attr(f, name, ds._extra[name])
+    _put_extra(f, ds._extra)
 
 
 def _make_scales(ds: Dataset, f: h5py.File) -> _Scales:
@@ -301,9 +301,8 @@ def _attrs(obj: Any, item: Any, order: Sequence[str],
             write_int_attr(obj, name, int(value))
         else:
             write_attr(obj, name, value)
-    for name in sorted(extra if extra is not None
-                       else getattr(item, "_extra", {})):
-        write_attr(obj, name, item._extra[name])
+    _put_extra(obj, extra if extra is not None
+               else getattr(item, "_extra", {}))
 
 
 # ----------------------------------------------------------- datasets
@@ -376,13 +375,16 @@ def _strings(group: h5py.Group, name: str, values: Any, *,
 
 
 def _write_categories(ds: Dataset, f: h5py.File, scales: _Scales) -> None:
-    if not ds.categories and "categories" not in ds._present:
+    kept = ds._group_extra.get("categories", {})
+    if not ds.categories and "categories" not in ds._present and not kept:
         return
     group = f.create_group("categories")
+    _put_extra(group, kept)
     for name in sorted(ds.categories):
         dset = _strings(group, name, ds.categories[name].entries,
                         growable=False, keep=scales.keep)
         dset.dims[0].attach_scale(scales.root["category_" + name])
+        _put_extra(dset, ds.categories[name]._extra)
 
 
 def _write_parameter(f: h5py.File, name: str, item: Parameter,
@@ -461,8 +463,7 @@ def _write_mesh(mesh: Mesh, f: h5py.File, scales: _Scales) -> None:
     write_int_attr(group, "n_nodes", mesh.n_nodes)
     write_int_attr(group, "n_cells", mesh.n_cells)
     write_string_attr(group, "support_id", mesh.support_id)
-    for name in sorted(mesh._extra):
-        write_attr(group, name, mesh._extra[name])
+    _put_extra(group, mesh._extra)
     scales.mesh["node"] = make_scale(group, "node", mesh.n_nodes)
     cells = {which: mesh._cell_array(which) for which, _, _ in _CELLS}
     for which, scale, _ in _CELLS:
@@ -478,13 +479,16 @@ def _write_mesh(mesh: Mesh, f: h5py.File, scales: _Scales) -> None:
                                     dtype=dtype, track_times=False)
         scales.keep.append(dset)
         dset.dims[0].attach_scale(scales.mesh[scale])
+        _put_extra(dset, mesh._cell_extra.get(which, {}))
     if mesh.coordinates is not None:
         _write_slot(group, "coordinates", mesh.coordinates, scales)
     for which, arrays in (("node_arrays", mesh.node_arrays),
                           ("cell_arrays", mesh.cell_arrays)):
-        if not arrays and which not in mesh._present:
+        kept = mesh._group_extra.get(which, {})
+        if not arrays and which not in mesh._present and not kept:
             continue
         sub = group.create_group(which)
+        _put_extra(sub, kept)
         for name in arrays:
             _write_slot(sub, name, arrays[name], scales)
     dataset = mesh._dataset
@@ -497,6 +501,42 @@ def _write_mesh(mesh: Mesh, f: h5py.File, scales: _Scales) -> None:
         if dataset is not None:
             _foreign_scales(dataset, group, "mesh", body)
         opaque.restore_member(group, name, kind, body)
+
+
+def _put_extra(obj: Any, extra: dict[str, Any]) -> None:
+    """Attributes this reader does not know, put back as they were
+    read: exactly as stored when they came from a file."""
+    for name in sorted(extra):
+        value = extra[name]
+        if isinstance(value, opaque.Attribute):
+            opaque.restore_attribute(obj, name, value)
+        else:
+            write_attr(obj, name, value)
+
+
+#: The dimension scales the format names, which the writer makes.
+_FORMAT_SCALES = ("row", "node", "cell", "cell_plus_one", "index")
+_FORMAT_PREFIXES = ("component_", "group_", "category_")
+
+
+def _scale_attributes(ds: Dataset, f: h5py.File) -> None:
+    """Put back the attributes a file's dimension scales carried that
+    this reader does not know. A scale the format names that this file
+    no longer has cannot take them, and the write refuses rather than
+    drop them; a scale only kept objects used goes with them."""
+    for (where, name), extra in sorted(ds._scale_extra.items()):
+        home = f if where == "" else f.get(where)
+        scale = home.get(name) if isinstance(home, h5py.Group) else None
+        if isinstance(scale, h5py.Dataset):
+            _put_extra(scale, extra)
+            continue
+        if name in _FORMAT_SCALES or name.startswith(_FORMAT_PREFIXES):
+            raise MestraError(
+                "E41", "the dimension %s carries attributes this reader "
+                "keeps (%s), and this dataset no longer has that dimension, "
+                "so writing it would lose them"
+                % (name, ", ".join(sorted(extra))),
+                "/".join(p for p in (where, name) if p))
 
 
 def _foreign_scales(ds: Dataset, group: h5py.Group, where: str,
@@ -526,9 +566,11 @@ def _foreign_scales(ds: Dataset, group: h5py.Group, where: str,
 
 
 def _write_callables(ds: Dataset, f: h5py.File) -> None:
-    if not ds.callables and "callables" not in ds._present:
+    kept = ds._group_extra.get("callables", {})
+    if not ds.callables and "callables" not in ds._present and not kept:
         return
     group = f.create_group("callables")
+    _put_extra(group, kept)
     for name in ds.callables:
         obj = ds.callables[name]
         sub = group.create_group(name)

@@ -967,12 +967,10 @@ def test_w11_an_unknown_attribute_is_never_e19(changed, base):
         "", "categories/member", "labels/member", "mesh/cell_types",
         "mesh/node_arrays/pressure", "parameters/mach"]
     with lib.read(path) as ds:                    # strict
-        assert ds.parameters["mach"]._extra == {
-            "comment": "from the tunnel log"}
         again = path + ".again.mes"
         lib.write(ds, again)
     with h5py.File(again, "r") as f:
-        assert f["mach"].attrs["comment"] == b"from the tunnel log"
+        assert f["mach"].attrs["comment"] == "from the tunnel log"
     assert lib.validate(again).errors == []
     assert "E19" not in lib.validate(base["family"]).error_ids
 

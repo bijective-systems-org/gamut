@@ -42,6 +42,7 @@ from .model import (
     _Handle,
     is_reserved_root_name,
 )
+from .opaque import capture_attribute, capture_attributes
 from .validator import Report, validate
 from .writer import write
 
@@ -209,15 +210,17 @@ def _convert(old: Any, report: Report) -> Dataset:
     new._handle = holder
     _line(report, "", "dropped the root attribute aligned: version 1 has "
                       "one mesh, so every row is on it")
-    for name, attribute in sorted(old.extra.items()):
+    for name in sorted(old.extra):
         if name in _V1_ROOT:
             _line(report, "", "dropped the root attribute %s, which version "
                               "1 defines and the version 0 file did not "
                               "mean in that sense" % name)
         else:
-            new._extra[name] = attribute
+            new._extra[name] = capture_attribute(f, name)
     for name, table in old.categories.items():
-        new.categories[name] = CategoryTable(table.entries)
+        new.categories[name] = CategoryTable(
+            table.entries, extra=capture_attributes(
+                f["/categories/" + name], (), "categories/" + name))
 
     for name in old.key_names():
         key = old.keys[name]
@@ -227,15 +230,15 @@ def _convert(old: Any, report: Report) -> Dataset:
             new.parameters[name] = Parameter(
                 name, key.role, units=key.units, lower=key.lower,
                 upper=key.upper, run_group=run_group, data=source,
-                extra=_kept(key.extra, _V1_PARAMETER, report,
-                            "parameters/" + name))
+                extra=_kept(key.extra, f["/keys/" + name], _V1_PARAMETER,
+                            report, "parameters/" + name))
         else:
             new.labels[name] = Label(
                 name, key.role,
                 category=key.category if key.role != "id" else None,
                 data=source, dataset=new,
-                extra=_kept(key.extra, _V1_LABEL, report,
-                            "labels/" + name))
+                extra=_kept(key.extra, f["/keys/" + name], _V1_LABEL,
+                            report, "labels/" + name))
         if key.parent is not None:
             _line(report, "labels/" + name,
                   "dropped parent = %s: version 1 has no nested groups"
@@ -257,7 +260,8 @@ def _convert(old: Any, report: Report) -> Dataset:
         mesh = Mesh("points" if support.kind == "axis" else "mesh",
                     n_nodes=support.n_nodes, n_cells=support.n_cells,
                     stored_support_id=support.stored_support_id,
-                    extra=_kept(support.extra, _V1_MESH, report, "mesh"))
+                    extra=_kept(support.extra, f[base], _V1_MESH, report,
+                                "mesh"))
         mesh._dataset = new
         for which in ("cell_types", "cell_offsets", "cell_connectivity"):
             if support._cells.get(which) is not None:
@@ -362,7 +366,7 @@ def _slot(holder: _Handle, f: h5py.File, old: Any, path: str,
                 of=old.of if statistic is not None else None,
                 level=old.level, method=old.method,
                 category=getattr(old, "category", None),
-                extra=_kept(old.extra, _V1_SLOT, report, where))
+                extra=_kept(old.extra, f[path], _V1_SLOT, report, where))
     slot._dataset = dataset
     if old.data is not None:
         slot._data = _source(holder, f, path)
@@ -370,14 +374,16 @@ def _slot(holder: _Handle, f: h5py.File, old: Any, path: str,
     return slot
 
 
-def _kept(extra: dict[str, Any], known: frozenset[str], report: Report,
-          where: str) -> dict[str, Any]:
+def _kept(extra: dict[str, Any], obj: Any, known: frozenset[str],
+          report: Report, where: str) -> dict[str, Any]:
+    """The version 0 attributes the reader did not know, copied exactly
+    as stored, except those whose names version 1 defines."""
     out = {}
-    for name, value in sorted(extra.items()):
+    for name in sorted(extra):
         if name in known:
             _line(report, where, "dropped the attribute %s, which version 1 "
                                  "defines and the version 0 file did not "
                                  "mean in that sense" % name)
         else:
-            out[name] = value
+            out[name] = capture_attribute(obj, name)
     return out

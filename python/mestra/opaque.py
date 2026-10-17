@@ -56,7 +56,8 @@ from . import h5safe, limits
 from .errors import Finding, MestraError
 
 __all__ = ["capture", "restore", "read_all", "capture_member",
-           "restore_member", "read_member"]
+           "restore_member", "read_member", "Attribute",
+           "capture_attribute", "capture_attributes", "restore_attribute"]
 
 #: What a member is replaced by when it could not be copied.
 LOST = "mestra.opaque.lost"
@@ -423,3 +424,98 @@ def restore_member(parent: h5py.Group, name: str, kind: str,
                 dset.dims[axis].attach_scale(scale)
             except Exception:                           # pragma: no cover
                 continue
+
+
+# ------------------------------------------------ one attribute, exact
+
+class Attribute:
+    """An attribute this reader does not interpret, kept as stored:
+    its value with its shape and dtype, and for a string its kind
+    (fixed-length with size, character set and padding, or variable
+    length with character set). Plain data, so a dataset holding one
+    copies and deep-copies."""
+
+    __slots__ = ("value", "string", "shape")
+
+    def __init__(self, value: Any, string: Any = None,
+                 shape: Any = None) -> None:
+        self.value = value
+        self.string = string
+        self.shape = shape
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Attribute):
+            return NotImplemented
+        return (self.string == other.string and self.shape == other.shape
+                and np.array_equal(np.asarray(self.value, dtype=object),
+                                   np.asarray(other.value, dtype=object)))
+
+    def __repr__(self) -> str:
+        return "Attribute(%r)" % (self.value,)
+
+
+def capture_attribute(obj: Any, name: str) -> Attribute:
+    """One attribute exactly as stored. Raises when it cannot be read,
+    so that the caller can refuse a rewrite rather than drop it."""
+    attr = obj.attrs.get_id(name)
+    kind = attr.get_type()
+    if isinstance(kind, h5py.h5t.TypeStringID):
+        if kind.is_variable_str():
+            return Attribute(obj.attrs[name], ("vlen", kind.get_cset()),
+                             tuple(attr.shape))
+        raw = np.empty(attr.shape, dtype="S%d" % kind.get_size())
+        attr.read(raw, mtype=kind)
+        return Attribute(raw, ("fixed", kind.get_size(), kind.get_cset(),
+                               kind.get_strpad()))
+    value = np.array(obj.attrs[name])
+    if value.dtype.kind == "O":
+        raise MestraError("E41", "the attribute %s is of a type this reader "
+                                 "cannot copy" % name)
+    return Attribute(value)
+
+
+def capture_attributes(obj: Any, known: Any, where: str,
+                       problems: list[Finding] | None = None,
+                       lossy: list[str] | None = None
+                       ) -> dict[str, Attribute]:
+    """Every attribute of `obj` not in `known` (and not the machinery of
+    the dimension scales), exactly as stored. One that cannot be read
+    is a finding and makes `where` lossy, so a rewrite refuses rather
+    than drop it."""
+    out: dict[str, Attribute] = {}
+    for name in h5safe.attr_names(obj):
+        if name in known:
+            continue
+        try:
+            out[name] = capture_attribute(obj, name)
+        except Exception as exc:
+            message = exc.message if isinstance(exc, MestraError) else \
+                "the attribute %s cannot be copied" % name
+            if problems is not None:
+                problems.append(Finding("E41", where, message))
+            if lossy is not None:
+                lossy.append(where)
+    return out
+
+
+def restore_attribute(obj: Any, name: str, attribute: Attribute) -> None:
+    """Write a captured attribute back as it was stored."""
+    string = attribute.string
+    if string is None:
+        value = np.asarray(attribute.value)
+        obj.attrs.create(name, value, dtype=value.dtype)
+    elif string[0] == "fixed":
+        _, size, cset, pad = string
+        kind = h5py.h5t.C_S1.copy()
+        kind.set_size(size)
+        kind.set_cset(cset)
+        kind.set_strpad(pad)
+        raw = attribute.value
+        space = (h5py.h5s.create(h5py.h5s.SCALAR) if raw.shape == ()
+                 else h5py.h5s.create_simple(raw.shape))
+        made = h5py.h5a.create(obj.id, name.encode("utf-8"), kind, space)
+        made.write(raw, mtype=kind)
+    else:
+        encoding = "utf-8" if string[1] == h5py.h5t.CSET_UTF8 else "ascii"
+        obj.attrs.create(name, attribute.value, shape=attribute.shape,
+                         dtype=h5py.string_dtype(encoding))

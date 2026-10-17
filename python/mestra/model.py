@@ -403,13 +403,16 @@ class CategoryTable(Sequence[str]):
     """The named categories of a label. A category code is the
     position of its entry: the first entry is code 0."""
 
-    __slots__ = ("entries", "_itemsize")
+    __slots__ = ("entries", "_itemsize", "_extra")
 
     def __init__(self, entries: Sequence[str],
-                 itemsize: int | None = None) -> None:
+                 itemsize: int | None = None,
+                 extra: Mapping[str, Any] | None = None) -> None:
         self.entries = [str(e) for e in entries]
         #: The stored byte size, when a file declared a larger one.
         self._itemsize = itemsize
+        #: Attributes this reader does not know, kept for a rewrite.
+        self._extra = dict(extra or {})
 
     def __getitem__(self, at: Any) -> Any:
         return self.entries[at]
@@ -857,6 +860,10 @@ class Mesh:
         #: Datasets under /mesh this reader does not know (W11), kept
         #: whole for a rewrite.
         self._unknown: dict[str, Any] = {}
+        #: Attributes this reader does not know on the cell datasets
+        #: and on node_arrays and cell_arrays, kept for a rewrite.
+        self._cell_extra: dict[str, dict[str, Any]] = {}
+        self._group_extra: dict[str, dict[str, Any]] = {}
 
     def cells(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """(cell_types, cell_offsets, cell_connectivity), as stored."""
@@ -1199,6 +1206,11 @@ class Dataset:
         #: make again the scales the objects it keeps whole are attached
         #: to. The group is "" for the root and "mesh".
         self._scales: dict[tuple[str, str], tuple[int, bool]] = {}
+        #: Attributes this reader does not know on dimension scales, by
+        #: (group, name), and on /categories and /callables, kept for a
+        #: rewrite.
+        self._scale_extra: dict[tuple[str, str], dict[str, Any]] = {}
+        self._group_extra: dict[str, dict[str, Any]] = {}
         #: Optional groups the file carried, so that an empty one
         #: survives a rewrite.
         self._present: set[str] = set()

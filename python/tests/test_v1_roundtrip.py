@@ -749,3 +749,110 @@ def test_deep_copies(files):
             copy.deepcopy(lazy)
         assert caught.value.rule == ""
         assert copy.copy(lazy).row_count == 6      # a copy shares the file
+
+
+
+# ------------------------- unknown attributes, kept exactly on rewrite
+
+def attribute_as_stored(obj, name):
+    """Everything about an attribute that a rewrite must keep."""
+    attr = obj.attrs.get_id(name)
+    kind = attr.get_type()
+    out = [tuple(attr.shape), kind.get_class(), kind.get_size()
+           if not (isinstance(kind, h5py.h5t.TypeStringID)
+                   and kind.is_variable_str()) else "vlen"]
+    if isinstance(kind, h5py.h5t.TypeStringID):
+        out += [kind.get_cset(), kind.get_strpad()
+                if not kind.is_variable_str() else None]
+    value = obj.attrs[name]
+    out.append(value.tolist() if isinstance(value, np.ndarray) else value)
+    return out
+
+
+#: Four kinds of attribute: what h5py writes for a str, a fixed ASCII
+#: string, a float32 array and an int16 scalar.
+def add_foreign_attributes(obj):
+    obj.attrs["note_vlen"] = "free text"
+    obj.attrs.create("note_fixed", np.bytes_(b"abc"),
+                     dtype=h5py.string_dtype("ascii", 3))
+    obj.attrs["note_array"] = np.array([1.5, 2.5, 3.5], np.float32)
+    obj.attrs["note_int16"] = np.int16(-7)
+
+
+FOREIGN = ("note_vlen", "note_fixed", "note_array", "note_int16")
+
+#: Every kind of object W11 can name an unknown attribute on.
+HOLDERS = {
+    "family": ["/", "mach", "member", "run", "cl", "mesh",
+               "mesh/coordinates", "mesh/node_arrays/pressure",
+               "mesh/cell_arrays/face", "mesh/node_arrays",
+               "mesh/cell_arrays", "mesh/cell_types", "mesh/cell_offsets",
+               "mesh/cell_connectivity", "categories", "categories/member",
+               "row", "group_member", "category_flag", "component_3",
+               "mesh/node", "mesh/cell", "mesh/index"],
+    "model": ["callables", "cl", "mesh/node_arrays/pressure_band"],
+    "table": ["s_ref", "case"],
+}
+
+
+@pytest.mark.parametrize("case", list(HOLDERS))
+def test_unknown_attributes_survive_a_rewrite_exactly(files, tmp_path,
+                                                      case):
+    import shutil
+    path = str(tmp_path / "foreign.mes")
+    shutil.copy(files[case], path)
+    with h5py.File(path, "r+") as f:
+        for holder in HOLDERS[case]:
+            add_foreign_attributes(f[holder])
+        before = {(h, n): attribute_as_stored(f[h], n)
+                  for h in HOLDERS[case] for n in FOREIGN}
+    report = lib.validate(path)
+    assert report.errors == [], report
+    again = str(tmp_path / "again.mes")
+    with lib.read(path) as ds:
+        lib.write(ds, again)
+    with h5py.File(again, "r") as f:
+        after = {(h, n): attribute_as_stored(f[h], n)
+                 for h in HOLDERS[case] for n in FOREIGN}
+    assert after == before
+    assert lib.validate(again).errors == []
+    netCDF4 = pytest.importorskip("netCDF4")
+    with netCDF4.Dataset(again) as nc:
+        assert "row" in nc.dimensions
+
+
+def test_kept_attributes_with_nowhere_to_go_refuse_the_write(files,
+                                                             tmp_path):
+    """The table flag goes, with the array that used it; its dimension
+    carried attributes this reader keeps, so the write names it and
+    refuses rather than drop them."""
+    import shutil
+    path = str(tmp_path / "foreign.mes")
+    shutil.copy(files["family"], path)
+    with h5py.File(path, "r+") as f:
+        f["category_flag"].attrs["origin"] = "segmentation pass"
+    with lib.read(path) as ds:
+        del ds.mesh.cell_arrays["flagged"]
+        del ds.categories["flag"]
+        with pytest.raises(lib.MestraError) as caught:
+            lib.write(ds, str(tmp_path / "out.mes"))
+    assert caught.value.rule == "E41"
+    assert "category_flag" in caught.value.message
+    assert not (tmp_path / "out.mes").exists()
+
+
+def test_an_attribute_that_cannot_be_copied_refuses_the_write(files,
+                                                              tmp_path):
+    import shutil
+    path = str(tmp_path / "reference.mes")
+    shutil.copy(files["family"], path)
+    with h5py.File(path, "r+") as f:
+        f["mach"].attrs["points_at"] = f["cl"].ref
+    report = lib.validate(path)
+    assert report.errors == [] and "W11" in report.warning_ids
+    with lib.read(path) as ds:
+        assert ds._lossy == ["parameters/mach"]
+        with pytest.raises(lib.MestraError) as caught:
+            lib.write(ds, str(tmp_path / "out.mes"))
+    assert caught.value.rule == "E41"
+    assert "parameters/mach" in caught.value.message

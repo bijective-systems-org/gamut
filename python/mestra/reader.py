@@ -152,11 +152,9 @@ def _read(f: h5py.File, holder: _Handle, lazy: bool) -> Dataset:
                  "references", "source"):
         if name in names:
             setattr(ds, name, read_attr(f, name))
-    for name in names:
-        if name not in _ROOT_ATTRS:
-            ds._extra[name] = read_attr(f, name)
     scales = h5safe.scale_index(f)
     reader = _Reader(ds, holder, lazy, scales)
+    ds._extra = reader.extra(f, _ROOT_ATTRS, "")
     found = root.get("row")
     if found is not None and isinstance(found.obj, h5py.Dataset) and \
             found.obj.shape:
@@ -198,6 +196,12 @@ class _Reader:
         self.problem(where, member.problem or "this member cannot be read",
                      member.rule, lossy=member.kind == h5safe.EXTERNAL)
 
+    def extra(self, obj: Any, known: Any, where: str) -> dict[str, Any]:
+        """The attributes of `obj` this reader does not know, exactly as
+        stored, so that a rewrite puts them back unchanged."""
+        return opaque.capture_attributes(obj, known, where,
+                                         self.ds._problems, self.ds._lossy)
+
     def source(self, path: str, dset: h5py.Dataset) -> Any:
         made = FileSource(self.holder, path, dset.shape, dset.dtype,
                           is_fixed_string(dset.dtype))
@@ -235,7 +239,8 @@ class _Reader:
             entries = [decode_string(v) if isinstance(v, bytes) else str(v)
                        for v in np.asarray(values).reshape(-1)]
             self.ds.categories[member.name] = CategoryTable(
-                entries, itemsize=string_length(member.obj.dtype))
+                entries, itemsize=string_length(member.obj.dtype),
+                extra=self.extra(member.obj, (), where))
 
     def group(self, found: h5safe.Member | None,
               name: str) -> h5py.Group | None:
@@ -249,6 +254,10 @@ class _Reader:
                                "group, so it is not read")
             return None
         self.ds._present.add(name)
+        if name in ("categories", "callables"):
+            kept = self.extra(found.obj, (), name)
+            if kept:
+                self.ds._group_extra[name] = kept
         return found.obj
 
     def root_member(self, name: str, member: h5safe.Member) -> None:
@@ -261,6 +270,9 @@ class _Reader:
         obj = member.obj
         if isinstance(obj, h5py.Dataset) and h5safe.is_scale(obj):
             ds._scales[("", name)] = _scale_info(obj)
+            kept = self.extra(obj, (), name)
+            if kept:
+                ds._scale_extra[("", name)] = kept
             return
         if name in ("private", "VTKHDF") or (
                 isinstance(obj, h5py.Group)
@@ -282,12 +294,13 @@ class _Reader:
                 lower=_get(obj, "lower"), upper=_get(obj, "upper"),
                 run_group=_get(obj, "run_group"),
                 data=self.source("/" + name, obj),
-                extra=_extra(obj, _PARAMETER_ATTRS))
+                extra=self.extra(obj, _PARAMETER_ATTRS, "parameters/" + name))
         elif role in LABEL_ROLES and isinstance(obj, h5py.Dataset):
             ds.labels[name] = Label(
                 name, role, category=_get(obj, "category"),
                 data=self.source("/" + name, obj),
-                extra=_extra(obj, _LABEL_ATTRS), dataset=ds)
+                extra=self.extra(obj, _LABEL_ATTRS, "labels/" + name),
+                dataset=ds)
         elif role == "scalar":
             ds.scalars[name] = self.slot(obj, name, "/" + name, "row")
         else:
@@ -324,7 +337,7 @@ class _Reader:
                 "_QuantizeBitRoundNumberOfSignificantBits"),
             category=got.get("category"),
             coordinates_attr=got.get("coordinates"),
-            extra=_extra(obj, _SLOT_ATTRS))
+            extra=self.extra(obj, _SLOT_ATTRS, path.lstrip("/")))
         slot._dataset = self.ds
         if isinstance(obj, h5py.Dataset):
             slot._data = self.source(path, obj)
@@ -347,7 +360,7 @@ class _Reader:
                     n_cells=n_cells if isinstance(n_cells, int) else 0,
                     stored_support_id=_get(group, "support_id")
                     if "support_id" in attrs else None,
-                    extra=_extra(group, _MESH_ATTRS))
+                    extra=self.extra(group, _MESH_ATTRS, "mesh"))
         mesh._dataset = ds
         ds.mesh = mesh
         inside = {m.name: m for m in h5safe.members(group)}
@@ -362,6 +375,9 @@ class _Reader:
                              member.rule)
                 continue
             mesh._cells[which] = self.source("/mesh/" + which, member.obj)
+            kept = self.extra(member.obj, (), "mesh/" + which)
+            if kept:
+                mesh._cell_extra[which] = kept
         member = inside.get("coordinates")
         if member is not None:
             if member.usable:
@@ -382,6 +398,9 @@ class _Reader:
                              holder.rule)
                 continue
             mesh._present.add(which)
+            kept = self.extra(holder.obj, (), "mesh/" + which)
+            if kept:
+                mesh._group_extra[which] = kept
             for array in h5safe.members(holder.obj):
                 where = "mesh/%s/%s" % (which, array.name)
                 if not array.usable:
@@ -393,6 +412,9 @@ class _Reader:
             if member.usable and isinstance(member.obj, h5py.Dataset) \
                     and h5safe.is_scale(member.obj):
                 ds._scales[("mesh", name)] = _scale_info(member.obj)
+                kept = self.extra(member.obj, (), "mesh/" + name)
+                if kept:
+                    ds._scale_extra[("mesh", name)] = kept
             if name in _MESH_MEMBERS:
                 continue
             where = "mesh/" + name
@@ -467,11 +489,6 @@ def _get(obj: Any, name: str) -> Any:
     if name in h5safe.attr_names(obj):
         return read_attr(obj, name)
     return None
-
-
-def _extra(obj: Any, known: tuple[str, ...]) -> dict[str, Any]:
-    return {name: read_attr(obj, name) for name in h5safe.attr_names(obj)
-            if name not in known}
 
 
 def _build_callable(ds: Dataset, where: str, group: h5py.Group,

@@ -58,6 +58,8 @@ def evaluate(ds: Dataset, inputs: Any = None) -> Dataset:
                 "generalisation_group"):
         setattr(out, key, getattr(ds, key))
     out.categories = copy.deepcopy(ds.categories)
+    if "categories" in ds._group_extra:
+        out._group_extra["categories"] = dict(ds._group_extra["categories"])
     out._extra = dict(ds._extra)
     out.notes.update(dict(ds.notes))
     out._row_count = rows
@@ -86,6 +88,8 @@ def evaluate(ds: Dataset, inputs: Any = None) -> Dataset:
                     stored_support_id=ds.mesh._stored_support_id,
                     extra=dict(ds.mesh._extra))
         mesh._dataset = out
+        mesh._cell_extra = copy.deepcopy(ds.mesh._cell_extra)
+        mesh._group_extra = copy.deepcopy(ds.mesh._group_extra)
         for which, source in ds.mesh._cells.items():
             mesh._cells[which] = None if source is None else \
                 MemorySource(source.read())
