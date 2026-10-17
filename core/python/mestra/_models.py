@@ -15,7 +15,7 @@ import numpy as np
 
 from . import _lib
 from ._lib import MestraError, b, call
-from ._study import Study, _precision, _spec, open as _open
+from ._study import Study, _axes, _precision, _spec, open as _open
 
 # --- dictionaries <-> core trees --------------------------------------------
 
@@ -210,11 +210,12 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
                  source: str | None = None) -> ModelFile:
     """Creates a model file (spec section 7): no runs; parameters with
     bounds; every scalar and field names the model and output computing it."""
+    axes = _axes(coordinates)        # before the file exists: a refusal leaves none
     handle = ctypes.c_void_p()
     call("mes_create_model", b(path), b(writer), b(mesh or ""), b(per), ctypes.byref(handle))
     study = ModelFile(handle, path, writing=True)
     study._mesh_kind, study._per = mesh or "", per if mesh else ""
-    study._axes = int((coordinates or {}).get("axes", 3))
+    study._axes = axes
     try:
         for key, value in (("title", title), ("license", license), ("references", references),
                            ("source", source)):

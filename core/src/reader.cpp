@@ -391,18 +391,6 @@ std::vector<std::pair<std::string, std::string>> Reader::describe(
   return out;
 }
 
-namespace {
-
-// A count taken from the file, checked before it sizes a buffer.
-std::size_t capped(std::int64_t n, std::size_t item, const std::string& path) {
-  need(n >= 0 && static_cast<std::uint64_t>(n) <= kMaxDatasetElements &&
-           static_cast<std::uint64_t>(n) <= kMaxDatasetBytes / item,
-       "E23", path + ": " + std::to_string(n) + " elements are more than this reader reads at once",
-       path);
-  return static_cast<std::size_t>(n);
-}
-
-}  // namespace
 
 std::pair<std::int64_t, std::int64_t> Reader::span(const std::string& cumulative, std::int64_t k,
                                                    const std::string& path) const {
@@ -420,7 +408,7 @@ std::pair<std::int64_t, std::int64_t> Reader::span(const std::string& cumulative
 
 std::vector<std::int64_t> Reader::row_instances(const Selection& runs) const {
   const std::int64_t n = runs.count(schema_.rows, "rows");
-  std::vector<std::int64_t> out(capped(n, 8, "/mesh/row_instance"));
+  std::vector<std::int64_t> out(checked_count("/mesh/row_instance", 8, {n}));
   if (n > 0) file_->read("/mesh/row_instance", DType::Int64, {runs}, out.data(), out.size() * 8);
   return out;
 }
@@ -579,7 +567,10 @@ void Reader::read(const std::string& path, const Selection& runs,
       f.read("/mesh/cell_types", mem, {Selection::range(c0, c1)}, out, out_bytes);
       return;
     }
-    std::vector<std::int64_t> offs(static_cast<std::size_t>(c1 - c0 + 1));
+    const DsetInfo oi = f.dataset_info("/mesh/cell_offsets", false);
+    need(oi.shape.size() == 1 && static_cast<hsize_t>(c1) < oi.shape[0], "E21",
+         path + ": instance_cells runs past cell_offsets", path);
+    std::vector<std::int64_t> offs(checked_count(path, 8, {c1 - c0 + 1}));
     f.read("/mesh/cell_offsets", DType::Int64, {Selection::range(c0, c1 + 1)},
            offs.data(), offs.size() * 8);
     for (std::size_t i = 1; i < offs.size(); ++i) {
@@ -687,7 +678,7 @@ std::vector<unsigned char> Reader::private_record(const std::string& name) const
   DType t;
   need(dtype_of(info.type, &t) && t == DType::UInt8, "",
        "the private record \"" + name + "\" is not bytes written by this library");
-  std::vector<unsigned char> out(capped(static_cast<std::int64_t>(info.shape[0]), 1, path));
+  std::vector<unsigned char> out(checked_count(path, 1, {static_cast<std::int64_t>(info.shape[0])}));
   if (!out.empty()) file_->read(path, DType::UInt8, {}, out.data(), out.size());
   return out;
 }
@@ -711,7 +702,11 @@ std::vector<std::string> Reader::label_names(const std::string& name,
   need(l != nullptr, "", "no label \"" + name + "\"", name);
   const std::vector<std::string>& entries = table(l->category);
   const std::int64_t n = runs.count(schema_.rows, name);
-  std::vector<std::int64_t> codes(capped(n, 8, name));
+  need(n <= kMaxNamesRead, "E23",
+       name + ": names for " + std::to_string(n) + " rows are more than the " +
+           std::to_string(kMaxNamesRead) + " read at once; read the codes, or fewer rows",
+       name);
+  std::vector<std::int64_t> codes(checked_count(name, 8, {n}));
   if (n > 0) file_->read("/" + name, DType::Int64, {runs}, codes.data(), codes.size() * 8);
   std::vector<std::string> out;
   out.reserve(codes.size());

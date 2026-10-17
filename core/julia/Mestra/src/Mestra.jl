@@ -189,9 +189,12 @@ mutable struct Study
         finalizer(s) do x
             # A study left open is finished as close would; errors have no
             # one to go to here.
-            getfield(x, :handle) == C_NULL && return
+            h = getfield(x, :handle)
+            h == C_NULL && return
             err = Ref{CError}()
-            ccall(sym(:mes_close), Cint, (Ptr{Cvoid}, Ref{CError}), getfield(x, :handle), err)
+            if ccall(sym(:mes_close), Cint, (Ptr{Cvoid}, Ref{CError}), h, err) != 0
+                ccall(sym(:mes_abandon), Cvoid, (Ptr{Cvoid}, Cint), h, 0)
+            end
             setfield!(x, :handle, C_NULL)
         end
         return s
@@ -203,10 +206,12 @@ function handle(s::Study)
     return s.handle
 end
 
+# A refused close (a shared mesh never set, a model file without a model)
+# keeps the study open to fix and close again.
 function Base.close(s::Study)
     s.handle == C_NULL && return nothing
-    h, s.handle = s.handle, C_NULL
-    @mes mes_close (Ptr{Cvoid},) h
+    @mes mes_close (Ptr{Cvoid},) s.handle
+    s.handle = C_NULL
     s.remove_on_close && isfile(s.path) && rm(s.path)
     return nothing
 end
@@ -230,10 +235,12 @@ function with_study(f, s::Study)
         close(s)
         return r
     catch
-        # Leaving on an error: release the file; the first error stands.
+        # Leaving on an error: finish the file if it can be finished, else
+        # discard a file this study created; the first error stands.
         try
             close(s)
         catch
+            abandon(s, true)
         end
         rethrow()
     end

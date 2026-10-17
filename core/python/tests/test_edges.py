@@ -282,3 +282,128 @@ def test_scattered_selections_read_by_gathering(tmp_path):
         got = _lib.read(h, "coordinates", _lib.Selection(rows, "rows"),
                         _lib.Selection(nodes, "nodes"), np.dtype(np.float64))
         np.testing.assert_array_equal(got, pts[np.ix_(rows, nodes)])
+
+
+# --- models, close, and caps on every file-sized buffer --------------------------------
+
+
+class _Bad:
+    """A model type whose numbers hold an illegal key below the top level."""
+    type = "test_bad"
+
+    def __init__(self, numbers):
+        self.numbers = numbers
+
+    @classmethod
+    def load(cls, numbers):
+        return cls(numbers)
+
+    def save(self):
+        return self.numbers
+
+    def call(self, inputs, wanted):
+        return {}
+
+
+def _model_file(path):
+    return mestra.create_model(path, writer="t",
+                               parameters={"x": {"units": "1", "lower": 0.0, "upper": 1.0}},
+                               scalars={"y": {"units": "1", "model": "m", "output": "y"}})
+
+
+def test_refused_model_adds_nothing(tmp_path):
+    p = str(tmp_path / "m.mes")
+    with _model_file(p) as mf:
+        with pytest.raises(mestra.MestraError) as e:
+            mf.add_model("m", _Bad({"v": 1.0, "w": np.arange(3), "zz": {"bad name": 1}}), ["x"])
+        assert e.value.rule == "E8"
+        mf.add_model("m", mestra.Nearest(["x"], [0.0], [1.0], [[0.5]], {"y": [2.0]}), ["x"])
+    assert not mestra.validate(p).findings
+    with mestra.evaluate(p, {"x": [0.1]}) as out:
+        assert out.get_scalar("y").tolist() == [2.0]
+
+
+def test_refused_close_keeps_the_file_open(tmp_path):
+    p = str(tmp_path / "m.mes")
+    mf = _model_file(p)
+    with pytest.raises(mestra.MestraError) as e:
+        mf.close()
+    assert e.value.rule == "E16"
+    mf.add_model("m", mestra.Nearest(["x"], [0.0], [1.0], [[0.5]], {"y": [2.0]}), ["x"])
+    mf.close()
+    assert not mestra.validate(p).findings
+
+
+def test_close_refused_inside_with_discards_the_file(tmp_path):
+    p = str(tmp_path / "m.mes")
+    pts, cells = grid(2, 2)
+    with pytest.raises(ZeroDivisionError):
+        with mestra.create(p, writer="t", mesh="shared", per="fixed",
+                           coordinates={"units": "m", "axes": 2}, parameters={"x": "m"}):
+            1 / 0                    # leaves before set_mesh: the file cannot be finished
+    assert not os.path.exists(p)
+
+
+def test_refused_coordinate_declaration_changes_nothing(tmp_path):
+    h = ctypes.c_void_p()
+    p = str(tmp_path / "c.mes")
+    _lib.call("mes_create", p.encode(), b"t", b"shared", b"fixed", ctypes.byref(h))
+    try:
+        with pytest.raises(mestra.MestraError):
+            _lib.call("mes_declare_coordinates", h, b"m", _lib.MES_INT64, 2, b"", b"")
+        _lib.call("mes_declare_coordinates", h, b"m", _lib.MES_FLOAT64, 2, b"", b"")
+        pts = np.zeros((3, 2))
+        _lib.call("mes_geometry_begin", h)
+        _lib.call("mes_geometry_points", h, _lib.MES_FLOAT64, pts.ctypes.data_as(ctypes.c_void_p), 3, 2)
+        _lib.call("mes_set_mesh", h)
+    finally:
+        _lib.call("mes_close", h)
+    assert not mestra.validate(p).findings
+
+
+def test_trailing_nul_in_a_name_is_refused(tmp_path):
+    with mestra.create(str(tmp_path / "t.mes"), writer="t", labels={"case": "group"},
+                       parameters={"x": "m"}) as s:
+        with pytest.raises(mestra.MestraError, match="NUL"):
+            s.add_run({"x": 1.0, "case": "a\x00"})
+        with pytest.raises(mestra.MestraError, match="NUL"):
+            s.add_runs({"x": [1.0], "case": ["b\x00\x00"]})
+        s.add_run({"x": 1.0, "case": "a"})
+
+
+def test_malformed_axes_leave_no_file(tmp_path):
+    p = str(tmp_path / "a.mes")
+    with pytest.raises(mestra.MestraError) as e:
+        mestra.create(p, writer="t", mesh="shared", per="fixed",
+                      coordinates={"units": "m", "axes": "two"})
+    assert e.value.rule == "E24" and not os.path.exists(p)
+
+
+def test_as_given_float32_coordinates_refuse_float64_points(tmp_path):
+    p = str(tmp_path / "c.mes")
+    with mestra.create(p, writer="t", mesh="changing", per="run",
+                       coordinates={"units": "m", "axes": 2}, parameters={"r": "m"}) as s:
+        s.add_run({"r": 1.0}, points=np.zeros((3, 2), np.float32))
+        with pytest.raises(mestra.MestraError) as e:
+            s.add_run({"r": 2.0}, points=np.full((3, 2), 0.1234567891234))
+        assert e.value.rule == "E4"
+        s.add_run({"r": 2.0}, points=np.zeros((3, 2), np.float32))
+    with mestra.open(p) as f:
+        assert f.row_count == 2
+
+
+def test_cli_zone_on_a_changing_mesh_and_bad_rows(tmp_path, capsys):
+    from mestra import cli
+    p = str(tmp_path / "z.mes")
+    pts, cells = grid(2, 2)
+    with mestra.create(p, writer="t", mesh="changing", per="run",
+                       coordinates={"units": "m", "axes": 2}, parameters={"r": "m"},
+                       mesh_labels={"zone": {"at": "node", "categories": ["x", "y"]}},
+                       fields={"q": {"units": "1", "at": "node"}}) as s:
+        s.add_run({"r": 1.0}, fields={"q": np.arange(4.0)}, points=pts, cells=cells,
+                  mesh_labels={"zone": [0, 1, 1, 0]})
+    out = str(tmp_path / "q.csv")
+    assert cli.main(["get", p, "q", "--zone", "zone=y", "--rows", "0", "-o", out, "--json"]) == 0
+    capsys.readouterr()
+    assert cli.main(["get", p, "q", "--rows", "0,2,", "-o", out, "--json"]) != 0
+    assert "--rows takes positions" in capsys.readouterr().out

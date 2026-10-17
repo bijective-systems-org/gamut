@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <initializer_list>
 #include <string>
 #include <utility>
 #include <vector>
@@ -56,6 +57,26 @@ const std::size_t kMaxTableBytes = std::size_t(256) << 20;
 const std::size_t kMaxDatasetElements = std::size_t(1) << 31;
 const std::size_t kMaxDatasetBytes = std::size_t(1) << 33;
 const std::size_t kMaxFilterParameters = 1024;
+
+// `n` elements of `item` bytes, a count taken from the file (or a product
+// of such counts, given as factors), checked against the eager caps
+// before it sizes a buffer: E23 above them.
+std::size_t checked_count(const std::string& path, std::size_t item,
+                          std::initializer_list<std::int64_t> factors);
+
+// A read touching more chunks than this is refused (E23): HDF5 keeps state
+// per chunk touched, so a file of tiny chunks would make a small read cost
+// gigabytes (spec section 9.6).
+const std::size_t kMaxChunksRead = std::size_t(1) << 20;
+// Reads over every row that the library makes on the caller's behalf: the
+// where selector scans at most this many rows, and label names (a string
+// per row) are read for at most kMaxNamesRead rows at once.
+const std::int64_t kMaxRowsScanned = std::int64_t(1) << 27;
+const std::int64_t kMaxNamesRead = std::int64_t(1) << 25;
+struct DsetInfo;
+// The chunks a selection of a chunked dataset touches; E23 above the cap.
+void check_chunks_touched(const std::string& path, const DsetInfo& info,
+                          const std::vector<Selection>& sel);
 const std::size_t kMaxIndexedObjects = 1u << 20;
 const int kMaxGroupDepth = 64;
 

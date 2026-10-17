@@ -841,7 +841,8 @@ void Validator::mesh() {
       // Without cells, every cell object is absent (spec section 10.4).
       if (!cells) {
         for (const char* p : {"/mesh/instance_cells", "/mesh/row_cell_start", "/mesh/cell_value",
-                              "/mesh/cell", "/mesh/cell_plus_one", "/mesh/index"}) {
+                              "/mesh/cell", "/mesh/cell_plus_one", "/mesh/index",
+                              "/mesh/cell_offsets", "/mesh/cell_connectivity"}) {
           if (file_->exists(p)) {
             add("E5", "mesh", std::string(p).substr(1) + " is present in a mesh without cells");
           }
@@ -914,7 +915,8 @@ void Validator::mesh() {
           }
         }
       }
-      // Row starts.
+      // Row starts: checked while the rows fit the checker's cap, as ints().
+      if (static_cast<std::uint64_t>(rows_) > kMaxCheckElements) return;
       std::vector<std::int64_t> inst(static_cast<std::size_t>(rows_));
       if (group) {
         if (!file_->is_dataset("/mesh/row_instance")) {

@@ -680,19 +680,20 @@ void Writer::declare_coordinates(const std::string& units, DType dtype, int axes
        "coordinates computed by a model belong to a model file whose mesh is per run");
   need(!model_ || schema_.mesh.per == "fixed" || !model.empty(), "E16",
        "a model file's coordinates per run are computed by a model; name it");
-  schema_.mesh.coordinate_model = model;
-  schema_.mesh.coordinate_output = output;
   need(!schema_.mesh.kind.empty(), "", "coordinates need a mesh");
   need(!schema_.mesh.set_done && !datasets_ready_, "",
        "the coordinates are declared before the mesh is set and before the "
        "first run");
   check_units(units, "coordinates");
   need(axes >= 1 && axes <= 3, "E24", "coordinates have 1 to 3 axes");
+  const bool as_given = dtype == DType::String;   // String: "as given"
+  need(as_given || is_float(dtype), "E4", "coordinates are float32 or float64");
+  // Checked; now recorded (a refused call changes nothing).
+  schema_.mesh.coordinate_model = model;
+  schema_.mesh.coordinate_output = output;
   schema_.mesh.coordinate_units = units;
-  schema_.mesh.coordinate_dtype_auto = dtype == DType::String;   // String: "as given"
-  need(schema_.mesh.coordinate_dtype_auto || is_float(dtype), "E4",
-       "coordinates are float32 or float64");
-  schema_.mesh.coordinate_dtype = schema_.mesh.coordinate_dtype_auto ? DType::Float64 : dtype;
+  schema_.mesh.coordinate_dtype_auto = as_given;
+  schema_.mesh.coordinate_dtype = as_given ? DType::Float64 : dtype;
   schema_.mesh.axes = axes;
 }
 
@@ -954,6 +955,7 @@ void Writer::resolve_autos(Schema& s, const Batch* first) {
     m.coordinate_dtype = g != nullptr && g->points.dtype == DType::Float32 ? DType::Float32
                                                                            : DType::Float64;
     m.coordinate_dtype_auto = false;
+    m.coordinate_given = true;
   }
 }
 
@@ -1399,6 +1401,10 @@ std::int64_t Writer::add_runs(const Batch& batch) {
     const std::string who =
         "geometry " + std::to_string(instances_written_ + static_cast<std::int64_t>(k));
     need(is_float(g.points.dtype), "E4", who + ": coordinates are float32 or float64");
+    need(!(m.coordinate_given && m.coordinate_dtype == DType::Float32 &&
+           g.points.dtype == DType::Float64),
+         "E4", who + ": the first coordinates were float32, so they are stored as float32; give "
+                     "float32 points, or declare their precision to convert", "coordinates");
     if (m.kind == "shared") {
       need(g.n_nodes == m.n_nodes && g.axes == m.axes && g.points.count == m.n_nodes * m.axes,
            "E5", who + ": coordinates must be " + std::to_string(m.n_nodes) + " nodes x " +
@@ -1597,14 +1603,29 @@ void Writer::add_model(const std::string& id, const std::string& type,
            id + ": a nearest model's bounds equal its parameters' bounds (" + nm.columns[j] + ")");
     }
   }
+  need(valid_utf8(type) && type.find('\0') == std::string::npos, "E3",
+       id + ": the type is not valid UTF-8");
+  need(valid_utf8(repr) && repr.find('\0') == std::string::npos, "E3",
+       id + ": repr is not valid UTF-8");
+  // Everything is checked before the model's group exists (a refused call
+  // adds nothing); a failure while writing removes the group again.
+  check_dict(numbers, true, 0, id);
   const std::string group = "/models/" + id;
   file_->make_group(group);
-  file_->write_attr(group, "type", AttrValue::text(type));
-  std::string joined;
-  for (const auto& in : inputs) joined += (joined.empty() ? "" : " ") + in;
-  file_->write_attr(group, "inputs", AttrValue::text(joined));
-  if (!repr.empty()) file_->write_attr(group, "repr", AttrValue::text(repr));
-  write_dict_group(*file_, group, numbers, true);
+  try {
+    file_->write_attr(group, "type", AttrValue::text(type));
+    std::string joined;
+    for (const auto& in : inputs) joined += (joined.empty() ? "" : " ") + in;
+    file_->write_attr(group, "inputs", AttrValue::text(joined));
+    if (!repr.empty()) file_->write_attr(group, "repr", AttrValue::text(repr));
+    write_dict_group(*file_, group, numbers, true);
+  } catch (...) {
+    try {
+      file_->remove_link(group);
+    } catch (...) {
+    }
+    throw;
+  }
   Model m;
   m.id = id;
   m.type = type;
@@ -1679,7 +1700,13 @@ void Writer::abandon(bool remove) {
 
 void Writer::close() {
   if (closed_) return;
-  ensure_datasets(nullptr);
+  // Checked before anything is written, so a refused close can be fixed
+  // (add the model, set the mesh) and tried again.
+  if (!datasets_ready_) {
+    check_relations();
+    Schema trial = schema_;
+    check_preconditions(trial, nullptr);
+  }
   if (model_) {
     need(!schema_.models.empty(), "E16", "a model file holds at least one model; add one with "
                                          "add_model before closing");
@@ -1697,6 +1724,7 @@ void Writer::close() {
       need(has(schema_.mesh.coordinate_model), "E17", "coordinates: name a model that was added");
     }
   }
+  ensure_datasets(nullptr);
   flush();
   write_cf_coordinates();
   file_->flush();

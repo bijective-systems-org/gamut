@@ -619,14 +619,15 @@ int mes_flush(mes_file* f, mes_error* err) {
 int mes_close(mes_file* f, mes_error* err) {
   clear(err);
   if (f == nullptr) return 0;
-  std::unique_ptr<mes_file> owned(f);
   try {
-    if (owned->writer) owned->writer->close();
-    owned->reader.reset();
-    return 0;
+    if (f->writer) f->writer->close();
   } catch (...) {
+    // The handle stays open: fix what the error names and close again, or
+    // give up with mes_abandon.
     return fail(err);
   }
+  delete f;
+  return 0;
 }
 
 void mes_abandon(mes_file* f, int remove_file) {

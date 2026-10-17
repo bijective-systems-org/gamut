@@ -41,6 +41,13 @@ def _spec(value: Any, key: str) -> dict:
     return {key: value}
 
 
+def _axes(coordinates: Mapping[str, Any] | None) -> int:
+    value = (coordinates or {}).get("axes", 3)
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+        raise MestraError("E24", f"coordinates: axes is 1, 2 or 3, not {value!r}")
+    return int(value)
+
+
 def _precision(value: Any) -> int:
     if value is None:
         return _lib.MES_AS_GIVEN
@@ -76,9 +83,11 @@ class Study:
     # --- life cycle -------------------------------------------------------
 
     def close(self) -> None:
+        """Finishes the file.  A refused close (a shared mesh never set, a
+        model file without a model) keeps it open to fix and close again."""
         if self._h is not None:
-            h, self._h = self._h, None
-            call("mes_close", h)
+            call("mes_close", self._h)
+            self._h = None
 
     def _abandon(self, remove: bool) -> None:
         """Releases the file without finishing it; with `remove`, deletes a
@@ -94,18 +103,21 @@ class Study:
         if exc_type is None:
             self.close()
             return
-        # Leaving on an error: release the file, and let the first error
-        # stand rather than one the half-finished file raises on close.
+        # Leaving on an error: finish the file if it can be finished, else
+        # discard a file this study created; the first error stands.
         try:
             self.close()
         except MestraError:
-            pass
+            self._abandon(remove=True)
 
     def __del__(self) -> None:
         try:
             self.close()
         except Exception:
-            pass
+            try:
+                self._abandon(remove=False)
+            except Exception:
+                pass
 
     def _handle(self) -> ctypes.c_void_p:
         if self._h is None:
@@ -205,6 +217,11 @@ class Study:
         keep = []
         group_names: list[str] | None = None
         for name, vals in columns.items():
+            # NumPy drops trailing NULs from text, so names are checked as given.
+            for x in ([vals] if isinstance(vals, str) else
+                      vals if isinstance(vals, (list, tuple)) else []):
+                if isinstance(x, str):
+                    b(x)
             arr = np.asarray(vals)
             if arr.dtype.kind in "US" or arr.dtype == object or arr.dtype == np.bool_:
                 names = ["true" if x is True or x is np.True_ else
@@ -519,19 +536,20 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
     """Creates a data file and returns it open to add runs (interface §3)."""
     if mesh is not None and per is None:
         raise MestraError("E6", "a mesh needs per: 'fixed', 'run' or 'group:<label>'")
+    axes = _axes(coordinates)        # before the file exists: a refusal leaves none
     handle = ctypes.c_void_p()
     call("mes_create", b(path), b(writer), b(mesh or ""), b(per or "fixed"), ctypes.byref(handle))
     study = Study(handle, path, writing=True)
     study._mesh_kind = mesh or ""
     study._per = per or ""
     study._group = per[6:] if per and per.startswith("group:") else None
-    study._axes = int((coordinates or {}).get("axes", 3))
-    for group in (parameters, scalars):
-        for name, value in (group or {}).items():
-            study._declared_units[name] = _spec(value, "units").get("units", "")
-    precision = dict(precision or {})
-    round_bits = dict(round_bits or {})
+    study._axes = axes
     try:
+        for group in (parameters, scalars):
+            for name, value in (group or {}).items():
+                study._declared_units[name] = _spec(value, "units").get("units", "")
+        precision = dict(precision or {})
+        round_bits = dict(round_bits or {})
         if not compression:
             call("mes_set_compression", handle, 0, 0)
         for key, value in (("title", title), ("license", license),

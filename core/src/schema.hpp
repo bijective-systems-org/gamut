@@ -89,6 +89,7 @@ struct Mesh {
   std::string coordinate_units;
   DType coordinate_dtype = DType::Float64;
   bool coordinate_dtype_auto = false;
+  bool coordinate_given = false;  // precision taken from the first points this writer took
   std::string support_id;         // shared
   std::string coordinate_model, coordinate_output;   // served coordinates
   std::vector<MeshLabel> labels;

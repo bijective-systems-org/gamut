@@ -126,6 +126,14 @@ bool read_parallel(const File& f, const std::string& path, DType mem,
       plan.hi[a] = static_cast<hsize_t>(runs[0].first + runs[0].second);
     }
   }
+  {
+    std::vector<Selection> boxes;
+    for (std::size_t a = 0; a < rank; ++a) {
+      boxes.push_back(Selection::range(static_cast<std::int64_t>(plan.lo[a]),
+                                       static_cast<std::int64_t>(plan.hi[a])));
+    }
+    check_chunks_touched(path, info, boxes);
+  }
   std::vector<hsize_t> box(rank);
   std::size_t total = 1;
   for (std::size_t a = 0; a < rank; ++a) {

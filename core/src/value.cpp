@@ -1,5 +1,7 @@
 #include "value.hpp"
 
+#include <cstdint>
+
 namespace mestra {
 namespace internal {
 
@@ -46,7 +48,8 @@ Value Value::numbers(DType dtype, std::vector<std::int64_t> shape,
   if (x.shape_.empty()) {
     throw Error("E18", "a zero-dimensional array is stored as the number it holds");
   }
-  if (static_cast<std::size_t>(x.size()) * dtype_size(dtype) != x.bytes_.size()) {
+  const std::uint64_t n = static_cast<std::uint64_t>(x.size());
+  if (n > SIZE_MAX / dtype_size(dtype) || n * dtype_size(dtype) != x.bytes_.size()) {
     throw Error("", "an array's bytes do not match its shape");
   }
   return x;
@@ -73,7 +76,12 @@ Value Value::dict(Dict d) {
 
 std::int64_t Value::size() const {
   std::int64_t n = 1;
-  for (const auto e : shape_) n *= e;
+  for (const auto e : shape_) {
+    if (e < 0 || (e != 0 && n > INT64_MAX / e)) {
+      throw Error("E18", "an array's shape is negative or too large");
+    }
+    n *= e;
+  }
   return n;
 }
 

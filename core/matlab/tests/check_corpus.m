@@ -63,8 +63,16 @@ try
         reads = e.reads;
         if ~iscell(reads), reads = num2cell(reads); end
         for j = 1:numel(reads)
+            q = reads{j};
             try
-                r.getLabel(reads{j}.label);
+                if isfield(q, 'label'), r.getLabel(q.label);
+                elseif isfield(q, 'cells'), r.getCells(q.cells + 1);
+                elseif isfield(q, 'select'), r.select(q.select);
+                elseif isfield(q, 'scalar'), r.getScalar(q.scalar);
+                elseif isfield(q, 'evaluate')
+                    out = mestra.evaluate(path, q.evaluate);
+                    out.close();
+                end
             catch err
                 if ~startsWith(err.identifier, 'mestra:'), rethrow(err); end
             end
@@ -85,7 +93,14 @@ end
 function why = probe(path, p)
 why = '';
 if isfield(p, 'evaluate')
-    return   % model evaluation from MATLAB is checked once its plug-ins land
+    out = mestra.evaluate(path, p.evaluate);
+    c = onCleanup(@() out.close());
+    got = out.getScalar(p.scalar);
+    want = p.values(:);
+    if ~isequal(got(:), want)
+        why = sprintf('evaluate %s: %s ~= %s', p.scalar, mat2str(got(:)'), mat2str(want'));
+    end
+    return
 end
 r = mestra.open(path);
 c = onCleanup(@() r.close());

@@ -57,7 +57,18 @@ function hostile(path, e)
             Mestra.names(f, "parameters")
             for r in get(e, "reads", [])
                 try
-                    Mestra.get_label(f, r["label"])
+                    if haskey(r, "label")
+                        Mestra.get_label(f, r["label"])
+                    elseif haskey(r, "cells")
+                        Mestra.get_cells(f; row=r["cells"] + 1)
+                    elseif haskey(r, "select")
+                        Mestra.select(f, r["select"])
+                    elseif haskey(r, "scalar")
+                        Mestra.get_scalar(f, r["scalar"])
+                    elseif haskey(r, "evaluate")
+                        inputs = Dict(k => Float64.(v) for (k, v) in r["evaluate"])
+                        close(Mestra.evaluate(path, inputs))
+                    end
                 catch x
                     x isa MestraError || rethrow()
                 end

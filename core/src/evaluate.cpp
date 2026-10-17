@@ -39,22 +39,23 @@ std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string&
     g.axes = s.mesh.axes;
     const auto all = Selection::all();
     if (s.mesh.per == "fixed") {
-      std::vector<double> pts(static_cast<std::size_t>(s.mesh.n_nodes * s.mesh.axes));
+      std::vector<double> pts(checked_count("coordinates", 8, {s.mesh.n_nodes, s.mesh.axes}));
       model.read("coordinates", all, all, DType::Float64, pts.data(), pts.size() * 8);
       g.points = Column::of(DType::Float64, pts.data(), static_cast<std::int64_t>(pts.size()));
     }
     if (s.mesh.n_cells > 0) {
-      std::vector<std::int64_t> types(static_cast<std::size_t>(s.mesh.n_cells));
+      std::vector<std::int64_t> types(checked_count("cells/types", 8, {s.mesh.n_cells}));
       model.read("cells/types", all, all, DType::Int64, types.data(), types.size() * 8);
       g.types.assign(types.begin(), types.end());
-      g.offsets.resize(static_cast<std::size_t>(s.mesh.n_cells + 1));
+      g.offsets.resize(checked_count("cells/offsets", 8, {s.mesh.n_cells + 1}));
       model.read("cells/offsets", all, all, DType::Int64, g.offsets.data(), g.offsets.size() * 8);
-      g.connectivity.resize(static_cast<std::size_t>(s.mesh.n_conn));
+      g.connectivity.resize(checked_count("cells/connectivity", 8, {s.mesh.n_conn}));
       model.read("cells/connectivity", all, all, DType::Int64, g.connectivity.data(),
                  g.connectivity.size() * 8);
     }
     for (const auto& ml : s.mesh.labels) {
-      const auto n = static_cast<std::size_t>(ml.where == "node" ? s.mesh.n_nodes : s.mesh.n_cells);
+      const std::size_t n = checked_count(mesh_label_path(ml), 8,
+                                          {ml.where == "node" ? s.mesh.n_nodes : s.mesh.n_cells});
       std::vector<std::int64_t> v(n);
       model.read(mesh_label_path(ml), all, all, DType::Int64, v.data(), n * 8);
       g.labels[ml.name] = v;

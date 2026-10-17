@@ -416,10 +416,14 @@ def _cleanup(path: str) -> None:
 def _rows_arg(text: str | None) -> Any:
     if text is None:
         return None
-    if ":" in text:
-        a, b = text.split(":", 1)
-        return slice(int(a) if a else None, int(b) if b else None)
-    return [int(x) for x in text.split(",")]
+    try:
+        if ":" in text:
+            a, b = text.split(":", 1)
+            return slice(int(a) if a else None, int(b) if b else None)
+        return [int(x) for x in text.split(",")]
+    except ValueError:
+        raise MestraError("", f"--rows takes positions (3 or 0,2,5) or a range (0:10), not "
+                              f"{text!r}") from None
 
 
 def cmd_get(args: argparse.Namespace) -> int:
@@ -439,7 +443,16 @@ def cmd_get(args: argparse.Namespace) -> int:
         if args.zone:
             label, _, value = args.zone.partition("=")
             d = f.describe(label)
-            codes = f.get_mesh_label(label)
+            if f.type == "changing":
+                # Each row of a changing mesh has its own mesh labels.
+                chosen_rows = np.arange(f.row_count)[rows] if rows is not None else \
+                    np.arange(f.row_count)
+                if len(np.atleast_1d(chosen_rows)) != 1:
+                    raise MestraError("", "--zone on a changing mesh reads one row; give it "
+                                          "with --rows N")
+                codes = f.get_mesh_label(label, row=int(np.atleast_1d(chosen_rows)[0]))
+            else:
+                codes = f.get_mesh_label(label)
             table = _lib.strings_out("mes_table", f._handle(), _lib.b(d["category"])) \
                 if d.get("category") else None
             want = table.index(value) if table else int(value)

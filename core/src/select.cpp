@@ -1,5 +1,6 @@
 #include "select.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -91,6 +92,10 @@ class Parser {
  public:
   Parser(const Reader& r, const std::string& where) : r_(r), toks_(tokenize(where)) {
     rows_ = r.schema().rows;
+    if (rows_ > kMaxRowsScanned) {
+      throw Error("E23", "where: the file has " + std::to_string(rows_) + " rows, more than the " +
+                             std::to_string(kMaxRowsScanned) + " a selection scans");
+    }
   }
 
   std::vector<bool> parse() {
@@ -160,20 +165,31 @@ class Parser {
   std::vector<bool> compare(const Token& name, const std::string& op, const Token& value) {
     const Schema& s = r_.schema();
     std::vector<bool> out(static_cast<std::size_t>(rows_), false);
+    // Columns are read a block of rows at a time, so memory stays bounded.
+    const std::int64_t block = std::int64_t(1) << 20;
     const Selection all = Selection::all();
     if (const Label* l = s.label(name.text)) {
       if (op != "==" && op != "!=") {
         throw Error("", "where: the label " + name.text + " compares only by == or !=");
       }
-      const std::vector<std::string> names = r_.label_names(name.text, all);
+      // Compared by code: the table names the entry once.
       const std::vector<std::string> table = r_.table(l->category);
-      bool known = false;
-      for (const auto& t : table) known = known || t == value.text;
-      if (!known) {
+      std::int64_t code = -1;
+      for (std::size_t k = 0; k < table.size(); ++k) {
+        if (table[k] == value.text) code = static_cast<std::int64_t>(k);
+      }
+      if (code < 0) {
         throw Error("E9", "where: \"" + value.text + "\" is not in the table of " + name.text);
       }
-      for (std::size_t i = 0; i < out.size(); ++i) {
-        out[i] = (names[i] == value.text) == (op == "==");
+      for (std::int64_t a = 0; a < rows_; a += block) {
+        const std::int64_t b = std::min(rows_, a + block);
+        std::vector<std::int64_t> codes(static_cast<std::size_t>(b - a));
+        r_.read(name.text, Selection::range(a, b), all, DType::Int64, codes.data(),
+                codes.size() * 8);
+        for (std::int64_t i = a; i < b; ++i) {
+          out[static_cast<std::size_t>(i)] =
+              (codes[static_cast<std::size_t>(i - a)] == code) == (op == "==");
+        }
       }
       return out;
     }
@@ -186,17 +202,22 @@ class Parser {
       throw Error("", "where: " + name.text + " compares with a number, and \"" + value.text +
                           "\" is not one");
     }
-    std::vector<double> col(static_cast<std::size_t>(rows_));
-    if (rows_ > 0) r_.read(name.text, all, all, DType::Float64, col.data(), col.size() * 8);
-    for (std::size_t i = 0; i < out.size(); ++i) {
-      const double x = col[i];
-      if (std::isnan(x)) continue;   // NaN compares false, every way
-      if (op == "==") out[i] = x == v;
-      else if (op == "!=") out[i] = x != v;
-      else if (op == "<") out[i] = x < v;
-      else if (op == "<=") out[i] = x <= v;
-      else if (op == ">") out[i] = x > v;
-      else out[i] = x >= v;
+    for (std::int64_t a = 0; a < rows_; a += block) {
+      const std::int64_t b = std::min(rows_, a + block);
+      std::vector<double> col(static_cast<std::size_t>(b - a));
+      r_.read(name.text, Selection::range(a, b), all, DType::Float64, col.data(),
+              col.size() * 8);
+      for (std::int64_t i = a; i < b; ++i) {
+        const double x = col[static_cast<std::size_t>(i - a)];
+        const std::size_t k = static_cast<std::size_t>(i);
+        if (std::isnan(x)) continue;   // NaN compares false, every way
+        if (op == "==") out[k] = x == v;
+        else if (op == "!=") out[k] = x != v;
+        else if (op == "<") out[k] = x < v;
+        else if (op == "<=") out[k] = x <= v;
+        else if (op == ">") out[k] = x > v;
+        else out[k] = x >= v;
+      }
     }
     return out;
   }

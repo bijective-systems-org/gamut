@@ -75,6 +75,67 @@ r = mestra.open(p);
 ok(r.rowCount() == 4 && isequal(r.getField('pf', 'rows', 4), 100:105), 'append');
 r.close();
 
+% Model files: the built-in nearest model with one input (MATLAB cannot tell
+% a one-element array from a number; the gateway keeps the ranks), and a
+% registered plug-in serving values and std.
+mp = fullfile(tmp, 'nearest.mes');
+s = mestra.createModel(mp, 'writer', 'matlab tests', ...
+    'parameters', struct('alpha', struct('units', 'degree', 'lower', 0, 'upper', 10)), ...
+    'scalars', struct('cl', struct('units', '1', 'model', 'fit', 'output', 'cl')));
+s.addModel('fit', mestra.Nearest({'alpha'}, 0, 10, [0; 5; 10], struct('cl', [0.1; 0.5; 1.0])), ...
+    {'alpha'});
+s.close();
+ok(isempty(mestra.validate(mp)), 'nearest model file validates');
+
+% A refused close keeps the file open to fix and close again.
+rp = fullfile(tmp, 'refused.mes');
+s = mestra.createModel(rp, 'writer', 'matlab tests', ...
+    'parameters', struct('alpha', struct('units', 'degree', 'lower', 0, 'upper', 10)), ...
+    'scalars', struct('cl', struct('units', '1', 'model', 'fit', 'output', 'cl')));
+try
+    s.close();
+    ok(false, 'close without a model refused');
+catch err
+    ok(strcmp(err.identifier, 'mestra:E16'), ['refused close: ' err.identifier]);
+end
+s.addModel('fit', mestra.Nearest({'alpha'}, 0, 10, [0; 10], struct('cl', [1; 2])), {'alpha'});
+s.close();
+ok(isempty(mestra.validate(rp)), 'closed after the fix');
+out = mestra.evaluate(mp, struct('alpha', [1; 4; 9]));
+ok(isequal(out.getScalar('cl'), [0.1; 0.5; 1.0]), 'nearest evaluated');
+ok(isequal(out.getParameter('alpha'), [1; 4; 9]), 'inputs kept');
+tmpPath = out.Path;
+out.close();
+ok(~isfile(tmpPath), 'temporary evaluated file removed on close');
+r = mestra.open(mp);
+numbers = mestra_mex('model_numbers', r.Handle, 'fit');
+r.close();
+back = mestra.Nearest.load(numbers);
+ok(isequal(back.X, [0; 5; 10]) && isequal(back.Lower, 0), 'nearest numbers read back');
+
+lp = fullfile(tmp, 'linear.mes');
+s = mestra.createModel(lp, 'writer', 'matlab tests', ...
+    'parameters', struct('x', struct('units', 'm', 'lower', -1, 'upper', 1)), ...
+    'scalars', struct('y', struct('units', '1', 'model', 'lin', 'output', 'y'), ...
+        'y_std', struct('units', '1', 'model', 'lin', 'output', 'y', 'of', 'y', ...
+                        'statistic', 'std')));
+lin = testmodels.Linear(); lin.A = 1; lin.B = 2; lin.Std = 0.25; lin.Input = 'x'; lin.Output = 'y';
+s.addModel('lin', lin, {'x'});
+s.close();
+try
+    mestra.evaluate(lp, struct('x', [0; 0.5]));
+    ok(false, 'unregistered type refused');
+catch err
+    ok(contains(err.message, 'not registered'), ['unregistered type: ' err.message]);
+end
+mestra.registerModelType('testmodels.Linear');
+ep = fullfile(tmp, 'evaluated.mes');
+out = mestra.evaluate(lp, struct('x', [0; 0.5]), 'path', ep);
+ok(isequal(out.getScalar('y'), [1; 2]) && isequal(out.getScalar('y_std'), [0.25; 0.25]), ...
+    'plug-in values and std');
+out.close();
+ok(isfile(ep) && isempty(mestra.validate(ep)), 'evaluated file kept and valid');
+
 % Errors carry their rule.
 try
     mestra.create(fullfile(tmp, 'bad.mes'), 'writer', 'w', 'parameters', struct('x', 'm//s'));

@@ -586,6 +586,47 @@ def hostile_cases(out):
         f.move("row", "row_real")
         f["row"] = h5py.SoftLink("/row_real")
     cases["hostile_soft_row"] = {"rules": ["E22"], "refused": "E22"}
+    # A model whose arrays declare (2**62, 4) elements, none stored: the
+    # element count overflows 64 bits once multiplied by the item size.
+    p = os.path.join(out, "hostile_model_wrap.mes")
+    shutil.copy(os.path.join(out, "model_nearest.mes"), p)
+    with h5py.File(p, "r+") as f:
+        g = f["models/fit"]
+        for path in ("x", "outputs/cl"):
+            del g[path]
+            g.create_dataset(path, shape=(1 << 62, 4), maxshape=(None, 4), chunks=(1, 4),
+                             dtype="<f8")
+    cases["hostile_model_wrap"] = {"rules": ["E23"],
+                                   "reads": [{"evaluate": {"mach": [0.4], "alpha": [1.0]}}]}
+    # A changing mesh whose first instance claims 2**30 cells while
+    # cell_offsets holds a handful.
+    p = os.path.join(out, "hostile_cells_huge.mes")
+    shutil.copy(os.path.join(out, "changing.mes"), p)
+    with h5py.File(p, "r+") as f:
+        f["mesh/instance_cells"][1] = 1 << 30
+    cases["hostile_cells_huge"] = {"rules": ["E21"], "reads": [{"cells": 0}]}
+    # 2**30 rows declared, one stored: the where selector reads every row.
+    p = os.path.join(out, "hostile_where_huge.mes")
+    shutil.copy(os.path.join(out, "table.mes"), p)
+    with h5py.File(p, "r+") as f:
+        for name in ("row", "mach"):
+            f[name].resize((1 << 30,))
+    cases["hostile_where_huge"] = {"rules": [], "reads": [{"select": "mach > 0.5"}]}
+    # A scalar column of 2**21 one-element chunks, none written: HDF5 keeps
+    # state per chunk touched, so reading it whole would take gigabytes.
+    p = os.path.join(out, "hostile_tiny_chunks.mes")
+    shutil.copy(os.path.join(out, "table.mes"), p)
+    with h5py.File(p, "r+") as f:
+        n = 1 << 21
+        f["row"].resize((n,))
+        attrs = {k: f["cl"].attrs[k] for k in f["cl"].attrs if k != "DIMENSION_LIST"}
+        f["cl"].dims[0].detach_scale(f["row"])
+        del f["cl"]
+        d = f.create_dataset("cl", shape=(n,), maxshape=(None,), chunks=(1,), dtype="<f8")
+        for k, v in attrs.items():
+            d.attrs.create(k, v)
+        d.dims[0].attach_scale(f["row"])
+    cases["hostile_tiny_chunks"] = {"rules": [], "reads": [{"scalar": "cl"}]}
     return cases
 
 

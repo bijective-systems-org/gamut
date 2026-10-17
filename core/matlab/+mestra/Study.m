@@ -13,6 +13,7 @@ classdef Study < handle
         Per
         Group
         Axes = 3
+        RemoveOnClose = false   % an evaluated file in a temporary place
     end
 
     methods
@@ -34,10 +35,15 @@ classdef Study < handle
         end
 
         function close(s)
+            %CLOSE Finishes the file.  A refused close (a shared mesh never
+            %   set, a model file without a model) keeps it open to fix and
+            %   close again.
             if ~isempty(s.Handle)
-                h = s.Handle;
+                mestra_mex('close', s.Handle);
                 s.Handle = [];
-                mestra_mex('close', h);
+                if s.RemoveOnClose && isfile(s.Path)
+                    delete(s.Path);
+                end
             end
         end
 
@@ -45,6 +51,7 @@ classdef Study < handle
             try
                 s.close();
             catch
+                s.abandon(false);
             end
         end
 
@@ -113,6 +120,14 @@ classdef Study < handle
 
         function setNote(s, key, value)
             mestra_mex('set_note', s.Handle, key, value);
+        end
+
+        function addModel(s, id, model, inputs, repr)
+            %ADDMODEL Adds a model to a model file: its id, the model (an
+            %   object of a registered type, or mestra.Nearest) and the
+            %   inputs it reads (parameters, labels, 'coordinates').
+            if nargin < 5, repr = ''; end
+            mestra_mex('add_model', s.Handle, id, model.Type, cellstr(inputs), model.save(), repr);
         end
 
         % --- reading -------------------------------------------------------
@@ -259,11 +274,14 @@ classdef Study < handle
         end
 
         function p = pos(~, x)
-            % 1-based MATLAB positions to the core's 0-based ones.
+            % 1-based MATLAB positions to the core's 0-based ones.  Only
+            % whole-number positions; a logical mask is find(mask).
             if isempty(x)
                 p = [];
             else
-                if islogical(x), x = find(x); end
+                if islogical(x) || ~isnumeric(x) || any(x(:) ~= fix(x(:)))
+                    error('mestra:usage', 'positions are whole numbers (for a mask, use find)');
+                end
                 p = double(x(:)) - 1;
             end
         end

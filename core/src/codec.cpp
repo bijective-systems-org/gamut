@@ -83,13 +83,56 @@ Dict read_dict_group(const File& f, const std::string& path, bool top_level, int
       d[m.name] = Value::strings(shape, f.read_strings(child));
       continue;
     }
-    std::int64_t n = 1;
-    for (const auto e : shape) n *= e;
-    std::vector<unsigned char> bytes(static_cast<std::size_t>(n) * dtype_size(t));
+    // The shape comes from the file: counted against the eager caps (spec
+    // section 9.6) before it sizes anything.
+    std::size_t n = 1;
+    for (const auto e : shape) {
+      const std::size_t x = static_cast<std::size_t>(e);
+      if (x != 0 && n > kMaxDatasetElements / x) n = kMaxDatasetElements + 1;
+      else n *= x;
+    }
+    if (n > kMaxDatasetElements || n > kMaxDatasetBytes / dtype_size(t)) {
+      throw Error("E23", "\"" + child + "\" declares more elements than this reader reads "
+                         "at once");
+    }
+    std::vector<unsigned char> bytes(n * dtype_size(t));
     if (n > 0) f.read(child, t, {}, bytes.data(), bytes.size());
     d[m.name] = Value::numbers(t, shape, std::move(bytes));
   }
   return d;
+}
+
+void check_dict(const Dict& d, bool top_level, int depth, const std::string& where) {
+  if (depth >= kMaxDictDepth) {
+    throw Error("E23", "\"" + where + "\" is nested deeper than this writer walks");
+  }
+  auto clean = [](const std::string& s) {
+    return s.find('\0') == std::string::npos && valid_utf8(s);
+  };
+  for (const auto& entry : d) {
+    const std::string& key = entry.first;
+    const Value& v = entry.second;
+    if (!legal_netcdf_name(key) || reserved_name(key)) {
+      throw Error("E8", "the model-data key \"" + key + "\" is not a legal name");
+    }
+    if (top_level && kTopLevel.count(key)) {
+      throw Error("E18", "the model data's top level may not use \"" + key +
+                             "\", which is an attribute of the model");
+    }
+    if (v.kind() == Value::Kind::Str && !clean(v.as_text())) {
+      throw Error("E18", "the model-data string \"" + key + "\" is not valid UTF-8 without "
+                         "NUL bytes");
+    }
+    if (v.kind() == Value::Kind::Strings) {
+      for (const auto& s : v.items()) {
+        if (!clean(s)) {
+          throw Error("E18", "a model-data string in \"" + key + "\" is not valid UTF-8 "
+                             "without NUL bytes");
+        }
+      }
+    }
+    if (v.kind() == Value::Kind::Dict) check_dict(v.as_dict(), false, depth + 1, where + "/" + key);
+  }
 }
 
 void write_dict_group(File& f, const std::string& path, const Dict& d, bool top_level,

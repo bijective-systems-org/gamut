@@ -274,6 +274,68 @@ void tree_from(mes_tree* t, const std::string& prefix, const mxArray* value) {
   }
 }
 
+// The built-in nearest model's numbers with exact ranks, which a struct
+// cannot carry (MATLAB has no one-axis or one-element arrays): columns as
+// strings; lower and upper one axis; x points x columns; each output
+// points first, one axis when it holds one value per point.
+void nearest_tree(mes_tree* t, const mxArray* numbers) {
+  if (!mxIsStruct(numbers) || mxGetNumberOfElements(numbers) != 1) {
+    usage("nearest numbers are a scalar struct");
+  }
+  auto field = [&](const char* name) {
+    const mxArray* f = mxGetField(numbers, 0, name);
+    if (f == nullptr) usage(std::string("nearest numbers need ") + name);
+    return f;
+  };
+  mes_error e{};
+  auto doubles = [&](const mxArray* a, const char* what) {
+    if (!mxIsDouble(a) || mxIsComplex(a)) usage(std::string(what) + " is real double");
+  };
+  const auto columns = cellstr(field("columns"), "columns");
+  const auto p = pointers(columns);
+  check(mes_tree_set_strings(t, "columns", p.data(), static_cast<int64_t>(p.size()), &e), e);
+  const int64_t k = static_cast<int64_t>(columns.size());
+  for (const char* name : {"lower", "upper"}) {
+    const mxArray* a = field(name);
+    doubles(a, name);
+    int64_t n = static_cast<int64_t>(mxGetNumberOfElements(a));
+    check(mes_tree_set_array(t, name, MES_FLOAT64, mxGetData(a), 1, &n, &e), e);
+  }
+  const mxArray* x = field("x");
+  doubles(x, "x");
+  const int64_t total = static_cast<int64_t>(mxGetNumberOfElements(x));
+  if (k == 0 || total % k != 0) usage("x is points x columns");
+  const int64_t points = total / k;
+  {
+    // x(i, j) in MATLAB's column order to C order.
+    std::vector<double> c(static_cast<std::size_t>(total));
+    const double* m = mxGetPr(x);
+    for (int64_t i = 0; i < points; ++i) {
+      for (int64_t j = 0; j < k; ++j) c[static_cast<std::size_t>(i * k + j)] = m[j * points + i];
+    }
+    const int64_t dims[2] = {points, k};
+    check(mes_tree_set_array(t, "x", MES_FLOAT64, c.data(), 2, dims, &e), e);
+  }
+  check(mes_tree_set_dict(t, "outputs", &e), e);
+  const mxArray* outs = field("outputs");
+  if (!mxIsStruct(outs) || mxGetNumberOfElements(outs) != 1) usage("outputs is a scalar struct");
+  for (int i = 0; i < mxGetNumberOfFields(outs); ++i) {
+    const std::string key = std::string("outputs/") + mxGetFieldNameByNumber(outs, i);
+    const mxArray* v = mxGetFieldByNumber(outs, 0, i);
+    doubles(v, key.c_str());
+    const mwSize nd = mxGetNumberOfDimensions(v);
+    const mwSize* md = mxGetDimensions(v);
+    std::vector<int64_t> dims(md, md + nd);
+    while (dims.size() > 1 && dims.back() == 1) dims.pop_back();
+    if (dims.empty() || dims[0] != points) usage(key + ": one entry per point, points first");
+    std::vector<int64_t> c_dims;
+    const auto bytes = to_c_order(v, dims.size(), &c_dims);
+    check(mes_tree_set_array(t, key.c_str(), MES_FLOAT64, bytes.data(),
+                             static_cast<int>(dims.size()), dims.data(), &e),
+          e);
+  }
+}
+
 mxArray* struct_from(const mes_tree* t, const std::string& prefix);
 
 mxArray* tree_value(const mes_tree* t, const std::string& key) {
@@ -377,8 +439,10 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     plhs[0] = handle_out(f);
   } else if (cmd == "close") {
     mes_file* f = file(arg(1));
-    g_files.erase(reinterpret_cast<std::uintptr_t>(f));
-    check(mes_close(f, &e), e);
+    const int status = mes_close(f, &e);
+    // A refused close keeps the handle open (fix and close again, or abandon).
+    if (status == 0) g_files.erase(reinterpret_cast<std::uintptr_t>(f));
+    check(status, e);
   } else if (cmd == "abandon") {
     mes_file* f = file(arg(1));
     g_files.erase(reinterpret_cast<std::uintptr_t>(f));
@@ -581,7 +645,11 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     mes_tree* t = nullptr;
     check(mes_tree_new(&t, &e), e);
     try {
-      tree_from(t, "", arg(5));
+      if (text(arg(3), "type") == "nearest") {
+        nearest_tree(t, arg(5));
+      } else {
+        tree_from(t, "", arg(5));
+      }
     } catch (...) {
       mes_tree_free(t);
       throw;
@@ -592,19 +660,49 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
                                      p.data(), static_cast<int64_t>(p.size()), t, text(arg(6), "repr").c_str(), &e);
     mes_tree_free(t);
     check(status, e);
+  } else if (cmd == "nearest_check") {
+    mes_tree* t = nullptr;
+    check(mes_tree_new(&t, &e), e);
+    try {
+      nearest_tree(t, arg(1));
+    } catch (...) {
+      mes_tree_free(t);
+      throw;
+    }
+    const int status = mes_nearest_check(t, &e);
+    mes_tree_free(t);
+    check(status, e);
   } else if (cmd == "nearest_call") {
     // numbers (struct), inputNames (cell), columns (cell of double vectors), output
     mes_tree* t = nullptr;
     check(mes_tree_new(&t, &e), e);
-    tree_from(t, "", arg(1));
-    const auto names = cellstr(arg(2), "input names");
-    const mxArray* cols = arg(3);
+    try {
+      nearest_tree(t, arg(1));
+    } catch (...) {
+      mes_tree_free(t);
+      throw;
+    }
+    std::vector<std::string> names;
     std::vector<std::vector<double>> data;
     int64_t rows = 0;
-    for (std::size_t j = 0; j < names.size(); ++j) {
-      const mxArray* c = mxGetCell(cols, static_cast<mwIndex>(j));
-      data.emplace_back(mxGetPr(c), mxGetPr(c) + mxGetNumberOfElements(c));
-      rows = static_cast<int64_t>(data.back().size());
+    try {
+      names = cellstr(arg(2), "input names");
+      const mxArray* cols = arg(3);
+      if (!mxIsCell(cols) || mxGetNumberOfElements(cols) != names.size()) {
+        usage("one column per input name");
+      }
+      for (std::size_t j = 0; j < names.size(); ++j) {
+        const mxArray* c = mxGetCell(cols, static_cast<mwIndex>(j));
+        if (c == nullptr || !mxIsDouble(c) || mxIsComplex(c)) usage("input columns are real double");
+        data.emplace_back(mxGetPr(c), mxGetPr(c) + mxGetNumberOfElements(c));
+        if (j > 0 && static_cast<int64_t>(data.back().size()) != rows) {
+          usage("input columns have one length");
+        }
+        rows = static_cast<int64_t>(data.back().size());
+      }
+    } catch (...) {
+      mes_tree_free(t);
+      throw;
     }
     std::vector<const double*> ptrs;
     for (const auto& d : data) ptrs.push_back(d.data());

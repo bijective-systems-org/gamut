@@ -607,6 +607,57 @@ std::vector<std::int64_t> File::selected_shape(
   return out;
 }
 
+std::size_t checked_count(const std::string& path, std::size_t item,
+                          std::initializer_list<std::int64_t> factors) {
+  std::size_t n = 1;
+  bool over = false;
+  for (const std::int64_t f : factors) {
+    if (f < 0) throw Error("E21", path + ": a negative count", path);
+    const std::size_t x = static_cast<std::size_t>(f);
+    if (x != 0 && n > kMaxDatasetElements / x) over = true;
+    else n *= x;
+  }
+  if (over || n > kMaxDatasetElements || n > kMaxDatasetBytes / item) {
+    throw Error("E23", path + ": more elements than this reader reads at once", path);
+  }
+  return n;
+}
+
+void check_chunks_touched(const std::string& path, const DsetInfo& info,
+                          const std::vector<Selection>& sel) {
+  if (!info.chunked || info.chunk.size() != info.shape.size()) return;
+  std::size_t total = 1;
+  for (std::size_t a = 0; a < info.shape.size(); ++a) {
+    const std::int64_t length = static_cast<std::int64_t>(info.shape[a]);
+    const std::int64_t c = static_cast<std::int64_t>(info.chunk[a] == 0 ? 1 : info.chunk[a]);
+    std::vector<std::pair<std::int64_t, std::int64_t>> runs;
+    if (a < sel.size()) {
+      runs = sel[a].runs(length, path);
+    } else if (length > 0) {
+      runs.emplace_back(0, length);
+    }
+    // Distinct chunk indices along this axis; runs are increasing.
+    std::size_t touched = 0;
+    std::int64_t last = -1;
+    for (const auto& r : runs) {
+      if (r.second <= 0) continue;
+      std::int64_t first = r.first / c;
+      const std::int64_t end = (r.first + r.second - 1) / c;
+      if (first <= last) first = last + 1;
+      if (end >= first) touched += static_cast<std::size_t>(end - first + 1);
+      last = std::max(last, end);
+    }
+    if (touched == 0) return;
+    if (total > kMaxChunksRead / touched) total = kMaxChunksRead + 1;
+    else total *= touched;
+  }
+  if (total > kMaxChunksRead) {
+    throw Error("E23", "\"" + path + "\": the read touches more than " +
+                           std::to_string(kMaxChunksRead) + " chunks; rewrite the file with "
+                           "the default chunks (write_copy)", path);
+  }
+}
+
 bool File::read_gathered(const std::string& path, const std::vector<hsize_t>& shape, DType mem,
                          const std::vector<Selection>& sel, void* out,
                          std::size_t out_bytes) const {
@@ -694,6 +745,7 @@ void File::read(const std::string& path, DType mem,
   const DsetInfo info = dataset_info(path, false);
   need(info.is_dataset, "\"" + path + "\" is not a dataset");
   if (read_gathered(path, info.shape, mem, sel, out, out_bytes)) return;
+  check_chunks_touched(path, info, sel);
   Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
   need(dset.valid(), "cannot open \"" + path + "\"");
   Id space(H5Dget_space(dset.get()));

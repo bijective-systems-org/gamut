@@ -50,6 +50,21 @@ def probe(path: str, p: dict) -> str | None:
     return None
 
 
+def hostile_read(path: str, f, r: dict) -> None:
+    """One read of a hostile file; a refusal is a MestraError."""
+    if "label" in r:
+        f.get_label(r["label"])
+    elif "cells" in r:
+        f.get_cells(row=r["cells"])
+    elif "select" in r:
+        f.select(r["select"])
+    elif "scalar" in r:
+        f.get_scalar(r["scalar"])
+    elif "evaluate" in r:
+        with mestra.evaluate(path, r["evaluate"]):
+            pass
+
+
 def main() -> int:
     corpus = sys.argv[1]
     with open(os.path.join(corpus, "expected.json")) as fh:
@@ -89,7 +104,7 @@ def main() -> int:
                         f.names("parameters")
                         for r in e.get("reads", []):
                             try:
-                                f.get_label(r["label"])
+                                hostile_read(path, f, r)
                             except mestra.MestraError:
                                 pass
                     if "refused" in e:
