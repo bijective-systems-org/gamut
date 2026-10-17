@@ -522,6 +522,28 @@ void Writer::set_attribute(const std::string& name, const std::string& value) {
   if (name == "evaluated_from") schema_.evaluated_from = value;
 }
 
+void Writer::set_note(const std::string& key, const AttrValue& value) {
+  need_open();
+  need(legal_netcdf_name(key) && !reserved_name(key), "E8",
+       "the note key \"" + key + "\" is not a legal name", key);
+  need(value.kind() != AttrValue::Kind::Str || valid_utf8(value.as_text()), "E3",
+       key + ": a note is valid UTF-8", key);
+  file_->make_group("/notes");
+  file_->replace_attr("/notes", key, value);
+}
+
+void Writer::set_private(const std::string& name, const std::vector<unsigned char>& bytes) {
+  need_open();
+  need(legal_netcdf_name(name) && !reserved_name(name), "E8",
+       "the private record \"" + name + "\" is not a legal name", name);
+  file_->make_group("/private");
+  const std::string path = "/private/" + name;
+  if (file_->exists(path)) file_->remove_link(path);
+  const hsize_t n = static_cast<hsize_t>(bytes.size());
+  file_->create_dataset(path, DType::UInt8, 0, {n}, {}, {}, {});
+  if (n > 0) file_->write(path, DType::UInt8, {0}, {n}, bytes.data());
+}
+
 void Writer::declare_parameter(const Parameter& p) {
   need_open();
   need_no_runs("declaring a parameter");

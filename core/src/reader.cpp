@@ -626,6 +626,36 @@ void Reader::read(const std::string& path, const Selection& runs,
   }
 }
 
+std::vector<std::pair<std::string, AttrValue>> Reader::notes() const {
+  std::vector<std::pair<std::string, AttrValue>> out;
+  if (!file_->is_group("/notes")) return out;
+  for (const RawAttr& a : file_->attributes("/notes")) {
+    if (a.too_large) continue;
+    out.emplace_back(a.name, a.value);
+  }
+  return out;
+}
+
+std::vector<std::string> Reader::private_names() const {
+  std::vector<std::string> out;
+  for (const Member& m : file_->members("/private")) {
+    if (m.kind == LinkKind::Hard && m.is_dataset) out.push_back(m.name);
+  }
+  return out;
+}
+
+std::vector<unsigned char> Reader::private_record(const std::string& name) const {
+  const std::string path = "/private/" + name;
+  const DsetInfo info = file_->dataset_info(path, false);
+  need(info.is_dataset && info.shape.size() == 1, "", "no private record \"" + name + "\"");
+  DType t;
+  need(dtype_of(info.type, &t) && t == DType::UInt8, "",
+       "the private record \"" + name + "\" is not bytes written by this library");
+  std::vector<unsigned char> out(static_cast<std::size_t>(info.shape[0]));
+  if (!out.empty()) file_->read(path, DType::UInt8, {}, out.data(), out.size());
+  return out;
+}
+
 Dict Reader::model_numbers(const std::string& id) const {
   bool found = false;
   for (const auto& m : schema_.models) found = found || m.id == id;

@@ -53,6 +53,10 @@ class Reader {
   std::vector<std::string> table(const std::string& name) const;
   // A model's numbers (spec section 12).
   Dict model_numbers(const std::string& id) const;
+  // The free-form attributes under /notes.
+  std::vector<std::pair<std::string, AttrValue>> notes() const;
+  std::vector<std::string> private_names() const;
+  std::vector<unsigned char> private_record(const std::string& name) const;
   // Worker threads for reading fields (1: serial through HDF5).
   void set_threads(int n) { threads_ = n < 1 ? 1 : n; }
 

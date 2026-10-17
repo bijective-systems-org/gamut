@@ -2,6 +2,8 @@
 // the boundary and turning it into a mes_error.
 #include "mestra/mestra.h"
 
+#include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <map>
@@ -553,6 +555,48 @@ int mes_batch_commit(mes_file* f, int64_t* first_id, mes_error* err) {
   }
 }
 
+int mes_set_note_text(mes_file* f, const char* key, const char* value, mes_error* err) {
+  try {
+    clear(err);
+    writer_of(f).set_note(str(key), mestra::AttrValue::text(str(value)));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int mes_set_note_int(mes_file* f, const char* key, int64_t value, mes_error* err) {
+  try {
+    clear(err);
+    writer_of(f).set_note(str(key), mestra::AttrValue::integer(value));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int mes_set_note_float(mes_file* f, const char* key, double value, mes_error* err) {
+  try {
+    clear(err);
+    writer_of(f).set_note(str(key), mestra::AttrValue::real(value));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int mes_set_private(mes_file* f, const char* name, const void* bytes, int64_t n, mes_error* err) {
+  try {
+    clear(err);
+    need(n >= 0 && (n == 0 || bytes != nullptr), "the bytes are NULL");
+    const auto* p = static_cast<const unsigned char*>(bytes);
+    writer_of(f).set_private(str(name), std::vector<unsigned char>(p, p + n));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
 int mes_flush(mes_file* f, mes_error* err) {
   try {
     clear(err);
@@ -736,6 +780,64 @@ int mes_select(const mes_file* f, const char* where, int64_t* out, int64_t capac
              std::to_string(rows.size()) + " rows are selected");
     if (!rows.empty()) std::memcpy(out, rows.data(), rows.size() * sizeof(int64_t));
     *n = static_cast<int64_t>(rows.size());
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int mes_notes(const mes_file* f, mes_strings** keys, mes_strings** kinds, mes_strings** values,
+              mes_error* err) {
+  try {
+    clear(err);
+    need(keys != nullptr && kinds != nullptr && values != nullptr, "an output is NULL");
+    std::vector<std::string> k, t, v;
+    for (const auto& kv : reader_of(f).notes()) {
+      k.push_back(kv.first);
+      switch (kv.second.kind()) {
+        case mestra::AttrValue::Kind::Str: t.push_back("text"); v.push_back(kv.second.as_text()); break;
+        case mestra::AttrValue::Kind::Int: t.push_back("int"); v.push_back(std::to_string(kv.second.as_int())); break;
+        case mestra::AttrValue::Kind::Bool: t.push_back("bool"); v.push_back(kv.second.as_bool() ? "1" : "0"); break;
+        case mestra::AttrValue::Kind::Float: {
+          char buf[40];
+          std::snprintf(buf, sizeof buf, "%.17g", kv.second.as_float());
+          t.push_back("float");
+          v.push_back(buf);
+          break;
+        }
+      }
+    }
+    *keys = strings(std::move(k));
+    *kinds = strings(std::move(t));
+    *values = strings(std::move(v));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int mes_private_names(const mes_file* f, mes_strings** out, mes_error* err) {
+  try {
+    clear(err);
+    need(out != nullptr, "out is NULL");
+    *out = strings(reader_of(f).private_names());
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int mes_get_private(const mes_file* f, const char* name, void* out, int64_t capacity, int64_t* n,
+                    mes_error* err) {
+  try {
+    clear(err);
+    need(n != nullptr, "n is NULL");
+    const auto bytes = reader_of(f).private_record(str(name));
+    *n = static_cast<int64_t>(bytes.size());
+    if (capacity > 0) {
+      need(out != nullptr, "out is NULL");
+      std::memcpy(out, bytes.data(), std::min<std::size_t>(bytes.size(), static_cast<std::size_t>(capacity)));
+    }
     return 0;
   } catch (...) {
     return fail(err);

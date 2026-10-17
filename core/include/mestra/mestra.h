@@ -144,6 +144,14 @@ MES_API int mes_batch_geometry_for_member(mes_file* f, const char* member, mes_e
 MES_API int mes_batch_commit(mes_file* f, int64_t* first_id, mes_error* err);
 MES_API int mes_flush(mes_file* f, mes_error* err);
 
+/* Free-form public notes (spec section 8): text, integers, floats. */
+MES_API int mes_set_note_text(mes_file* f, const char* key, const char* value, mes_error* err);
+MES_API int mes_set_note_int(mes_file* f, const char* key, int64_t value, mes_error* err);
+MES_API int mes_set_note_float(mes_file* f, const char* key, double value, mes_error* err);
+/* A producer's own record: bytes no reader interprets. */
+MES_API int mes_set_private(mes_file* f, const char* name, const void* bytes, int64_t n,
+                            mes_error* err);
+
 /* Closes a file opened by any call and frees the handle; writes what a
  * writer holds.  f may be NULL. */
 MES_API int mes_close(mes_file* f, mes_error* err);
@@ -255,6 +263,16 @@ MES_API int64_t mes_report_count(const mes_report* r);
 MES_API int mes_report_get(const mes_report* r, int64_t i, const char** rule,
                            const char** severity, const char** path, const char** message);
 MES_API void mes_report_free(mes_report* r);
+
+/* Notes as three parallel lists: keys, kinds ("text", "int", "float",
+ * "bool") and values as text (floats in %.17g). */
+MES_API int mes_notes(const mes_file* f, mes_strings** keys, mes_strings** kinds,
+                      mes_strings** values, mes_error* err);
+MES_API int mes_private_names(const mes_file* f, mes_strings** out, mes_error* err);
+/* Writes up to capacity bytes; *n is the record's size (call with
+ * capacity 0 to learn it). */
+MES_API int mes_get_private(const mes_file* f, const char* name, void* out, int64_t capacity,
+                            int64_t* n, mes_error* err);
 
 /* --- Strings --------------------------------------------------------------- */
 MES_API int64_t mes_strings_count(const mes_strings* s);

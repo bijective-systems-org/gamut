@@ -265,3 +265,26 @@ def test_select_where(tmp_path):
                     "mach > big", "(mach > 1"):
             with pytest.raises(mestra.MestraError):
                 f.select(bad)
+
+
+def test_notes_private_and_units(tmp_path):
+    pytest.importorskip("pint")
+    p = str(tmp_path / "u.mes")
+    with mestra.create(p, writer="t", parameters={"altitude": "km", "speed": "m s-1"},
+                       scalars={"q": "kPa"}) as s:
+        s.notes["solver"] = "OpenFOAM v2406"
+        s.notes["iterations"] = 4000
+        s.notes["residual"] = 1.5e-6
+        s.set_private("project", b"\x00\x01binary\xff")
+        s.add_run({"altitude": (35000.0, "ft"), "speed": 250.0, "q": (101325.0, "Pa")})
+    with mestra.open(p) as f:
+        assert f.notes == {"iterations": 4000, "residual": 1.5e-6, "solver": "OpenFOAM v2406"}
+        assert f.private_names() == ["project"]
+        assert f.get_private("project") == b"\x00\x01binary\xff"
+        np.testing.assert_allclose(f.get_parameter("altitude"), [10.668])
+        np.testing.assert_allclose(f.get_parameter("altitude", units="ft"), [35000.0])
+        np.testing.assert_allclose(f.get_parameter("speed", units="km h-1"), [900.0])
+        np.testing.assert_allclose(f.get_scalar("q"), [101.325])
+        with pytest.raises(mestra.MestraError, match="convert"):
+            f.get_scalar("q", units="m")
+    assert mestra.validate(p).findings == ()

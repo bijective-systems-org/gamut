@@ -8,7 +8,7 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from . import _lib
+from . import _lib, _units
 from ._lib import MestraError, Selection, b, call
 
 
@@ -46,6 +46,7 @@ class Study:
         self._axes = 3
         self._described: dict[str, dict[str, str]] = {}
         self._rows: int | None = None
+        self._declared_units: dict[str, str] = {}
         if not writing:
             self._mesh_kind = self._info("mesh_kind")
             self._per = self._info("per")
@@ -137,12 +138,21 @@ class Study:
                 mesh_labels: Mapping[str, Any] | None = None) -> int:
         """Adds one run; returns its id.  `values` gives each parameter, label
         (by name) and scalar; `fields` one value per node or cell."""
-        columns = {k: [v] for k, v in values.items()}
+        columns = {k: [self._given(k, v)] for k, v in values.items()}
         flds = {k: np.asarray(v).reshape(1, -1) if self._mesh_kind != "changing" else np.asarray(v)
                 for k, v in (fields or {}).items()}
         return self._commit(1, columns, flds, [points] if points is not None else None,
                             [cells] if cells is not None else None,
                             [mesh_labels] if mesh_labels is not None else None)[0]
+
+    def _given(self, name: str, value: Any) -> Any:
+        """A value as (number, units) is converted to the declared units."""
+        if isinstance(value, tuple) and len(value) == 2 and isinstance(value[1], str):
+            target = self._declared_units.get(name)
+            if target is None:
+                raise MestraError("", f"{name} has no declared units to convert to")
+            return float(_units.convert(value[0], value[1], target))
+        return value
 
     def add_runs(self, columns: Mapping[str, Any], *, fields: Mapping[str, Any] | None = None,
                  points: Sequence[Any] | None = None, cells: Sequence[Any] | None = None,
@@ -282,9 +292,11 @@ class Study:
     def get_row_ids(self, rows: Any = None) -> np.ndarray:
         return self._get("row", rows, dtype=np.int64)
 
-    def get_parameter(self, name: str, rows: Any = None) -> np.ndarray:
+    def get_parameter(self, name: str, rows: Any = None, units: str | None = None) -> np.ndarray:
         d = self.describe(name)
-        return self._get(name, rows, dtype=np.int64 if d.get("dtype") == "int64" else np.float64)
+        values = self._get(name, rows, dtype=np.int64 if d.get("dtype") == "int64" and units is None
+                           else np.float64)
+        return self._in_units(name, values, units)
 
     def get_label(self, name: str, rows: Any = None) -> np.ndarray:
         self._need_reader()
@@ -297,14 +309,14 @@ class Study:
     def get_label_codes(self, name: str, rows: Any = None) -> np.ndarray:
         return self._get(name, rows, dtype=np.int64)
 
-    def get_scalar(self, name: str, rows: Any = None) -> np.ndarray:
-        return self._get(name, rows, dtype=self._result_dtype(name))
+    def get_scalar(self, name: str, rows: Any = None, units: str | None = None) -> np.ndarray:
+        return self._in_units(name, self._get(name, rows, dtype=self._result_dtype(name)), units)
 
-    def get_constant(self, name: str) -> Any:
+    def get_constant(self, name: str, units: str | None = None) -> Any:
         d = self.describe(name)
-        if d.get("dtype") == "int64":
+        if d.get("dtype") == "int64" and units is None:
             return int(self._get(name, dtype=np.int64))
-        return float(self._get(name))
+        return float(self._in_units(name, self._get(name), units))
 
     def get_cells(self, row: int | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         rows = None if row is None else [int(row)]
@@ -312,23 +324,25 @@ class Study:
                 self._get("cells/offsets", rows, dtype=np.int64),
                 self._get("cells/connectivity", rows, dtype=np.int64))
 
-    def get_points(self, row: int | None = None) -> np.ndarray:
+    def get_points(self, row: int | None = None, units: str | None = None) -> np.ndarray:
         if row is None and self._per not in ("fixed",):
             raise MestraError("", "this mesh's geometry changes; give the row")
         rows = None if row is None else [int(row)]
         out = self._get("coordinates", rows, dtype=self._coordinate_dtype(), squeeze_row=False)
         if row is not None and self._mesh_kind == "shared":
             out = out[0]
-        return out
+        return self._in_units("coordinates", out, units)
 
-    def get_field(self, name: str, rows: Any = None, nodes: Any = None, cells: Any = None) -> np.ndarray:
+    def get_field(self, name: str, rows: Any = None, nodes: Any = None, cells: Any = None,
+                  units: str | None = None) -> np.ndarray:
         sites = nodes if nodes is not None else cells
         if self._mesh_kind == "changing":
             if rows is None or (_lib.iterable(rows) and len(list(rows)) != 1):
                 raise MestraError("", f"{name}: a changing mesh is read one row at a time; "
                                       "reads across rows need a shared mesh")
             rows = [int(rows)] if not _lib.iterable(rows) else list(rows)
-        return self._get(name, rows, sites, dtype=self._result_dtype(name))
+        return self._in_units(name, self._get(name, rows, sites, dtype=self._result_dtype(name)),
+                              units)
 
     def get_mesh_label(self, name: str, row: int | None = None) -> np.ndarray:
         rows = None if row is None else [int(row)]
@@ -350,6 +364,51 @@ class Study:
             else:
                 out[n] = self.get_scalar(n, rows)
         return out
+
+    # --- notes and private records ---------------------------------------------
+
+    @property
+    def notes(self) -> Any:
+        """Free-form public notes: a dict when reading; assign items when
+        writing (`study.notes["solver"] = "OpenFOAM v2406"`)."""
+        if self._writing:
+            return _NotesWriter(self)
+        keys, kinds, values = [], [], []
+        k, t, v = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+        call("mes_notes", self._handle(), ctypes.byref(k), ctypes.byref(t), ctypes.byref(v))
+        try:
+            for h, dst in ((k, keys), (t, kinds), (v, values)):
+                for i in range(_lib._lib.mes_strings_count(h)):
+                    dst.append(_lib._lib.mes_strings_get(h, i).decode("utf-8"))
+        finally:
+            for h in (k, t, v):
+                _lib._lib.mes_strings_free(h)
+        cast = {"int": int, "float": float, "bool": lambda x: x == "1", "text": str}
+        return {key: cast[kind](val) for key, kind, val in zip(keys, kinds, values)}
+
+    def set_private(self, name: str, data: bytes) -> None:
+        """A producer's own record: bytes no other reader interprets."""
+        self._need_writer()
+        buf = bytes(data)
+        call("mes_set_private", self._handle(), b(name), buf, len(buf))
+
+    def private_names(self) -> list[str]:
+        self._need_reader()
+        return _lib.strings_out("mes_private_names", self._handle())
+
+    def get_private(self, name: str) -> bytes:
+        self._need_reader()
+        n = ctypes.c_int64()
+        call("mes_get_private", self._handle(), b(name), None, 0, ctypes.byref(n))
+        out = ctypes.create_string_buffer(max(n.value, 1))
+        call("mes_get_private", self._handle(), b(name), out, n.value, ctypes.byref(n))
+        return out.raw[: n.value]
+
+    def _in_units(self, name: str, values: np.ndarray, units: str | None) -> np.ndarray:
+        if units is None:
+            return values
+        have = self.describe(name).get("units", "")
+        return _units.convert(values, have, units)
 
     def select(self, where: str) -> np.ndarray:
         """The positions of the rows `where` selects, e.g.
@@ -391,6 +450,24 @@ class Study:
         return np.float32 if self.describe("coordinates").get("dtype") == "float32" else np.float64
 
 
+class _NotesWriter:
+    """`study.notes[key] = value` while writing: text, integers, floats."""
+
+    def __init__(self, study: Study) -> None:
+        self._study = study
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        h = self._study._handle()
+        if isinstance(value, bool) or isinstance(value, (int, np.integer)):
+            call("mes_set_note_int", h, b(key), int(value))
+        elif isinstance(value, (float, np.floating)):
+            call("mes_set_note_float", h, b(key), float(value))
+        elif isinstance(value, str):
+            call("mes_set_note_text", h, b(key), b(value))
+        else:
+            raise MestraError("", f"a note is text, an integer or a float, not {type(value).__name__}")
+
+
 def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = None,
            labels: Mapping[str, Any] | None = None, scalars: Mapping[str, Any] | None = None,
            fields: Mapping[str, Any] | None = None, mesh_labels: Mapping[str, Any] | None = None,
@@ -410,6 +487,9 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
     study._per = per or ""
     study._group = per[6:] if per and per.startswith("group:") else None
     study._axes = int((coordinates or {}).get("axes", 3))
+    for group in (parameters, scalars):
+        for name, value in (group or {}).items():
+            study._declared_units[name] = _spec(value, "units").get("units", "")
     precision = dict(precision or {})
     round_bits = dict(round_bits or {})
     try:
@@ -487,10 +567,13 @@ def open(path: str, mode: str = "r", threads: int = 1) -> Study:  # noqa: A001
     if mode == "a":
         reader = open(path, "r")
         kind, per = reader._mesh_kind, reader._per
+        declared = {n: reader.describe(n).get("units", "")
+                    for n in reader.names("parameters") + reader.names("scalars")}
         reader.close()
         call("mes_open_append", b(path), ctypes.byref(handle))
         study = Study(handle, path, writing=True)
         study._mesh_kind, study._per = kind, per
         study._group = per[6:] if per.startswith("group:") else None
+        study._declared_units = declared
         return study
     raise MestraError("", f"mode {mode!r} is 'r' or 'a'")

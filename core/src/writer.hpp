@@ -95,6 +95,10 @@ class Writer {
   void set_constant(const Constant& c);
   void set_generalisation_group(const std::string& label);
   void set_compression(const FilterPipeline& filters) { filters_ = filters; }
+  // A free-form public attribute under /notes (spec section 8).
+  void set_note(const std::string& key, const AttrValue& value);
+  // A producer's own record under /private, bytes no reader interprets.
+  void set_private(const std::string& name, const std::vector<unsigned char>& bytes);
 
   // A shared mesh: its cells, its fixed mesh labels and, when per is
   // fixed, its coordinates.  When the coordinates change, `points` is
