@@ -50,7 +50,7 @@ tarball="$work/hdf5-1.14.6.tar.gz"
 if [ ! -d "$work/hdf5" ]; then
   curl -sSfL -o "$tarball" \
     https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.6/hdf5-1.14.6.tar.gz &&
-  row "HDF5 source" "1.14.6, sha256 $(sha256sum "$tarball" | cut -c1-16)…" &&
+  row "HDF5 source" "1.14.6, sha256 $(sha256sum "$tarball" | cut -d' ' -f1)" &&
   tar -xzf "$tarball" -C "$work" &&
   cmake -S "$work/hdf5-1.14.6" -B "$work/hdf5-build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_TESTING=OFF \
@@ -69,36 +69,58 @@ cmake -S "$core" -B "$work/static" -G Ninja -DCMAKE_BUILD_TYPE=Release \
 
 shared_core="$work/shared/libmestra.so"
 static_core="$work/static/libmestra.so"
+status=0
+# The claim itself: no HDF5 symbol leaves the static core, and it needs no
+# shared HDF5.
 if [ -f "$static_core" ]; then
+  h5=$(nm -D --defined-only "$static_core" | awk '{print $3}' | grep -c '^H5')
   others=$(nm -D --defined-only "$static_core" | awk '{print $3}' | grep -cv '^mes_')
   linked=$(ldd "$static_core" | grep -c hdf5)
-  row "static core exports" "$(nm -D --defined-only "$static_core" | grep -c ' mes_') mes_* symbols, $others others; $linked shared HDF5 dependencies"
-fi
-
-status=0
-run() {   # name, core, preload, required
-  local name=$1 lib=$2 pre=$3 required=$4
-  if [ ! -f "$lib" ]; then
-    row "$name" "not built"
-    [ "$required" = yes ] && status=1
-    return
-  fi
-  if MESTRA_LIBRARY="$lib" LD_PRELOAD="$pre" $py -m pytest -q -p no:cacheprovider \
-       "$core/python/tests" > "$work/$name.log" 2>&1; then
-    row "$name" "pass: $(tail -1 "$work/$name.log")"
+  if [ "$h5" = 0 ] && [ "$linked" = 0 ]; then
+    row "static core exports" "$(nm -D --defined-only "$static_core" | grep -c ' mes_') mes_* symbols, $h5 H5 symbols, $others others; $linked shared HDF5 dependencies"
   else
-    row "$name" "FAIL (exit $?): $(grep -E 'passed|failed|error|Fatal|Segmentation' "$work/$name.log" | tail -2 | tr '\n' ' ' | cut -c1-180)"
-    [ "$required" = yes ] && status=1
+    row "static core exports" "FAIL: $h5 H5 symbols exported, $linked shared HDF5 dependencies"
+    status=1
+  fi
+else
+  status=1
+fi
+fail() {  # name, required, message
+  row "$1" "FAIL: $3"
+  [ "$2" = yes ] && status=1
+}
+run() {   # name, core, preload ("none" or a library), required
+  local name=$1 lib=$2 pre=$3 required=$4 env=()
+  [ -f "$lib" ] || { fail "$name" "$required" "not built"; return; }
+  if [ "$pre" != none ]; then
+    # A missing library would make LD_PRELOAD a silent no-op.
+    [ -f "$pre" ] || { fail "$name" "$required" "the library to preload is missing"; return; }
+    env=(LD_PRELOAD="$pre")
+    if ! env ${env[@]+"${env[@]}"} $py -c "import sys; sys.exit(0 if '$(basename "$pre")' in open('/proc/self/maps').read() else 1)"; then
+      fail "$name" "$required" "the preload did not take effect"
+      return
+    fi
+  fi
+  env ${env[@]+"${env[@]}"} PYTHONPATH="$core/python" MESTRA_LIBRARY="$lib" \
+    $py -m pytest -q -rs -p no:cacheprovider "$core/python/tests" > "$work/$name.log" 2>&1
+  local code=$?
+  local last
+  last=$(tail -1 "$work/$name.log")
+  # A pass needs tests that ran: skips are recorded, an empty run fails.
+  if [ $code = 0 ] && echo "$last" | grep -qE '[0-9]+ passed'; then
+    row "$name" "pass: $last"
+  else
+    fail "$name" "$required" "exit $code: $(grep -E 'passed|failed|error|Fatal|Segmentation' "$work/$name.log" | tail -2 | tr '\n' ' ' | cut -c1-180)"
   fi
 }
-run shared-beside-h5py "$shared_core" "" no
+run shared-beside-h5py "$shared_core" none no
 run shared-under-foreign-global "$shared_core" "$h5py_lib" no
-run static-beside-h5py "$static_core" "" yes
+run static-beside-h5py "$static_core" none yes
 run static-under-foreign-global "$static_core" "$h5py_lib" yes
 run static-under-system-global "$static_core" "$system_lib" yes
 
 # The corpus through the static core, h5py's HDF5 preloaded.
-if [ -f "$static_core" ] &&
+if [ -f "$static_core" ] && [ -f "$h5py_lib" ] &&
    $py "$core/corpus/generate.py" "$work/corpus" > "$work/corpus.log" 2>&1 &&
    MESTRA_LIBRARY="$static_core" LD_PRELOAD="$h5py_lib" \
      $py "$core/corpus/check.py" "$work/corpus" >> "$work/corpus.log" 2>&1; then
