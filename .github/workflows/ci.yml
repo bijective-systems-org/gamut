@@ -1,15 +1,16 @@
 name: ci
 
-# One workflow for the five things this repository has to keep true: the
-# corpus regenerates to what is committed, and each of the four language
-# interfaces runs that corpus.  No implementation is the reference, so no
-# job here is either; they all answer to `vectors/`.
+# What this repository keeps true, on every push to main and every pull
+# request: the core and its tests, also under the address and undefined-
+# behaviour sanitizers; only the C interface leaving the library; the wheel
+# and the Python suite on it (which runs the examples and holds the guide to
+# them); the corpus from Python, Julia and MATLAB; and the core and the
+# wheel on macOS and Windows. Packages link HDF5 statically, so every job
+# builds the core that way, with tools/build_deps.sh.
 #
-# Every action is pinned to a full commit SHA with the tag it was at in
-# the comment beside it.  A tag can be moved and a SHA cannot, and a
-# workflow that runs whatever a tag points at today is a workflow that
-# runs somebody else's code tomorrow.  Nothing here uses a secret, and
-# the only permission granted is reading this repository's contents.
+# Every action is pinned to a full commit SHA with its tag beside it: a tag
+# can move and a SHA cannot. Nothing here uses a secret, and the only
+# permission is reading this repository.
 
 on:
   push:
@@ -21,329 +22,220 @@ permissions:
   contents: read
 
 concurrency:
-  # One run per ref.  A second push to a branch cancels the first, and
-  # the queue stays short enough that a result means something.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 defaults:
   run:
-    # bash on all three operating systems, so that one set of commands
-    # describes every leg and a Windows failure is a real difference
-    # rather than a difference of shell.
     shell: bash
 
 jobs:
-  # ------------------------------------------------------------------
-  # The corpus is the thing the other four jobs are measured against, so
-  # it is checked on its own and first: a corpus that does not regenerate
-  # makes every other failure in the run meaningless.
-  corpus:
-    name: corpus
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+  linux:
+    name: linux (core, sanitizers, wheel, Python, corpus, Julia)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.12'
-          cache: pip
+          python-version: |
+            3.10
+            3.13
+            3.12
 
-      - name: Install what the generator and the check need
-        # h5py and numpy are the whole of generate.py's dependencies, as
-        # vectors/README.md says.  check.py goes further: it opens every
-        # case that must validate cleanly with two netCDF-4 readers that
-        # share no code, and it reports a reader that is not installed as
-        # a problem rather than skipping it, so those two belong to this
-        # job as much as h5py does.
+      - name: Tools
         run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ninja-build
           python -m pip install --upgrade pip
-          python -m pip install h5py numpy netCDF4 h5netcdf
+          python -m pip install build numpy h5py pytest
 
-      - name: Check the committed corpus against a fresh run
-        # check.py regenerates every case into a temporary directory
-        # and compares it with the committed copy, and writes the three
-        # files that are not committed into place itself.  Nothing
-        # regenerates the tree in place first: that would replace the
-        # committed corpus with this runner's, and the comparison would
-        # then be the generator against itself.
-        run: python vectors/check.py
+      - name: zlib and HDF5, static
+        run: bash tools/build_deps.sh "$RUNNER_TEMP/deps" > "$RUNNER_TEMP/deps.log" 2>&1 || { tail -50 "$RUNNER_TEMP/deps.log"; exit 1; }
 
-  # ------------------------------------------------------------------
-  python:
-    name: python ${{ matrix.python }} (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    # Minutes are metered: a pull request runs this on Linux alone, and the
-    # three-platform matrix runs on main (every push) and on a release.
-    if: github.event_name != 'pull_request' || matrix.os == 'ubuntu-latest'
-    timeout-minutes: 30
-    strategy:
-      # Every cell runs.  Which platform a reader breaks on is the
-      # finding, so a first failure must not hide the rest.
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python: ['3.11', '3.12']
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: ${{ matrix.python }}
-          cache: pip
-          cache-dependency-path: python/pyproject.toml
-
-      - name: Install mestra and its test extra
+      - name: The core and its tests
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e "./python[dev]"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMESTRA_STATIC_HDF5=ON \
+                -DHDF5_ROOT="$RUNNER_TEMP/deps" -DZLIB_ROOT="$RUNNER_TEMP/deps"
+          cmake --build build -j2
+          ./build/core_unit_tests
+          ./build/core_writer_reader_tests
 
-      - name: Write the three files that are not committed
-        # A test that wants one of these skips without it rather than
-        # failing, so writing them is what makes the run complete.
-        # --on-demand writes only those three; the suite then runs
-        # against the committed corpus, not a regenerated one.
-        run: python vectors/generate.py --on-demand
-
-      - name: pytest
-        working-directory: python
-        run: python -m pytest -q
-
-      - name: ruff
-        working-directory: python
-        run: python -m ruff check .
-
-      - name: mypy
-        # The configuration names its own files, so it takes no argument.
-        working-directory: python
-        run: python -m mypy
-
-  # ------------------------------------------------------------------
-  # HDF5 with the high-level H5DS API is the one dependency this
-  # implementation has, and the only way to get the same one on three
-  # operating systems is a package manager that has all three.  Hence
-  # conda-forge through micromamba, and hence the environment's own
-  # python for the conformance drivers under cpp/tests.
-  cpp:
-    name: cpp (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    # Minutes are metered: a pull request runs this on Linux alone, and the
-    # three-platform matrix runs on main (every push) and on a release.
-    if: github.event_name != 'pull_request' || matrix.os == 'ubuntu-latest'
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    defaults:
-      run:
-        # A login shell, which is what setup-micromamba's `init-shell`
-        # writes the activation into.  On Windows this is Git bash, and
-        # the environment activates there too.
-        shell: bash -el {0}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: HDF5 and a python from conda-forge
-        uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3.2.1
-        with:
-          environment-name: mestra-cpp
-          # `hdf5` and not `libhdf5`: the build needs hdf5_hl.h.  h5py
-          # and numpy are for the drivers of cpp/tests and for writing
-          # the corpus files that are not committed, and they have to be
-          # in this environment because this environment's interpreter
-          # is the one CMake is given.
-          create-args: >-
-            python=3.12
-            hdf5
-            h5py
-            numpy
-          init-shell: bash
-          cache-environment: true
-          post-cleanup: none
-
-      - name: Name the prefix and the interpreter for CMake
-        # A conda-forge environment puts its headers under `Library/` on
-        # Windows and under the prefix elsewhere.  The script settles
-        # that once, checks that hdf5.h and hdf5_hl.h are really there,
-        # and exports HDF5_ROOT and MESTRA_PYTHON.
-        run: python .github/scripts/hdf5_env.py mestra-cpp
-
-      - name: Write the three files that are not committed
-        # cpp/README.md: once, before ctest, and never while a test is
-        # reading vectors/.  `corpus` needs wide_keys and
-        # `shared_hostile` needs the two deep files, and both report a
-        # missing file as a failure rather than passing over it.
-        run: python vectors/generate.py --on-demand
-
-      - name: Configure
+      - name: Only the C interface leaves the library
         run: |
-          cmake --version
-          # No -G on Windows: CMake's default there is the newest Visual
-          # Studio generator the runner has, which is the one to build
-          # with.  CMAKE_BUILD_TYPE is what the single-config generators
-          # read and --config is what the multi-config ones read, so
-          # both are given.
-          cmake -S cpp -B cpp/build \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DHDF5_ROOT="$HDF5_ROOT" \
-                -DPython3_EXECUTABLE="$MESTRA_PYTHON"
-          echo "--- what the configuration chose ---"
-          grep -E '^(CMAKE_GENERATOR|CMAKE_CXX_COMPILER|HDF5_[A-Z_]*(DIR|LIBRARY|VERSION))' \
-               cpp/build/CMakeCache.txt || true
+          others=$(nm -D --defined-only build/libmestra.so | awk '{print $3}' | grep -v '^mes_' || true)
+          test -z "$others" || { echo "also exported: $others"; exit 1; }
+          if ldd build/libmestra.so | grep hdf5; then echo "links a shared HDF5"; exit 1; fi
 
-      - name: Build
-        run: cmake --build cpp/build --config Release --parallel
-
-      - name: Test
-        run: ctest --test-dir cpp/build --build-config Release --output-on-failure
-
-      # The sanitizers are a second configuration rather than the only
-      # one: section 29 makes a file untrusted input, and the hostile
-      # subset is the test that says so, but a sanitized build is several
-      # times slower and one platform is enough to find a memory fault
-      # that the C API can reach.
-      - name: Configure with the sanitizers
-        if: matrix.os == 'ubuntu-latest'
+      - name: The core under the address and undefined-behaviour sanitizers
         run: |
-          cmake -S cpp -B cpp/build-sanitize \
-                -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-                -DMESTRA_SANITIZE=ON \
-                -DHDF5_ROOT="$HDF5_ROOT" \
-                -DPython3_EXECUTABLE="$MESTRA_PYTHON"
+          sudo sysctl -w vm.mmap_rnd_bits=28        # the runner kernel's default breaks ASan
+          cmake -S . -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMESTRA_SANITIZE=ON \
+                -DMESTRA_STATIC_HDF5=ON -DHDF5_ROOT="$RUNNER_TEMP/deps" -DZLIB_ROOT="$RUNNER_TEMP/deps"
+          cmake --build build-asan -j2
+          ./build-asan/core_unit_tests
+          ./build-asan/core_writer_reader_tests
 
-      - name: Build with the sanitizers
-        if: matrix.os == 'ubuntu-latest'
-        run: cmake --build cpp/build-sanitize --parallel
-
-      - name: Test under the sanitizers
-        if: matrix.os == 'ubuntu-latest'
-        env:
-          # The CMake option already asks for -fno-sanitize-recover, so
-          # an undefined-behaviour finding stops the run; this asks it to
-          # say where.  Leak detection is left at its default, which is
-          # on for Linux: if HDF5's own allocations ever trip it, the
-          # answer is a suppression file that names them, not a switch
-          # that turns the check off.
-          UBSAN_OPTIONS: print_stacktrace=1
-        run: ctest --test-dir cpp/build-sanitize --output-on-failure
-
-      - name: What the build found, when it did not work
-        # Windows is the leg with the most room to go wrong here -- a
-        # generator, a prefix laid out differently, and a CMakeLists that
-        # hands MSVC warning flags written for GCC.  A failure that only
-        # says "find_package(HDF5) failed" is not worth waking up to, so
-        # this prints the prefix, the cache and the logs that name it.
-        if: failure()
+      - name: The wheel
         run: |
-          echo "--- environment ---"
-          echo "CONDA_PREFIX=${CONDA_PREFIX:-unset}"
-          echo "HDF5_ROOT=${HDF5_ROOT:-unset}"
-          echo "MESTRA_PYTHON=${MESTRA_PYTHON:-unset}"
-          python .github/scripts/hdf5_env.py mestra-cpp || true
-          echo "--- generators this runner offers ---"
-          cmake --help | sed -n '/^Generators/,$p' | head -n 40 || true
-          for build in cpp/build cpp/build-sanitize; do
-            [ -d "$build" ] || continue
-            echo "--- $build/CMakeCache.txt ---"
-            grep -E '^(CMAKE_GENERATOR|CMAKE_CXX_|HDF5_)' \
-                 "$build/CMakeCache.txt" | head -n 40 || true
-            for log in CMakeFiles/CMakeConfigureLog.yaml \
-                       CMakeFiles/CMakeError.log \
-                       Testing/Temporary/LastTest.log; do
-              [ -f "$build/$log" ] || continue
-              echo "--- $build/$log (last 120 lines) ---"
-              tail -n 120 "$build/$log" || true
-            done
+          CMAKE_ARGS="-DMESTRA_STATIC_HDF5=ON -DHDF5_ROOT=$RUNNER_TEMP/deps -DZLIB_ROOT=$RUNNER_TEMP/deps" \
+            python -m build --outdir dist .
+
+      - name: The Python suite on the installed wheel (3.12 with every extra; 3.10, 3.13)
+        # From a directory outside the checkout, so `import mestra` is the
+        # wheel; the tests reach the examples and docs by their own path.
+        run: |
+          wheel=$(ls dist/*.whl)
+          for v in 3.12 3.10 3.13; do
+            spec="$wheel"; extras="pytest h5py"
+            [ "$v" = 3.12 ] && { spec="$wheel[test]"; extras=""; }
+            "python$v" -m venv "$RUNNER_TEMP/venv-$v"
+            "$RUNNER_TEMP/venv-$v/bin/python" -m pip install -q "$spec" $extras
+            (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/venv-$v/bin/python" -m pytest -q -p no:cacheprovider \
+              "$GITHUB_WORKSPACE/python/tests")
           done
-          true
 
-  # ------------------------------------------------------------------
-  julia:
-    name: julia ${{ matrix.julia }} (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    # Minutes are metered: a pull request runs this on Linux alone, and the
-    # three-platform matrix runs on main (every push) and on a release.
-    if: github.event_name != 'pull_request' || matrix.os == 'ubuntu-latest'
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        # 1.11 is the long-term support release and `1` is whatever the
-        # latest is on the day: the package's compat floor is 1.10, and
-        # the two ends are what say whether it still spans the range.
-        os: [ubuntu-latest, macos-latest]
-        julia: ['1.11', '1']
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.12'
-          cache: pip
-
-      - name: Install what the generator needs
+      - name: The corpus from Python
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install h5py numpy
-
-      - name: Write the three files that are not committed
-        # The suite times an open, a validate and one lazy row range on
-        # `wide_keys`, and reads the two deep hostile files.  Without
-        # them those tests fail on a missing file.
-        run: python vectors/generate.py --on-demand
+          python corpus/generate.py "$RUNNER_TEMP/corpus"
+          MESTRA_LIBRARY="$PWD/build/libmestra.so" python corpus/check.py "$RUNNER_TEMP/corpus" | tee "$RUNNER_TEMP/corpus.txt"
+          grep -qE '^[1-9][0-9]* cases' "$RUNNER_TEMP/corpus.txt"
 
       - uses: julia-actions/setup-julia@fa02766e078afaaf09b14210362cee14137e6a32 # v3.0.2
         with:
-          version: ${{ matrix.julia }}
+          version: '1.11'
 
-      - uses: julia-actions/cache@a7bed9df697e5d7309d68afe7542a87621a8b6c8 # v3.3.0
+      - name: Julia, its example, and the corpus from Julia
+        env:
+          MESTRA_LIBRARY: ${{ github.workspace }}/build/libmestra.so
+        run: |
+          julia --project=julia -e 'using Pkg; Pkg.instantiate()'
+          julia --project=julia -e 'include("julia/test/runtests.jl")'
+          mkdir -p "$RUNNER_TEMP/jexample"
+          (cd "$RUNNER_TEMP/jexample" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/one_mesh.jl")
+          julia --project="$RUNNER_TEMP/jcorpus" -e 'using Pkg; Pkg.add(name="JSON", version="1.10"); Pkg.develop(path="julia")'
+          julia --project="$RUNNER_TEMP/jcorpus" julia/test/check_corpus.jl "$RUNNER_TEMP/corpus" | tee "$RUNNER_TEMP/jcorpus.txt"
+          grep -qE '^[1-9][0-9]* cases' "$RUNNER_TEMP/jcorpus.txt"
 
-      - name: Pkg.test
-        # Manifest.toml is not committed, so the resolve is part of what
-        # is tested: the compat bounds have to admit a working set on
-        # both releases.
-        run: julia --project=julia -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
+      - name: Two HDF5 copies in one process
+        if: github.event_name == 'push'
+        env:
+          WORK: ${{ runner.temp }}/two-hdf5
+          PYTHON: python
+        run: |
+          sudo apt-get install -y -q libhdf5-dev     # the foreign 1.10 the test preloads
+          python -m pip install -q pint xarray netCDF4 pyvista pandas
+          bash tests/two_hdf5_linux.sh
 
-  # ------------------------------------------------------------------
   # MATLAB on a GitHub-hosted runner is licensed by MathWorks for public
-  # repositories only, and this job uses no secret and no licence token.
-  # It therefore needs this repository to be public; on a private one the
-  # setup step fails asking for a licence, and the job has to move to a
-  # self-hosted runner with a licence of its own.
+  # repositories, with no secret and no licence token.
   matlab:
-    name: matlab
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    name: matlab (suite, example, corpus)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
-          cache: pip
 
-      - name: Install what the generator needs
+      - name: zlib, HDF5 and the core, static
+        # MATLAB loads its own HDF5; a core with HDF5 linked in never meets it.
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install h5py numpy
+          sudo apt-get update -q && sudo apt-get install -y -q ninja-build
+          bash tools/build_deps.sh "$RUNNER_TEMP/deps" > "$RUNNER_TEMP/deps.log" 2>&1 || { tail -50 "$RUNNER_TEMP/deps.log"; exit 1; }
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMESTRA_BUILD_TESTS=OFF \
+                -DMESTRA_STATIC_HDF5=ON -DHDF5_ROOT="$RUNNER_TEMP/deps" -DZLIB_ROOT="$RUNNER_TEMP/deps"
+          cmake --build build -j2
 
-      - name: Write the three files that are not committed
-        run: python vectors/generate.py --on-demand
+      - name: The corpus
+        run: |
+          python -m pip install -q numpy h5py
+          python corpus/generate.py "$RUNNER_TEMP/corpus"
+          echo "CORPUS=$RUNNER_TEMP/corpus" >> "$GITHUB_ENV"
 
-      - name: MATLAB
-        uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d # v3.1.0
+      - uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d # v3.1.0
         with:
           release: latest
           cache: true
 
-      - name: Run the suite
-        # run_tests.m is the headless entry point: it puts the package
-        # and the tests on the path itself, prints the counts, and exits
-        # non-zero on any failure or incomplete test.  The action runs it
-        # under `-batch` from the workspace root, which is what the
-        # relative paths here are relative to.
+      - name: Build the gateway, then the suite (with the example) and the corpus
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3.3.0
         with:
-          command: "addpath('matlab'); run('matlab/tests/run_tests.m')"
+          command: "cd matlab; build_mex; addpath(fullfile(pwd, 'tests')); run_tests; corpus = getenv('CORPUS'); run(fullfile(pwd, 'tests', 'check_corpus.m'))"
+
+  macos:
+    name: macos (core, wheel, Python)
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: zlib and HDF5, static
+        run: bash tools/build_deps.sh "$RUNNER_TEMP/deps" > "$RUNNER_TEMP/deps.log" 2>&1 || { tail -50 "$RUNNER_TEMP/deps.log"; exit 1; }
+
+      - name: The core and its tests
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMESTRA_STATIC_HDF5=ON \
+                -DHDF5_ROOT="$RUNNER_TEMP/deps" -DZLIB_ROOT="$RUNNER_TEMP/deps"
+          cmake --build build -j3
+          ./build/core_unit_tests
+          ./build/core_writer_reader_tests
+
+      - name: The wheel and the Python suite on it
+        run: |
+          python -m pip install -q build
+          CMAKE_ARGS="-DMESTRA_STATIC_HDF5=ON -DHDF5_ROOT=$RUNNER_TEMP/deps -DZLIB_ROOT=$RUNNER_TEMP/deps" \
+            python -m build --wheel --outdir dist .
+          python -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install -q "$(ls dist/*.whl)[test]"
+          cd "$RUNNER_TEMP" && "$RUNNER_TEMP/venv/bin/python" -m pytest -q -p no:cacheprovider "$GITHUB_WORKSPACE/python/tests"
+
+  windows:
+    name: windows (core, wheel, Python)
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: zlib and HDF5, static
+        run: |
+          deps="$(cygpath -m "$RUNNER_TEMP")/deps"
+          echo "DEPS=$deps" >> "$GITHUB_ENV"
+          bash tools/build_deps.sh "$deps" > "$RUNNER_TEMP/deps.log" 2>&1 || { tail -60 "$RUNNER_TEMP/deps.log"; exit 1; }
+
+      - name: The core and its tests (Release, with the static C runtime it ships with)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMESTRA_STATIC_HDF5=ON \
+                -DHDF5_ROOT="$DEPS" -DZLIB_ROOT="$DEPS"
+          cmake --build build --config Release --parallel 2
+          build/Release/core_unit_tests
+          build/Release/core_writer_reader_tests
+
+      - name: The wheel and the Python suite on it
+        run: |
+          python -m pip install -q build
+          CMAKE_ARGS="-DMESTRA_STATIC_HDF5=ON -DHDF5_ROOT=$DEPS -DZLIB_ROOT=$DEPS" \
+            python -m build --wheel --outdir dist .
+          python -m venv "$RUNNER_TEMP/venv"
+          py="$RUNNER_TEMP/venv/Scripts/python"
+          "$py" -m pip install -q "$(ls dist/*.whl)[test]"
+          cd "$RUNNER_TEMP" && "$py" -m pytest -q -p no:cacheprovider "$GITHUB_WORKSPACE/python/tests"

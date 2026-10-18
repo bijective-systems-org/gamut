@@ -46,8 +46,8 @@ for k = 1:numel(names)
     end
 end
 total = counts.valid + counts.rules + counts.hostile;
-fprintf('%d cases (%d valid, %d rule, %d hostile): %d failure(s)\n', total, counts.valid, ...
-    counts.rules, counts.hostile, numel(fails));
+fprintf('%d cases (%d valid, %d rule, %d hostile): %d hold\n', total, counts.valid, ...
+    counts.rules, counts.hostile, total - numel(fails));
 for k = 1:numel(fails), fprintf('  FAIL %s\n', fails{k}); end
 if ~isempty(fails), error('mestra:corpus', '%d failures', numel(fails)); end
 

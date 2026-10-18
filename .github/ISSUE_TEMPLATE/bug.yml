@@ -8,9 +8,10 @@ body:
       label: Where
       options:
         - Python
-        - C++
         - MATLAB
         - Julia
+        - The core (C or C++)
+        - The command line or VTK conversion
         - The specification or the corpus
         - The documentation
     validations:

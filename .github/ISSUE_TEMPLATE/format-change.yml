@@ -5,14 +5,14 @@ body:
   - type: markdown
     attributes:
       value: >-
-        The specification and the conformance corpus define the format,
-        so a change lands in both and in every implementation together.
+        The specification and the corpus define the format, so a change
+        lands in both and in the core together.
         CONTRIBUTING.md has the rules this form follows.
   - type: textarea
     id: case
     attributes:
       label: The file or workflow the format cannot represent
-      description: A concrete case, with its rows, supports and arrays.
+      description: A real study or workflow, with its runs, mesh and results.
     validations:
       required: true
   - type: textarea
@@ -24,15 +24,15 @@ body:
   - type: textarea
     id: compatibility
     attributes:
-      label: Compatibility under SPEC section 28
+      label: Within version 1, or a new version
       description: >-
-        Additive within mestra/0 (an optional attribute or group under
-        the unknown-content rules), or a new major version.
+        Additive within mestra/1 (SPEC.md section 17: a reader that does
+        not know it reports W5 and goes on), or a new major version.
     validations:
       required: true
   - type: textarea
     id: corpus
     attributes:
-      label: Corpus cases and the change in each implementation
+      label: Corpus cases that pin it
     validations:
       required: false
