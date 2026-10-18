@@ -1,262 +1,218 @@
-function out = evaluate(dataset, keysTable)
-%MESTRA.EVALUATE  Materialise a dataset's callable slots on a keys table.
-%
-%   OUT = MESTRA.EVALUATE(DATASET, KEYSTABLE) returns a new
-%   mestra.Dataset with the same slots as DATASET, every slot that was
-%   served by a callable now holding data, and the key columns holding
-%   the rows of KEYSTABLE.  Specification section 10 calls this
-%   evaluating the file on a keys table; doing it on a grid is
-%   distillation.
-%
-%   KEYSTABLE is a MATLAB table whose variable names are the key names
-%   (section 26).  Its row order is the evaluation order: output row i
-%   is the result for table row i.  Every key the file declares must
-%   have a column; other columns are passed through to the callables,
-%   which read the columns they declare and ignore the rest.
-%
-%   A callable returns one prediction per output (section 10).  A slot
-%   whose statistic is value or mean, or none, takes the prediction's
-%   mean; a slot whose statistic is band takes its uncertainty and is
-%   given the prediction's level and method.
-%
-%   DATASET is not changed.  A slot that already held data is carried
-%   over unchanged when it does not vary along `row`; when it does,
-%   its row count must match the table, and an error names the slot if
-%   it does not.
-%
-%   The result has no callables: every callable slot now holds data,
-%   so there is nothing left for one to serve, and the written file
-%   has no `/callables` group at all rather than an empty one
-%   (docs/api-conventions.md, section 7).
-%
-%   Example
-%
-%       d = mestra.read('affine_zero_rows.mes');
-%       t = table(0.5, 4.0, 'VariableNames', {'mach', 'alpha'});
-%       e = mestra.evaluate(d, t);
-%       e.scalar('cl').values                    % 1.45
-%       a = e.nodeArray('s0', 'pressure');
-%       mestra.permute(a.values, a.dims, {'row', 'node'})
-%
-%   See also mestra.Callable, mestra.Affine, mestra.read, mestra.write.
-
-    if ~isa(dataset, 'mestra.Dataset')
-        error('mestra:evaluate', ...
-              'the first argument must be a mestra.Dataset');
-    end
-    if ~istable(keysTable)
-        error('mestra:keysTable', ...
-              'the keys table must be a MATLAB table (section 26)');
-    end
-    nRows = height(keysTable);
-    declared = dataset.keyNames();
-    missing = setdiff(declared, keysTable.Properties.VariableNames);
-    if ~isempty(missing)
-        error('mestra:keysTable', ...
-              'the keys table has no column for %s', strjoin(missing, ', '));
-    end
-
-    out = copyDataset(dataset);
-    out.path = '';
-    rerowed = nRows ~= dataset.nRows;
-    out.nRows = nRows;
-    for i = 1:numel(out.keys)
-        name = out.keys(i).name;
-        column = keysTable.(name);
-        if iscell(column) || isstring(column)
-            out.keys(i).values = reshape(cellstr(column), 1, []);
-        else
-            out.keys(i).values = reshape(column, 1, []);
-        end
-        if rerowed, out.keys(i).chunk = []; end
-    end
-    if ~isempty(out.rowSupport) && numel(out.rowSupport) ~= nRows
-        out.rowSupport = [];
-    end
-
-    results = containers.Map('KeyType', 'char', 'ValueType', 'any');
-    for i = 1:numel(out.scalars)
-        out.scalars(i) = fill(out, results, out.scalars(i), ...
-                              ['/scalars/' out.scalars(i).name], ...
-                              keysTable, nRows, {'row'}, rerowed);
-    end
-    for i = 1:numel(out.supports)
-        s = out.supports(i);
-        base = ['/supports/' s.name];
-        if ~isempty(s.coordinates)
-            s.coordinates = fill(out, results, s.coordinates, ...
-                [base '/coordinates'], keysTable, nRows, ...
-                {'row', 'node', 'component'}, rerowed);
-        end
-        for j = 1:numel(s.nodeArrays)
-            s.nodeArrays(j) = fill(out, results, s.nodeArrays(j), ...
-                [base '/node_arrays/' s.nodeArrays(j).name], keysTable, ...
-                nRows, {'row', 'node', 'component'}, rerowed);
-        end
-        for j = 1:numel(s.cellArrays)
-            s.cellArrays(j) = fill(out, results, s.cellArrays(j), ...
-                [base '/cell_arrays/' s.cellArrays(j).name], keysTable, ...
-                nRows, {'row', 'cell', 'component'}, rerowed);
-        end
-        out.supports(i) = s;
-    end
-    % Section 7 of docs/api-conventions.md: evaluating turns every
-    % callable slot into a stored slot, so the result has no callable
-    % to keep and the `/callables` group is absent from the file, not
-    % present and empty.  Dropping the callables is not enough on its
-    % own: the writer also writes a group the file it came from
-    % carried, so the group has to go from `groupsPresent` too.
-    out.callables = mestra.Dataset.emptyCallable();
-    out.groupsPresent = setdiff(out.groupsPresent, {'callables'}, 'stable');
+function out = evaluate(modelPath, inputs, varargin)
+%EVALUATE Evaluates a model file on a table of inputs (spec section 7.4).
+%   out = mestra.evaluate(modelPath, inputs)
+%   out = mestra.evaluate(modelPath, inputs, 'path', p)
+%   out = mestra.evaluate(modelPath, inputs, 'coordinates', C)
+%   inputs maps each parameter to values and each label to names (a cell
+%   array) from the model file's table, all of one length n.  C (n x nodes
+%   x axes) is needed when a model reads geometry the file does not store.
+%   Returns the resulting data file open to read; without 'path' it lives
+%   in a temporary file removed when it is closed.
+p = inputParser;
+p.addParameter('path', '');
+p.addParameter('coordinates', []);
+p.parse(varargin{:});
+coordinates = p.Results.coordinates;
+m = mestra.open(modelPath);
+closeModel = onCleanup(@() m.close());
+if ~strcmp(m.kind(), 'model')
+    error('mestra:E16', '%s is not a model file', modelPath);
+end
+params = m.names('parameters'); params = params(:)';
+labels = m.names('labels'); labels = labels(:)';
+given = fieldnames(inputs)';
+if isempty(given)
+    error('mestra:E2', 'give the model''s inputs');
+end
+lengths = cellfun(@(k) numel(inputs.(k)), given);
+if any(lengths ~= lengths(1))
+    error('mestra:E5', 'every input needs the same number of rows');
+end
+n = lengths(1);
+unknown = setdiff(given, [params labels]);
+if ~isempty(unknown)
+    error('mestra:E2', '%s is not an input of this model', unknown{1});
 end
 
-% ---------------------------------------------------------------------
-
-function slot = fill(d, results, slot, path, keysTable, nRows, fileDims, ...
-                     rerowed)
-%fill  One slot: call its callable, or check the data it already has.
-%   With REROWED true the file being made has a different row count
-%   from the one it was read from, so a chunk shape carried over from
-%   that file is measured against a row count that is no longer the
-%   one it has.  Section 23 measures the default against the length of
-%   the row dimension the leading axis is attached to, so the chunk is
-%   dropped and the writer computes the default for the new count; a
-%   chunk that is not the default is W12 and no file this package
-%   writes should draw one.
-    if rerowed && isfield(slot, 'chunk') && ...
-            ~isempty(slot.dims) && strcmp(slot.dims{end}, 'row')
-        slot.chunk = [];
+% The table each model reads: parameters as values, labels as codes.
+tbl = struct();
+labelNames = struct();
+for k = 1:numel(params)
+    name = params{k};
+    if ~isfield(inputs, name)
+        error('mestra:E2', 'the input %s is missing', name);
     end
-    if strcmp(slot.source, 'data')
-        if strcmp(slot.varies, 'row') && ~isempty(slot.values)
-            n = size(slot.values, numel(slot.dims));
-            if n ~= nRows
-                error('mestra:evaluate', ...
-                      ['the slot "%s" holds %d rows of data and the keys ' ...
-                       'table has %d; drop it or pass a matching table'], ...
-                      path, n, nRows);
-            end
-        end
-        return
-    end
-    [id, output] = splitSource(slot.source, slot.output, path);
-    if ~results.isKey(id)
-        record = d.callable(id);
-        if isempty(record.obj)
-            if ~isempty(record.type) && mestra.Registry.isKnown(record.type)
-                % The type is one this package can build, so what is
-                % missing is the dictionary to build it from.  A
-                % dataset from mestra.open has none, because an open
-                % does not read one (docs/api-conventions.md, section
-                % 7); a dataset from mestra.read has one that would
-                % not build.
-                error('mestra:evaluate', ...
-                      ['the callable "%s" has type "%s" and no object ' ...
-                       'built from it. A dataset from mestra.open ' ...
-                       'carries no dictionary, because an open does ' ...
-                       'not read one: read the file with mestra.read ' ...
-                       'to evaluate it. If it was read, the ' ...
-                       'dictionary does not describe a %s'], ...
-                      id, record.type, record.type);
-            end
-            error('mestra:evaluate', ...
-                  ['the callable "%s" has type "%s", which no registered ' ...
-                   'type can evaluate; register it with ' ...
-                   'mestra.Registry.register'], id, record.type);
-        end
-        results(id) = record.obj.call(keysTable);
-    end
-    produced = results(id);
-    if ~produced.isKey(output)
-        error('mestra:evaluate', ...
-              'the callable "%s" produces no output named "%s"', id, output);
-    end
-    record = produced(output);
-    if ~isstruct(record) || ~isfield(record, 'mean')
-        error('mestra:evaluate', ...
-              ['the callable "%s" returned something that is not a ' ...
-               'prediction for output "%s"; a callable returns a struct ' ...
-               'with mean, uncertainty, level and method per output ' ...
-               '(section 10)'], id, output);
-    end
-    % Section 10: which part of the record fills the slot is its
-    % statistic.  A band slot takes the uncertainty and, with it, the
-    % level and the method the record states.
-    statistic = '';
-    if isfield(slot, 'statistic'), statistic = slot.statistic; end
-    if strcmp(statistic, 'band')
-        if isempty(record.uncertainty)
-            error('mestra:E12', ...
-                  ['E12: %s: this band slot takes the uncertainty of ' ...
-                   'output "%s" and the callable "%s" returned none; a ' ...
-                   'band without a level cannot be stored, so drop the ' ...
-                   'slot or give the model a band'], path, output, id);
-        end
-        value = record.uncertainty;
-        slot.level = record.level;
-        slot.method = record.method;
-    elseif isempty(statistic) || any(strcmp(statistic, {'value', 'mean'}))
-        value = record.mean;
+    d = m.describe(name);
+    if strcmp(mestra.internal.field(d, 'dtype', ''), 'int64')
+        col = int64(inputs.(name)(:));
     else
-        error('mestra:E12', ...
-              ['E12: %s: a callable serves value, mean and band slots; ' ...
-               'this one is %s'], path, statistic);
+        col = double(inputs.(name)(:));
     end
-    slot.source = 'data';
-    slot.output = '';
-    slot.dtype = 'float64';
-    if numel(fileDims) == 1
-        slot.values = reshape(double(value.buffer()), 1, []);
-        slot.dims = {'row'};
+    lo = str2double(d.lower); hi = str2double(d.upper);
+    outside = find(col < lo | col > hi, 1);
+    if ~isempty(outside)
+        warning('mestra:W4', '%s is outside the model''s domain [%g, %g] at row %d', ...
+            name, lo, hi, outside);
+    end
+    tbl.(name) = col;
+end
+for k = 1:numel(labels)
+    name = labels{k};
+    if ~isfield(inputs, name)
+        error('mestra:E2', 'the input %s is missing', name);
+    end
+    d = m.describe(name);
+    entries = mestra_mex('table', m.Handle, d.category);
+    names = cellstr(inputs.(name));
+    [known, at] = ismember(names(:), entries(:));
+    if ~all(known)
+        bad = names(~known);
+        error('mestra:E9', '%s: ''%s'' is not in the model''s table', name, bad{1});
+    end
+    tbl.(name) = int64(at(:) - 1);
+    labelNames.(name) = names(:);
+end
+if ~isempty(coordinates)
+    tbl.coordinates = double(coordinates);
+elseif ~isempty(m.MeshKind) && strcmp(m.Per, 'fixed')
+    pts = m.getPoints();
+    tbl.coordinates = repmat(reshape(pts, [1 size(pts)]), [n 1 1]);
+end
+
+% What each model is asked for.
+scalars = m.names('scalars');
+nodeFields = m.names('node_fields');
+cellFields = m.names('cell_fields');
+results = [scalars(:); nodeFields(:); cellFields(:)];
+wanted = containers.Map('KeyType', 'char', 'ValueType', 'any');
+requests = cell(0, 4);
+for k = 1:numel(results)
+    name = results{k};
+    d = m.describe(name);
+    statistic = mestra.internal.field(d, 'statistic', '');
+    wrt = mestra.internal.field(d, 'with_respect_to', '');
+    if strcmp(statistic, 'std')
+        req = {d.output, 'std'};
+    elseif strcmp(statistic, 'quantile')
+        req = {d.output, 'quantile', str2double(d.q)};
+    elseif ~isempty(wrt)
+        req = {d.output, 'derivative', wrt};
     else
-        buf = double(value.buffer());
-        slot.values = reshape(buf, [fliplr(value.shape) 1 1]);
-        slot.dims = fliplr(fileDims);
-        if isempty(slot.components)
-            slot.components = size(slot.values, 1);
+        req = {d.output, 'values'};
+    end
+    wanted = ask(wanted, d.model, req);
+    requests(end + 1, :) = {name, d.model, d.output, req}; %#ok<AGROW>
+end
+coordinate = struct();
+if ~isempty(m.MeshKind)
+    coordinate = m.describe('coordinates');
+    if ~isempty(mestra.internal.field(coordinate, 'model', ''))
+        wanted = ask(wanted, coordinate.model, {coordinate.output, 'values'});
+    end
+end
+
+% Each model, loaded by its registered type and called once.
+outputs = containers.Map('KeyType', 'char', 'ValueType', 'any');
+ids = keys(wanted);
+for k = 1:numel(ids)
+    id = ids{k};
+    dm = m.describe(['models/' id]);
+    cls = mestra.internal.registry(dm.type);
+    if isempty(cls)
+        error('mestra:error', ['the model %s is of type ''%s'', whose software is not ' ...
+            'registered here (mestra.registerModelType)'], id, dm.type);
+    end
+    numbers = mestra_mex('model_numbers', m.Handle, id);
+    model = feval([cls '.load'], numbers);
+    reads = strsplit(strtrim(dm.inputs), ' ');
+    in = struct();
+    for j = 1:numel(reads)
+        if ~isfield(tbl, reads{j})
+            error('mestra:E2', 'the model %s reads %s, which was not given', id, reads{j});
         end
+        in.(reads{j}) = tbl.(reads{j});
     end
-    if isfield(slot, 'shape')
-        sz = size(slot.values);
-        sz = [sz ones(1, numel(slot.dims) - numel(sz))];
-        slot.shape = fliplr(sz(1:numel(slot.dims)));
-    end
+    outputs(id) = model.call(in, wanted(id));
 end
 
-function [id, output] = splitSource(source, output, path)
-    if numel(source) <= 9 || ~strncmp(source, 'callable:', 9)
-        error('mestra:E36', ...
-              'the slot "%s" has source "%s"', path, source);
-    end
-    id = source(10:end);
-    if isempty(output)
-        error('mestra:E39', ...
-              'the slot "%s" names a callable and no output', path);
-    end
+% The data file.
+outPath = p.Results.path;
+temporary = isempty(outPath);
+if temporary
+    outPath = [tempname '.mes'];
+end
+w = mestra.Study(mestra_mex('evaluate_begin', m.Handle, outPath), outPath, true, ...
+    m.MeshKind, m.Per);
+try
+    write(w, m, n, params, labels, tbl, labelNames, scalars, requests, outputs, coordinate, ...
+        coordinates);
+catch err
+    % A failed evaluation leaves no file behind.
+    w.abandon(true);
+    rethrow(err);
+end
+w.close();
+out = mestra.open(outPath);
+out.RemoveOnClose = temporary;
 end
 
-function out = copyDataset(d)
-%copyDataset  A fresh Dataset with the same contents.
-    out = mestra.Dataset();
-    out.format = d.format;
-    out.writer = d.writer;
-    out.created = d.created;
-    out.aligned = d.aligned;
-    out.generalisationGroup = d.generalisationGroup;
-    out.nRows = d.nRows;
-    out.keys = d.keys;
-    out.scalars = d.scalars;
-    out.categories = d.categories;
-    out.supports = d.supports;
-    out.callables = d.callables;
-    out.rowSupport = d.rowSupport;
-    out.notes = d.notes;
-    out.privateTree = d.privateTree;
-    out.unknownGroups = d.unknownGroups;
-    out.skipped = d.skipped;
-    if d.unknownAttrs.Count > 0
-        out.unknownAttrs = containers.Map(d.unknownAttrs.keys(), ...
-                                          d.unknownAttrs.values());
+function write(w, m, n, params, labels, tbl, labelNames, scalars, requests, outputs, ...
+    coordinate, coordinates)
+columns = struct();
+for k = 1:numel(params), columns.(params{k}) = tbl.(params{k}); end
+for k = 1:numel(labels), columns.(labels{k}) = labelNames.(labels{k}); end
+fields = struct();
+for k = 1:size(requests, 1)
+    [name, id, output, req] = requests{k, :};
+    got = outputs(id);
+    if ~isfield(got, output)
+        error('mestra:error', 'the model %s gave no output %s', id, output);
     end
-    out.groupsPresent = d.groupsPresent;
+    record = got.(output);
+    values = [];
+    switch req{2}
+        case 'values'
+            values = mestra.internal.field(record, 'values', []);
+        case 'std'
+            values = mestra.internal.field(record, 'std', []);
+        case 'quantile'
+            q = mestra.internal.field(record, 'quantiles', []);
+            if isa(q, 'containers.Map') && isKey(q, req{3}), values = q(req{3}); end
+        case 'derivative'
+            dv = mestra.internal.field(record, 'derivatives', struct());
+            values = mestra.internal.field(dv, req{3}, []);
+    end
+    if isempty(values)
+        error('mestra:error', 'the model %s gave no %s for %s', id, req{2}, output);
+    end
+    if any(strcmp(scalars, name))
+        columns.(name) = double(values(:));
+    else
+        fields.(name) = reshape(double(values), n, []);
+    end
+end
+points = {};
+if ~isempty(m.MeshKind) && strcmp(m.Per, 'run')
+    if ~isempty(mestra.internal.field(coordinate, 'model', ''))
+        got = outputs(coordinate.model);
+        pts = got.(coordinate.output).values;
+    elseif ~isempty(coordinates)
+        pts = double(coordinates);
+    else
+        error('mestra:E2', 'this model file''s geometry changes per run; give coordinates');
+    end
+    points = cell(1, n);
+    for i = 1:n
+        points{i} = reshape(pts(i, :, :), size(pts, 2), size(pts, 3));
+    end
+end
+w.addRuns(columns, 'fields', fields, 'points', points);
+end
+
+function wanted = ask(wanted, id, req)
+if isKey(wanted, id)
+    wanted(id) = [wanted(id) {req}];
+else
+    wanted(id) = {req};
+end
 end

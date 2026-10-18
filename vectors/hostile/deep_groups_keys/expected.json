@@ -1,1 +1,0 @@
-{"allow_extra":true,"description":"Thirty thousand groups nested under /keys, where a reader walks looking for key columns. The rest of the file is an ordinary two-row file with no support.","required_errors":["E41"],"timeout_seconds":10}

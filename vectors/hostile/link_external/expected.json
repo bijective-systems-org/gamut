@@ -1,1 +1,0 @@
-{"allow_extra":true,"description":"An external link into a file that is not there, under each of /keys, /scalars, /supports and /callables. A reader that followed it would read a file nobody named.","required_errors":["E40"],"timeout_seconds":10}

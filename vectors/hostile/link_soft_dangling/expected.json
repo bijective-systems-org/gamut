@@ -1,1 +1,0 @@
-{"allow_extra":true,"description":"A soft link to a name that does not exist, under each of /keys, /scalars, /supports and /callables.","required_errors":["E40"],"timeout_seconds":10}

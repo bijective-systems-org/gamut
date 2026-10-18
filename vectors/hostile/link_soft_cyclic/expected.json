@@ -1,1 +1,0 @@
-{"allow_extra":true,"description":"A soft link pointing at itself, under each of /keys, /scalars, /supports and /callables.","required_errors":["E40"],"timeout_seconds":10}

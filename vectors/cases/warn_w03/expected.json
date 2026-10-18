@@ -1,1 +1,0 @@
-{"codec":{},"description":"A scalar holding NaN, which is how this format spells missing floating-point data.","evaluation":[],"probes":[{"row":1,"slot":"/scalars/cl","value":"nan"}],"support_ids":{"s0":"96df395d80ef548444562292de441525ba0b5c8ad00a8dadff19a19c943936c7"},"validator":{"errors":[],"warnings":["W03"]}}

@@ -1,70 +1,18 @@
-"""mestra: one file for a parametric simulation study, or a model
-fitted to one, that says what every number is.
+"""mestra: files for parametric simulation studies and their models.
 
-    import mestra
-
-    with mestra.read("study.mes") as ds:
-        print(ds.kind, ds.addons, ds.row_count)
-        mach = ds.parameters["mach"].values()
-        pressure = ds.mesh.node_arrays["pressure"].read(rows=slice(0, 4))
-        print(pressure.dims)                    # row, node, component
-
-    report = mestra.validate("study.mes")
-    for finding in report.findings:
-        print(finding)
-
-The names in `__all__` are the whole public surface; everything else,
-and every module or attribute whose name begins with `_`, is private.
-This package reads and writes format version 1 (`mestra/1`);
-`upgrade` converts a version 0 file.
+Every call goes to the shared core (a C library); this package is its
+Python face, with NumPy as its one dependency.
 """
 
-from __future__ import annotations
+from ._lib import MestraError, format_string as _format, version as _version
+from ._study import Study, create, open
+from ._validate import Finding, Report, validate
+from ._models import Nearest, create_model, evaluate, register_model_type
+from ._files import append, extract, write_copy
 
-from .append import append
-from .callables import (
-    Affine,
-    Callable,
-    OpaqueCallable,
-    Prediction,
-    callable_types,
-    input_table,
-    register_callable,
-)
-from .errors import Finding, MestraError
-from .evaluate import evaluate, prediction
-from .model import FORMAT, Dataset, Label, Mesh, NamedArray, Parameter, Slot
-from .reader import read
-from .upgrade import upgrade
-from .validator import Report, validate
-from .writer import write
+__version__ = _version()
+FORMAT = _format()
 
-__version__ = "1.0.0.dev0"
-
-__all__ = [
-    "Affine",
-    "Callable",
-    "Dataset",
-    "FORMAT",
-    "Finding",
-    "Label",
-    "Mesh",
-    "MestraError",
-    "NamedArray",
-    "OpaqueCallable",
-    "Parameter",
-    "Prediction",
-    "Report",
-    "Slot",
-    "__version__",
-    "append",
-    "callable_types",
-    "evaluate",
-    "input_table",
-    "prediction",
-    "read",
-    "register_callable",
-    "upgrade",
-    "validate",
-    "write",
-]
+__all__ = ["FORMAT", "Finding", "MestraError", "Nearest", "Report", "Study", "append", "create",
+           "create_model", "evaluate", "extract", "open", "register_model_type", "validate",
+           "write_copy"]

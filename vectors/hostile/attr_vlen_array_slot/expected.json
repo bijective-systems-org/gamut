@@ -1,1 +1,0 @@
-{"allow_extra":true,"description":"A slot's `units` is an array of two variable-length strings, which section 18 forbids twice over.","required_errors":["E19"],"timeout_seconds":10}

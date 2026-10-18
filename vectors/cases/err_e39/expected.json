@@ -1,1 +1,0 @@
-{"codec":{},"description":"A condition key with no units, which section 19 requires and no other rule catches: E11 covers a field and a scalar, not a key.","evaluation":[],"probes":[],"support_ids":{"s0":"96df395d80ef548444562292de441525ba0b5c8ad00a8dadff19a19c943936c7"},"validator":{"errors":["E39"],"warnings":[]}}

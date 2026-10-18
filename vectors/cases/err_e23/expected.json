@@ -1,1 +1,0 @@
-{"codec":{},"description":"Cell offsets whose last value is not the length of the connectivity.","evaluation":[],"probes":[],"support_ids":{"s0":"f5bb4b0b2a8bbaee05263c2321486edd6f51de4504f599407b753bf17be70fcc"},"validator":{"errors":["E23"],"warnings":[]}}

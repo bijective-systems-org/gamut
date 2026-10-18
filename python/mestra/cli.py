@@ -1,335 +1,608 @@
-"""The command line: `mestra validate`, `mestra info`, `mestra upgrade`.
+"""The command line: agents first, people second (interface section 9).
 
-    $ mestra validate study.mes
-    0 error(s), 0 warning(s)
+    mestra info FILE [--json]
+    mestra validate FILE [--json]
+    mestra build DOC.json -o FILE [--json]       mestra build --example
+    mestra append FILE DOC.json [--json]
+    mestra get FILE NAME... [--where EXPR] [--rows SEL] [--zone LABEL=NAME] -o OUT [--json]
 
-    $ mestra info study.mes
-    kind mesh, add-ons: time, model
-    ...
-
-    $ mestra upgrade old.mes new.mes
-
-Each finding prints as `<rule> <path>: <message>` and a run ends with
-`<n> error(s), <m> warning(s)`. With `--json` each call prints one
-document instead: `kind` and `addons` first, then `file`, `format`,
-`findings` (each with `rule`, `severity`, `path`, `message`), `errors`
-and `warnings` (counts); `info` adds the parameters, labels, scalars,
-mesh and callables, and `upgrade` the `source` it read. A command
-exits non-zero when it finds an error, so it fits in a build.
+Readable text by default; `--json` prints one document of the shape given
+in each command's docstring, which is part of the interface promise.  Big
+data goes to files; every problem is reported at once with where it is and
+what to do.  Exit status: 0 success, 1 the file or document has errors,
+2 a usage error.
 """
 
 from __future__ import annotations
 
 import argparse
-import errno
+import csv
 import json
 import os
 import sys
-from collections.abc import Sequence
 from typing import Any
 
-import h5py
+import numpy as np
 
-from . import FORMAT, __version__
-from .encoding import read_attr
-from .errors import Finding, MestraError
-from .model import Dataset, Slot
-from .reader import read
-from .upgrade import upgrade
-from .validator import Report, validate
+from . import _lib
+from ._lib import MestraError
+from ._study import create, open as open_file
+from ._files import append as mestra_append, extract as mestra_extract
+from ._validate import validate
 
-__all__ = ["main"]
+EXAMPLE = {
+    "writer": "my sweep script",
+    "title": "Wing A sweep",
+    "license": "CC-BY-4.0",
+    "mesh": {"kind": "shared", "per": "fixed", "units": "m", "axes": 3,
+             "file": "mesh.npz"},
+    "parameters": {"mach": {"units": "1", "role": "condition"},
+                   "alpha": {"units": "degree", "role": "condition"}},
+    "labels": {"status": {"role": "status", "categories": ["converged", "failed"]}},
+    "scalars": {"cl": "1", "cd": "1"},
+    "fields": {"p": {"units": "Pa", "at": "node"}},
+    "mesh_labels": {"zone": {"at": "cell", "categories": ["inlet", "wall"]}},
+    "constants": {"s_ref": [12.5, "m2"]},
+    "runs": "runs.csv",
+}
 
-
-def main(argv: Sequence[str] | None = None) -> int:
-    """Run the command line; returns the exit status."""
-    parser = argparse.ArgumentParser(
-        prog="mestra", description="Check, describe and upgrade mestra "
-                                   "files.")
-    parser.add_argument("--version", action="version",
-                        version="mestra %s (format %s)"
-                        % (__version__, FORMAT))
-    commands = parser.add_subparsers(dest="command")
-    check = commands.add_parser(
-        "validate", help="report every rule a file breaks",
-        description="Print every finding, then the totals. Exits 1 when "
-                    "the file has an error; a warning does not.")
-    check.add_argument("file")
-    check.add_argument("--json", action="store_true",
-                       help="print one JSON document")
-    show = commands.add_parser(
-        "info", help="describe a file",
-        description="Print the kind and add-ons first, then the "
-                    "parameters, labels, scalars, mesh and callables. "
-                    "Reading it costs an open, not a read of the values.")
-    show.add_argument("file")
-    show.add_argument("--json", action="store_true",
-                      help="print one JSON document")
-    convert = commands.add_parser(
-        "upgrade", help="write the version 1 form of a version 0 file",
-        description="Write DST, validated, from the version 0 file SRC, "
-                    "which is never changed. Prints what version 1 does "
-                    "not keep, and any refusal.")
-    convert.add_argument("src")
-    convert.add_argument("dst")
-    convert.add_argument("--json", action="store_true",
-                         help="print one JSON document")
-    args = parser.parse_args(list(argv) if argv is not None
-                             else sys.argv[1:])
-    if args.command is None:
-        parser.print_help()
-        return 2
-    try:
-        if args.command == "validate":
-            status = _validate(args.file, args.json)
-        elif args.command == "info":
-            status = _info(args.file, args.json)
-        else:
-            status = _upgrade(args.src, args.dst, args.json)
-        sys.stdout.flush()
-    except OSError as exc:
-        if not _reader_gone(exc):
-            raise
-        devnull = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(devnull, sys.stdout.fileno())
-        return 1
-    return status
+EXAMPLE_NOTES = """\
+# mesh.npz holds the mesh as NumPy arrays: points (nodes x axes); cells as
+#   types (uint8 VTK codes), offsets, connectivity; and each mesh label by
+#   name (one value per node or cell).
+# runs.csv has a header of column names and one line per run: a value for
+#   each parameter and scalar, a name for each label, and for each field the
+#   path (relative to the CSV) of a .npy file holding that run's values.
+#   When the geometry changes per run (or per group member), a column
+#   "points" names a .npy of that run's points, and for a changing mesh a
+#   column "cells" names a .npz of its types, offsets and connectivity.
+"""
 
 
-def _reader_gone(exc: OSError) -> bool:
-    """A write to stdout failed because its reader went away."""
-    return isinstance(exc, BrokenPipeError) or (
-        sys.platform == "win32" and exc.errno == errno.EINVAL)
+class Problems(Exception):
+    """Every problem found in a document, each with its key."""
+
+    def __init__(self, problems: list[tuple[str, str]]) -> None:
+        super().__init__("; ".join(f"{k}: {m}" for k, m in problems))
+        self.problems = problems
 
 
-# -------------------------------------------------------- the commands
-
-def _validate(path: str, as_json: bool) -> int:
-    report = validate(path)
-    document = _document(path, report)
-    _emit(document, report, as_json)
-    return 1 if report.errors else 0
-
-
-def _info(path: str, as_json: bool) -> int:
-    try:
-        with read(path, strict=False) as ds:
-            report = Report(errors=list(ds._problems))
-            document = _document(path, report, ds)
-            document.update(_describe(ds))
-            lines = _lines(ds)
-    except (OSError, MestraError) as exc:
-        report = Report(errors=[Finding(getattr(exc, "rule", "") or "E01",
-                                        "", getattr(exc, "message",
-                                                    str(exc)))])
-        document = _document(path, report)
-        lines = []
-    if as_json:
-        _print_json(document)
+def _emit(args: argparse.Namespace, doc: dict, text: str) -> None:
+    if args.json:
+        print(json.dumps(doc, indent=1, default=_jsonable))
     else:
-        print("kind %s, add-ons: %s" % (document["kind"] or "unknown",
-                                       ", ".join(document["addons"])
-                                       or "none"))
-        print("%s  %s" % (path, document["format"] or "not readable"))
-        for line in lines:
-            print(line)
-        for finding in report.findings:
-            print(finding)
-    return 1 if report.errors else 0
+        print(text)
 
 
-def _upgrade(src: str, dst: str, as_json: bool) -> int:
-    try:
-        report = upgrade(src, dst)
-    except MestraError as exc:
-        report = Report(errors=[Finding(exc.rule, exc.path, exc.message,
-                                        "error")])
-    written = not report.errors and os.path.exists(dst)
-    document = _document(dst if written else src, report,
-                         kind_from=dst if written else None)
-    document["source"] = src
-    document["file"] = dst
-    _emit(document, report, as_json)
-    return 1 if report.errors else 0
+def _jsonable(x: Any) -> Any:
+    if isinstance(x, np.generic):
+        return x.item()
+    if isinstance(x, np.ndarray):
+        return x.tolist()
+    raise TypeError(type(x))
 
 
-# ----------------------------------------------------------- documents
-
-def _document(path: str, report: Report, ds: Dataset | None = None,
-              kind_from: str | None = None) -> dict[str, Any]:
-    kind, addons, found = None, [], _format(path)
-    if ds is None:
-        try:
-            with read(kind_from or path, strict=False) as opened:
-                kind, addons = opened.kind, opened.addons
-        except (OSError, MestraError):
-            pass
-    else:
-        kind, addons = ds.kind, ds.addons
-    return {
-        "kind": kind,
-        "addons": addons,
-        "file": path,
-        "format": found,
-        "findings": [{"rule": f.rule, "severity": f.severity,
-                      "path": f.path, "message": f.message}
-                     for f in report.findings],
-        "errors": len(report.errors),
-        "warnings": len(report.warnings),
-    }
+# --- info ---------------------------------------------------------------------------
 
 
-def _format(path: str) -> str | None:
-    try:
-        with h5py.File(path, "r") as f:
-            value = read_attr(f, "format")
-    except Exception:
-        return None
-    return value if isinstance(value, str) else None
-
-
-def _emit(document: dict[str, Any], report: Report, as_json: bool) -> None:
-    if as_json:
-        _print_json(document)
-        return
-    for finding in report.findings:
-        print(finding)
-    print("%d error(s), %d warning(s)" % (len(report.errors),
-                                         len(report.warnings)))
-
-
-def _print_json(document: dict[str, Any]) -> None:
-    print(json.dumps(document, ensure_ascii=False, default=_plain))
-
-
-def _plain(value: Any) -> Any:
-    if hasattr(value, "tolist"):
-        return value.tolist()
-    return str(value)
-
-
-def _slot(slot: Slot) -> dict[str, Any]:
-    out = {"name": slot.name, "location": slot.location,
-           "role": slot.role, "units": slot.units, "varies": slot.varies,
-           "components": slot.components,
-           "dtype": None if slot.dtype is None else str(slot.dtype),
-           "dims": list(slot.dims), "served": slot.served}
-    for key in ("callable_id", "output", "statistic", "of", "level",
-                "method", "with_respect_to", "significant_bits",
-                "category"):
-        value = getattr(slot, key)
-        if value is not None:
-            out[key] = value
-    return out
-
-
-def _describe(ds: Dataset) -> dict[str, Any]:
-    out: dict[str, Any] = {
-        "rows": ds.row_count,
-        "generalisation_group": ds.generalisation_group,
-        "parameters": [
-            {"name": n, "role": p.role, "units": p.units, "lower": p.lower,
-             "upper": p.upper, "run_group": p.run_group,
-             "dtype": None if p.dtype is None else str(p.dtype)}
-            for n, p in ds.parameters.items()],
-        "labels": [
-            {"name": n, "role": lab.role, "category": lab.category,
-             "entries": None if lab.table is None
-             else list(lab.table.entries)}
-            for n, lab in ds.labels.items()],
-        "scalars": [_slot(s) for s in ds.scalars.values()],
-        "mesh": None,
-        "callables": [
-            {"id": n, "type": _type_of(ds, n),
-             "inputs": None if ds._callable_inputs.get(n) is None
-             else sorted(ds._callable_inputs[n] or ())}
-            for n in ds.callables],
-    }
-    for key in ("title", "license", "references", "source"):
-        out[key] = getattr(ds, key)
-    if ds.mesh is not None:
-        mesh = ds.mesh
-        out["mesh"] = {
-            "kind": mesh.kind, "n_nodes": mesh.n_nodes,
-            "n_cells": mesh.n_cells, "support_id": mesh.support_id,
-            "coordinates": None if mesh.coordinates is None
-            else _slot(mesh.coordinates),
-            "node_arrays": [_slot(s) for s in mesh.node_arrays.values()],
-            "cell_arrays": [_slot(s) for s in mesh.cell_arrays.values()],
+def _summary(path: str) -> dict:
+    """Everything an agent needs to plan, from metadata and the run table."""
+    with open_file(path) as f:
+        d = f.describe()
+        doc: dict[str, Any] = {
+            "file": path, "format": d.get("format"), "kind": f.kind, "type": f.type,
+            "addons": f.addons, "row_count": f.row_count,
+            "file_bytes": os.path.getsize(path),
+            "metadata": {k: d[k] for k in ("writer", "created", "file_id", "title", "license",
+                                           "references", "source", "generalisation_group",
+                                           "trained_on", "evaluated_from") if k in d},
+            "parameters": [], "labels": [], "scalars": [], "constants": [],
         }
-    return out
+        for name in f.names("parameters"):
+            p = f.describe(name)
+            entry = {"name": name, "role": p.get("role"), "units": p.get("units"),
+                     "dtype": p.get("dtype")}
+            for k in ("lower", "upper", "run_group"):
+                if k in p:
+                    entry[k] = float(p[k]) if k in ("lower", "upper") else p[k]
+            if f.row_count:
+                lo, hi = np.inf, -np.inf
+                for v in _blocks(f, f.get_parameter, name):
+                    if v.size and not np.all(np.isnan(v)):
+                        lo, hi = min(lo, float(np.nanmin(v))), max(hi, float(np.nanmax(v)))
+                entry["range"] = [lo, hi]
+            doc["parameters"].append(entry)
+        for name in f.names("labels"):
+            l = f.describe(name)
+            entry = {"name": name, "role": l.get("role")}
+            table = _lib.strings_out("mes_table", f._handle(), _lib.b(l.get("category", name)))
+            entry["categories"] = table
+            if f.row_count:
+                # Counted from the codes a block at a time: no string per row.
+                counts = np.zeros(len(table), dtype=np.int64)
+                for codes in _blocks(f, f.get_label_codes, name):
+                    counts += np.bincount(codes[(codes >= 0) & (codes < len(table))],
+                                          minlength=len(table))
+                entry["counts"] = {c: int(counts[i]) for i, c in enumerate(table)}
+            doc["labels"].append(entry)
+        for name in f.names("scalars"):
+            doc["scalars"].append({"name": name, **f.describe(name)})
+        for name in f.names("constants"):
+            doc["constants"].append({"name": name, **f.describe(name)})
+        if f.type != "table":
+            mesh: dict[str, Any] = {"kind": d.get("mesh"), "per": d.get("per")}
+            c = f.describe("coordinates")
+            mesh.update({"coordinate_units": c.get("units"), "axes": int(c.get("axes", 0)),
+                         "precision": c.get("dtype")})
+            if f.type == "shared":
+                if f._per == "fixed":
+                    mesh["nodes"] = int(f.get_points().shape[0])
+                types, _, _ = f.get_cells()
+                mesh["cells"] = int(types.size)
+                mesh["support_id"] = d.get("support_id")
+            mesh["node_fields"] = [{"name": n, **f.describe(n)} for n in f.names("node_fields")]
+            mesh["cell_fields"] = [{"name": n, **f.describe(n)} for n in f.names("cell_fields")]
+            mesh["mesh_labels"] = [{"name": n, **f.describe(n)}
+                                   for n in f.names("node_labels") + f.names("cell_labels")]
+            doc["mesh"] = mesh
+        doc["models"] = [{"id": m, **f.describe(f"models/{m}")} for m in f.names("models")]
+    return doc
 
 
-def _type_of(ds: Dataset, identifier: str) -> str:
+def _human(doc: dict) -> str:
+    kinds = {"table": "table", "shared": "shared mesh", "changing": "changing mesh"}
+    head = f"{os.path.basename(doc['file'])}: {kinds.get(doc['type'], doc['type'])}"
+    if doc["kind"] == "model":
+        head += ", model file"
+    else:
+        head += f", {doc['row_count']:,} run(s)"
+    lines = [head]
+    mesh = doc.get("mesh")
+    if mesh:
+        parts = []
+        if "nodes" in mesh:
+            parts.append(f"{mesh['nodes']:,} nodes")
+        if "cells" in mesh:
+            parts.append(f"{mesh['cells']:,} cells")
+        parts.append({"fixed": "fixed", "run": "geometry per run"}.get(
+            mesh["per"], f"geometry per {mesh['per'][6:]}" if mesh["per"] else ""))
+        lines.append("  mesh        " + ", ".join(p for p in parts if p))
+    if doc["parameters"]:
+        items = []
+        for p in doc["parameters"]:
+            rng = p.get("range") or ([p["lower"], p["upper"]] if "lower" in p else None)
+            r = f" {rng[0]:g}–{rng[1]:g}" if rng else ""
+            items.append(f"{p['name']} [{p['units']}]{r}")
+        lines.append("  parameters  " + ", ".join(items))
+    for l in doc["labels"]:
+        counts = l.get("counts")
+        what = ", ".join(f"{n} {c}" for c, n in counts.items() if n) if counts else \
+            ", ".join(l["categories"])
+        lines.append(f"  labels      {l['name']} ({l['role']}): {what}")
+    plain = [s for s in doc["scalars"] if not s.get("of")]
+    if plain:
+        lines.append("  results     " + ", ".join(f"{s['name']} [{s['units']}]" for s in plain))
+    if mesh:
+        fields = [f"{f['name']} [{f['units']}] at nodes" for f in mesh["node_fields"] if not f.get("of")]
+        fields += [f"{f['name']} [{f['units']}] at cells" for f in mesh["cell_fields"] if not f.get("of")]
+        if fields:
+            lines.append("  fields      " + "; ".join(fields))
+        if mesh["mesh_labels"]:
+            lines.append("  zones       " + ", ".join(m["name"] for m in mesh["mesh_labels"]))
+    rel = [s for s in doc["scalars"] + (mesh["node_fields"] + mesh["cell_fields"] if mesh else [])
+           if s.get("of")]
+    if rel:
+        words = []
+        for s in rel:
+            if s.get("statistic") == "std":
+                words.append(f"{s['name']} (spread of {s['of']})")
+            elif s.get("statistic") == "quantile":
+                words.append(f"{s['name']} ({float(s['q']) * 100:g}% quantile of {s['of']})")
+            else:
+                words.append(f"{s['name']} (d{s['of']}/d{s.get('with_respect_to')})")
+        lines.append("  also        " + ", ".join(words))
+    if doc["constants"]:
+        lines.append("  constants   " + ", ".join(f"{c['name']} = {c.get('value')} {c['units']}"
+                                                  for c in doc["constants"]))
+    for m in doc["models"]:
+        lines.append(f"  model       {m['id']}: {m.get('type')} reading {m.get('inputs')}")
+    size = doc["file_bytes"]
+    unit = "KB" if size < 1e6 else ("MB" if size < 1e9 else "GB")
+    scale = 1e3 if unit == "KB" else (1e6 if unit == "MB" else 1e9)
+    lines.append(f"  file        {size / scale:.1f} {unit}")
+    return "\n".join(lines)
+
+
+def _blocks(f: Any, read: Any, name: str, size: int = 1 << 20) -> Any:
+    """A column of every row, a block of rows at a time."""
+    for start in range(0, f.row_count, size):
+        yield np.atleast_1d(read(name, rows=slice(start, min(f.row_count, start + size))))
+
+
+def cmd_info(args: argparse.Namespace) -> int:
+    """--json: {"file", "format", "kind", "type", "addons", "row_count", "file_bytes",
+    "metadata": {...}, "parameters": [{name, role, units, dtype, lower?, upper?,
+    run_group?, range?}], "labels": [{name, role, categories, counts?}],
+    "scalars": [{name, ...describe}], "constants": [...], "mesh"?: {kind, per,
+    coordinate_units, axes, precision, nodes?, cells?, support_id?, node_fields,
+    cell_fields, mesh_labels}, "models": [{id, type, inputs, repr?}]}"""
+    doc = _summary(args.file)
+    _emit(args, doc, _human(doc))
+    return 0
+
+
+# --- validate -------------------------------------------------------------------------
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    """--json: {"file", "ok", "errors", "warnings", "findings": [{rule, severity,
+    path, message}]}"""
+    r = validate(args.file)
+    doc = {"file": args.file, "ok": r.ok, "errors": len(r.errors), "warnings": len(r.warnings),
+           "findings": [f.__dict__ for f in r.findings]}
+    head = f"{'no' if not r.errors else len(r.errors)} error(s), " \
+           f"{'no' if not r.warnings else len(r.warnings)} warning(s)"
+    lines = [head] + [f"  {f.rule} {f.path or '(file)'}: {f.message}" for f in r.findings]
+    _emit(args, doc, "\n".join(lines))
+    return 0 if r.ok else 1
+
+
+# --- build and append ----------------------------------------------------------------------
+
+
+_KNOWN_KEYS = {"writer", "title", "license", "references", "source", "mesh", "parameters",
+               "labels", "scalars", "fields", "mesh_labels", "constants", "runs",
+               "generalisation_group"}
+
+
+def _check_document(doc: dict, base: str, appending: bool) -> list[tuple[str, str]]:
+    """Every problem a document has, before anything is written."""
+    problems: list[tuple[str, str]] = []
+    for key in doc:
+        if key not in _KNOWN_KEYS:
+            problems.append((key, f"is not a key of a build document; keys are "
+                                  f"{', '.join(sorted(_KNOWN_KEYS))}"))
+    if not appending and not doc.get("writer"):
+        problems.append(("writer", "name the program writing the file"))
+    for group in ("parameters", "scalars", "fields"):
+        for name, spec in (doc.get(group) or {}).items():
+            units = spec if isinstance(spec, str) else (spec or {}).get("units")
+            if not units:
+                problems.append((f"{group}.{name}.units", "units are required (e.g. Pa, m s-1, 1)"))
+            elif not _lib.units_parse(units):
+                problems.append((f"{group}.{name}.units",
+                                 f"\"{units}\" does not parse; use UDUNITS form such as m s-1"))
+    mesh = doc.get("mesh")
+    if mesh:
+        for k in ("kind", "per", "units"):
+            if not appending and k not in mesh:
+                problems.append((f"mesh.{k}", "is required"))
+        if mesh.get("file") and not os.path.exists(os.path.join(base, mesh["file"])):
+            problems.append(("mesh.file", f"{mesh['file']} does not exist next to the document"))
+    runs = doc.get("runs")
+    if not runs:
+        problems.append(("runs", "name the CSV holding one line per run"))
+    elif not os.path.exists(os.path.join(base, runs)):
+        problems.append(("runs", f"{runs} does not exist next to the document"))
+    return problems
+
+
+def _read_runs(doc: dict, base: str, study_fields: set[str], labels: set[str],
+               problems: list[tuple[str, str]]) -> tuple[dict, dict, list, list]:
+    path = os.path.join(base, doc["runs"])
+    with open(path, newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    csv_dir = os.path.dirname(path)
+    columns: dict[str, list] = {}
+    fields: dict[str, list] = {}
+    points: list = []
+    cells: list = []
+    for i, row in enumerate(rows, start=2):
+        for key, value in row.items():
+            where = f"runs line {i}, column {key}"
+            if key in study_fields:
+                f = os.path.join(csv_dir, value)
+                if not os.path.exists(f):
+                    problems.append((where, f"{value} does not exist"))
+                    continue
+                fields.setdefault(key, []).append(np.load(f))
+            elif key == "points":
+                if value:
+                    points.append(np.load(os.path.join(csv_dir, value)))
+                else:
+                    points.append(None)
+            elif key == "cells":
+                z = np.load(os.path.join(csv_dir, value))
+                cells.append((z["types"], z["offsets"], z["connectivity"]))
+            elif key in labels:
+                columns.setdefault(key, []).append(value)
+            else:
+                try:
+                    columns.setdefault(key, []).append(float(value) if value != "" else np.nan)
+                except ValueError:
+                    problems.append((where, f"\"{value}\" is not a number"))
+    return columns, fields, points, cells
+
+
+def _add_rows(study: Any, doc: dict, base: str, fields: set[str], labels: set[str]) -> int:
+    problems: list[tuple[str, str]] = []
+    columns, field_values, points, cells = _read_runs(doc, base, fields, labels, problems)
+    if problems:
+        raise Problems(problems)
+    n = len(next(iter(columns.values()))) if columns else 0
+    arrays = {k: np.stack(v) if study._mesh_kind != "changing" else np.concatenate([a.ravel() for a in v])
+              for k, v in field_values.items()}
+    study.add_runs(columns, fields=arrays, points=points or None, cells=cells or None)
+    return n
+
+
+def cmd_build(args: argparse.Namespace) -> int:
+    """--json: {"wrote": FILE, "rows": n, "problems": [{key, message}]}"""
+    if args.example:
+        print(json.dumps(EXAMPLE, indent=1))
+        print(EXAMPLE_NOTES, file=sys.stderr)
+        return 0
+    if not args.document or not args.output:
+        print("mestra build DOC.json -o FILE (or mestra build --example)", file=sys.stderr)
+        return 2
+    with open(args.document) as fh:
+        doc = json.load(fh)
+    base = os.path.dirname(os.path.abspath(args.document))
+    problems = _check_document(doc, base, appending=False)
+    if problems:
+        return _report_problems(args, problems)
+    mesh = doc.get("mesh") or {}
     try:
-        return str(getattr(ds.callables[identifier], "type", ""))
-    except MestraError:
-        return ""
+        study = create(args.output, writer=doc["writer"], parameters=doc.get("parameters"),
+                       labels=doc.get("labels"), scalars=doc.get("scalars"),
+                       fields=doc.get("fields"), mesh_labels=doc.get("mesh_labels"),
+                       constants={k: tuple(v) for k, v in (doc.get("constants") or {}).items()},
+                       mesh=mesh.get("kind"), per=mesh.get("per"),
+                       coordinates={"units": mesh["units"], "axes": int(mesh.get("axes", 3))}
+                       if mesh else None,
+                       title=doc.get("title"), license=doc.get("license"),
+                       references=doc.get("references"), source=doc.get("source"),
+                       generalisation_group=doc.get("generalisation_group"))
+        with study:
+            if mesh.get("kind") == "shared":
+                z = np.load(os.path.join(base, mesh["file"]))
+                cells = (z["types"], z["offsets"], z["connectivity"]) if "types" in z else None
+                labels = {k: z[k] for k in (doc.get("mesh_labels") or {})}
+                if mesh["per"] == "fixed":
+                    study.set_mesh(z["points"], cells, labels)
+                else:
+                    study.set_mesh(cells=cells, labels=labels, n_nodes=int(z["n_nodes"]))
+            n = _add_rows(study, doc, base, set(doc.get("fields") or {}), set(doc.get("labels") or {}))
+    except Problems as e:
+        _cleanup(args.output)
+        return _report_problems(args, e.problems)
+    except MestraError as e:
+        _cleanup(args.output)
+        return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
+    _emit(args, {"wrote": args.output, "rows": n, "problems": []},
+          f"wrote {args.output}: {n} run(s)")
+    return 0
 
 
-def _lines(ds: Dataset) -> list[str]:
-    lines = ["  %d row(s), written by %r on %s" % (ds.row_count, ds.writer,
-                                                  ds.created)]
-    if ds.generalisation_group:
-        lines[0] += ", unit of generalisation %s" % ds.generalisation_group
-    if ds.parameters:
-        lines.append("  parameters")
-        for name, p in ds.parameters.items():
-            bounds = "" if p.lower is None and p.upper is None else \
-                "  bounds [%s, %s]" % (p.lower, p.upper)
-            run = "  run_group %s" % p.run_group if p.run_group else ""
-            lines.append("    %-16s %-10s units %s%s%s"
-                         % (name, p.role, p.units, bounds, run))
-    if ds.labels:
-        lines.append("  labels")
-        for name, lab in ds.labels.items():
-            table = lab.table
-            entries = "" if table is None else "  %s (%s%s)" % (
-                lab.category, ", ".join(table.entries[:4]),
-                ", ..." if len(table) > 4 else "")
-            lines.append("    %-16s %-10s%s" % (name, lab.role, entries))
-    if ds.scalars:
-        lines.append("  scalars")
-        for name, slot in ds.scalars.items():
-            lines.append("    %-16s %s" % (name, _slot_line(slot)))
-    if ds.mesh is not None:
-        mesh = ds.mesh
-        lines.append("  mesh  %s, %d node(s), %d cell(s), id %s"
-                     % (mesh.kind, mesh.n_nodes, mesh.n_cells,
-                        mesh.support_id))
-        for where, slot in mesh._arrays().items():
-            lines.append("    %-28s %s" % (where, _slot_line(slot)))
-    if ds.callables:
-        lines.append("  callables")
-        for name in ds.callables:
-            declared = ds._callable_inputs.get(name)
-            lines.append("    %-16s %s%s" % (
-                name, _type_of(ds, name),
-                "" if declared is None else "  inputs %s"
-                % " ".join(sorted(declared))))
-    if ds.notes:
-        lines.append("  notes")
-        for name in sorted(ds.notes):
-            lines.append("    %-16s %s" % (name, ds.notes[name]))
-    return lines
+def cmd_append(args: argparse.Namespace) -> int:
+    """--json: {"appended": FILE, "rows": n, "problems": [{key, message}]}"""
+    if args.document.lower().endswith(".mes"):
+        # Every row of another study file (interface section 6).
+        try:
+            n = mestra_append(args.file, args.document)
+        except MestraError as e:
+            return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
+        _emit(args, {"appended": args.file, "rows": n, "problems": []},
+              f"appended {n} run(s) from {args.document} to {args.file}")
+        return 0
+    with open(args.document) as fh:
+        doc = json.load(fh)
+    base = os.path.dirname(os.path.abspath(args.document))
+    problems = _check_document(doc, base, appending=True)
+    if problems:
+        return _report_problems(args, problems)
+    try:
+        with open_file(args.file) as f:
+            fields = set(f.names("node_fields") + f.names("cell_fields"))
+            labels = set(f.names("labels"))
+        with open_file(args.file, mode="a") as study:
+            n = _add_rows(study, doc, base, fields, labels)
+    except Problems as e:
+        return _report_problems(args, e.problems)
+    except MestraError as e:
+        return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
+    _emit(args, {"appended": args.file, "rows": n, "problems": []},
+          f"appended {n} run(s) to {args.file}")
+    return 0
 
 
-def _slot_line(slot: Slot) -> str:
-    shape = "" if slot._data is None else \
-        "x".join(str(n) for n in slot._data.shape)
-    parts = ["(%s) %s" % (", ".join(slot.dims), shape), slot.role]
-    if slot.units:
-        parts.append("units %s" % slot.units)
-    if slot.served:
-        parts.append("served by %s, output %s" % (slot.callable_id,
-                                                 slot.output))
-    for key in ("statistic", "of", "with_respect_to", "level", "method",
-                "category"):
-        value = getattr(slot, key)
-        if value is not None:
-            parts.append("%s %s" % (key, value))
-    return "  ".join(parts)
+def _report_problems(args: argparse.Namespace, problems: list[tuple[str, str]]) -> int:
+    doc = {"problems": [{"key": k, "message": m} for k, m in problems]}
+    text = f"{len(problems)} problem(s):\n" + "\n".join(f"  {k}: {m}" for k, m in problems)
+    if args.json:
+        print(json.dumps(doc, indent=1))
+    else:
+        print(text, file=sys.stderr)
+    return 1
 
 
-if __name__ == "__main__":                           # pragma: no cover
+def _cleanup(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+# --- get -------------------------------------------------------------------------------------
+
+
+def _rows_arg(text: str | None) -> Any:
+    if text is None:
+        return None
+    try:
+        if ":" in text:
+            a, b = text.split(":", 1)
+            return slice(int(a) if a else None, int(b) if b else None)
+        return [int(x) for x in text.split(",")]
+    except ValueError:
+        raise MestraError("", f"--rows takes positions (3 or 0,2,5) or a range (0:10), not "
+                              f"{text!r}") from None
+
+
+def _get_study(args: argparse.Namespace) -> int:
+    """get -o NAME.mes: the selected rows as a smaller study file, every name
+    kept (mestra.extract). --json: {"wrote": OUT, "rows": n}"""
+    if args.names or args.zone:
+        raise MestraError("", "a smaller study file keeps every name and every node; give no "
+                              "names and no --zone")
+    with open_file(args.file) as f:
+        rows = _rows_arg(args.rows)
+        positions = np.arange(f.row_count)
+        if rows is not None:
+            positions = positions[rows]
+        if args.where:
+            positions = np.intersect1d(f.select(args.where), positions)
+    mestra_extract(args.file, args.output, np.asarray(positions, dtype=np.int64))
+    _emit(args, {"wrote": args.output, "rows": int(len(positions))},
+          f"wrote {len(positions)} run(s) to {args.output}")
+    return 0
+
+
+def cmd_get(args: argparse.Namespace) -> int:
+    """--json: {"wrote": OUT, "names": [...], "rows": n, "shape": {name: [...]},
+    "units": {name: units}}"""
+    out = args.output
+    ext = os.path.splitext(out)[1].lower()
+    if ext == ".mes":
+        return _get_study(args)
+    if not args.names:
+        raise MestraError("", "name what to write (or write a smaller study file: -o NAME.mes)")
+    with open_file(args.file) as f:
+        rows = _rows_arg(args.rows)
+        if args.where:
+            chosen = f.select(args.where)
+            if rows is not None:
+                base = np.arange(f.row_count)[rows]
+                chosen = np.intersect1d(chosen, base)
+            rows = chosen
+        sites = None
+        if args.zone:
+            label, _, value = args.zone.partition("=")
+            d = f.describe(label)
+            if f.type == "changing":
+                # Each row of a changing mesh has its own mesh labels.
+                chosen_rows = np.arange(f.row_count)[rows] if rows is not None else \
+                    np.arange(f.row_count)
+                if len(np.atleast_1d(chosen_rows)) != 1:
+                    raise MestraError("", "--zone on a changing mesh reads one row; give it "
+                                          "with --rows N")
+                codes = f.get_mesh_label(label, row=int(np.atleast_1d(chosen_rows)[0]))
+            else:
+                codes = f.get_mesh_label(label)
+            table = _lib.strings_out("mes_table", f._handle(), _lib.b(d["category"])) \
+                if d.get("category") else None
+            want = table.index(value) if table else int(value)
+            sites = np.flatnonzero(codes == want)
+        data: dict[str, np.ndarray] = {}
+        units: dict[str, str] = {}
+        fields = set(f.names("node_fields") + f.names("cell_fields"))
+        labels = set(f.names("labels"))
+        params = set(f.names("parameters"))
+        zone_at = f.describe(args.zone.partition("=")[0]).get("location") if args.zone else None
+        for name in args.names:
+            if name in fields:
+                at = f.describe(name).get("location")
+                if zone_at and at != zone_at:
+                    raise MestraError("", f"the zone {args.zone} marks {zone_at}s and {name} is at "
+                                          f"{at}s; choose a zone at {at}s")
+                data[name] = f.get_field(name, rows=rows, nodes=sites)
+            elif name in labels:
+                data[name] = f.get_label(name, rows=rows)
+            elif name in params:
+                data[name] = f.get_parameter(name, rows=rows)
+            elif name == "row":
+                data[name] = f.get_row_ids(rows)
+            else:
+                data[name] = f.get_scalar(name, rows=rows)
+            units[name] = f.describe(name).get("units", "") if name != "row" else ""
+        ids = f.get_row_ids(rows)
+    if ext == ".csv":
+        with open(out, "w", newline="") as fh:
+            w = csv.writer(fh)
+            if any(v.ndim > 1 for v in data.values()):
+                if len(data) != 1:
+                    raise SystemExit("a field goes to CSV alone (one line per row)")
+                (name, arr), = data.items()
+                w.writerow(["row"] + [f"{name}[{j}]" for j in range(arr.shape[1])])
+                for i, r in enumerate(arr):
+                    w.writerow([int(ids[i])] + [repr(float(x)) for x in r])
+            else:
+                w.writerow(["row"] + list(data))
+                for i in range(len(ids)):
+                    w.writerow([int(ids[i])] + [str(v[i]) for v in data.values()])
+    elif ext == ".npy":
+        if len(data) != 1:
+            print("a .npy holds one array; use .npz for several", file=sys.stderr)
+            return 2
+        np.save(out, next(iter(data.values())))
+    elif ext == ".npz":
+        np.savez(out, row=ids, **data)
+    else:
+        print(f"OUT ends in .csv, .npy or .npz (got {ext or 'nothing'})", file=sys.stderr)
+        return 2
+    doc = {"wrote": out, "names": list(data), "rows": int(len(ids)),
+           "shape": {k: list(v.shape) for k, v in data.items()}, "units": units}
+    _emit(args, doc, f"wrote {out}: " + ", ".join(
+        f"{k} {'x'.join(map(str, v.shape))} [{units[k]}]" for k, v in data.items()))
+    return 0
+
+
+# --- entry ------------------------------------------------------------------------------------
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="mestra", description=__doc__.split("\n\n")[0])
+    sub = parser.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("info", help="describe a file")
+    p.add_argument("file")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_info)
+    p = sub.add_parser("validate", help="report every rule a file breaks")
+    p.add_argument("file")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_validate)
+    p = sub.add_parser("build", help="build a file from a JSON document")
+    p.add_argument("document", nargs="?")
+    p.add_argument("-o", "--output")
+    p.add_argument("--example", action="store_true", help="print a filled-in document")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_build)
+    p = sub.add_parser("append", help="add runs to a file in place, from a JSON document or "
+                                      "every row of another study file (.mes)")
+    p.add_argument("file")
+    p.add_argument("document")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_append)
+    p = sub.add_parser("get", help="write selected data to a file")
+    p.add_argument("file")
+    p.add_argument("names", nargs="*", help="what to write; none for a smaller study file")
+    p.add_argument("--where")
+    p.add_argument("--rows", help="a:b or i,j,k")
+    p.add_argument("--zone", help="LABEL=NAME: the nodes or cells of one zone")
+    p.add_argument("-o", "--output", required=True)
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_get)
+    args = parser.parse_args(argv)
+    try:
+        return args.func(args)
+    except MestraError as e:
+        if getattr(args, "json", False):
+            print(json.dumps({"error": {"rule": e.rule, "path": e.path, "message": e.message}},
+                             indent=1))
+        else:
+            print(f"error: {e}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
     sys.exit(main())

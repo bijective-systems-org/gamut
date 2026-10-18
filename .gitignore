@@ -1,29 +1,25 @@
+# Python
 __pycache__/
 *.pyc
-.DS_Store
-.build/
-*.mst
-*.h5
-!vectors/**/*.mst
-!vectors/**/*.h5
-
-# C++ build trees
-cpp/build*/
-build/
 *.egg-info/
 dist/
+wheelhouse/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 
-# Three golden files are generated on demand rather than committed,
-# because of their size:
-#   python vectors/generate.py --hostile-deep --wide
-vectors/hostile/deep_groups_callables/case.mes
-vectors/hostile/deep_groups_keys/case.mes
-vectors/cases/wide_keys/case.mes
+# Build trees and built libraries
+build/
+build-*/
+python/mestra/_native/
+matlab/*.mex*
 
-# shared core build trees
-core/build*/
-core/matlab/*.mex*
-core/julia/Mestra/Manifest.toml
+# Julia
+julia/Manifest.toml
+
+# Files the tests and benchmarks write
+*.mes
+!docs/**/*.mes
+bench/results/raw/
+
+.DS_Store
