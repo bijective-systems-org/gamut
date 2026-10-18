@@ -3,9 +3,9 @@
     python docs/assets/make_hero.py STUDY.gamut
 
 The study is the capsule family of docs/benchmarks.md (not public). It writes
-docs/assets/hero.svg, one run of every shape coloured by its heat flux, and
-docs/assets/hero-table.svg, four rows of the run table beside their two
-surface fields. Renders are PyVista's, embedded as PNG.
+docs/assets/hero.svg, three rows of the run table beside their two surface
+fields, and docs/assets/hero-family.svg, one run of every shape coloured by
+its heat flux. Renders are PyVista's.
 """
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ def _colormap(name: str):
     return ListedColormap(matplotlib.colormaps[name](np.linspace(0.12, 1.0, 256)))
 
 
-FIELDS = [("pressure_coefficient", "pressure coefficient", "viridis"),
-          ("heat_flux_ratio", "heat flux ratio", "inferno")]
+FIELDS = [("pressure_coefficient", "pressure_coefficient", "viridis"),
+          ("heat_flux_ratio", "heat_flux_ratio", "inferno")]
 COLUMNS = [("row", "run", "{:d}"), ("member", "shape", "{}"), ("mach", "Mach", "{:.1f}"),
            ("alpha", "α", "{:.1f}°"), ("beta", "β", "{:.1f}°"),
            ("axial_force_coefficient", "C<tspan baseline-shift=\"sub\" font-size=\"9\">A</tspan>", "{:.3f}"),
@@ -48,11 +48,11 @@ STYLE = """<style>
 
 
 def pick(study) -> list[int]:
-    """Four runs on four different shapes, from nose-down to nose-up."""
+    """Three runs on three different shapes, from nose-down to nose-up."""
     alpha = study.get_parameter("alpha")
     member = study.get_label("member")
     chosen, seen = [], set()
-    for target in (-12.0, -3.0, 6.0, 13.0):
+    for target in (-12.0, 1.0, 13.0):
         for row in np.argsort(np.abs(alpha - target)):
             if member[row] not in seen:
                 chosen.append(int(row))
@@ -92,15 +92,17 @@ def crop_all(images: list[Image.Image], pad: int = 6) -> tuple[list[str], float]
     boxes = [im.getbbox() for im in images]
     box = (max(min(b[0] for b in boxes) - pad, 0), max(min(b[1] for b in boxes) - pad, 0),
            max(b[2] for b in boxes) + pad, max(b[3] for b in boxes) + pad)
-    return [png(im.crop(box)) for im in images], (box[3] - box[1]) / (box[2] - box[0])
+    return [png(im.crop(box), width=240) for im in images], (box[3] - box[1]) / (box[2] - box[0])
 
 
-def png(image: Image.Image, width: int | None = None) -> str:
-    """A PNG data URI, at most `width` pixels wide, in 128 colours."""
+def png(image: Image.Image, width: int | None = None, colours: int | None = None) -> str:
+    """A PNG data URI, at most `width` pixels wide, in `colours` colours if given."""
     if width and image.width > width:
         image = image.resize((width, round(image.height * width / image.width)), Image.LANCZOS)
+    if colours:
+        image = image.quantize(colours, method=Image.Quantize.FASTOCTREE)
     buffer = io.BytesIO()
-    image.quantize(128, method=Image.Quantize.FASTOCTREE).save(buffer, format="PNG", optimize=True)
+    image.save(buffer, format="PNG", optimize=True)
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
 
 
@@ -114,7 +116,7 @@ def table_figure(path: str) -> None:
         order = sorted(rows)                       # reads take increasing positions
         values = {name: study.get_field(name, rows=order)[[order.index(r) for r in rows]]
                   for name, _, _ in FIELDS}
-        clims = {name: (float(np.nanpercentile(v, 1)), float(np.nanpercentile(v, 99)))
+        clims = {name: (float(np.nanmin(v)), float(np.nanpercentile(v, 99)))
                  for name, v in values.items()}
         table = []
         for k, row in enumerate(rows):
@@ -140,9 +142,9 @@ def table_figure(path: str) -> None:
     row_h = round(thumb * aspect) + 16
     xs = [0, 50, 170, 226, 286, 346, 410]
     field_x = [470, 470 + thumb + 40]
-    height = top + 24 + row_h * len(table) + 34
+    height = top + 24 + row_h * len(table) + 60
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
-           f'height="{height}" role="img" aria-label="Four rows of a capsule family study: each run\'s '
+           f'height="{height}" role="img" aria-label="Three rows of a capsule family study: each run\'s '
            f'inputs, a result and its split, beside its surface pressure and heating">', STYLE,
            '<rect class="page" width="100%" height="100%"/>',
            f'<text class="ink mono h" x="0" y="20">{os.path.basename(path)}</text>',
@@ -152,7 +154,7 @@ def table_figure(path: str) -> None:
     for (_, label, _), x in zip(COLUMNS, xs):
         out.append(f'<text class="soft" x="{x}" y="{y}">{label}</text>')
     for (_, label, _), x in zip(FIELDS, field_x):
-        out.append(f'<text class="soft" x="{x + thumb / 2:.0f}" y="{y}" text-anchor="middle">{label}</text>')
+        out.append(f'<text class="soft mono" x="{x + thumb / 2:.0f}" y="{y}" text-anchor="middle">{label}</text>')
     out.append(f'<line class="rule" x1="0" y1="{y + 8}" x2="{width}" y2="{y + 8}"/>')
     for k, (cells_text, images) in enumerate(table):
         y0 = top + 24 + k * row_h
@@ -163,10 +165,20 @@ def table_figure(path: str) -> None:
             out.append(f'<image href="{image}" x="{x}" y="{y0 + (row_h - thumb * aspect) / 2:.0f}" '
                        f'width="{thumb}" height="{thumb * aspect:.0f}"/>')
         out.append(f'<line class="rule" x1="0" y1="{y0 + row_h}" x2="{width}" y2="{y0 + row_h}"/>')
-    out.append(f'<text class="soft" x="0" y="{height - 10}">and {total - len(table):,} more rows; '
-               f'every field is one block of runs × nodes</text>')
+    bar_y = top + 24 + row_h * len(table) + 14
+    for (name, _, cmap), x in zip(FIELDS, field_x):
+        colours = _colormap(cmap)(np.linspace(0, 1, 9))
+        stops = "".join(f'<stop offset="{k / 8:.3f}" stop-color="#{int(c[0] * 255):02x}{int(c[1] * 255):02x}'
+                        f'{int(c[2] * 255):02x}"/>' for k, c in enumerate(colours))
+        lo, hi = clims[name]
+        out.append(f'<defs><linearGradient id="g_{name}">{stops}</linearGradient></defs>')
+        out.append(f'<rect x="{x}" y="{bar_y}" width="{thumb}" height="8" fill="url(#g_{name})"/>')
+        out.append(f'<text class="soft" x="{x}" y="{bar_y + 22}">{lo:.1f}</text>')
+        out.append(f'<text class="soft" x="{x + thumb}" y="{bar_y + 22}" text-anchor="end">≥ {hi:.1f}</text>')
+    out.append(f'<text class="soft" x="0" y="{bar_y + 8}">and {total - len(table):,} more rows; '
+               f'each field is one block of runs × nodes</text>')
     out.append("</svg>")
-    with open(os.path.join(HERE, "hero-table.svg"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(HERE, "hero.svg"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(out) + "\n")
 
 
@@ -206,12 +218,12 @@ def family_figure(path: str) -> None:
            f'at {n_nodes:,} nodes; one of each shape\'s {runs_each} runs, the one nearest 10° incidence</text>']
     for k, image in enumerate(images):
         x, y = (k % cols) * w, top + (k // cols) * (h + 4)
-        out.append(f'<image href="{png(image.crop(box), 2 * round(w))}" x="{x:.1f}" y="{y:.1f}" '
+        out.append(f'<image href="{png(image.crop(box), 2 * round(w), colours=128)}" x="{x:.1f}" y="{y:.1f}" '
                    f'width="{w:.1f}" height="{h:.1f}"/>')
     out.append(f'<text class="soft" x="0" y="{height - 8:.0f}">{total:,} runs in {size / 1e6:.0f} MB. '
-               f'Each field is one block of runs × nodes, and node k is the same point on every shape.</text>')
+               f'Each field is one block of runs × nodes; node k is the corresponding point on every shape.</text>')
     out.append("</svg>")
-    with open(os.path.join(HERE, "hero.svg"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(HERE, "hero-family.svg"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(out) + "\n")
 
 

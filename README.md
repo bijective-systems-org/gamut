@@ -27,7 +27,7 @@ xarray and the netCDF tools open them too, and a published specification
 says what every array in them means.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/hero.svg" alt="Forty-four capsule shapes from one study file, each coloured by the heat flux on its surface in one run." width="760">
+  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/hero.svg" alt="Three rows of a capsule study file: each run's number, shape, Mach number, angles, axial force coefficient and train or test split, beside renders of its surface pressure and heat flux." width="760">
 </p>
 
 ## Example
@@ -77,7 +77,7 @@ CHECK(gamut_read(f, "cp", NULL, &one_node, GAMUT_FLOAT64, cp, sizeof cp, &err));
 CHECK(gamut_close(f, &err));
 ```
 
-All four print the same values:
+All four read the same values, which each complete example prints:
 
 ```text
 cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86

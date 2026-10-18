@@ -23,7 +23,8 @@ ASSETS = os.path.join(ROOT, "docs", "assets")
 
 NAMES = {"gamut": "Gamut", "gamut_threads": "Gamut, 4 threads", "vtk_folder": "VTK folder", "vtk_zip": "VTK folder, zipped",
          "hdf5_per_run": "HDF5, a group per run", "netcdf": "netCDF-4 (xarray)",
-         "zarr": "Zarr (xarray)", "parquet": "Parquet, run table only"}
+         "zarr": "Zarr (xarray)", "parquet": "Parquet, run table only", "vtkhdf": "VTKHDF, a step per run",
+         "npz_per_run": "NumPy, a file per run", "npy": "NumPy arrays, uncompressed"}
 READS = {"open": "Open", "one_run": "One run", "one_node": "One node, every run",
          "region": "A region, every run", "query": "Runs by condition"}
 
@@ -110,7 +111,8 @@ def size_figure(cases: list[tuple[str, dict]]) -> str:
     for label, r in cases:
         base = r["formats"]["vtk_folder"]["bytes"]
         items.append((label, None, "", False))
-        for fmt in ("gamut", "vtk_folder", "vtk_zip", "hdf5_per_run", "netcdf", "zarr"):
+        for fmt in ("gamut", "vtk_folder", "vtk_zip", "vtkhdf", "hdf5_per_run", "netcdf", "zarr",
+                    "npz_per_run", "npy"):
             if fmt in r["formats"]:
                 f = r["formats"][fmt]
                 items.append((NAMES[fmt], f["bytes"] / base, megabytes(f["bytes"]),
@@ -126,12 +128,17 @@ def read_figure(r: dict, read: str, title: str, subtitle: str) -> str:
     return bars(title, subtitle, items, time_axis=True)
 
 
+WORDS = {5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine"}
+
+
 def summary_figure(r: dict) -> str:
-    """The README's figure: one study, four measures, the same five formats in
+    """The README's figure: one study, four measures, the same formats in
     the same order in every panel, each panel on its own linear scale."""
-    formats = ["gamut", "hdf5_per_run", "netcdf", "zarr", "vtk_folder"]
+    formats = [f for f in ("gamut", "hdf5_per_run", "netcdf", "vtkhdf", "zarr", "npz_per_run", "npy",
+                           "vtk_folder") if f in r["formats"]]
     labels = {"gamut": "Gamut", "hdf5_per_run": "HDF5, a group per run", "netcdf": "netCDF-4",
-              "zarr": "Zarr", "vtk_folder": "VTK files"}
+              "vtkhdf": "VTKHDF", "zarr": "Zarr", "npz_per_run": "NumPy, a file per run",
+              "npy": "NumPy, uncompressed", "vtk_folder": "VTK files"}
     panels = [[("Size on disk", lambda f: f["bytes"], lambda f: megabytes(f["bytes"])),
                ("Read one run", lambda f: f["one_run"]["median_s"], lambda f: seconds(f["one_run"]["median_s"]))],
               [("Choose runs by condition, read a result of each", lambda f: f["query"]["median_s"],
@@ -145,9 +152,8 @@ def summary_figure(r: dict) -> str:
     height = top + band * len(panels)
     shape = r["shape"]
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
-           f'height="{height}" role="img" aria-label="Size and read times of Gamut, HDF5, netCDF-4, Zarr '
-           f'and VTK files for one study">', STYLE, '<rect class="page" width="100%" height="100%"/>',
-           f'<text class="ink h" x="0" y="18">One study in five formats</text>',
+           f'height="{height}" role="img" aria-label="Size and read times of one study in eight formats">', STYLE, '<rect class="page" width="100%" height="100%"/>',
+           f'<text class="ink h" x="0" y="18">One study in {WORDS[len(formats)]} formats</text>',
            f'<text class="soft" x="0" y="36">{shape["runs"]:,} runs of a capsule family on one '
            f'{shape["nodes"]:,}-node mesh; shorter is better</text>']
     for b, pair in enumerate(panels):
