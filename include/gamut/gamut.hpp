@@ -48,12 +48,26 @@ inline void check(int status, const gamut_error& e) {
 
 inline const char* or_null(const std::string& s) { return s.empty() ? nullptr : s.c_str(); }
 
-inline std::vector<std::string> take(gamut_strings* s) {
-  std::vector<std::string> out;
-  for (int64_t i = 0; i < gamut_strings_count(s); ++i) out.emplace_back(gamut_strings_get(s, i));
-  gamut_strings_free(s);
-  return out;
-}
+// Owns a list of strings from the library until it goes out of scope.
+struct Strings {
+  gamut_strings* s = nullptr;
+  Strings() = default;
+  Strings(const Strings&) = delete;
+  Strings& operator=(const Strings&) = delete;
+  ~Strings() { gamut_strings_free(s); }
+  std::vector<std::string> take() const {
+    std::vector<std::string> out;
+    for (int64_t i = 0; i < gamut_strings_count(s); ++i) out.emplace_back(gamut_strings_get(s, i));
+    return out;
+  }
+};
+
+// The limits of docs/security.md that the core applies to a read and to a
+// selection, checked here too so that nothing that would be refused is
+// allocated first.
+constexpr int64_t kMaxReadElements = int64_t(1) << 31;
+constexpr int64_t kMaxReadBytes = int64_t(1) << 33;
+constexpr int64_t kMaxRowsSelected = int64_t(1) << 27;
 
 inline std::vector<const char*> pointers(const std::vector<std::string>& items) {
   std::vector<const char*> out;
@@ -71,8 +85,9 @@ template <> constexpr int dtype<int8_t>() { return GAMUT_INT8; }
 
 }  // namespace detail
 
-// Rows, nodes or cells to read: everything (the default, or gamut::all), a
-// range [start, stop), or strictly increasing positions ({0, 4, 9}).
+// Rows, nodes or cells to read: everything (the default, gamut::all, or {}),
+// a range [start, stop), or strictly increasing positions ({0, 4, 9}; an
+// empty vector of positions selects nothing).
 class Selection {
  public:
   Selection() = default;
@@ -85,16 +100,13 @@ class Selection {
     s.stop_ = stop;
     return s;
   }
-  const gamut_sel* get() const {
-    sel_ = {kind_, start_, stop_, index_.data(), static_cast<int64_t>(index_.size())};
-    return &sel_;
-  }
+  // The selection in the C interface's terms, valid while this one lives.
+  gamut_sel c() const { return {kind_, start_, stop_, index_.data(), static_cast<int64_t>(index_.size())}; }
 
  private:
   int kind_ = GAMUT_SEL_ALL;
   int64_t start_ = 0, stop_ = 0;
   std::vector<int64_t> index_;
-  mutable gamut_sel sel_{};
 };
 
 inline const Selection all{};
@@ -105,6 +117,7 @@ template <class T>
 struct Array {
   std::vector<int64_t> shape;
   std::vector<T> values;
+  T operator[](size_t i) const { return values[i]; }
   T operator()(int64_t i, int64_t j) const { return values[static_cast<size_t>(i * shape.at(1) + j)]; }
   size_t size() const { return values.size(); }
   typename std::vector<T>::const_iterator begin() const { return values.begin(); }
@@ -146,9 +159,14 @@ inline Relation derivative_of(const std::string& of, const std::string& with_res
   return {of, "", std::nullopt, with_respect_to, axis};
 }
 
-// A run's parameters and scalars as numbers, its labels by name.
-using Values = std::map<std::string, std::variant<double, std::string>>;
-// A run's fields, one value per node or cell.
+// A run's parameters and scalars as numbers (integers stay integers), its
+// labels by name.
+using Values = std::map<std::string, std::variant<double, int64_t, std::string>>;
+// Many runs at once: a column per name, one entry per run.
+using Columns = std::map<std::string, std::variant<std::vector<double>, std::vector<int64_t>,
+                                                   std::vector<std::string>>>;
+// A run's fields, one value per node or cell (for add_runs, every run's
+// values one after another).
 using Fields = std::map<std::string, std::vector<double>>;
 
 class Study;
@@ -184,6 +202,11 @@ class Study {
     detail::check(gamut_close(f_, &e), e);
     f_ = nullptr;
   }
+  // Gives up on the file without finishing it; with remove, deletes a file
+  // this study created (a file opened to append is never deleted).
+  void abandon(bool remove = true) noexcept {
+    if (f_) gamut_abandon(std::exchange(f_, nullptr), remove ? 1 : 0);
+  }
   gamut_file* handle() const { return f_; }
 
   // --- writing -----------------------------------------------------------
@@ -204,10 +227,10 @@ class Study {
   }
   // With the bounds the values lie in (a model file's domain).
   void declare_parameter(const std::string& name, const std::string& role, const std::string& units,
-                         double lower, double upper) {
+                         double lower, double upper, const std::string& run_group = "") {
     gamut_error e{};
     detail::check(gamut_declare_parameter(need_writer(), name.c_str(), role.c_str(), units.c_str(),
-                                          GAMUT_AS_GIVEN, 1, lower, upper, "", &e), e);
+                                          GAMUT_AS_GIVEN, 1, lower, upper, run_group.c_str(), &e), e);
   }
   // role: "categorical", "status", "group" or "split"; without categories
   // the table grows as names appear.
@@ -270,30 +293,61 @@ class Study {
                   const std::optional<Geometry>& geometry = std::nullopt) {
     gamut_error e{};
     detail::check(gamut_batch_begin(need_writer(), 1, &e), e);
-    std::string member;
+    std::optional<std::string> member;
     for (const auto& [name, value] : values) {
       if (const double* number = std::get_if<double>(&value)) {
         detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, number, 1, &e), e);
+      } else if (const int64_t* integer = std::get_if<int64_t>(&value)) {
+        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_INT64, integer, 1, &e), e);
       } else {
         const char* label = std::get<std::string>(value).c_str();
         detail::check(gamut_batch_names(f_, name.c_str(), &label, 1, &e), e);
         if (name == group_) member = std::get<std::string>(value);
       }
     }
-    for (const auto& [name, field] : fields)
-      detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, field.data(),
-                                       static_cast<int64_t>(field.size()), &e), e);
+    stage_fields(fields);
     if (geometry) {
-      if (!group_.empty() && member.empty())
+      if (!group_.empty() && !member)
         throw Error("E2", "give " + group_ + " by name so the geometry belongs to its member");
       detail::check(gamut_geometry_begin(f_, &e), e);
       stage(geometry->points, geometry->cells ? &*geometry->cells : nullptr, geometry->labels);
       detail::check(group_.empty() ? gamut_batch_geometry_for_row(f_, &e)
-                                   : gamut_batch_geometry_for_member(f_, member.c_str(), &e), e);
+                                   : gamut_batch_geometry_for_member(f_, member->c_str(), &e), e);
     }
     int64_t id = 0;
     detail::check(gamut_batch_commit(f_, &id, &e), e);
     return id;
+  }
+
+  // Adds many runs at once, all or nothing, on a mesh whose geometry is
+  // fixed or set already; returns their ids.
+  std::vector<int64_t> add_runs(const Columns& columns, const Fields& fields = {}) {
+    if (columns.empty()) throw Error("E5", "add_runs needs at least one column");
+    int64_t n = -1;
+    for (const auto& [name, column] : columns) {
+      const int64_t m = std::visit([](const auto& v) { return static_cast<int64_t>(v.size()); }, column);
+      if (n >= 0 && m != n) throw Error("E5", "every column needs the same number of runs; " + name + " has " +
+                                              std::to_string(m) + ", not " + std::to_string(n));
+      n = m;
+    }
+    gamut_error e{};
+    detail::check(gamut_batch_begin(need_writer(), n, &e), e);
+    for (const auto& [name, column] : columns) {
+      if (const auto* numbers = std::get_if<std::vector<double>>(&column)) {
+        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, numbers->data(), n, &e), e);
+      } else if (const auto* integers = std::get_if<std::vector<int64_t>>(&column)) {
+        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_INT64, integers->data(), n, &e), e);
+      } else {
+        const std::vector<const char*> names = detail::pointers(std::get<std::vector<std::string>>(column));
+        detail::check(gamut_batch_names(f_, name.c_str(), names.data(), n, &e), e);
+      }
+    }
+    stage_fields(fields);
+    int64_t first = 0;
+    detail::check(gamut_batch_commit(f_, &first, &e), e);
+    std::vector<int64_t> ids(static_cast<size_t>(n));
+    for (int64_t i = 0; i < n; ++i) ids[static_cast<size_t>(i)] = first + i;
+    return ids;
   }
 
   // --- reading -----------------------------------------------------------
@@ -305,16 +359,16 @@ class Study {
   // "cell_fields", "node_labels", "cell_labels".
   std::vector<std::string> names(const std::string& group) const {
     gamut_error e{};
-    gamut_strings* s = nullptr;
-    detail::check(gamut_names(need_reader(), group.c_str(), &s, &e), e);
-    return detail::take(s);
+    detail::Strings s;
+    detail::check(gamut_names(need_reader(), group.c_str(), &s.s, &e), e);
+    return s.take();
   }
   // What the file says about a name, or with no name about itself.
   std::map<std::string, std::string> describe(const std::string& name = "") const {
     gamut_error e{};
-    gamut_strings *k = nullptr, *v = nullptr;
-    detail::check(gamut_describe(need_reader(), name.c_str(), &k, &v, &e), e);
-    const std::vector<std::string> keys = detail::take(k), values = detail::take(v);
+    detail::Strings k, v;
+    detail::check(gamut_describe(need_reader(), name.c_str(), &k.s, &v.s, &e), e);
+    const std::vector<std::string> keys = k.take(), values = v.take();
     std::map<std::string, std::string> out;
     for (size_t i = 0; i < keys.size(); ++i) out[keys[i]] = values[i];
     return out;
@@ -326,14 +380,18 @@ class Study {
     if (table == d.end() || table->second.empty())
       throw Error("", name + " has no category table; its codes are its values");
     gamut_error e{};
-    gamut_strings* s = nullptr;
-    detail::check(gamut_table(f_, table->second.c_str(), &s, &e), e);
-    return detail::take(s);
+    detail::Strings s;
+    detail::check(gamut_table(f_, table->second.c_str(), &s.s, &e), e);
+    return s.take();
   }
   // The positions of the rows a condition selects ("mach > 0.7 and
   // status == converged"), in increasing order.
   std::vector<int64_t> select(const std::string& where) const {
-    std::vector<int64_t> out(static_cast<size_t>(std::max<int64_t>(row_count(), 1)));
+    const int64_t rows = row_count();
+    if (rows > detail::kMaxRowsSelected)
+      throw Error("E23", "where: the file has " + std::to_string(rows) + " rows, more than the " +
+                         std::to_string(detail::kMaxRowsSelected) + " a selection scans");
+    std::vector<int64_t> out(static_cast<size_t>(std::max<int64_t>(rows, 1)));
     int64_t n = 0;
     gamut_error e{};
     detail::check(gamut_select(f_, where.c_str(), out.data(), static_cast<int64_t>(out.size()), &n, &e), e);
@@ -354,9 +412,10 @@ class Study {
   }
   std::vector<std::string> get_label(const std::string& name, const Selection& rows = all) const {
     gamut_error e{};
-    gamut_strings* s = nullptr;
-    detail::check(gamut_label_names(need_reader(), name.c_str(), rows.get(), &s, &e), e);
-    return detail::take(s);
+    detail::Strings s;
+    const gamut_sel r = rows.c();
+    detail::check(gamut_label_names(need_reader(), name.c_str(), &r, &s.s, &e), e);
+    return s.take();
   }
   double get_constant(const std::string& name) const { return read<double>(name, all, all).values.at(0); }
   std::vector<int64_t> get_row_ids(const Selection& rows = all) const {
@@ -364,8 +423,9 @@ class Study {
   }
   // The points a run used (nodes x axes); no row for a fixed geometry.
   Array<double> get_points(std::optional<int64_t> row = std::nullopt) const {
+    if (!row && info("per") != "fixed") throw Error("", "this mesh's geometry changes; give the row");
     Array<double> a = read<double>("coordinates", one(row), all);
-    if (a.shape.size() == 3) a.shape.erase(a.shape.begin());   // one row of a shared mesh
+    if (row && a.shape.size() == 3) a.shape.erase(a.shape.begin());   // the one row asked for
     return a;
   }
   Cells get_cells(std::optional<int64_t> row = std::nullopt) const {
@@ -381,16 +441,24 @@ class Study {
   template <class T>
   Array<T> read(const std::string& name, const Selection& rows, const Selection& sites) const {
     gamut_error e{};
+    const gamut_sel r = rows.c(), s = sites.c();
     int64_t shape[4] = {0, 0, 0, 0};
     int rank = 0;
-    detail::check(gamut_shape(need_reader(), name.c_str(), rows.get(), sites.get(), shape, &rank, &e), e);
+    detail::check(gamut_shape(need_reader(), name.c_str(), &r, &s, shape, &rank, &e), e);
     Array<T> a;
     a.shape.assign(shape, shape + rank);
     int64_t n = 1;
-    for (int64_t d : a.shape) n *= d;
+    for (int64_t d : a.shape) {
+      if (d < 0 || (d > 0 && n > detail::kMaxReadElements / d))
+        throw Error("E23", name + ": a read of more than " + std::to_string(detail::kMaxReadElements) +
+                           " elements is refused; read a part at a time");
+      n *= d;
+    }
+    const int64_t bytes = n * static_cast<int64_t>(sizeof(T));
+    if (n > detail::kMaxReadElements || bytes > detail::kMaxReadBytes)
+      throw Error("E23", name + ": a read of " + std::to_string(bytes) + " bytes is refused; read a part at a time");
     a.values.resize(static_cast<size_t>(n));
-    detail::check(gamut_read(f_, name.c_str(), rows.get(), sites.get(), detail::dtype<T>(), a.values.data(),
-                             n * static_cast<int64_t>(sizeof(T)), &e), e);
+    detail::check(gamut_read(f_, name.c_str(), &r, &s, detail::dtype<T>(), a.values.data(), bytes, &e), e);
     return a;
   }
   // Decompresses field reads in that many threads.
@@ -423,9 +491,9 @@ class Study {
   }
   std::string info(const char* key) const {
     gamut_error e{};
-    gamut_strings* s = nullptr;
-    detail::check(gamut_info(need_reader(), key, &s, &e), e);
-    const std::vector<std::string> v = detail::take(s);
+    detail::Strings s;
+    detail::check(gamut_info(need_reader(), key, &s.s, &e), e);
+    const std::vector<std::string> v = s.take();
     return v.empty() ? std::string() : v[0];
   }
   static Selection one(std::optional<int64_t> row) { return row ? Selection{*row} : Selection{}; }
@@ -446,6 +514,9 @@ class Study {
       detail::check(gamut_geometry_points(f_, GAMUT_FLOAT64, points.data(),
                                           static_cast<int64_t>(points.size()) / axes_, axes_, &e), e);
     }
+    if (cells && cells->offsets.size() != cells->types.size() + 1)
+      throw Error("E5", "cells: offsets need one more entry than there are cells (" +
+                        std::to_string(cells->types.size() + 1) + "), not " + std::to_string(cells->offsets.size()));
     if (cells)
       detail::check(gamut_geometry_cells(f_, cells->types.data(), static_cast<int64_t>(cells->types.size()),
                                          cells->offsets.data(), cells->connectivity.data(),
@@ -453,6 +524,13 @@ class Study {
     for (const auto& [name, values] : labels)
       detail::check(gamut_geometry_label(f_, name.c_str(), values.data(), static_cast<int64_t>(values.size()),
                                          &e), e);
+  }
+
+  void stage_fields(const Fields& fields) {
+    gamut_error e{};
+    for (const auto& [name, field] : fields)
+      detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, field.data(),
+                                       static_cast<int64_t>(field.size()), &e), e);
   }
 
   gamut_file* f_ = nullptr;
@@ -491,9 +569,11 @@ inline Study open(const std::string& path, const std::string& mode, int threads)
   {
     const Study reader = open(path, "r");
     per = reader.info("per");
-    const std::map<std::string, std::string> c = reader.describe("coordinates");
-    const auto found = c.find("axes");
-    if (found != c.end()) axes = std::stoi(found->second);
+    if (!reader.info("mesh_kind").empty()) {
+      const std::map<std::string, std::string> c = reader.describe("coordinates");
+      const auto found = c.find("axes");
+      if (found != c.end()) axes = std::stoi(found->second);
+    }
   }
   detail::check(gamut_open_append(path.c_str(), &f, &e), e);
   Study s(f, true);
@@ -512,7 +592,8 @@ inline int64_t append(const std::string& dst, const std::string& src) {
 // Writes the chosen runs of src as a new file, their ids kept.
 inline void extract(const std::string& src, const std::string& dst, const Selection& rows) {
   gamut_error e{};
-  detail::check(gamut_extract(src.c_str(), dst.c_str(), rows.get(), &e), e);
+  const gamut_sel r = rows.c();
+  detail::check(gamut_extract(src.c_str(), dst.c_str(), &r, &e), e);
 }
 // Rewrites a file with the default layout, keeping its identity.
 inline void write_copy(const std::string& src, const std::string& dst) {
@@ -532,14 +613,17 @@ inline Report validate(const std::string& path) {
   gamut_error e{};
   gamut_report* r = nullptr;
   detail::check(gamut_validate(path.c_str(), &r, &e), e);
+  struct Free {
+    gamut_report* r;
+    ~Free() { gamut_report_free(r); }
+  } owner{r};
   Report out;
   for (int64_t i = 0; i < gamut_report_count(r); ++i) {
     const char *rule = "", *severity = "", *where = "", *message = "";
     gamut_report_get(r, i, &rule, &severity, &where, &message);
-    Finding f{rule, severity, where, message};
+    Finding f{rule ? rule : "", severity ? severity : "", where ? where : "", message ? message : ""};
     (f.severity == "error" ? out.errors : out.warnings).push_back(std::move(f));
   }
-  gamut_report_free(r);
   out.ok = out.errors.empty();
   return out;
 }

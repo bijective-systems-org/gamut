@@ -215,7 +215,7 @@ against 124 ms from its VTK file.
 | Python 3.10 or later | `pip install gamut-format` |
 | MATLAB | `build_mex(core)` once in the `matlab` folder of a checkout |
 | Julia 1.9 or later | `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia")` |
-| C++ and C | CMake build and install, then `find_package(gamut)` and `#include <gamut/gamut.hpp>` |
+| C++ and C | CMake build and install, then `find_package(gamut)`; include `gamut/gamut.hpp` (C++17) or `gamut/gamut.h` (C) |
 
 The Python wheels for macOS, Linux and Windows contain the core with HDF5
 linked in. MATLAB and Julia use the same core: the wheel's

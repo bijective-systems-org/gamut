@@ -108,6 +108,8 @@ elseif(UNIX)
   endif()
 endif()
 set_target_properties(gamut PROPERTIES OUTPUT_NAME gamut)
+# gamut.hpp needs C++17 in the programs that include it.
+target_compile_features(gamut INTERFACE cxx_std_17)
 
 if(GAMUT_BUILD_TESTS)
   enable_testing()

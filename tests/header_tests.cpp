@@ -221,6 +221,91 @@ void test_copies_and_errors() {
   CHECK(!gamut::version().empty());
 }
 
+void test_integers_batches_and_reads() {
+  {
+    auto s = gamut::create("batches.gamut", "header tests");
+    s.declare_label("run", "group");
+    s.declare_parameter("t", "time", "s", "run");
+    s.declare_parameter("n", "design", "1");
+    s.declare_scalar("cl", "1");
+    CHECK(s.handle() != nullptr);
+    gamut::Study moved = std::move(s);                            // the file moves with the study
+    CHECK(s.handle() == nullptr);
+    CHECK(moved.add_run({{"run", "a"}, {"t", 0.0}, {"n", 3}, {"cl", 0.5}}) == 0);
+    const std::vector<int64_t> ids = moved.add_runs(
+        {{"run", std::vector<std::string>{"a", "b", "b"}}, {"t", std::vector<double>{1.0, 0.0, 1.0}},
+         {"n", std::vector<int64_t>{3, 4, 4}}, {"cl", std::vector<double>{0.6, 0.7, 0.8}}});
+    CHECK((ids == std::vector<int64_t>{1, 2, 3}));
+    CHECK(refused([&] { moved.add_runs({{"t", std::vector<double>{1.0}}, {"n", std::vector<int64_t>{}}}); }) == "E5");
+    moved.close();
+  }
+  {
+    auto s = gamut::open("batches.gamut", "a");                    // a table, no mesh
+    s.add_run({{"run", "c"}, {"t", 0.0}, {"n", 5}, {"cl", 0.9}});
+    s.close();
+  }
+  const auto s = gamut::open("batches.gamut");
+  CHECK(s.row_count() == 5);
+  CHECK(s.describe("n")["dtype"] == "int64");
+  CHECK((s.read<int64_t>("n", gamut::all, gamut::all).values == std::vector<int64_t>{3, 3, 4, 4, 5}));
+  CHECK((s.read<int32_t>("n", {4}, gamut::all).values == std::vector<int32_t>{5}));
+  CHECK(std::fabs(s.read<float>("cl", {1}, gamut::all).values[0] - 0.6f) < 1e-6f);
+  CHECK((s.get_scalar("cl", std::vector<int64_t>{0, 3}) == std::vector<double>{0.5, 0.8}));
+  CHECK(s.get_scalar("cl", std::vector<int64_t>{}).empty());       // no positions, no values
+  CHECK(s.describe("t")["run_group"] == "run");
+  CHECK((s.select("run == b") == std::vector<int64_t>{2, 3}));
+  const gamut::Array<double> cl = s.get_field("cl");               // any name reads as an array
+  double total = 0;
+  for (double v : cl) total += v;
+  CHECK(std::fabs(total - 3.5) < 1e-12 && cl[4] == 0.9);
+}
+
+void test_geometry_per_run_and_members() {
+  {
+    auto s = gamut::create("per_run.gamut", "header tests", "shared", "run");
+    s.declare_coordinates("m", 2);
+    s.declare_parameter("k", "condition", "1");
+    s.declare_field("p", "node", "Pa");
+    s.set_mesh(16, ring_cells(8));
+    for (int k = 0; k < 2; ++k)
+      s.add_run({{"k", double(k)}}, {{"p", std::vector<double>(16, 0.0)}},
+                gamut::Geometry{ring_points(8, 1.0 + k), std::nullopt, {}});
+    s.close();
+  }
+  const auto r = gamut::open("per_run.gamut");
+  CHECK(refused([&] { r.get_points(); }) == "error");            // the geometry changes: give the row
+  const gamut::Array<double> p = r.get_points(1);
+  CHECK((p.shape == std::vector<int64_t>{16, 2}) && std::fabs(p(0, 0) - 2.0) < 1e-12);
+
+  {
+    auto s = gamut::open("family.gamut", "a");
+    s.add_run({{"member", "slim"}, {"gamma", 5.0}}, {{"p", std::vector<double>(16, 0.0)}});
+    s.add_run({{"member", "huge"}, {"gamma", 5.0}}, {{"p", std::vector<double>(16, 9.0)}},
+              gamut::Geometry{ring_points(8, 4.0), std::nullopt, {}});
+    s.close();
+  }
+  const auto f = gamut::open("family.gamut");
+  CHECK(f.row_count() == 6);
+  CHECK(std::fabs(f.get_points(5)(0, 0) - 4.0) < 1e-12);
+  CHECK(gamut::validate("family.gamut").ok);
+}
+
+void test_refusals_before_the_library() {
+  auto s = gamut::create("cells.gamut", "header tests", "shared", "fixed");
+  s.declare_coordinates("m", 2);
+  gamut::Cells short_offsets = ring_cells(8);
+  short_offsets.offsets.pop_back();
+  CHECK(refused([&] { s.set_mesh(ring_points(8, 1.0), short_offsets); }) == "E5");
+  CHECK(refused([&] { s.set_mesh(std::vector<double>(5, 0.0), ring_cells(8)); }) == "E5");
+  s.abandon();
+  CHECK(refused([] { gamut::open("cells.gamut"); }) != "");          // abandoned and removed
+  std::FILE* text = std::fopen("not_a_study.gamut", "w");
+  std::fputs("not HDF5\n", text);
+  std::fclose(text);
+  const gamut::Report report = gamut::validate("not_a_study.gamut");
+  CHECK(!report.ok && !report.errors.empty() && report.errors[0].rule == "E1");
+}
+
 }  // namespace
 
 int main() {
@@ -228,6 +313,9 @@ int main() {
   test_shared_fixed_and_append();
   test_family_and_changing();
   test_copies_and_errors();
+  test_integers_batches_and_reads();
+  test_geometry_per_run_and_members();
+  test_refusals_before_the_library();
   std::printf("%d checks, %d failures\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }

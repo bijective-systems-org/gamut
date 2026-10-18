@@ -33,15 +33,18 @@ study.close();
 `"run"` or `"group:<label>"`). Declarations come next, then the mesh, then
 runs. `points` are nodes × axes in C order and `cells` a `gamut::Cells` in
 VTK's convention, node numbers from 0. Each run gives its parameters and
-scalars as numbers and its labels by name, then its fields; `add_run`
-writes it all or nothing and returns its id. `solve` stands for the
-solver and returns `cp` at every node.
+scalars as numbers (an integer stays an integer) and its labels by name,
+then its fields; `add_run` writes it all or nothing and returns its id,
+and takes a `gamut::Geometry` when the run brings its own points.
+`add_runs` writes many runs at once from a column per name. `solve`
+stands for the solver and returns `cp` at every node.
 
 A call that is refused throws `gamut::Error`, whose `rule()` names the rule
 of the specification (`"E7"`) when one applies and `path()` what it
-concerns. A study closes when it goes out of scope; `close()` does it
-sooner and throws if the file cannot be finished (a shared mesh never
-set), whereas leaving the scope then discards the file.
+concerns. A study closes when it goes out of scope. Call `close()` to
+finish a file you write: it throws if the file cannot be finished (a
+shared mesh never set), whereas leaving the scope then discards the file
+silently. `abandon()` gives up on a file on purpose.
 
 ### Adding runs
 
