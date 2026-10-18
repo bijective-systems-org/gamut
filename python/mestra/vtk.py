@@ -8,7 +8,7 @@
 (or `python -m mestra.vtk ...`).
 
 `import` turns a folder of VTK runs (one .vtu, .vtp or legacy .vtk file per
-run, all on one mesh) into one study file. It needs two small tables beside
+run) into one study file. It needs two small tables beside
 the runs; on the first call it writes them as templates and stops:
 
   parameters.csv   one line per run: the file, then each parameter or label
@@ -28,9 +28,10 @@ the runs; on the first call it writes them as templates and stops:
 A number column is a parameter (float64), a text column a label; the role
 line can say otherwise. A parameter with role `time` and one `group` label
 make a set of transients. Arrays of three components become vectors
-(`U_x`, `U_y`, `U_z` with `vector = U`); integer arrays the same in every
-run become mesh labels. Geometry the same in every run is stored once,
-otherwise per run.
+(`U_x`, `U_y`, `U_z` with `vector = U`); integer arrays become mesh labels
+(on one mesh, the same in every run). Runs with the same cells share one
+mesh, its geometry stored once if it never moves and per run otherwise;
+runs with different cells keep a mesh each (a changing mesh).
 
 `export` writes one .vtu per run back, with parameters.csv and fields.csv,
 so a study round-trips and nothing is locked in.
@@ -252,7 +253,8 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
     if problems:
         raise Problems(problems)
 
-    # First pass: one mesh, the same arrays everywhere; is the geometry fixed?
+    # First pass: the same arrays everywhere; one mesh or a mesh per run;
+    # is the geometry fixed?
     first = from_pyvista(pv.read(os.path.join(base, files[0])))
     types0, offsets0, conn0 = first["cells"]
     if (types0 == 42).any():
@@ -267,17 +269,17 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
     arrays.update({("cell", k): v for k, v in first["cell_data"].items() if k not in skip})
     labels_fixed = {key: True for key, v in arrays.items() if v.dtype.kind in "iu"}
     fixed_geometry = True
+    one_mesh = True          # the same cells in every run; otherwise a mesh per run
     for f in files[1:]:
         run = from_pyvista(pv.read(os.path.join(base, f)))
         t, o, c = run["cells"]
-        if not (np.array_equal(t, types0) and np.array_equal(o, offsets0)
-                and np.array_equal(c, conn0)):
-            differ = _first_difference(t, o, c, types0, offsets0, conn0)
-            problems.append(f"{f}: its cells differ from {files[0]}'s ({differ}); runs on "
-                            "different meshes need a correspondence first, from a mapping or "
-                            "morphing tool")
-            continue
-        if not np.array_equal(run["points"], first["points"]):
+        other = sorted(set(int(x) for x in np.unique(t)) - SPEC_CELLS)
+        if other:
+            problems.append(f"{f}: VTK cell types {other} are not in version 1")
+        if one_mesh and not (np.array_equal(t, types0) and np.array_equal(o, offsets0)
+                             and np.array_equal(c, conn0)):
+            one_mesh = False
+        if one_mesh and not np.array_equal(run["points"], first["points"]):
             fixed_geometry = False
         here = {("node", k): v for k, v in run["point_data"].items() if k not in skip}
         here.update({("cell", k): v for k, v in run["cell_data"].items() if k not in skip})
@@ -286,10 +288,18 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
                             f"{files[0]}'s {sorted(k for _, k in arrays)}")
             continue
         for key, v in here.items():
-            if v.shape != arrays[key].shape or v.dtype.kind != arrays[key].dtype.kind:
-                problems.append(f"{f}: array {key[1]} has another shape or type")
-            elif key in labels_fixed and not np.array_equal(v, arrays[key]):
+            if v.shape[1:] != arrays[key].shape[1:] or v.dtype.kind != arrays[key].dtype.kind:
+                problems.append(f"{f}: array {key[1]} has other components or another type")
+            elif one_mesh and v.shape != arrays[key].shape:
+                problems.append(f"{f}: array {key[1]} has another length")
+            elif key in labels_fixed and not (v.shape == arrays[key].shape
+                                              and np.array_equal(v, arrays[key])):
                 labels_fixed[key] = False
+    if not one_mesh:
+        # Each run keeps its own mesh, and its integer arrays as its own mesh
+        # labels; nothing claims node k of one run is node k of another.
+        fixed_geometry = False
+        labels_fixed = {key: True for key in labels_fixed}
     # Declarations from the first run's arrays.
     field_decl: dict[str, dict] = {}
     mesh_labels: dict[str, dict] = {}
@@ -374,12 +384,14 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
             param_spec[t]["run_group"] = groups[0]
     try:
         with mestra.create(out, writer="mestra-vtk", parameters=param_spec, labels=label_spec,
-                           fields=field_decl, mesh_labels=mesh_labels, mesh="shared",
+                           fields=field_decl, mesh_labels=mesh_labels,
+                           mesh="shared" if one_mesh else "changing",
                            per="fixed" if fixed_geometry else "run",
                            coordinates={"units": coordinate_units, "axes": 3}) as study:
-            study.set_mesh(first["points"] if fixed_geometry else None, first["cells"],
-                           labels={k: arrays[label_source[k]] for k in mesh_labels},
-                           n_nodes=None if fixed_geometry else len(first["points"]))
+            if one_mesh:
+                study.set_mesh(first["points"] if fixed_geometry else None, first["cells"],
+                               labels={k: arrays[label_source[k]] for k in mesh_labels},
+                               n_nodes=None if fixed_geometry else len(first["points"]))
             for i, f in enumerate(files):
                 run = first if i == 0 else from_pyvista(pv.read(os.path.join(base, f)))
                 values: dict[str, Any] = {"file": f}
@@ -395,8 +407,14 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
                     else:
                         for k, part in enumerate(parts):
                             data[part] = np.ascontiguousarray(v[:, k])
-                study.add_run(values, fields=data,
-                              points=None if fixed_geometry else run["points"])
+                if one_mesh:
+                    study.add_run(values, fields=data,
+                                  points=None if fixed_geometry else run["points"])
+                else:
+                    own = {k: run["point_data" if label_source[k][0] == "node" else "cell_data"]
+                           [label_source[k][1]] for k in mesh_labels}
+                    study.add_run(values, fields=data, points=run["points"], cells=run["cells"],
+                                  mesh_labels=own)
     except BaseException:
         # A failed import leaves no partial file behind.
         if os.path.exists(out):
@@ -404,19 +422,10 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
         raise
     report = mestra.validate(out)
     return {"ok": not report.errors, "file": out, "rows": len(files),
-            "geometry": "fixed" if fixed_geometry else "per run",
+            "geometry": "fixed" if fixed_geometry else "per run" if one_mesh else "a mesh per run",
             "fields": sorted(field_decl), "mesh_labels": sorted(mesh_labels),
             "left_out": left_out, "notes": notes,
             "findings": [f"{x.rule} {x.path}: {x.message}" for x in report.findings]}
-
-
-def _first_difference(t, o, c, t0, o0, c0) -> str:
-    if len(t) != len(t0):
-        return f"{len(t)} cells against {len(t0)}"
-    for k in range(len(t)):
-        if t[k] != t0[k] or not np.array_equal(c[o[k]:o[k + 1]], c0[o0[k]:o0[k + 1]]):
-            return f"first at cell {k}"
-    return "connectivity"
 
 
 # --- export -------------------------------------------------------------------------------

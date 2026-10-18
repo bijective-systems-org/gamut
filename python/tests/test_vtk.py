@@ -112,6 +112,34 @@ def test_morphing_geometry_is_stored_per_run(tmp_path):
                                       pv.read(os.path.join(folder, files[2])).points)
 
 
+def test_runs_on_different_meshes_are_a_changing_mesh(tmp_path):
+    folder = str(tmp_path / "runs")
+    os.makedirs(folder)
+    files = []
+    for i, nx in enumerate((4, 5, 7)):                  # each run meshed on its own
+        g = pv.ImageData(dimensions=(nx, 3, 2)).cast_to_unstructured_grid()
+        g.point_data["p"] = np.arange(g.n_points, dtype=np.float64) + 100 * i
+        g.cell_data["U"] = np.ones((g.n_cells, 3), dtype=np.float32) * i
+        g.cell_data["zone"] = (np.arange(g.n_cells) % 2).astype(np.int32)
+        files.append(f"run_{i:03d}.vtu")
+        g.save(os.path.join(folder, files[-1]))
+    fill_tables(folder, files)
+    out = str(tmp_path / "s.mes")
+    report = mestra_vtk.import_folder(folder, out)
+    assert report["ok"] and report["geometry"] == "a mesh per run", report
+    with mestra.open(out) as s:
+        assert s.type == "changing"
+        for row, f in enumerate(files):
+            g = pv.read(os.path.join(folder, f))
+            np.testing.assert_array_equal(s.get_points(row=row), g.points)
+            np.testing.assert_array_equal(s.get_field("p", rows=row), g.point_data["p"])
+            np.testing.assert_array_equal(s.get_mesh_label("zone", row=row), g.cell_data["zone"])
+            assert len(s.get_cells(row=row)[0]) == g.n_cells
+    back = str(tmp_path / "back")
+    mestra_vtk.export_study(out, back)
+    assert pv.read(os.path.join(back, files[2])).n_points == pv.read(os.path.join(folder, files[2])).n_points
+
+
 def test_transients_get_their_run_group(tmp_path):
     folder = str(tmp_path / "runs")
     files = write_runs(folder)
@@ -145,7 +173,7 @@ def test_problems_are_reported_together(tmp_path):
     with pytest.raises(mestra_vtk.Problems) as e:
         mestra_vtk.import_folder(folder, str(tmp_path / "s.mes"))
     text = "\n".join(e.value.problems)
-    assert f"{files[1]}: its cells differ" in text
+    assert f"{files[1]}: its arrays" in text
     assert not os.path.exists(tmp_path / "s.mes")
 
 

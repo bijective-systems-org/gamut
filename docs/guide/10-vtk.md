@@ -56,11 +56,12 @@ written back: ['run_000.vtu', 'run_001.vtu', 'run_002.vtu']
   transient runs ([time series](05-time-series.md)).
 - An array of three components becomes a vector of three fields (`U_x`,
   `U_y`, `U_z`), declared as one vector.
-- An integer array that is the same in every run becomes a mesh label: a
-  zone or a patch.
-- Geometry the same in every run is stored once; otherwise once per run.
-- Every run must have the same cells. Runs on different meshes need a
-  correspondence first, from a mapping or morphing tool.
+- An integer array becomes a mesh label, such as a zone or a patch; on one
+  mesh it must be the same in every run.
+- Runs with the same cells share [one mesh](02-one-mesh.md), its geometry
+  stored once if it never moves and once per run if it does.
+- Runs with different cells, each meshed on its own, keep a mesh each: a
+  [changing mesh](04-changing-meshes.md), read one run at a time.
 
 ## Worth knowing
 
