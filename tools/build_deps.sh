@@ -24,6 +24,13 @@ generator=()
 if command -v ninja > /dev/null 2>&1 && [ "${OS:-}" != "Windows_NT" ]; then
   generator=(-G Ninja)
 fi
+# On Windows the C runtime is linked statically into everything, so the
+# core's DLL needs no Visual C++ redistributable (MATLAB and Julia load it
+# too, without Python's copy of the runtime).
+runtime=()
+if [ "${OS:-}" = "Windows_NT" ]; then
+  runtime=(-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DCMAKE_POLICY_DEFAULT_CMP0091=NEW)
+fi
 
 fetch() {  # url, file, sha256
   local url=$1 file=$downloads/$2 sum=$3
@@ -38,13 +45,15 @@ fetch() {  # url, file, sha256
     echo "build_deps: $2 has SHA-256 $have, expected $sum" >&2
     exit 1
   fi
-  tar -xzf "$file" -C "$downloads"
+  # Relative names: GNU tar reads "C:/..." as a remote host on Windows.
+  (cd "$downloads" && tar -xzf "$2")
 }
 
 build() {  # source dir, build dir, cmake arguments...
   local src=$1 bin=$2
   shift 2
-  cmake -S "$src" -B "$bin" ${generator[@]+"${generator[@]}"} -DCMAKE_BUILD_TYPE=Release \
+  cmake -S "$src" -B "$bin" ${generator[@]+"${generator[@]}"} ${runtime[@]+"${runtime[@]}"} \
+        -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$prefix" -DCMAKE_POSITION_INDEPENDENT_CODE=ON "$@"
   cmake --build "$bin" --config Release --parallel "$jobs"
   cmake --install "$bin" --config Release

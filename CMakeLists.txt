@@ -24,6 +24,9 @@ option(MESTRA_STATIC_HDF5 "Link HDF5 statically into the core" OFF)
 if(MESTRA_STATIC_HDF5)
   set(HDF5_USE_STATIC_LIBRARIES ON)
   set(ZLIB_USE_STATIC_LIBS ON)
+  # With the C runtime linked statically, as tools/build_deps.sh builds
+  # HDF5 and zlib, the DLL needs no Visual C++ redistributable.
+  set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
 endif()
 
 # No multiply and add may fuse into one rounding step: the built-in
