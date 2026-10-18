@@ -205,9 +205,18 @@ def _human(doc: dict) -> str:
             items.append(f"{p['name']} [{p['units']}]{r}")
         lines.append("  parameters  " + ", ".join(items))
     for l in doc["labels"]:
-        counts = l.get("counts")
-        what = ", ".join(f"{n} {c}" for c, n in counts.items() if n) if counts else \
-            ", ".join(l["categories"])
+        counts = {c: n for c, n in (l.get("counts") or {}).items() if n}
+        names = list(counts) if counts else l["categories"]
+        if len(names) > 6:
+            # Many names (a family's members): how many, and a few of them.
+            spread = sorted(set(counts.values()))
+            each = "" if not spread else f", {spread[0]} runs each" if len(spread) == 1 else \
+                f", {spread[0]} to {spread[-1]} runs each"
+            what = f"{len(names)} names{each}: {', '.join(names[:3])}, ..."
+        elif counts:
+            what = ", ".join(f"{n} {c}" for c, n in counts.items())
+        else:
+            what = ", ".join(names)
         lines.append(f"  labels      {l['name']} ({l['role']}): {what}")
     plain = [s for s in doc["scalars"] if not s.get("of")]
     if plain:
