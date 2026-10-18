@@ -7,9 +7,8 @@
 </p>
 
 <p align="center">
-An open file format for parametric simulation studies.<br>
-Every run, the mesh it ran on and the units of every number, in one file<br>
-that Python, MATLAB, Julia and C read the same way.
+An open file format for parametric simulation studies,<br>
+with libraries for Python, MATLAB, Julia and C.
 </p>
 
 <p align="center">
@@ -19,18 +18,18 @@ that Python, MATLAB, Julia and C read the same way.
 ---
 
 A parametric study usually ends as a folder of solver outputs, a spreadsheet
-of inputs and a script that knows how to join them. Gamut keeps all of it in
+of inputs and a script that knows how to join them. Gamut stores the study as
 one compressed file: the runs and their inputs, the results, the mesh and its
-fields, with units, roles and statuses written down. Anyone can share it,
-check it and train models on it without the script.
+fields, with units, roles and statuses written down. Anyone with the file can
+check the study or train a model on it, without the script.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/one-study-one-file.svg" alt="A folder of VTK files, a parameters table and a joining script become one file holding the run table, the mesh, and every field as one block of runs by nodes." width="760">
 </p>
 
-## Measured on real studies
+## Performance
 
-Against the folder of VTK files each study came as:
+Measured on two real studies, against the folder of VTK files each came as:
 
 | | Gamut | VTK files |
 |---|---:|---:|
@@ -39,14 +38,14 @@ Against the folder of VTK files each study came as:
 | Reading one node across all 1,364 runs | **124 ms** | 4.9 s |
 | Reading one run of a 177,000-node airfoil study | **15 ms** | 124 ms |
 
-Choosing runs by a condition and reading them takes a millisecond, sixty
-times faster than HDF5 stored a run per group. Gamut files are about the size
-of netCDF and Zarr. HDF5 written a run at a time reads one small run faster,
-and Zarr's default chunks read one node across many runs faster. The
-[benchmarks](https://github.com/bijective-systems-org/gamut/blob/main/docs/benchmarks.md)
-give every comparison, the method and the machine.
+Choosing runs by a condition and reading them takes about a millisecond,
+sixty times faster than HDF5 stored a run per group. Gamut files are about
+the size of netCDF and Zarr files. HDF5 written a run at a time reads one
+small run faster, and Zarr's default chunks read one node across many runs
+faster. The [benchmarks page](https://github.com/bijective-systems-org/gamut/blob/main/docs/benchmarks.md)
+has the full comparison and how it was measured.
 
-## In a few lines
+## Example
 
 A sweep written one run at a time, as a solver finishes each, then read by
 condition (`points`, `cells` and `pressure` stand for your mesh and your
@@ -66,10 +65,10 @@ with gamut.open("cylinder.gamut") as study:
     cp = study.get_field("cp", rows=rows, nodes=[12])     # runs x nodes
 ```
 
-## The same answer in every language
+## MATLAB, Julia and C
 
-One C++ core does the reading and writing behind every language, so the
-same question gets the same numbers.
+The four libraries share one C++ core, so a query returns the same values in
+every language.
 
 **MATLAB**
 
@@ -99,50 +98,47 @@ double values[9];
 CHECK(gamut_read(f, "cp", &chosen, &one_node, GAMUT_FLOAT64, values, sizeof values, &err));
 ```
 
-Each prints the same line:
+All four print:
 
 ```text
 cp on top of the cylinder where gamma > 2: -1.57 -1.32 -1.08 -0.86
 ```
 
-## Units travel with the numbers
+## Units
 
-Every parameter, result, field and constant must declare its units, in the
+Every parameter, result, field and constant declares its units, in the
 UDUNITS grammar that netCDF-CF uses (`Pa`, `m s-1`, `kg m-3`, `degree`).
-Units that are missing or do not parse are refused when a file is written,
-and reported by `gamut validate` in a file from elsewhere. Python converts as
-it reads:
+Missing or unparseable units are refused when a file is written and reported
+by `gamut validate` in a file from elsewhere. Python converts on read:
 
 ```python
 p_wall = study.get_field("p", rows=rows, nodes=on_wall, units="kPa")
 ```
 
-and a value written as `(72, "km/h")` is stored in the `m s-1` the file
-declares. MATLAB, Julia and C return values in the units they were stored in,
-which `describe` names.
+It converts on write too: a value given as `(72, "km/h")` is stored in the
+`m s-1` the file declares. MATLAB, Julia and C return values in the units
+they were stored in, which `describe` names.
 
-## What else the file knows
+## What a file records
 
-- **What each number is for.** Roles separate design inputs, operating
-  conditions and time; a status label says which runs converged, so training
-  skips the failed ones; a split publishes the train and test sets.
-- **What a fair test holds out.** The file can name the group a fair test
-  leaves out whole, such as one geometry of a family, and a split that leaks
-  it is reported.
-- **Shapes that change, nodes that correspond.** One mesh for every run; a
-  geometry per member of a shape family on one topology, node for node, as
-  field models need; or a mesh per run.
-- **Models in the same terms as the data.** A fitted surrogate is a file of
-  the same shape with no rows, and evaluating it gives an ordinary study.
-- **Checked and safe to open.** `gamut validate` reports every rule a file
-  breaks and where; a file from outside cannot make a reader allocate for
-  sizes it merely claims or follow a link. A shared corpus of valid, broken
-  and hostile files holds every language to the specification.
-- **Made for scripts and agents.** The `gamut` command (`info`, `validate`,
-  `build`, `append`, `get`) answers in JSON with `--json`.
-- **Nothing locked in.** Underneath it is HDF5 laid out as netCDF-4, so
-  h5py, xarray and the netCDF tools read it without this package, and
-  `gamut-vtk` turns a study back into VTK files.
+Besides the values, a file records what they mean. Parameters have a role
+(design input, operating condition or time). A status label marks the runs
+that converged, so training can skip the rest, and a split can publish the
+train and test sets. The file can also name the group a fair test must hold
+out whole, such as one geometry of a family, and a split that mixes it is
+reported. The mesh can be shared by every run, given per member of a family
+of shapes on one topology, or differ from run to run. A fitted model is
+stored as a file of the same shape with no rows, and evaluating it produces
+an ordinary study.
+
+Files are HDF5 laid out as netCDF-4, so h5py, xarray and the netCDF tools
+read them without this package, and `gamut-vtk` converts a study to and from
+VTK files. `gamut validate` reports every rule a file breaks. The libraries
+check sizes before allocating memory and never follow links, which matters
+for files from outside ([security](https://github.com/bijective-systems-org/gamut/blob/main/docs/security.md)),
+and a shared corpus of valid, broken and hostile files holds all four to the
+specification. The `gamut` command (`info`, `validate`, `build`, `append`,
+`get`) prints JSON with `--json`.
 
 ## Install
 
@@ -155,7 +151,7 @@ Until version 1 is on PyPI, install from a checkout with `pip install .`
 instead. MATLAB, Julia and C or C++: see
 [installing](https://github.com/bijective-systems-org/gamut/blob/main/docs/install.md).
 
-## Where next
+## Documentation
 
 - [**Start here**](https://github.com/bijective-systems-org/gamut/blob/main/docs/start-here.md): the first ten minutes, the first day,
   the first week.
