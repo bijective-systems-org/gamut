@@ -27,7 +27,8 @@ no errors, 3 warnings
 ```
 
 `validate` checks the rules of the [specification](../../SPEC.md) and
-names each one a file breaks. Errors make a file invalid; warnings say
+names each one it finds broken, within the [limits](../security.md#the-limits)
+of what it reads. Errors make a file invalid; warnings say
 what a reader should know, such as runs that failed.
 
 ## Taking data out

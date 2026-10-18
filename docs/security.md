@@ -19,7 +19,8 @@ software the reader has installed and registered. The packaged core loads
 no HDF5 filter plugins: the format allows only gzip and shuffle, which
 HDF5 has built in, and a file naming another filter is refused.
 
-`gamut validate` reports each rule a file breaks, with where and why. A
+`gamut validate` reports the rules a file breaks, with where and why,
+within the limits below. A
 read that cannot be carried out safely is refused with the rule and the
 path of what it concerns.
 
