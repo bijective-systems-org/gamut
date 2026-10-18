@@ -23,6 +23,14 @@ def test_relative_links_resolve(page):
     text = re.sub(r"^```.*?^```", "", text, flags=re.M | re.S)       # not inside code
     targets = re.findall(r"\]\(([^)\s]+)\)", text) + re.findall(r'src="([^"]+)"', text)
     for target in targets:
+        # This repository's own absolute links (the README is also PyPI's
+        # page, where relative ones break) are checked as local paths.
+        own = re.match(r"https://(?:github\.com/bijective-systems-org/mestra/(?:blob|tree)/main/|"
+                       r"raw\.githubusercontent\.com/bijective-systems-org/mestra/main/)(.+)", target)
+        if own:
+            path = (ROOT / own.group(1).split("#")[0]).resolve()
+            assert path.exists(), f"{page.relative_to(ROOT)} links to {target}, which does not exist"
+            continue
         if re.match(r"[a-z]+:", target) or target.startswith("#"):
             continue
         path = (page.parent / target.split("#")[0]).resolve()

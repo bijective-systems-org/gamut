@@ -10,7 +10,9 @@ step before.
 
 1. **Install.** `pip install mestra` in a Python 3.10 or later environment
    (other languages: [installing](install.md)). Check it with
-   `mestra --version`.
+   `mestra --version`, which should name `mestra/1` files. Until version 1
+   is released on PyPI, `pip install mestra` brings the earlier 0.1 series;
+   install from a checkout instead, with `pip install .` at its top.
 2. **Run the first two examples.** From a checkout of this repository:
 
    ```bash

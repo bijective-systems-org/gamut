@@ -41,7 +41,10 @@ Each refusal is rule E23, with the path of what was refused. The limits are
 far above what a study needs: a field of 8 GiB is read a part at a time,
 which any of the reads in the [guide](guide/08-reading-parts.md) does. The
 [corpus](../corpus) holds hostile files built to cross each limit, and
-every language is tested against them.
+every language is tested against them. Below the limits, validating takes
+time in proportion to what a file declares: a small file that declares two
+billion cells keeps `mestra validate` busy for about a minute before it
+reports what is wrong.
 
 ## What it does not protect against
 

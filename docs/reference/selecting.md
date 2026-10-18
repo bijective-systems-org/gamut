@@ -20,10 +20,12 @@ A comparison is a name, an operator and a value.
 | Name | Operators | Value |
 |---|---|---|
 | a parameter or a scalar | `==` `!=` `<` `<=` `>` `>=` | a decimal number: `0.7`, `-2`, `1e-5` |
-| a label | `==` `!=` | one of the label's names, in double quotes if it has spaces or any of `( ) " = ! < >` |
+| a label | `==` `!=` | one of the label's names, in double quotes if it has spaces or any of `( ) = ! < >` |
 
 Operators and parentheses need no spaces around them. A single `=` is not
-an operator; the message says which ones are.
+an operator; the message says which ones are. A name that itself holds a
+double quote cannot be written in a condition; choose those runs by
+position instead.
 
 ## Combining
 

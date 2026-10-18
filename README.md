@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="mestra" width="240">
+  <img src="https://raw.githubusercontent.com/bijective-systems-org/mestra/main/docs/assets/logo.svg" alt="mestra" width="240">
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@ with units, roles and statuses written down, so the study can be shared,
 checked and used to train models without the script.
 
 <p align="center">
-  <img src="docs/assets/one-study-one-file.svg" alt="A folder of VTK files, a parameters table and a joining script become one file holding the run table, the mesh, and every field as one block of runs by nodes." width="760">
+  <img src="https://raw.githubusercontent.com/bijective-systems-org/mestra/main/docs/assets/one-study-one-file.svg" alt="A folder of VTK files, a parameters table and a joining script become one file holding the run table, the mesh, and every field as one block of runs by nodes." width="760">
 </p>
 
 ## In a few lines
@@ -58,7 +58,7 @@ with mestra.open("sweep.mes") as study:
 
 On two real studies, one mestra file was six times and two times smaller
 than the folder of VTK files each came as, and read one run, or the runs
-meeting a condition, in milliseconds. The [benchmarks](docs/benchmarks.md)
+meeting a condition, in milliseconds. The [benchmarks](https://github.com/bijective-systems-org/mestra/blob/main/docs/benchmarks.md)
 compare it with VTK, HDF5, netCDF and Zarr, including where it is slower.
 
 ## Install
@@ -68,17 +68,19 @@ pip install mestra            # Python 3.10 or later; wheels for macOS, Linux an
 pip install "mestra[vtk]"     # with VTK import and export
 ```
 
-MATLAB, Julia and C or C++: see [installing](docs/install.md).
+Until version 1 is on PyPI, these bring the earlier 0.1 series: install from
+a checkout with `pip install .` instead. MATLAB, Julia and C or C++: see
+[installing](https://github.com/bijective-systems-org/mestra/blob/main/docs/install.md).
 
 ## Where next
 
-- [**Start here**](docs/start-here.md): the first ten minutes, the first day,
+- [**Start here**](https://github.com/bijective-systems-org/mestra/blob/main/docs/start-here.md): the first ten minutes, the first day,
   the first week.
-- [**Guide**](docs/guide/README.md): one page per concept, each with a
+- [**Guide**](https://github.com/bijective-systems-org/mestra/blob/main/docs/guide/README.md): one page per concept, each with a
   script you can run.
-- [**Specification**](SPEC.md): the format itself, for anyone writing
+- [**Specification**](https://github.com/bijective-systems-org/mestra/blob/main/SPEC.md): the format itself, for anyone writing
   another implementation.
-- [**How it compares**](docs/comparison.md) with VTK, CGNS, Exodus,
+- [**How it compares**](https://github.com/bijective-systems-org/mestra/blob/main/docs/comparison.md) with VTK, CGNS, Exodus,
   netCDF-CF and Zarr.
 
 ## Status
@@ -86,9 +88,9 @@ MATLAB, Julia and C or C++: see [installing](docs/install.md).
 Version 1 of the format (`mestra/1`) is specified and implemented: the C++
 core, Python, MATLAB and Julia, the validator, the command line and VTK
 conversion. It is not yet released on PyPI; until it is, install from a
-checkout with `pip install .` (see [installing](docs/install.md)).
+checkout with `pip install .` (see [installing](https://github.com/bijective-systems-org/mestra/blob/main/docs/install.md)).
 
 ## License
 
-[Apache 2.0](LICENSE). Made by [Bijective Systems](https://github.com/bijective-systems-org).
-If you use mestra in published work, please cite it ([CITATION.cff](CITATION.cff)).
+[Apache 2.0](https://github.com/bijective-systems-org/mestra/blob/main/LICENSE). Made by [Bijective Systems](https://github.com/bijective-systems-org).
+If you use mestra in published work, please cite it ([CITATION.cff](https://github.com/bijective-systems-org/mestra/blob/main/CITATION.cff)).

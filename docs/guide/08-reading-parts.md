@@ -40,8 +40,9 @@ the positions where the label holds a name's code are that zone.
 
 **Units.** Every read takes `units`, and converts from the stored units.
 Conversion needs the `units` extra (`pip install "mestra[units]"`, which
-brings pint); without it, values arrive in the units they were stored in,
-which `describe(name)["units"]` names.
+brings pint); without it, a read that asks for other units is refused.
+Leave `units` out to get values in the units they were stored in, which
+`describe(name)["units"]` names.
 
 ## Worth knowing
 
