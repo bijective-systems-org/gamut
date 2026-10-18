@@ -19,16 +19,21 @@ with libraries for Python, MATLAB, Julia and C.
 
 Gamut is a file format for parametric simulation studies: the hundreds or
 thousands of CFD or FEA runs behind a design sweep, an aerodynamic
-database or a surrogate model. One file holds every run's inputs, results,
-status, mesh and fields, with units, and Python, MATLAB, Julia and C query
-it with the same calls. Files are HDF5 laid out as netCDF-4, so h5py,
+database or a surrogate model. One file holds the run table, each run's
+inputs, results and status, and, when the runs have a mesh, the mesh and
+every field on it, all with units. Python, MATLAB, Julia and C read and
+write it with the same calls. Files are HDF5 laid out as netCDF-4, so h5py,
 xarray and the netCDF tools open them too, and a published specification
 says what every array in them means.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/hero.svg" alt="Forty-four capsule shapes from one study file, each coloured by the heat flux on its surface in one run." width="760">
+</p>
 
 ## Example
 
 Nine runs of potential flow past a cylinder on one mesh: eight written as
-a sweep, a ninth added later, then read back by condition. `points`,
+a sweep, a ninth added later, then read back. `points`,
 `cells` and `solve` stand for your mesh and your solver, and each block
 assumes the library is loaded (`import gamut`, `using Gamut`,
 `#include <gamut/gamut.h>`; in C, `CHECK` stops at an error). The complete
@@ -36,23 +41,20 @@ programs are in [`examples/`](https://github.com/bijective-systems-org/gamut/blo
 
 ### Read
 
-The pressure at the top of the cylinder in every run with circulation
-above 2:
+The pressure coefficient at the top of the cylinder, in every run:
 
 Python
 
 ```python
 with gamut.open("cylinder.gamut") as study:
-    rows = study.select("gamma > 2")
-    cp = study.get_field("cp", rows=rows, nodes=[12])     # runs x nodes
+    cp = study.get_field("cp", nodes=[12])                 # runs x nodes
 ```
 
 MATLAB
 
 ```matlab
 study = gamut.open('cylinder.gamut');
-rows = study.select('gamma > 2');
-cp = study.getField('cp', 'rows', rows, 'nodes', 13);           % runs x nodes, from 1
+cp = study.getField('cp', 'nodes', 13);                         % runs x nodes, from 1
 study.close();
 ```
 
@@ -60,8 +62,7 @@ Julia
 
 ```julia
 cp = Gamut.open("cylinder.gamut") do study
-    rows = Gamut.select(study, "gamma > 2")
-    Gamut.get_field(study, "cp"; rows, nodes=[13])           # runs × nodes, from 1
+    Gamut.get_field(study, "cp"; nodes=[13])                 # runs × nodes, from 1
 end
 ```
 
@@ -69,19 +70,17 @@ C
 
 ```c
 CHECK(gamut_open("cylinder.gamut", &f, &err));
-int64_t rows[9], n = 0, node = 12;
-CHECK(gamut_select(f, "gamma > 2", rows, 9, &n, &err));
-const gamut_sel chosen = {GAMUT_SEL_INDEX, 0, 0, rows, n};
+int64_t node = 12;
 const gamut_sel one_node = {GAMUT_SEL_INDEX, 0, 0, &node, 1};
-double values[9];
-CHECK(gamut_read(f, "cp", &chosen, &one_node, GAMUT_FLOAT64, values, sizeof values, &err));
+double cp[9];                                          /* runs x nodes */
+CHECK(gamut_read(f, "cp", NULL, &one_node, GAMUT_FLOAT64, cp, sizeof cp, &err));
 CHECK(gamut_close(f, &err));
 ```
 
 All four print the same values:
 
 ```text
-cp on top of the cylinder where gamma > 2: -1.57 -1.32 -1.08 -0.86
+cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
 ```
 
 MATLAB and Julia count positions from 1, so node 12 in Python and C is

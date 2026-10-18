@@ -1,4 +1,4 @@
-/* A sweep on one mesh: eight runs written, a ninth added, then read by condition.
+/* A sweep on one mesh: eight runs written, a ninth added, then read.
  *
  * Potential flow past a cylinder at nine values of circulation, on one ring
  * of quadrilaterals. examples/00_readme.py and the MATLAB and Julia
@@ -84,15 +84,13 @@ int main(void) {
   CHECK(gamut_close(f, &err));
 
   CHECK(gamut_open("cylinder.gamut", &f, &err));
-  int64_t rows[9], n = 0, node = 12;
-  CHECK(gamut_select(f, "gamma > 2", rows, 9, &n, &err));
-  const gamut_sel chosen = {GAMUT_SEL_INDEX, 0, 0, rows, n};
+  int64_t node = 12;
   const gamut_sel one_node = {GAMUT_SEL_INDEX, 0, 0, &node, 1};
-  double values[9];
-  CHECK(gamut_read(f, "cp", &chosen, &one_node, GAMUT_FLOAT64, values, sizeof values, &err));
+  double cp[9];                                          /* runs x nodes */
+  CHECK(gamut_read(f, "cp", NULL, &one_node, GAMUT_FLOAT64, cp, sizeof cp, &err));
   CHECK(gamut_close(f, &err));
-  printf("cp on top of the cylinder where gamma > 2:");
-  for (int64_t i = 0; i < n; ++i) printf(" %.2f", values[i]);
+  printf("cp at the top of the cylinder, run by run:");
+  for (int i = 0; i < 9; ++i) printf(" %.2f", cp[i]);
   printf("\n");
   return 0;
 }

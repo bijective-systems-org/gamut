@@ -8,8 +8,7 @@ is on the [installing](../install.md#c-and-c) page; with CMake,
 `find_package(gamut)` and `gamut::gamut` are all a project needs.
 
 The example writes eight runs of flow past a cylinder on one mesh, reopens
-the file to add a ninth, then reads one node of the runs that meet a
-condition: the program
+the file to add a ninth, then reads one node in every run: the program
 of the [README](../../README.md#example).
 
 ## The conventions
@@ -73,23 +72,22 @@ string leaves a text attribute out, `has_q = 0` the quantile and
 
 ```c
 CHECK(gamut_open("cylinder.gamut", &f, &err));
-int64_t rows[9], n = 0, node = 12;
-CHECK(gamut_select(f, "gamma > 2", rows, 9, &n, &err));
-const gamut_sel chosen = {GAMUT_SEL_INDEX, 0, 0, rows, n};
+int64_t node = 12;
 const gamut_sel one_node = {GAMUT_SEL_INDEX, 0, 0, &node, 1};
-double values[9];
-CHECK(gamut_read(f, "cp", &chosen, &one_node, GAMUT_FLOAT64, values, sizeof values, &err));
+double cp[9];                                          /* runs x nodes */
+CHECK(gamut_read(f, "cp", NULL, &one_node, GAMUT_FLOAT64, cp, sizeof cp, &err));
+CHECK(gamut_close(f, &err));
 ```
 
 A selection is everything (`GAMUT_SEL_ALL`, or `NULL`), a range
 (`GAMUT_SEL_RANGE`, from `start` up to `stop`), or a strictly increasing list
 of positions (`GAMUT_SEL_INDEX`). `gamut_shape` gives the shape a read will
 have; `gamut_read` converts to the type asked for and fills the buffer from
-the start. It prints the same values Python reads for those runs and that
-node:
+the start. It prints the same values Python reads for that node in every
+run:
 
 ```text
-cp on top of the cylinder where gamma > 2: -1.57 -1.32 -1.08 -0.86
+cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
 ```
 
 ## Notes

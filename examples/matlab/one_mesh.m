@@ -1,4 +1,4 @@
-%ONE_MESH A sweep on one mesh: eight runs written, a ninth added, then read by condition.
+%ONE_MESH A sweep on one mesh: eight runs written, a ninth added, then read.
 %   Potential flow past a cylinder at nine values of circulation, on one
 %   ring of quadrilaterals. examples/00_readme.py and the Julia and C
 %   examples are the same program and print the same line. Positions
@@ -33,7 +33,6 @@ study.addRun(struct('gamma', 4), 'fields', struct('cp', solve(4)));
 study.close();
 
 study = gamut.open('cylinder.gamut');
-rows = study.select('gamma > 2');
-cp = study.getField('cp', 'rows', rows, 'nodes', 13);           % runs x nodes, from 1
+cp = study.getField('cp', 'nodes', 13);                         % runs x nodes, from 1
 study.close();
-fprintf('cp on top of the cylinder where gamma > 2:%s\n', sprintf(' %.2f', cp));
+fprintf('cp at the top of the cylinder, run by run:%s\n', sprintf(' %.2f', cp));

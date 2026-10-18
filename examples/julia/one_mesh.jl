@@ -1,4 +1,4 @@
-# A sweep on one mesh: eight runs written, a ninth added, then read by condition.
+# A sweep on one mesh: eight runs written, a ninth added, then read.
 #
 # Potential flow past a cylinder at nine values of circulation, on one ring
 # of quadrilaterals. examples/00_readme.py and the MATLAB and C examples are
@@ -38,7 +38,6 @@ Gamut.open("cylinder.gamut"; mode="a") do study
 end
 
 cp = Gamut.open("cylinder.gamut") do study
-    rows = Gamut.select(study, "gamma > 2")
-    Gamut.get_field(study, "cp"; rows, nodes=[13])           # runs × nodes, from 1
+    Gamut.get_field(study, "cp"; nodes=[13])                 # runs × nodes, from 1
 end
-println("cp on top of the cylinder where gamma > 2: ", join((@sprintf("%.2f", v) for v in cp), " "))
+println("cp at the top of the cylinder, run by run: ", join((@sprintf("%.2f", v) for v in cp), " "))

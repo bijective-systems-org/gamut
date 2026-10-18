@@ -1,4 +1,4 @@
-"""A sweep on one mesh: eight runs written, a ninth added, then read by condition.
+"""A sweep on one mesh: eight runs written, a ninth added, then read.
 
 Potential flow past a cylinder at nine values of circulation, on one ring
 of quadrilaterals. examples/matlab, julia and c hold the same program in
@@ -29,6 +29,5 @@ with gamut.open("cylinder.gamut", mode="a") as study:
     study.add_run({"gamma": 4.0}, fields={"cp": solve(4.0)})
 
 with gamut.open("cylinder.gamut") as study:
-    rows = study.select("gamma > 2")
-    cp = study.get_field("cp", rows=rows, nodes=[12])     # runs x nodes
-    print("cp on top of the cylinder where gamma > 2:", " ".join(f"{v:.2f}" for v in cp.ravel()))
+    cp = study.get_field("cp", nodes=[12])                 # runs x nodes
+print("cp at the top of the cylinder, run by run:", " ".join(f"{v:.2f}" for v in cp.ravel()))

@@ -7,7 +7,7 @@ and positions counted from 1. The package needs the core library
 ([installing](../install.md#julia)).
 
 The example writes eight runs of flow past a cylinder on one mesh, reopens
-the file to add a ninth, then reads the runs that meet a condition: the program of the
+the file to add a ninth, then reads one node in every run: the program of the
 [README](../../README.md#example). From a working folder:
 `julia --project=<checkout>/julia <checkout>/examples/julia/one_mesh.jl`.
 
@@ -40,13 +40,12 @@ and `Gamut.open(path; mode="a")` reopens a file to add runs.
 
 ```julia
 cp = Gamut.open("cylinder.gamut") do study
-    rows = Gamut.select(study, "gamma > 2")
-    Gamut.get_field(study, "cp"; rows, nodes=[13])           # runs × nodes, from 1
+    Gamut.get_field(study, "cp"; nodes=[13])                 # runs × nodes, from 1
 end
 ```
 
 ```text
-cp on top of the cylinder where gamma > 2: -1.57 -1.32 -1.08 -0.86
+cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
 ```
 
 Node 13 here is node 12 in Python: positions count from 1 in Julia and
