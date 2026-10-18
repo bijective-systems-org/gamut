@@ -7,8 +7,9 @@ or to read a study. Building and installing it
 is on the [installing](../install.md#c-and-c) page; with CMake,
 `find_package(gamut)` and `gamut::gamut` are all a project needs.
 
-The example writes nine runs of flow past a cylinder on one mesh, run by
-run, then reads one node of the runs that meet a condition: the program
+The example writes eight runs of flow past a cylinder on one mesh, reopens
+the file to add a ninth, then reads one node of the runs that meet a
+condition: the program
 of the [README](../../README.md#example).
 
 ## The conventions
@@ -51,11 +52,18 @@ CHECK(gamut_set_mesh(f, &err));
 ```
 
 ```c
-CHECK(gamut_batch_begin(f, 1, &err));             /* one run, all or nothing */
-CHECK(gamut_batch_values(f, "gamma", GAMUT_FLOAT64, &gamma, 1, &err));
-CHECK(gamut_batch_values(f, "cp", GAMUT_FLOAT64, cp, N_NODES, &err));
-CHECK(gamut_batch_commit(f, NULL, &err));
+static void add_run(gamut_file* f, double gamma) {
+  static double cp[N_NODES];
+  solve(gamma, cp);
+  CHECK(gamut_batch_begin(f, 1, &err));
+  CHECK(gamut_batch_values(f, "gamma", GAMUT_FLOAT64, &gamma, 1, &err));
+  CHECK(gamut_batch_values(f, "cp", GAMUT_FLOAT64, cp, N_NODES, &err));
+  CHECK(gamut_batch_commit(f, NULL, &err));
+}
 ```
+
+`gamut_open_append` opens an existing file, and runs are added to it the
+same way.
 
 `gamut_declare_result` takes every attribute a result can have; an empty
 string leaves a text attribute out, `has_q = 0` the quantile and

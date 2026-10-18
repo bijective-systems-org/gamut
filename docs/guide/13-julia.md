@@ -6,8 +6,8 @@ declarations as `Dict`s or named tuples, `do` blocks that close the file,
 and positions counted from 1. The package needs the core library
 ([installing](../install.md#julia)).
 
-The example writes nine runs of flow past a cylinder on one mesh, then
-reads the runs that meet a condition: the program of the
+The example writes eight runs of flow past a cylinder on one mesh, reopens
+the file to add a ninth, then reads the runs that meet a condition: the program of the
 [README](../../README.md#example). From a working folder:
 `julia --project=<checkout>/julia <checkout>/examples/julia/one_mesh.jl`.
 
@@ -19,9 +19,13 @@ Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed
               parameters=Dict("gamma" => (units="m2 s-1", role="design")),
               fields=Dict("cp" => (units="1", at="node"))) do study
     Gamut.set_mesh!(study; points, cells)
-    for gamma in range(0, 4; length=9)
+    for gamma in range(0, 3.5; length=8)
         Gamut.add_run!(study, Dict("gamma" => gamma); fields=Dict("cp" => solve(gamma)))
     end
+end
+
+Gamut.open("cylinder.gamut"; mode="a") do study
+    Gamut.add_run!(study, Dict("gamma" => 4.0); fields=Dict("cp" => solve(4.0)))
 end
 ```
 
@@ -29,7 +33,8 @@ end
 connectivity)`, in VTK's convention as in every language: the node numbers
 inside `connectivity` count from 0. The `do` block finishes the file when
 it ends, and removes it if the block throws and the file cannot be
-finished. `solve` stands for the solver and returns `cp` at every node.
+finished. `solve` stands for the solver and returns `cp` at every node,
+and `Gamut.open(path; mode="a")` reopens a file to add runs.
 
 ## Reading
 

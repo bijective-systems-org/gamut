@@ -17,34 +17,77 @@ with libraries for Python, MATLAB, Julia and C.
 
 ---
 
-Gamut is a file format for parametric simulation studies: many runs of one
-simulation over its inputs. A file holds the run table (each run's inputs,
-results and status), the mesh, and every field, with the units of every
-number. Files are HDF5 laid out as netCDF-4, and one C++ core reads and
-writes them for Python, MATLAB, Julia and C.
-
-## What it does
-
-| | |
-|---|---|
-| Languages | Python, MATLAB, Julia and C call one C++ core, so a query returns the same values in each, and any of them reads a file another wrote. h5py, xarray and the netCDF tools read the files without Gamut. |
-| Units | Every parameter, result, field and constant declares its units (`Pa`, `m s-1`, `degree`); a file without them is refused when written. Python converts on read and write ([reading parts](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/08-reading-parts.md)). |
-| Run metadata | Parameters are marked as design inputs, operating conditions or time. Labels record a run's status, fidelity, solver or any other category, and a split records which rows are for training and which for testing. A file can name the group a fair test must hold out whole, such as one shape of a family ([run tables](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/01-run-tables.md)). |
-| Uncertainty and gradients | A standard deviation, a quantile or a derivative is stored as a result that names the result it describes, so a plotting or training script finds it without naming conventions ([uncertainty](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/06-uncertainty-and-gradients.md)). |
-| Meshes | One mesh for every run, with each field stored as one block of runs × nodes (or cells); one geometry per member of a family of shapes on one topology; or a different mesh per run ([one mesh](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/02-one-mesh.md), [families](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/03-geometry-families.md)). |
-| Model files | A fitted model is a file of the same shape with no runs, holding the model's numbers but no code. Evaluating it on new inputs gives an ordinary study ([models](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/07-models.md)). |
-| Reads | Runs are chosen by condition (`mach > 0.7 and status == converged`). On a shared mesh, one run, one region or one node across every run is read without the rest of the file. HDF5 handles one call at a time, so with threads turned on, a read of whole runs or a contiguous range fetches the compressed chunks through HDF5 and decompresses them in parallel. |
-| Checks | `gamut validate` tests a file against the 34 numbered rules of the [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md). A corpus of 64 valid, broken and hostile files runs in CI through the Python, MATLAB and Julia libraries and the C interface under them, and readers check sizes before allocating memory and never follow links ([files from outside](https://github.com/bijective-systems-org/gamut/blob/main/docs/security.md)). |
+Gamut is a file format for parametric simulation studies: the hundreds or
+thousands of CFD or FEA runs behind a design sweep, an aerodynamic
+database or a surrogate model. One file holds every run's inputs, results,
+status, mesh and fields, with units, and Python, MATLAB, Julia and C query
+it with the same calls.
 
 ## Example
 
-Nine runs of potential flow past a cylinder, each written as it finishes,
-then the pressure at the top of the cylinder read in the runs with
-circulation above 2. `points`, `cells`
-and `solve` stand for your mesh and your solver; each example in
+Nine runs of potential flow past a cylinder on one mesh: eight written as
+a sweep, a ninth added later, then read back by condition. `points`,
+`cells` and `solve` stand for your mesh and your solver; each file in
 [`examples/`](https://github.com/bijective-systems-org/gamut/blob/main/examples) is the complete program.
 
-### Python
+### Read
+
+The pressure at the top of the cylinder in every run with circulation
+above 2:
+
+Python
+
+```python
+with gamut.open("cylinder.gamut") as study:
+    rows = study.select("gamma > 2")
+    cp = study.get_field("cp", rows=rows, nodes=[12])     # runs x nodes
+```
+
+MATLAB
+
+```matlab
+study = gamut.open('cylinder.gamut');
+rows = study.select('gamma > 2');
+cp = study.getField('cp', 'rows', rows, 'nodes', 13);           % runs x nodes, from 1
+study.close();
+```
+
+Julia
+
+```julia
+cp = Gamut.open("cylinder.gamut") do study
+    rows = Gamut.select(study, "gamma > 2")
+    Gamut.get_field(study, "cp"; rows, nodes=[13])           # runs × nodes, from 1
+end
+```
+
+C
+
+```c
+CHECK(gamut_open("cylinder.gamut", &f, &err));
+int64_t rows[9], n = 0, node = 12;
+CHECK(gamut_select(f, "gamma > 2", rows, 9, &n, &err));
+const gamut_sel chosen = {GAMUT_SEL_INDEX, 0, 0, rows, n};
+const gamut_sel one_node = {GAMUT_SEL_INDEX, 0, 0, &node, 1};
+double values[9];
+CHECK(gamut_read(f, "cp", &chosen, &one_node, GAMUT_FLOAT64, values, sizeof values, &err));
+```
+
+All four print the same values:
+
+```text
+cp on top of the cylinder where gamma > 2: -1.57 -1.32 -1.08 -0.86
+```
+
+MATLAB and Julia count positions from 1, so node 12 in Python and C is
+node 13 in MATLAB and Julia.
+
+### Write
+
+Declare each name with its units and role, give the mesh once, then add
+runs as the solver finishes them:
+
+Python
 
 ```python
 with gamut.create("cylinder.gamut", writer="example sweep", mesh="shared", per="fixed",
@@ -52,15 +95,11 @@ with gamut.create("cylinder.gamut", writer="example sweep", mesh="shared", per="
                    parameters={"gamma": {"units": "m2 s-1", "role": "design"}},
                    fields={"cp": {"units": "1", "at": "node"}}) as study:
     study.set_mesh(points, cells)
-    for gamma in np.linspace(0.0, 4.0, 9):
+    for gamma in np.linspace(0.0, 3.5, 8):
         study.add_run({"gamma": gamma}, fields={"cp": solve(gamma)})
-
-with gamut.open("cylinder.gamut") as study:
-    rows = study.select("gamma > 2")
-    cp = study.get_field("cp", rows=rows, nodes=[12])     # runs x nodes
 ```
 
-### MATLAB
+MATLAB
 
 ```matlab
 study = gamut.create('cylinder.gamut', 'writer', 'example sweep', 'mesh', 'shared', 'per', 'fixed', ...
@@ -68,18 +107,13 @@ study = gamut.create('cylinder.gamut', 'writer', 'example sweep', 'mesh', 'share
     'parameters', struct('gamma', struct('units', 'm2 s-1', 'role', 'design')), ...
     'fields', struct('cp', struct('units', '1', 'at', 'node')));
 study.setMesh(points, cells);
-for gamma = linspace(0, 4, 9)
+for gamma = linspace(0, 3.5, 8)
     study.addRun(struct('gamma', gamma), 'fields', struct('cp', solve(gamma)));
 end
 study.close();
-
-study = gamut.open('cylinder.gamut');
-rows = study.select('gamma > 2');
-cp = study.getField('cp', 'rows', rows, 'nodes', 13);           % runs x nodes, from 1
-study.close();
 ```
 
-### Julia
+Julia
 
 ```julia
 Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed",
@@ -87,18 +121,24 @@ Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed
               parameters=Dict("gamma" => (units="m2 s-1", role="design")),
               fields=Dict("cp" => (units="1", at="node"))) do study
     Gamut.set_mesh!(study; points, cells)
-    for gamma in range(0, 4; length=9)
+    for gamma in range(0, 3.5; length=8)
         Gamut.add_run!(study, Dict("gamma" => gamma); fields=Dict("cp" => solve(gamma)))
     end
 end
-
-cp = Gamut.open("cylinder.gamut") do study
-    rows = Gamut.select(study, "gamma > 2")
-    Gamut.get_field(study, "cp"; rows, nodes=[13])           # runs × nodes, from 1
-end
 ```
 
-### C
+C
+
+```c
+static void add_run(gamut_file* f, double gamma) {
+  static double cp[N_NODES];
+  solve(gamma, cp);
+  CHECK(gamut_batch_begin(f, 1, &err));
+  CHECK(gamut_batch_values(f, "gamma", GAMUT_FLOAT64, &gamma, 1, &err));
+  CHECK(gamut_batch_values(f, "cp", GAMUT_FLOAT64, cp, N_NODES, &err));
+  CHECK(gamut_batch_commit(f, NULL, &err));
+}
+```
 
 ```c
 CHECK(gamut_create("cylinder.gamut", "example sweep", "shared", "fixed", &f, &err));
@@ -110,33 +150,55 @@ CHECK(gamut_geometry_begin(f, &err));
 CHECK(gamut_geometry_points(f, GAMUT_FLOAT64, points, N_NODES, 2, &err));
 CHECK(gamut_geometry_cells(f, types, N_CELLS, offsets, connectivity, 4 * N_CELLS, &err));
 CHECK(gamut_set_mesh(f, &err));
-for (int run = 0; run < 9; ++run) {
-  const double gamma = 0.5 * run;
-  solve(gamma, cp);
-  CHECK(gamut_batch_begin(f, 1, &err));             /* one run, all or nothing */
-  CHECK(gamut_batch_values(f, "gamma", GAMUT_FLOAT64, &gamma, 1, &err));
-  CHECK(gamut_batch_values(f, "cp", GAMUT_FLOAT64, cp, N_NODES, &err));
-  CHECK(gamut_batch_commit(f, NULL, &err));
-}
+for (int run = 0; run < 8; ++run) add_run(f, 0.5 * run);
 CHECK(gamut_close(f, &err));
-
-CHECK(gamut_open("cylinder.gamut", &f, &err));
-int64_t rows[9], n = 0, node = 12;
-CHECK(gamut_select(f, "gamma > 2", rows, 9, &n, &err));
-const gamut_sel chosen = {GAMUT_SEL_INDEX, 0, 0, rows, n};
-const gamut_sel one_node = {GAMUT_SEL_INDEX, 0, 0, &node, 1};
-double values[9];
-CHECK(gamut_read(f, "cp", &chosen, &one_node, GAMUT_FLOAT64, values, sizeof values, &err));
 ```
 
-All four print the same line, and any of them reads a file another wrote:
+### Add runs
 
-```text
-cp on top of the cylinder where gamma > 2: -1.57 -1.32 -1.08 -0.86
+Reopen the file and add to it, from any of the four:
+
+Python
+
+```python
+with gamut.open("cylinder.gamut", mode="a") as study:
+    study.add_run({"gamma": 4.0}, fields={"cp": solve(4.0)})
 ```
 
-MATLAB and Julia count positions from 1, so node 12 in Python and C is node 13 in
-MATLAB and Julia.
+MATLAB
+
+```matlab
+study = gamut.open('cylinder.gamut', 'mode', 'a');
+study.addRun(struct('gamma', 4), 'fields', struct('cp', solve(4)));
+study.close();
+```
+
+Julia
+
+```julia
+Gamut.open("cylinder.gamut"; mode="a") do study
+    Gamut.add_run!(study, Dict("gamma" => 4.0); fields=Dict("cp" => solve(4.0)))
+end
+```
+
+C
+
+```c
+CHECK(gamut_open_append("cylinder.gamut", &f, &err));
+add_run(f, 4.0);
+CHECK(gamut_close(f, &err));
+```
+
+## What you can do with it
+
+| | |
+|---|---|
+| Use one file everywhere | Python, MATLAB, Julia and C call one C++ core, so a query returns the same values in each, and each reads what another wrote. h5py, xarray and the netCDF tools open the files without Gamut. |
+| Read only what you need | Choose runs by condition (`mach > 0.7 and status == converged`), nodes by zone, and values in the units you ask for. On a shared mesh, one region of every run or one node across thousands of runs is a single read ([reading parts](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/08-reading-parts.md)). |
+| Train models on it directly | Each field on a shared mesh is one block of runs × nodes. Labels record status, fidelity or solver, a split says which rows are for training and which for testing, and a file can name the group a fair test must hold out whole. Standard deviations, quantiles and derivatives are stored beside the results they describe ([run tables](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/01-run-tables.md), [uncertainty](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/06-uncertainty-and-gradients.md)). |
+| Keep the model with the data | A fitted model is a file of the same shape with no runs and no code inside; evaluating it on new inputs gives an ordinary study ([models](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/07-models.md)). |
+| Store any study | A table of runs with no mesh, one mesh for every run, one geometry per member of a family of shapes on one topology, a mesh per run, or transient runs with a row per saved step ([families](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/03-geometry-families.md), [time series](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/05-time-series.md)). |
+| Rely on what you open | Every number has units, refused when missing; Python converts them on read and write. `gamut validate` checks the 34 numbered rules of the [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md). A corpus of 64 valid, broken and hostile files runs in CI through the Python, MATLAB and Julia libraries and the C interface under them, and readers check sizes before allocating memory and never follow links ([files from outside](https://github.com/bijective-systems-org/gamut/blob/main/docs/security.md)). |
 
 ## Performance
 
@@ -144,14 +206,16 @@ MATLAB and Julia.
   <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/bench-summary.svg" alt="Size on disk and three read times for one study stored as Gamut, HDF5 with a group per run, netCDF-4, Zarr and VTK files." width="760">
 </p>
 
-Measured on an Apple M3 with the files in the operating system's cache.
-Gamut is about the size of netCDF-4 and Zarr and a sixth of the VTK files.
-Its chunks are laid out for reading whole runs, so one node across every
-run takes 124 ms, slower than netCDF-4 (54 ms) and Zarr (4 ms); with four
-threads it takes 38 ms. On a second study, with 177,000-node meshes, one
-run reads in 15 ms against 124 ms from its VTK file. The
-[benchmarks page](https://github.com/bijective-systems-org/gamut/blob/main/docs/benchmarks.md) has every number, the method and
-the scripts to repeat it.
+Gamut is about the size of netCDF-4 and Zarr, a sixth of the VTK files,
+and in this study the fastest at choosing runs by condition. Its chunks are laid out for
+reading whole runs, so one node across every run is slower than in
+netCDF-4 or Zarr; four threads bring it from 124 ms to 38 ms. HDF5 itself
+decompresses on one core, so Gamut fetches the compressed chunks through
+HDF5 and decompresses them in its own threads. On a second study, with
+177,000-node meshes, one run reads in 15 ms against 124 ms from its VTK
+file.
+
+<sub>Apple M3, 8 GB, macOS 27, files in the operating system's cache; medians of five reads, each opening the file. The [benchmarks page](https://github.com/bijective-systems-org/gamut/blob/main/docs/benchmarks.md) has every number, the method and the scripts to repeat it.</sub>
 
 ## Install
 

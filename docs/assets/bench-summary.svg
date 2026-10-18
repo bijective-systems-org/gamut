@@ -10,7 +10,7 @@
   </style>
 <rect class="page" width="100%" height="100%"/>
 <text class="ink h" x="0" y="18">One study in five formats</text>
-<text class="soft" x="0" y="36">1,364 runs of a capsule family on one 6,722-node mesh; times are medians of five reads, each opening the file</text>
+<text class="soft" x="0" y="36">1,364 runs of a capsule family on one 6,722-node mesh; shorter is better</text>
 <text class="ink" x="140" y="98" text-anchor="end">Gamut</text>
 <text class="ink" x="140" y="120" text-anchor="end">HDF5, a group per run</text>
 <text class="ink" x="140" y="142" text-anchor="end">netCDF-4</text>

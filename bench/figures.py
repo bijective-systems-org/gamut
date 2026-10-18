@@ -149,7 +149,7 @@ def summary_figure(r: dict) -> str:
            f'and VTK files for one study">', STYLE, '<rect class="page" width="100%" height="100%"/>',
            f'<text class="ink h" x="0" y="18">One study in five formats</text>',
            f'<text class="soft" x="0" y="36">{shape["runs"]:,} runs of a capsule family on one '
-           f'{shape["nodes"]:,}-node mesh; times are medians of five reads, each opening the file</text>']
+           f'{shape["nodes"]:,}-node mesh; shorter is better</text>']
     for b, pair in enumerate(panels):
         y0 = top + b * band
         for i, fmt in enumerate(formats):

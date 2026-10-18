@@ -1,4 +1,4 @@
-/* A sweep on one mesh, written run by run, then read by condition.
+/* A sweep on one mesh: eight runs written, a ninth added, then read by condition.
  *
  * Potential flow past a cylinder at nine values of circulation, on one ring
  * of quadrilaterals. examples/00_readme.py and the MATLAB and Julia
@@ -38,8 +38,18 @@ static void solve(double gamma, double* cp) {
   }
 }
 
+/* Adds one run, all or nothing. */
+static void add_run(gamut_file* f, double gamma) {
+  static double cp[N_NODES];
+  solve(gamma, cp);
+  CHECK(gamut_batch_begin(f, 1, &err));
+  CHECK(gamut_batch_values(f, "gamma", GAMUT_FLOAT64, &gamma, 1, &err));
+  CHECK(gamut_batch_values(f, "cp", GAMUT_FLOAT64, cp, N_NODES, &err));
+  CHECK(gamut_batch_commit(f, NULL, &err));
+}
+
 int main(void) {
-  static double points[N_NODES][2], cp[N_NODES];
+  static double points[N_NODES][2];
   static int64_t offsets[N_CELLS + 1], connectivity[4 * N_CELLS];
   static uint8_t types[N_CELLS];
   for (int k = 0; k < N_NODES; ++k) {                /* around each ring first */
@@ -66,14 +76,11 @@ int main(void) {
   CHECK(gamut_geometry_points(f, GAMUT_FLOAT64, points, N_NODES, 2, &err));
   CHECK(gamut_geometry_cells(f, types, N_CELLS, offsets, connectivity, 4 * N_CELLS, &err));
   CHECK(gamut_set_mesh(f, &err));
-  for (int run = 0; run < 9; ++run) {
-    const double gamma = 0.5 * run;
-    solve(gamma, cp);
-    CHECK(gamut_batch_begin(f, 1, &err));             /* one run, all or nothing */
-    CHECK(gamut_batch_values(f, "gamma", GAMUT_FLOAT64, &gamma, 1, &err));
-    CHECK(gamut_batch_values(f, "cp", GAMUT_FLOAT64, cp, N_NODES, &err));
-    CHECK(gamut_batch_commit(f, NULL, &err));
-  }
+  for (int run = 0; run < 8; ++run) add_run(f, 0.5 * run);
+  CHECK(gamut_close(f, &err));
+
+  CHECK(gamut_open_append("cylinder.gamut", &f, &err));
+  add_run(f, 4.0);
   CHECK(gamut_close(f, &err));
 
   CHECK(gamut_open("cylinder.gamut", &f, &err));

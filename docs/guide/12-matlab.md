@@ -5,8 +5,8 @@ spelling: methods on a study object in camelCase, options as name–value
 pairs, declarations as structs, and positions counted from 1. Installing
 the package takes one build step ([installing](../install.md#matlab)).
 
-The example writes nine runs of flow past a cylinder on one mesh, then
-reads the runs that meet a condition: the program of the
+The example writes eight runs of flow past a cylinder on one mesh, reopens
+the file to add a ninth, then reads the runs that meet a condition: the program of the
 [README](../../README.md#example). From a working folder, with
 `examples/matlab` on the path, run `one_mesh`.
 
@@ -18,16 +18,21 @@ study = gamut.create('cylinder.gamut', 'writer', 'example sweep', 'mesh', 'share
     'parameters', struct('gamma', struct('units', 'm2 s-1', 'role', 'design')), ...
     'fields', struct('cp', struct('units', '1', 'at', 'node')));
 study.setMesh(points, cells);
-for gamma = linspace(0, 4, 9)
+for gamma = linspace(0, 3.5, 8)
     study.addRun(struct('gamma', gamma), 'fields', struct('cp', solve(gamma)));
 end
+study.close();
+
+study = gamut.open('cylinder.gamut', 'mode', 'a');
+study.addRun(struct('gamma', 4), 'fields', struct('cp', solve(4)));
 study.close();
 ```
 
 Declarations are structs, one field per name. Cells are a cell array
 `{types, offsets, connectivity}`, in VTK's convention as in every
 language: the node numbers inside `connectivity` count from 0. `solve`
-stands for the solver and returns `cp` at every node.
+stands for the solver and returns `cp` at every node. `gamut.open(path,
+'mode', 'a')` reopens a file to add runs.
 
 ## Reading
 
