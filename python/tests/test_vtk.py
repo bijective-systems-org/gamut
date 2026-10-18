@@ -52,6 +52,8 @@ def fill_tables(folder, files, time=False):
 def test_first_call_writes_templates(tmp_path):
     folder = str(tmp_path / "runs")
     files = write_runs(folder)
+    with open(os.path.join(folder, "._run_000.vtu"), "wb") as fh:     # macOS metadata
+        fh.write(b"\0\5\26\7")
     report = mestra_vtk.import_folder(folder, str(tmp_path / "s.mes"))
     assert not report["ok"] and len(report["templates"]) == 2
     lines = open(os.path.join(folder, "parameters.csv")).read().splitlines()

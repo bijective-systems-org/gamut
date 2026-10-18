@@ -204,7 +204,10 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
                   round_bits: int | None = None) -> dict[str, Any]:
     """Imports a folder of VTK runs; returns a report. Raises Problems
     with every problem found before anything is written."""
-    found = sorted(f for f in os.listdir(folder) if f.lower().endswith(VTK_SUFFIXES))
+    # Hidden files are not runs: macOS writes "._name.vtu" beside each file
+    # on drives it cannot keep its metadata on.
+    found = sorted(f for f in os.listdir(folder)
+                   if f.lower().endswith(VTK_SUFFIXES) and not f.startswith("."))
     parameters = parameters or os.path.join(folder, "parameters.csv")
     fields = fields or os.path.join(folder, "fields.csv")
     if not os.path.exists(parameters) or not os.path.exists(fields):
