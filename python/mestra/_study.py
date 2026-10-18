@@ -334,8 +334,8 @@ class Study:
             # A slice of sites needs their count first.
             s.resolve(self._site_count(name, r))
         out = _lib.read(self._handle(), name, r, s, np.dtype(dtype))
-        if squeeze_row and r.single and out.ndim >= 1 and out.shape[0] == 1 and \
-                self._mesh_kind != "changing":
+        # One row asked as a single position drops the row axis.
+        if squeeze_row and r.single and out.ndim >= 1 and out.shape[0] == 1:
             out = out[0]
         return out
 
@@ -403,7 +403,9 @@ class Study:
                 raise MestraError("", f"{name}: a changing mesh is read one row at a time; "
                                       "reads across rows need a shared mesh")
             rows = list(rows) if one else _one_row(rows)
-        return self._in_units(name, self._get(name, rows, sites, dtype=self._result_dtype(name)),
+        # A changing mesh's field has no row axis (one row at a time).
+        return self._in_units(name, self._get(name, rows, sites, dtype=self._result_dtype(name),
+                                              squeeze_row=self._mesh_kind != "changing"),
                               units)
 
     def get_mesh_label(self, name: str, row: int | None = None) -> np.ndarray:

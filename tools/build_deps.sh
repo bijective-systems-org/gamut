@@ -16,8 +16,9 @@ set -euo pipefail
 prefix=${1:?usage: build_deps.sh PREFIX [DOWNLOAD_DIR]}
 downloads=${2:-$prefix/src}
 mkdir -p "$prefix" "$downloads"
-prefix=$(cd "$prefix" && pwd)
-downloads=$(cd "$downloads" && pwd)
+# Absolute paths; on Windows (Git Bash) in the C:/... form CMake expects.
+prefix=$(cd "$prefix" && { pwd -W 2>/dev/null || pwd; })
+downloads=$(cd "$downloads" && { pwd -W 2>/dev/null || pwd; })
 jobs=${MESTRA_BUILD_JOBS:-2}
 
 generator=()

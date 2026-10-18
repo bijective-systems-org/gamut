@@ -643,7 +643,7 @@ function read(s::Study, name, rows, sites, ::Type{T}; squeeze=true) where {T}
         @mes mes_read (Ptr{Cvoid}, Cstring, Ref{CSel}, Ref{CSel}, Cint, Ptr{Cvoid}, Int64) handle(s) cs(name) rsel ssel DTYPE[T] pointer(buf) sizeof(buf)
     end
     out = from_c_order(buf, dims)
-    if squeeze && r.single && s.mesh_kind != "changing" && length(dims) >= 1 && dims[1] == 1
+    if squeeze && r.single && length(dims) >= 1 && dims[1] == 1
         out = length(dims) == 1 ? out[1] : selectdim(out, 1, 1) |> collect
     end
     return out
@@ -705,7 +705,8 @@ function get_field(s::Study, name; rows=nothing, nodes=nothing, cells=nothing)
                                   "across rows need a shared mesh"))
         rows = rows isa Integer ? [rows] : collect(rows)
     end
-    return read(s, name, rows, sites, result_type(s, name))
+    # A changing mesh's field has no row axis (one row at a time).
+    return read(s, name, rows, sites, result_type(s, name); squeeze=s.mesh_kind != "changing")
 end
 
 get_mesh_label(s::Study, name; row=nothing) = read(s, name, one_row(row), nothing, Int64; squeeze=false)

@@ -171,6 +171,11 @@ class Writer {
   std::int64_t cell_values_ = 0;
   std::vector<std::int64_t> instance_nodes_, instance_cells_;   // changing
   std::map<std::int64_t, std::int64_t> member_instance_;   // per group: code -> instance
+  // Per group: a fingerprint of each instance's stored geometry, so a
+  // member given its geometry again is checked without keeping it.
+  std::map<std::int64_t, std::string> instance_print_;
+  std::string geometry_print(const Geometry& g) const;
+  std::string instance_print(std::int64_t instance);
   std::map<std::string, std::unique_ptr<Pending>> pending_;
 };
 

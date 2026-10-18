@@ -425,3 +425,36 @@ def test_selection_messages_say_where_positions_start(tmp_path):
     with mestra.open(p) as f:
         with pytest.raises(mestra.MestraError, match="counting from 0"):
             f.get_parameter("x", rows=[5])
+
+
+def test_a_member_given_its_geometry_again_is_accepted_when_unchanged(tmp_path):
+    p = str(tmp_path / "fam.mes")
+    pts, cells = grid(2, 2)
+    with mestra.create(p, writer="t", mesh="shared", per="group:member",
+                       coordinates={"units": "m", "axes": 2},
+                       labels={"member": "group"}, parameters={"mach": "1"}) as s:
+        s.set_mesh(cells=cells, n_nodes=4)
+        s.add_run({"member": "a", "mach": 1.0}, points=pts)
+        s.add_run({"member": "a", "mach": 2.0}, points=pts)          # the same: accepted
+        with pytest.raises(mestra.MestraError, match="other geometry"):
+            s.add_run({"member": "a", "mach": 3.0}, points=pts * 2)
+    with mestra.open(p, mode="a") as s:                               # after a reopen too
+        s.add_run({"member": "a", "mach": 4.0}, points=pts)
+        with pytest.raises(mestra.MestraError, match="other geometry"):
+            s.add_run({"member": "a", "mach": 5.0}, points=pts + 1)
+    with mestra.open(p) as f:
+        assert f.row_count == 3
+    assert not mestra.validate(p).findings
+
+
+def test_one_row_of_a_column_is_a_number_in_every_kind_of_file(tmp_path):
+    p = str(tmp_path / "c.mes")
+    pts, cells = grid(2, 2)
+    with mestra.create(p, writer="t", mesh="changing", per="run",
+                       coordinates={"units": "m", "axes": 2}, parameters={"r": "m"},
+                       scalars={"y": "1"}) as s:
+        s.add_run({"r": 1.0, "y": 2.0}, points=pts, cells=cells)
+    with mestra.open(p) as f:
+        assert np.ndim(f.get_scalar("y", rows=0)) == 0
+        assert np.ndim(f.get_parameter("r", rows=0)) == 0
+        assert f.get_scalar("y", rows=[0]).shape == (1,)

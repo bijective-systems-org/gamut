@@ -76,4 +76,5 @@ environment = { MACOSX_DEPLOYMENT_TARGET = "11.0", MESTRA_DEPS = "/tmp/mestra-de
 
 [tool.cibuildwheel.windows]
 environment = { MESTRA_DEPS = "C:/mestra-deps", CMAKE_ARGS = "-DMESTRA_STATIC_HDF5=ON -DHDF5_ROOT=C:/mestra-deps -DZLIB_ROOT=C:/mestra-deps" }
-before-all = "bash {project}/tools/build_deps.sh C:/mestra-deps"
+# Git's bash by full path: a bare `bash` can resolve to the WSL launcher.
+before-all = '"C:/Program Files/Git/bin/bash.exe" {project}/tools/build_deps.sh C:/mestra-deps'

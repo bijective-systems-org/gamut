@@ -1378,10 +1378,24 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
            group);
       new_geometry.push_back(&g->second);
     }
+    // A member that already has its geometry may be given it again, the
+    // same; other geometry is refused (one member has one geometry).
     for (const auto& kv : batch.member_geometry) {
       bool used = false;
       for (const Geometry* g : new_geometry) used = used || g == &kv.second;
-      need(used, "", "geometry was given for \"" + kv.first + "\", which is not new in this batch");
+      if (used) continue;
+      std::int64_t code = -1;
+      for (std::size_t k = 0; k < entries.size() + more.size(); ++k) {
+        const std::string& e = k < entries.size() ? entries[k] : more[k - entries.size()];
+        if (e == kv.first) code = static_cast<std::int64_t>(k);
+      }
+      const auto stored = member_instance_.find(code);
+      need(stored != member_instance_.end(), "",
+           "geometry was given for \"" + kv.first + "\", which has no run here", group);
+      need(geometry_print(kv.second) == instance_print(stored->second), "",
+           "the " + group + " \"" + kv.first + "\" already has other geometry; one member has "
+           "one geometry",
+           group);
     }
     need(batch.run_geometry.empty(), "",
          "a mesh that changes per group takes geometry by group, not per run");
@@ -1539,6 +1553,7 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
       instance_nodes_.push_back(g.n_nodes);
       instance_cells_.push_back(static_cast<std::int64_t>(g.types.size()));
     }
+    if (!group.empty()) instance_print_[instances_written_] = geometry_print(g);
     ++instances_written_;
   }
   if (!group.empty()) {
@@ -1588,6 +1603,90 @@ bool Writer::has_member(const std::string& name) const {
     if (t->second[k] == name) return member_instance_.count(static_cast<std::int64_t>(k)) == 1;
   }
   return false;
+}
+
+std::string Writer::geometry_print(const Geometry& g) const {
+  // What is stored: the points at the coordinates' dtype, then the cells
+  // and the mesh labels (by name, as int32).
+  const Mesh& m = schema_.mesh;
+  Sha256 h;
+  const std::vector<unsigned char> points = convert(g.points, m.coordinate_dtype, "coordinates");
+  const std::int64_t sizes[3] = {static_cast<std::int64_t>(points.size()),
+                                 static_cast<std::int64_t>(g.types.size()),
+                                 static_cast<std::int64_t>(g.connectivity.size())};
+  h.update(sizes, sizeof sizes);
+  h.update(points.data(), points.size());
+  h.update(g.types.data(), g.types.size());
+  h.update(g.offsets.data(), g.offsets.size() * 8);
+  h.update(g.connectivity.data(), g.connectivity.size() * 8);
+  for (const auto& ml : m.labels) {
+    const auto it = g.labels.find(ml.name);
+    if (it == g.labels.end()) continue;
+    std::vector<std::int32_t> v(it->second.begin(), it->second.end());
+    h.update(ml.name.data(), ml.name.size() + 1);
+    h.update(v.data(), v.size() * 4);
+  }
+  return h.hex();
+}
+
+std::string Writer::instance_print(std::int64_t instance) {
+  const auto it = instance_print_.find(instance);
+  if (it != instance_print_.end()) return it->second;
+  // An instance written before this session: read back what is stored.
+  flush();
+  const Mesh& m = schema_.mesh;
+  File& f = *file_;
+  const std::size_t item = dtype_size(m.coordinate_dtype);
+  Geometry g;
+  g.axes = m.axes;
+  g.points.dtype = m.coordinate_dtype;
+  if (m.kind == "shared") {
+    g.n_nodes = m.n_nodes;
+    g.points.count = m.n_nodes * m.axes;
+    g.points.bytes.resize(static_cast<std::size_t>(g.points.count) * item);
+    f.read("/mesh/coordinates", m.coordinate_dtype, {Selection::range(instance, instance + 1)},
+           g.points.bytes.data(), g.points.bytes.size());
+  } else {
+    std::int64_t n0 = 0, c0 = 0;
+    for (std::int64_t k = 0; k < instance; ++k) {
+      n0 += instance_nodes_[static_cast<std::size_t>(k)];
+      c0 += instance_cells_[static_cast<std::size_t>(k)];
+    }
+    const std::int64_t nn = instance_nodes_[static_cast<std::size_t>(instance)];
+    const std::int64_t nc = instance_cells_[static_cast<std::size_t>(instance)];
+    g.n_nodes = nn;
+    g.points.count = nn * m.axes;
+    g.points.bytes.resize(static_cast<std::size_t>(g.points.count) * item);
+    f.read("/mesh/coordinates", m.coordinate_dtype, {Selection::range(n0, n0 + nn)},
+           g.points.bytes.data(), g.points.bytes.size());
+    if (m.has_cells == 1 && nc > 0) {
+      g.types.resize(static_cast<std::size_t>(nc));
+      f.read("/mesh/cell_types", DType::UInt8, {Selection::range(c0, c0 + nc)}, g.types.data(),
+             g.types.size());
+      g.offsets.resize(static_cast<std::size_t>(nc + 1));
+      f.read("/mesh/cell_offsets", DType::Int64, {Selection::range(c0, c0 + nc + 1)},
+             g.offsets.data(), g.offsets.size() * 8);
+      const std::int64_t base = g.offsets.front();
+      for (auto& o : g.offsets) o -= base;
+      g.connectivity.resize(static_cast<std::size_t>(g.offsets.back()));
+      if (!g.connectivity.empty()) {
+        f.read("/mesh/cell_connectivity", DType::Int64,
+               {Selection::range(base, base + g.offsets.back())}, g.connectivity.data(),
+               g.connectivity.size() * 8);
+      }
+    }
+    for (const auto& ml : m.labels) {
+      const bool node = ml.where == "node";
+      const std::int64_t a = node ? n0 : c0, n = node ? nn : nc;
+      std::vector<std::int64_t> v(static_cast<std::size_t>(n));
+      if (n > 0) {
+        f.read(label_dataset(ml), DType::Int64, {Selection::range(a, a + n)}, v.data(),
+               v.size() * 8);
+      }
+      g.labels[ml.name] = v;
+    }
+  }
+  return instance_print_[instance] = geometry_print(g);
 }
 
 void Writer::keep_identity(const std::string& file_id, const std::string& created) {
