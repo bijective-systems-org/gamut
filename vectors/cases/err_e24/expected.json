@@ -1,1 +1,0 @@
-{"codec":{},"description":"A connectivity value equal to the node count, one past the last node.","evaluation":[],"probes":[],"support_ids":{"s0":"14777bd0752a69af0d0f39448b92b844514439fa8b2f11381d5fff8d5d722d57"},"validator":{"errors":["E24"],"warnings":[]}}

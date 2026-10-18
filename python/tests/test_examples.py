@@ -1,68 +1,43 @@
-"""The examples of docs/examples run, and print what their READMEs say.
+"""Every script in examples/ runs from a clean directory and exits cleanly,
+and the guide page with its number quotes it exactly: each code block is
+lines of the script, each output block lines of what it prints."""
 
-Each example directory holds a README.md and a python.py. The README's
-"Expected output" section is the exact output of running python.py, so
-an example that rots fails here rather than in a reader's hands. Each
-one runs in a subprocess, in a directory of its own, because several
-of them write a file into the working directory.
-"""
 from __future__ import annotations
 
+import os
+import pathlib
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
-EXAMPLES = Path(__file__).resolve().parents[2] / "docs" / "examples"
-HEADING = "Expected output"
-TIMEOUT = 120
+from _pages import EXAMPLES, GUIDE, blocks, contiguous
+
+SCRIPTS = sorted(p for p in EXAMPLES.glob("[0-9][0-9]_*.py")) if EXAMPLES.is_dir() else []
+NEEDS = {"08_selecting_parts.py": "pint", "10_vtk.py": "pyvista"}
 
 
-def directories() -> list[Path]:
-    return sorted(p.parent for p in EXAMPLES.glob("*/python.py"))
+@pytest.mark.skipif(not SCRIPTS, reason="examples/ is not beside this test (an installed package)")
+@pytest.mark.parametrize("script", SCRIPTS, ids=lambda p: p.stem)
+def test_example_runs(script, tmp_path):
+    if script.name in NEEDS:
+        pytest.importorskip(NEEDS[script.name])
+    env = dict(os.environ)
+    package = pathlib.Path(__file__).resolve().parents[1]
+    import gamut
+    if pathlib.Path(gamut.__file__).resolve().is_relative_to(package):
+        env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(package), env.get("PYTHONPATH")]))
+    result = subprocess.run([sys.executable, str(script)], cwd=tmp_path, env=env,
+                            capture_output=True, text=True, timeout=300)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip(), "an example says what it did"
 
-
-def expected_output(readme: Path) -> list[str]:
-    """The lines of the README's "Expected output" block."""
-    lines = readme.read_text(encoding="utf-8").splitlines()
-    for at, line in enumerate(lines):
-        if line.strip() == HEADING and lines[at + 1].startswith("---"):
-            break
-    else:
-        raise AssertionError("%s has no %r section" % (readme, HEADING))
-    out: list[str] = []
-    for line in lines[at + 2:]:
-        if not line.strip():
-            if out:
-                break
-            continue
-        if not line.startswith("    "):
-            break
-        out.append(line[4:].rstrip())
-    assert out, "%s: the %r section is empty" % (readme, HEADING)
-    return out
-
-
-def test_every_example_has_a_readme() -> None:
-    found = directories()
-    assert found, "no examples under %s" % EXAMPLES
-    assert len(found) <= 7, "one directory per concept, no more than seven"
-    for directory in found:
-        assert (directory / "README.md").exists(), directory
-
-
-@pytest.mark.parametrize("directory", directories(),
-                         ids=lambda p: p.name)
-def test_example_runs_and_prints_what_the_readme_says(
-        directory: Path, tmp_path: Path) -> None:
-    script = directory / "python.py"
-    body = [line for line in script.read_text(encoding="utf-8").splitlines()
-            if line.strip() and not line.lstrip().startswith("#")]
-    assert len(body) < 30, "%s is %d lines" % (script, len(body))
-
-    run = subprocess.run([sys.executable, str(script)], cwd=str(tmp_path),
-                         capture_output=True, text=True, timeout=TIMEOUT)
-    assert run.returncode == 0, run.stderr
-    printed = [line.rstrip() for line in run.stdout.splitlines()]
-    assert printed == expected_output(directory / "README.md")
+    for page in GUIDE.glob(script.name[:2] + "-*.md"):
+        text = page.read_text(encoding="utf-8")
+        source = script.read_text(encoding="utf-8")
+        assert f"examples/{script.name}" in text, f"{page.name} names its script"
+        for block in blocks(text, "python"):
+            assert contiguous(block, source), f"{page.name} quotes code not in {script.name}:\n{block}"
+        for block in blocks(text, "text"):
+            assert contiguous(block, result.stdout), \
+                f"{page.name} shows output {script.name} does not print:\n{block}"

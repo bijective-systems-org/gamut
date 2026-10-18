@@ -1,74 +1,215 @@
-%RUN_TESTS  Run the whole test suite, corpus and all.
-%
-%   Headless, from a shell:
-%
-%     matlab -nodisplay -batch "addpath('<repo>/matlab'); \
-%         run('<repo>/matlab/tests/run_tests.m')" < /dev/null
-%
-%   The script adds the package to the path itself, so the addpath
-%   above is a convenience and not a requirement.  It prints the
-%   counts, lists every failure, and exits non-zero when anything
-%   failed, which is what a continuous integration job needs.
-%
-%   See also CorpusTest, PackageTest.
-
+function run_tests()
+% MATLAB tests of the Gamut wrapper over the shared core.  Run with
+%   matlab -batch "addpath('<abs>/matlab/tests'); run_tests"
 here = fileparts(mfilename('fullpath'));
-addpath(fileparts(here));      % the +mestra package
-addpath(here);                 % the tests and their helpers
+addpath(fileparts(here));
+tmp = tempname; mkdir(tmp);
+cleanup = onCleanup(@() rmdir(tmp, 's'));
+failures = 0; checks = 0;
 
-import matlab.unittest.TestSuite
-import matlab.unittest.TestRunner
-import matlab.unittest.plugins.TestRunProgressPlugin
-
-suite = [TestSuite.fromClass(?CorpusTest), ...
-         TestSuite.fromClass(?PackageTest), ...
-         TestSuite.fromClass(?ConventionsTest), ...
-         TestSuite.fromClass(?PostTest), ...
-         TestSuite.fromClass(?ExamplesTest), ...
-         TestSuite.fromClass(?HostileTest), ...
-         TestSuite.fromClass(?HostileSubsetTest)];
-
-runner = TestRunner.withNoPlugins();
-runner.addPlugin(TestRunProgressPlugin.withVerbosity(1));
-result = runner.run(suite);
-
-passed = sum([result.Passed]);
-failed = sum([result.Failed]);
-incomplete = sum([result.Incomplete]);
-
-counts = CorpusTest.coverage();
-fprintf('\n');
-fprintf('cases in the corpus : %d (%d of them valid)\n', ...
-        counts.cases, counts.valid);
-fprintf('probes compared     : %d (%d instance, %d draw, %d cell axis)\n', ...
-        counts.probes, counts.instanceProbes, counts.drawProbes, ...
-        counts.cellProbes);
-fprintf('support ids         : %d\n', counts.supportIds);
-fprintf('codec round trips   : %d\n', counts.dictionaries);
-fprintf('evaluation probes   : %d\n', counts.evaluationProbes);
-fprintf('read-write-compare  : %d\n', counts.valid);
-fprintf('hostile files       : %d own, %d shared subset\n', ...
-        numel(HostileTest.allCases()), numel(HostileSubsetTest.allCases()));
-fprintf('conventions checks  : %d\n', ...
-        numel(TestSuite.fromClass(?ConventionsTest)));
-fprintf('post-processing     : %d\n', ...
-        numel(TestSuite.fromClass(?PostTest)));
-fprintf('worked examples     : %d\n', ...
-        numel(fieldnames(ExamplesTest.examplesShown())));
-fprintf('tests run           : %d\n', numel(result));
-fprintf('passed              : %d\n', passed);
-fprintf('failed              : %d\n', failed);
-fprintf('incomplete          : %d\n', incomplete);
-fprintf('total time          : %.1f s\n', sum([result.Duration]));
-
-if failed > 0 || incomplete > 0
-    fprintf('\nfailures:\n');
-    for i = 1:numel(result)
-        if result(i).Failed || result(i).Incomplete
-            fprintf('  %s\n', result(i).Name);
+    function ok(cond, what)
+        checks = checks + 1;
+        if ~cond
+            failures = failures + 1;
+            fprintf(2, 'FAIL: %s\n', what);
         end
     end
-    disp(table(result));
-    exit(1);
+
+% A table, one run at a time.
+p = fullfile(tmp, 'polar.gamut');
+s = gamut.create(p, 'writer', 'matlab tests', ...
+    'parameters', struct('mach', struct('units', '1', 'role', 'condition'), 'alpha', 'degree'), ...
+    'labels', struct('status', struct('role', 'status', 'categories', {{'converged', 'failed'}})), ...
+    'scalars', struct('cl', '1', 'cd', '1'), 'constants', struct('s_ref', {{12.5, 'm2'}}));
+for i = 1:5
+    st = 'converged'; if i == 3, st = 'failed'; end
+    s.addRun(struct('mach', 0.3 + 0.1 * (i - 1), 'alpha', i - 1, 'status', st, ...
+        'cl', 0.1 * i, 'cd', single(0.01)));
 end
-fprintf('\nall tests passed\n');
+s.close();
+r = gamut.open(p);
+ok(r.rowCount() == 5, 'row count');
+ok(strcmp(r.type(), 'table'), 'type');
+cl = r.getScalar('cl');
+ok(isequal(size(cl), [5 1]) && abs(cl(2) - 0.2) < 1e-15, 'cl column');
+ok(isa(r.getScalar('cd'), 'single'), 'cd kept single');
+st = r.getLabel('status', 'rows', 3);
+ok(strcmp(st{1}, 'failed'), 'label by 1-based row');
+ok(isequal(r.select('mach > 0.45'), [3; 4; 5]), 'select 1-based');
+ok(isequal(r.select('mach>0.45'), [3; 4; 5]), 'select without spaces');
+c = r.categories('status');
+ok(isequal(c(:)', {'converged', 'failed'}), 'category table');
+ok(r.getConstant('s_ref') == 12.5, 'constant');
+ids = r.getRowIds();
+ok(isequal(ids', int64(0:4)), 'row ids 0-based values');
+t = r.table();
+ok(height(t) == 5 && any(strcmp(t.Properties.VariableNames, 'cl')), 'table');
+r.close();
+f = gamut.validate(p);
+ok(numel(f) == 1 && strcmp(f(1).rule, 'W2'), 'validate: one W2');
+
+% A shared mesh with fields; logical (row, node) order.
+p = fullfile(tmp, 'sweep.gamut');
+[X, Y] = meshgrid(0:2, 0:1);
+pts = [X(:) Y(:)];        % 6 nodes, MATLAB column order of the grid
+s = gamut.create(p, 'writer', 'matlab tests', 'mesh', 'shared', 'per', 'fixed', ...
+    'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'), ...
+    'fields', struct('pf', struct('units', 'Pa', 'at', 'node')));
+s.setMesh(pts, {uint8([9 9]), [0 4 8], [0 2 3 1 2 4 5 3]});
+P = reshape(1:18, 3, 6);  % 3 runs x 6 nodes
+s.addRuns(struct('k', [1; 2; 3]), 'fields', struct('pf', P));
+s.close();
+r = gamut.open(p);
+ok(isequal(r.getField('pf'), P), 'field round trip, run x node');
+ok(isequal(r.getField('pf', 'rows', 2, 'nodes', [2 3]), P(2, [2 3])), 'field selection 1-based');
+ok(isequal(r.getPoints(), pts), 'points');
+[types, offsets, conn] = r.getCells();
+ok(isequal(types', uint8([9 9])) && offsets(end) == 8 && conn(1) == 0, 'cells');
+r.close();
+rt = gamut.open(p, 'threads', 4);
+ok(isequal(rt.getField('pf'), P), 'parallel read');
+rt.close();
+
+% Append in place.
+s = gamut.open(p, 'mode', 'a');
+s.addRun(struct('k', 4), 'fields', struct('pf', 100:105));
+s.close();
+r = gamut.open(p);
+ok(r.rowCount() == 4 && isequal(r.getField('pf', 'rows', 4), 100:105), 'append');
+r.close();
+
+% Model files: the built-in nearest model with one input (MATLAB cannot tell
+% a one-element array from a number; the gateway keeps the ranks), and a
+% registered plug-in serving values and std.
+mp = fullfile(tmp, 'nearest.gamut');
+s = gamut.createModel(mp, 'writer', 'matlab tests', ...
+    'parameters', struct('alpha', struct('units', 'degree', 'lower', 0, 'upper', 10)), ...
+    'scalars', struct('cl', struct('units', '1', 'model', 'fit', 'output', 'cl')));
+s.addModel('fit', gamut.Nearest({'alpha'}, 0, 10, [0; 5; 10], struct('cl', [0.1; 0.5; 1.0])), ...
+    {'alpha'});
+s.close();
+ok(isempty(gamut.validate(mp)), 'nearest model file validates');
+
+% A refused close keeps the file open to fix and close again.
+rp = fullfile(tmp, 'refused.gamut');
+s = gamut.createModel(rp, 'writer', 'matlab tests', ...
+    'parameters', struct('alpha', struct('units', 'degree', 'lower', 0, 'upper', 10)), ...
+    'scalars', struct('cl', struct('units', '1', 'model', 'fit', 'output', 'cl')));
+try
+    s.close();
+    ok(false, 'close without a model refused');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E16'), ['refused close: ' err.identifier]);
+end
+s.addModel('fit', gamut.Nearest({'alpha'}, 0, 10, [0; 10], struct('cl', [1; 2])), {'alpha'});
+s.close();
+ok(isempty(gamut.validate(rp)), 'closed after the fix');
+out = gamut.evaluate(mp, struct('alpha', [1; 4; 9]));
+ok(isequal(out.getScalar('cl'), [0.1; 0.5; 1.0]), 'nearest evaluated');
+ok(isequal(out.getParameter('alpha'), [1; 4; 9]), 'inputs kept');
+tmpPath = out.Path;
+out.close();
+ok(~isfile(tmpPath), 'temporary evaluated file removed on close');
+r = gamut.open(mp);
+numbers = gamut_mex('model_numbers', r.Handle, 'fit');
+r.close();
+back = gamut.Nearest.load(numbers);
+ok(isequal(back.X, [0; 5; 10]) && isequal(back.Lower, 0), 'nearest numbers read back');
+
+lp = fullfile(tmp, 'linear.gamut');
+s = gamut.createModel(lp, 'writer', 'matlab tests', ...
+    'parameters', struct('x', struct('units', 'm', 'lower', -1, 'upper', 1)), ...
+    'scalars', struct('y', struct('units', '1', 'model', 'lin', 'output', 'y'), ...
+        'y_std', struct('units', '1', 'model', 'lin', 'output', 'y', 'of', 'y', ...
+                        'statistic', 'std')));
+lin = testmodels.Linear(); lin.A = 1; lin.B = 2; lin.Std = 0.25; lin.Input = 'x'; lin.Output = 'y';
+s.addModel('lin', lin, {'x'});
+s.close();
+try
+    gamut.evaluate(lp, struct('x', [0; 0.5]));
+    ok(false, 'unregistered type refused');
+catch err
+    ok(contains(err.message, 'not registered'), ['unregistered type: ' err.message]);
+end
+gamut.registerModelType('testmodels.Linear');
+ep = fullfile(tmp, 'evaluated.gamut');
+out = gamut.evaluate(lp, struct('x', [0; 0.5]), 'path', ep);
+ok(isequal(out.getScalar('y'), [1; 2]) && isequal(out.getScalar('y_std'), [0.25; 0.25]), ...
+    'plug-in values and std');
+out.close();
+ok(isfile(ep) && isempty(gamut.validate(ep)), 'evaluated file kept and valid');
+
+% Copies between files: append, extract, writeCopy.
+ca = fullfile(tmp, 'ca.gamut'); cb = fullfile(tmp, 'cb.gamut'); ce = fullfile(tmp, 'ce.gamut');
+cw = fullfile(tmp, 'cw.gamut');
+s = gamut.create(ca, 'writer', 'w', 'parameters', struct('x', 'm'), ...
+    'labels', struct('case', 'categorical'));
+s.addRuns(struct('x', [1; 2], 'case', {{'p'; 'q'}}));
+s.close();
+s = gamut.create(cb, 'writer', 'w', 'parameters', struct('x', 'm'), ...
+    'labels', struct('case', 'categorical'));
+s.addRuns(struct('x', [3; 4], 'case', {{'r'; 'p'}}));
+s.close();
+ok(gamut.append(ca, cb) == 2, 'append returns the rows added');
+gamut.extract(ca, ce, [2 4]);
+r = gamut.open(ce);
+ok(isequal(r.getRowIds(), [1; 3]) && isequal(r.getLabel('case'), {'q'; 'p'}), 'extract keeps ids');
+r.close();
+gamut.writeCopy(ca, cw);
+r = gamut.open(cw); q = gamut.open(ca);
+ok(strcmp(r.describe().file_id, q.describe().file_id) && isequal(r.getParameter('x'), [1; 2; 3; 4]), ...
+    'writeCopy keeps identity and values');
+r.close(); q.close();
+try
+    gamut.append(ca, ca);
+    ok(false, 'append to itself refused');
+catch err
+    ok(startsWith(err.identifier, 'gamut:'), 'append to itself refused');
+end
+
+% Errors carry their rule.
+try
+    gamut.create(fullfile(tmp, 'bad.gamut'), 'writer', 'w', 'parameters', struct('x', 'm//s'));
+    ok(false, 'bad units refused');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E7'), ['bad units identifier: ' err.identifier]);
+end
+% In a mesh file too, a declaration error is its own, and the half-made
+% file is removed.
+bad = fullfile(tmp, 'badmesh.gamut');
+try
+    gamut.create(bad, 'writer', 'w', 'mesh', 'shared', 'per', 'fixed', ...
+        'coordinates', struct('units', 'm', 'axes', 2), ...
+        'fields', struct('q', struct('units', 'm//s', 'at', 'node')));
+    ok(false, 'bad field units refused');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E7'), ['mesh file bad units identifier: ' err.identifier]);
+    ok(~isfile(bad), 'half-declared mesh file removed');
+end
+try
+    r = gamut.open(p); r.close(); r.getField('pf');
+    ok(false, 'closed file refused');
+catch err
+    ok(contains(err.message, 'closed') || strcmp(err.identifier, 'gamut:usage'), 'closed handle');
+end
+
+% The example in examples/matlab runs and writes a valid file.
+example = fullfile(fileparts(fileparts(here)), 'examples', 'matlab', 'one_mesh.m');
+if isfile(example)
+    written = run_example(example, tmp);
+    ok(isempty(gamut.validate(written)), 'the MATLAB example writes a valid file');
+end
+
+fprintf('%d checks, %d failures\n', checks, failures);
+if failures > 0, error('gamut:tests', '%d failures', failures); end
+end
+
+function written = run_example(example, folder)
+% Runs an example script in its own workspace and folder, quietly.
+old = cd(folder);
+restore = onCleanup(@() cd(old));
+copyfile(example, folder);
+[~, name] = fileparts(example);
+evalc(name);
+written = fullfile(folder, 'cylinder.gamut');
+end

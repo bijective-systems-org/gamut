@@ -1,1 +1,0 @@
-{"allow_extra":true,"description":"A category table whose first entry is not valid UTF-8 and whose second is empty.","required_errors":["E26"],"timeout_seconds":10}

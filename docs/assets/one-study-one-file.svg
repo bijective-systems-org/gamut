@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" width="760" height="300"
+     role="img" aria-labelledby="t d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="t">One study, one file</title>
+  <desc id="d">A folder of solver outputs and a spreadsheet of inputs become one file
+  holding the run table, the mesh and every field as one block of runs by nodes.</desc>
+  <style>
+    .ink    { fill: #1F2328; }
+    .soft   { fill: #59636E; }
+    .line   { stroke: #1F2328; fill: none; stroke-width: 1.4; }
+    .thin   { stroke: #8C959F; fill: none; stroke-width: 1; }
+    .accent { stroke: #4A9FF5; fill: none; stroke-width: 2; }
+    .wash   { fill: #4A9FF5; fill-opacity: 0.10; }
+    .cell   { fill: #4A9FF5; }
+    .paper  { fill: #FFFFFF; }
+    .page   { fill: #FFFFFF; }
+    @media (prefers-color-scheme: dark) {
+      .page  { fill: #0D1117; }
+      .ink   { fill: #E6EDF3; }
+      .soft  { fill: #9198A1; }
+      .line  { stroke: #E6EDF3; }
+      .thin  { stroke: #6E7681; }
+      .paper { fill: #0D1117; }
+    }
+    text { font-size: 13px; }
+    .h { font-size: 14px; font-weight: 600; }
+    .s { font-size: 11.5px; }
+  </style>
+  <rect class="page" width="100%" height="100%"/>
+
+  <!-- Today: a folder of files -->
+  <text class="ink h" x="20" y="28">A study today</text>
+  <g transform="translate(20,48)">
+    <rect class="paper line" x="16" y="0" width="150" height="34" rx="3"/>
+    <rect class="paper line" x="8" y="8" width="150" height="34" rx="3"/>
+    <rect class="paper line" x="0" y="16" width="150" height="34" rx="3"/>
+    <text class="ink" x="12" y="38">200 VTK files</text>
+    <rect class="paper line" x="0" y="66" width="150" height="34" rx="3"/>
+    <text class="ink" x="12" y="88">parameters.csv</text>
+    <rect class="paper line" x="0" y="116" width="150" height="34" rx="3"/>
+    <text class="ink" x="12" y="138">join_runs.py</text>
+    <text class="soft s" x="0" y="176">Units, failed runs and which rows</text>
+    <text class="soft s" x="0" y="191">share a geometry live in the script.</text>
+  </g>
+
+  <!-- Arrow -->
+  <path class="accent" d="M210 150 H262 M254 143 L263 150 L254 157"/>
+
+  <!-- One file -->
+  <text class="ink h" x="290" y="28">One Gamut file</text>
+  <rect class="wash" x="290" y="44" width="450" height="232" rx="6"/>
+  <rect class="accent" x="290" y="44" width="450" height="232" rx="6"/>
+  <text class="soft s" x="304" y="64">study.gamut</text>
+
+  <!-- Run table -->
+  <text class="ink" x="304" y="90">Run table</text>
+  <g transform="translate(304,98)">
+    <rect class="paper thin" x="0" y="0" width="190" height="104"/>
+    <g class="thin">
+      <path d="M0 20 H190 M0 41 H190 M0 62 H190 M0 83 H190"/>
+      <path d="M48 0 V104 M96 0 V104 M150 0 V104"/>
+    </g>
+    <text class="ink s" x="6" y="14">mach</text>
+    <text class="ink s" x="54" y="14">alpha</text>
+    <text class="ink s" x="102" y="14">status</text>
+    <text class="ink s" x="156" y="14">cl</text>
+    <text class="soft s" x="6" y="35">0.6</text><text class="soft s" x="54" y="35">2°</text>
+    <text class="soft s" x="102" y="35">ok</text><text class="soft s" x="156" y="35">0.27</text>
+    <text class="soft s" x="6" y="56">0.7</text><text class="soft s" x="54" y="56">2°</text>
+    <text class="soft s" x="102" y="56">ok</text><text class="soft s" x="156" y="56">0.31</text>
+    <text class="soft s" x="6" y="77">0.8</text><text class="soft s" x="54" y="77">4°</text>
+    <text class="soft s" x="102" y="77">failed</text><text class="soft s" x="156" y="77">—</text>
+    <text class="soft s" x="6" y="98">⋮</text>
+  </g>
+  <text class="soft s" x="304" y="222">units, roles, status, splits</text>
+
+  <!-- Mesh -->
+  <text class="ink" x="520" y="90">Mesh</text>
+  <g transform="translate(520,98)" class="line">
+    <path d="M10 70 L40 18 L80 10 L110 40 L100 84 L52 96 Z"/>
+    <path class="thin" d="M40 18 L52 56 L80 10 M52 56 L110 40 M52 56 L100 84 M52 56 L52 96 M52 56 L10 70"/>
+  </g>
+  <g class="cell">
+    <circle cx="530" cy="168" r="2.6"/><circle cx="560" cy="116" r="2.6"/>
+    <circle cx="600" cy="108" r="2.6"/><circle cx="630" cy="138" r="2.6"/>
+    <circle cx="620" cy="182" r="2.6"/><circle cx="572" cy="194" r="2.6"/>
+    <circle cx="572" cy="154" r="2.6"/>
+  </g>
+  <text class="soft s" x="520" y="222">nodes, cells, zones</text>
+
+  <!-- Fields block -->
+  <text class="ink" x="656" y="90">Fields</text>
+  <g transform="translate(656,98)">
+    <rect class="paper thin" x="0" y="0" width="70" height="104"/>
+    <g class="cell">
+      <rect x="0" y="0" width="70" height="13" fill-opacity="0.55"/>
+      <rect x="0" y="26" width="70" height="13" fill-opacity="0.35"/>
+      <rect x="28" y="0" width="10" height="104" fill-opacity="0.35"/>
+    </g>
+    <path class="thin" d="M0 13 H70 M0 26 H70 M0 39 H70 M0 52 H70 M0 65 H70 M0 78 H70 M0 91 H70"/>
+  </g>
+  <text class="soft s" x="656" y="222">runs × nodes</text>
+
+  <text class="soft s" x="304" y="258">One run, one node across every run, or one region reads without the rest.</text>
+</svg>

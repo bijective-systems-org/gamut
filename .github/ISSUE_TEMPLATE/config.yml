@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
-  - name: The guide
-    url: https://github.com/bijective-systems-org/mestra/blob/main/docs/guide.md
-    about: The format in plain words, with one runnable example per idea.
+  - name: Start here
+    url: https://github.com/bijective-systems-org/gamut/blob/main/docs/start-here.md
+    about: The road from installing to using it on your own studies, and the guide.
   - name: The specification
-    url: https://github.com/bijective-systems-org/mestra/blob/main/SPEC.md
+    url: https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md
     about: The reference, by section.

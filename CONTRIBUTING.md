@@ -1,58 +1,75 @@
 # Contributing
 
-The specification and conformance corpus define Mestra. Repository
-maintainers review changes to that contract; no language implementation
-has authority to redefine it by changing behavior alone.
+The [specification](SPEC.md) and the [corpus](corpus) define gamut. The
+C++ core in `src/` implements them once; Python, MATLAB and Julia are thin
+layers over its C interface. A change of behaviour starts from the
+specification and the corpus, never from one language.
 
-For a bug fix, describe the observed failure, provide a small reproducer
-and test the intended behavior at the affected interface. Keep changes
-local to the layer that owns the problem. Model-training policy,
-producer lineage and application transactions ordinarily belong in the
-consumer or producer, using the existing schema.
+## A bug
 
-For a format change, open an issue or proposal containing:
+Describe what happened and what you expected, with the smallest file or
+script that shows it, and the output of `gamut --version`. A fix comes
+with a test at the layer that owns the problem: the core's tests for the
+core, the language's tests for its layer, the corpus for anything every
+language must agree on.
 
-1. A concrete file/workflow that the current format cannot represent.
-2. The proposed semantics and the behavior of existing readers.
-3. A compatibility decision under SPEC section 28.
-4. Corpus additions and the changes required in each implementation.
+## A change to the format
 
-Within `mestra/0`, optional attributes/groups can be added under the
-existing unknown-content rules. A new role, statistic, cell type,
-`source` keyword or required attribute is not additive. Existing meaning
-cannot change within version 0. Incompatible changes require a major
-format version; Python package versions are separate from that version.
+Open an issue first, with:
 
-Update the spec, corpus and affected implementations together. An
-implementation-specific limitation must be exposed in
-[compatibility.md](docs/compatibility.md). Use structural equality
-across languages/HDF5 versions; require deterministic bytes only where
-SPEC section 30 does. Run the relevant tests locally and the full CI
-matrix before release. [releasing.md](docs/releasing.md) lists the gates.
+1. a real study or workflow that the format cannot hold today;
+2. the meaning proposed, and what readers that do not know it will do;
+3. whether it is an addition within version 1 (SPEC.md section 17: a
+   reader that does not know it reports W5 and goes on) or needs a new
+   major version;
+4. the corpus cases that pin it.
 
-## Running the checks
+The specification, the corpus and the core change together.
 
-From the repository root, as `.github/workflows/ci.yml` runs them:
+## Building and running the checks
 
-    python vectors/generate.py --on-demand   # once: three files too big to commit
-    python vectors/check.py                  # needs h5py, numpy, netCDF4, h5netcdf
+The core needs CMake 3.16 or later, a C++17 compiler and HDF5 1.12 or
+later (or `tools/build_deps.sh` and `-DGAMUT_STATIC_HDF5=ON`, as in
+[installing](docs/install.md)). From the top of a checkout:
 
-    pip install -e "python/[dev]"     # [dev,checks] also runs the netCDF round trips
-    (cd python && python -m pytest -q && python -m ruff check . && python -m mypy)
+```bash
+cmake -S . -B build -DHDF5_ROOT=/path/to/hdf5
+cmake --build build -j2
+./build/core_unit_tests && ./build/core_writer_reader_tests
+```
 
-    cmake -S cpp -B cpp/build -DHDF5_ROOT=<hdf5 prefix> \
-          -DPython3_EXECUTABLE=<a python with h5py>
-    cmake --build cpp/build
-    ctest --test-dir cpp/build --output-on-failure
+Python finds the core in `build/` when run from the checkout:
 
-    julia --project=julia -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
+```bash
+pip install numpy pytest h5py pint pyvista pandas
+cd python && python -m pytest -q tests
+```
 
-    matlab -nodisplay -batch "addpath('matlab'); run('matlab/tests/run_tests.m')" < /dev/null
+The tests also run every script in `examples/`, check that each page of
+`docs/guide/` quotes its example and shows what it prints, run the
+command-line page's sessions, and build the C example. Change an example
+and its page together.
 
-Each language's README says more about its own setup;
-[cpp/README.md](cpp/README.md) explains `HDF5_ROOT`.
+Julia's tests, and the corpus from Python and Julia (the Julia check needs
+the JSON package in its environment):
 
-The current callable envelope is intentionally small. A new tool can
-register its own callable type without making the model's internals
-part of Mestra. Readers that do not own that type preserve its dictionary
-and public interface, and refuse unsupported execution explicitly.
+```bash
+julia --project=julia -e 'include("julia/test/runtests.jl")'
+python corpus/generate.py /tmp/corpus
+GAMUT_LIBRARY=build/libgamut.so python corpus/check.py /tmp/corpus
+julia --project=<an environment with JSON and Gamut> julia/test/check_corpus.jl /tmp/corpus
+```
+
+In MATLAB, from `matlab/`: `build_mex`, then `run_tests`, then
+`corpus='/tmp/corpus'; run('tests/check_corpus.m')`.
+
+`tools/damaged_files.py` measures how readers meet damaged files, and
+`bench/` holds the benchmarks (`bench/figures.py` rebuilds the benchmark
+page's tables and figures from `bench/results/`).
+
+## Style
+
+Code reads like the code around it: plain names, few comments, each
+saying why. Messages say what is wrong and what to do, with the rule
+(`E7`) when one applies. Documentation is short and tested where it can
+be.

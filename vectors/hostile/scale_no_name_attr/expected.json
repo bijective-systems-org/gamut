@@ -1,1 +1,0 @@
-{"allow_extra":true,"description":"A dimension scale with CLASS but no NAME attribute, which is half of what makes a scale.","required_errors":["E25"],"timeout_seconds":10}

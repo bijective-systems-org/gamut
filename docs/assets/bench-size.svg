@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 372" width="680" height="372" role="img" aria-label="Size on disk">
+<style>
+    .ink { fill: #1F2328; } .soft { fill: #59636E; } .grid { stroke: #D0D7DE; stroke-width: 1; }
+    .bar { fill: #8C959F; } .ours { fill: #4A9FF5; } .page { fill: #FFFFFF; }
+    @media (prefers-color-scheme: dark) {
+      .page { fill: #0D1117; } .ink { fill: #E6EDF3; } .soft { fill: #9198A1; } .grid { stroke: #30363D; } .bar { fill: #6E7681; }
+    }
+    text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; }
+    .h { font-size: 13px; font-weight: 600; }
+  </style>
+<rect class="page" width="100%" height="100%"/>
+<text class="ink h" x="0" y="18">Size on disk</text>
+<text class="soft" x="0" y="36">each study against the folder of VTK files it came as; shorter is smaller</text>
+<text class="ink h" x="0" y="68">The capsule family</text>
+<text class="ink" x="180" y="93" text-anchor="end">Gamut</text>
+<rect class="ours" x="190" y="82" width="60.0" height="16" rx="2"/>
+<text class="soft" x="256.0" y="94">66 MB</text>
+<text class="ink" x="180" y="119" text-anchor="end">VTK folder</text>
+<rect class="bar" x="190" y="108" width="381.0" height="16" rx="2"/>
+<text class="soft" x="577.0" y="120">419 MB</text>
+<text class="ink" x="180" y="145" text-anchor="end">VTK folder, zipped</text>
+<rect class="bar" x="190" y="134" width="267.9" height="16" rx="2"/>
+<text class="soft" x="463.9" y="146">295 MB</text>
+<text class="ink" x="180" y="171" text-anchor="end">HDF5, a group per run</text>
+<rect class="bar" x="190" y="160" width="70.7" height="16" rx="2"/>
+<text class="soft" x="266.7" y="172">77.8 MB</text>
+<text class="ink" x="180" y="197" text-anchor="end">netCDF-4 (xarray)</text>
+<rect class="bar" x="190" y="186" width="58.7" height="16" rx="2"/>
+<text class="soft" x="254.7" y="198">64.6 MB</text>
+<text class="ink" x="180" y="223" text-anchor="end">Zarr (xarray)</text>
+<rect class="bar" x="190" y="212" width="61.3" height="16" rx="2"/>
+<text class="soft" x="257.3" y="224">67.5 MB</text>
+<text class="ink h" x="0" y="250">AirfRANS</text>
+<text class="ink" x="180" y="275" text-anchor="end">Gamut</text>
+<rect class="ours" x="190" y="264" width="184.8" height="16" rx="2"/>
+<text class="soft" x="380.8" y="276">710 MB</text>
+<text class="ink" x="180" y="301" text-anchor="end">VTK folder</text>
+<rect class="bar" x="190" y="290" width="381.0" height="16" rx="2"/>
+<text class="soft" x="577.0" y="302">1.46 GB</text>
+<text class="ink" x="180" y="327" text-anchor="end">VTK folder, zipped</text>
+<rect class="bar" x="190" y="316" width="254.1" height="16" rx="2"/>
+<text class="soft" x="450.1" y="328">976 MB</text>
+<text class="ink" x="180" y="353" text-anchor="end">HDF5, a group per run</text>
+<rect class="bar" x="190" y="342" width="188.7" height="16" rx="2"/>
+<text class="soft" x="384.7" y="354">725 MB</text>
+</svg>

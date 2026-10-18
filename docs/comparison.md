@@ -1,79 +1,59 @@
-mestra and other formats
-========================
+# How Gamut compares
 
-This comparison answers where a study file fits beside solver and dataset
-formats. It is a reading map, not a conversion guarantee or an exhaustive
-capability matrix. External references were checked on 14 October 2026;
-implementations and conventions can evolve.
+Gamut is for one thing: a parametric study, meaning many runs of one
+simulation over its inputs, and the models fitted to it. Most formats it
+meets were built for something else, and remain the right choice for it.
+This page says what each is for, when to keep it, and how a study moves
+between it and gamut.
 
-mestra represents observations as rows with role-tagged keys, per-row
-scalars, supports and array slots, optionally served by callables. Its
-specification and corpus define those meanings. It can hold several
-supports; the aligned case has at most one, with correspondence established
-by the producer. [Design notes](design-notes.md) retain the original choices.
+## Beside each format
 
+| Format | Built for | Keep it when | With Gamut |
+|---|---|---|---|
+| VTK files (`.vtu`, `.vtp`, [VTKHDF](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html)) | one mesh and its data, for visualisation; VTKHDF adds time steps | you are looking at results in ParaView or VisIt | `gamut-vtk` turns a folder of runs into one study, and a study back into a folder ([VTK](guide/10-vtk.md)); cells use VTK's codes and node order |
+| [CGNS](https://cgns.org/) | CFD solutions: zones, boundary conditions, solver state | a solver reads or restarts from it | write each run's results from the solver, or convert its output; zones and patches become mesh labels |
+| [Exodus II](https://github.com/sandialabs/seacas) | finite-element models and results for the SEACAS tools | your finite-element tools need it | as for CGNS |
+| netCDF with [CF](https://cfconventions.org/) and [UGRID](https://ugrid-conventions.github.io/ugrid-conventions/) | geoscience data, with conventions for grids, meshes and time | you share with climate and ocean tools | a Gamut file is a netCDF-4 file: netCDF tools and xarray read it as it is; Gamut adds what a study means, such as runs, roles, statuses and relations |
+| HDF5 in your own layout (h5py) | any arrays, arranged as one program likes | the file never leaves that program | Gamut is HDF5 with a published layout and a validator, so someone else, in another language, reads it without your script |
+| [Zarr](https://zarr.dev/) | chunked arrays in object storage, read by many workers at once | reads go over the network to a cluster | a Gamut file is one local file; copy it, or extract the part a job needs |
+| Parquet or CSV | tables | the study has no fields and the meaning lives elsewhere | the run table carries units, roles and statuses; `gamut get study.gamut mach cl -o table.csv` exports columns |
+| Dataset packages for machine learning ([PLAID](https://plaid-lib.readthedocs.io/), [The Well](https://polymathic-ai.org/the_well/)) | benchmark datasets with loaders and fixed splits | the benchmark's loader is what you need | a study keeps its published splits and its unit of generalisation, and a fitted model is a file of the same shape |
 
-What the other formats describe
--------------------------------
+The [benchmarks](benchmarks.md) measure size and read speed against
+several of these on real studies.
 
-| Format / project | Relevant documented structure |
-|---|---|
-| [VTKHDF](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html) | Point, cell and field data on VTK dataset types, with temporal steps and composite structures. |
-| [CGNS](https://cgns.org/standard/FMM/nodes.html) | A CFD data model with zones, solution data and dimensional-unit structures. |
-| [Exodus II](https://github.com/sandialabs/seacas) | A finite-element analysis database used by the SEACAS preprocessing, postprocessing and translation tools. |
-| [CF](https://cfconventions.org/) and [UGRID](https://ugrid-conventions.github.io/ugrid-conventions/) | Metadata conventions for netCDF variables; UGRID describes unstructured-mesh topology and associated data. |
-| [PLAID](https://plaid-lib.readthedocs.io/en/latest/concepts/problem_definition.html) | Physics-simulation datasets with problem definitions selecting input/output features and train/test splits. |
-| [The Well](https://polymathic-ai.org/the_well/api/) | Shared HDF5 datasets with loaders and training/validation/test data interfaces. |
-| [PDEBench](https://github.com/pdebench/PDEBench) | PDE simulation benchmark data, HDF5 preparation and model/data-loading workflows. |
+## What Gamut adds
 
-These positive descriptions do not assert that another format has no place
-for roles, units, uncertainty, models or custom metadata. A comparison of
-those features needs the specific schema, convention and reader version;
-absence from this table is not evidence of absence from a format.
+- **One file per study**, holding the run table, the mesh and the fields,
+  with units, roles and statuses written down rather than kept in a script.
+- **Correspondence as structure.** On a shared mesh, node k is the same
+  point in every run, so a field is one block of runs × nodes and a model
+  can be trained on it directly.
+- **Reads across runs**: one run, one region of every run, or one node
+  across thousands of runs.
+- **A validator** that names every rule a file breaks, and a corpus of
+  valid, broken and hostile files that every implementation is held to.
+- **Models in the same terms as the data**, evaluated into an ordinary
+  study.
 
+## What it does not do
 
-Moving data in and out
-----------------------
+- **It is not a solver's file.** It holds results and the inputs that
+  produced them, not solver state; keep the solver's own files to restart.
+- **It is one file, read locally.** There is no object-store or server
+  access; very large studies are read a part at a time.
+- **Version 1 leaves out** polyhedral cells (export them decomposed),
+  declared tensors (store components), and fields as model inputs. The
+  [specification](../SPEC.md#18-additions-planned-within-version-1) lists
+  what is planned within version 1.
+- **Unit conversion on reads** is Python's alone, through pint; MATLAB,
+  Julia and C return values in the units they were stored in.
 
-Keep solver-native files when their zones, boundary conditions, solver state
-or established post-processing are needed. A derived mestra file can gather
-observations for comparison or modelling. Conversion must explicitly map
-keys, roles, units, groups, splits and status, and establish correspondence
-before declaring rows aligned. No conversion's losslessness, effort or
-performance is established by a shared container or matching cell codes.
+## Moving between them
 
-- **VTK cells.** mestra uses VTK cell codes and node order (SPEC20). A
-  converter still maps attributes and checks the mesh/data it writes.
-- **netCDF-4 and xarray.** Generic tools can read the public layout;
-  `xarray.open_datatree(path)` exposes groups and named dimensions.
-  `Dataset.to_xarray()` is a separate package adapter. Generic rewrites
-  need not preserve mestra conformance (SPEC21).
-- **PLAID.** A study mapping may associate samples with rows and explicit
-  problem-definition splits with a split key. It must supply the mestra
-  semantics it needs; the source schema alone does not establish producer
-  correspondence or modelling policy. [Design mappings](mappings.md) are
-  conceptual examples, not qualified converters.
-- **Catalogues.** A card or catalogue may point to the file; catalogue
-  display and its metadata need their own integration checks.
-- **Models.** A tool could register an additional callable type carrying
-  an FMI or ONNX payload. This is a possible extension, not a shipped
-  adapter or execution guarantee.
-
-For remote or large-data work, qualify the actual access pattern and
-storage environment. mestra's lazy reads and row chunking do not establish
-network or object-store performance.
-
-
-The mestra boundary
--------------------
-
-Stored public data is readable without a proprietary runtime. The built-in
-`affine` exercises callable conformance; other types require their owning
-software to execute, including any licence it requires. Supported opaque
-preservation is not encryption or proof that every unknown object survives
-a rewrite. The [compatibility notes](compatibility.md) describe language,
-preservation and native-parser limits.
-
-Lineage and validation records belong to the producer, using its records
-or private content. Package versions are separate from `mestra/0`; changes
-to existing file meaning follow [CONTRIBUTING.md](../CONTRIBUTING.md).
+A conversion maps names, units, roles, statuses and splits explicitly;
+nothing about a run's meaning is guessed from the container. When the runs
+of a study were meshed separately, a node-by-node comparison needs a
+correspondence first, from a mapping or morphing tool; until then they are
+a [changing mesh](guide/04-changing-meshes.md), which keeps every run
+exactly as it was computed.

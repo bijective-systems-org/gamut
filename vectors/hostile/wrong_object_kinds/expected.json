@@ -1,1 +1,0 @@
-{"allow_extra":true,"description":"A member of /keys that is a group and a member of /supports that is a dataset, where the format requires the opposite of each.","required_errors":["E41"],"timeout_seconds":10}

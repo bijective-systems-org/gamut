@@ -1,0 +1,80 @@
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "gamut-format"
+version = "1.0.0.dev0"
+description = "An open file format for simulation studies and the surrogate models fitted to them"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Bijective Systems" }]
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+keywords = ["simulation", "CFD", "FEA", "HDF5", "netCDF", "surrogate model", "dataset"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C++",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.optional-dependencies]
+units = ["pint>=0.23"]
+vtk = ["pyvista>=0.43", "pandas>=2.0"]
+test = ["pytest>=7", "h5py>=3.10", "pint>=0.23", "xarray>=2023.1", "netCDF4>=1.6",
+        "pyvista>=0.43", "pandas>=2.0"]
+
+[project.scripts]
+gamut = "gamut.cli:main"
+gamut-vtk = "gamut.cli:vtk_main"
+
+[project.urls]
+Homepage = "https://github.com/bijective-systems-org/gamut"
+Documentation = "https://github.com/bijective-systems-org/gamut/tree/main/docs"
+Specification = "https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md"
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.version = ">=3.20"
+build.verbose = false
+# The package talks to the core through ctypes, so one wheel serves every
+# Python 3 version on a platform.
+wheel.py-api = "py3"
+wheel.packages = ["python/gamut"]
+sdist.exclude = [".github", "AGENTS.md", "matlab", "julia", "bench", "docs", "corpus",
+                 "tests/two_hdf5_linux.sh"]
+
+[tool.scikit-build.cmake.define]
+GAMUT_BUILD_TESTS = "OFF"
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]
+
+[tool.cibuildwheel]
+build = "cp312-*"
+skip = ["*-musllinux_*", "*-win32", "*_i686"]
+build-frontend = "build"
+test-extras = ["test"]
+test-command = "pytest -q {project}/python/tests"
+# HDF5 and zlib, built once per platform and linked into the core.
+environment = { GAMUT_DEPS = "/tmp/gamut-deps", CMAKE_ARGS = "-DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT=/tmp/gamut-deps -DZLIB_ROOT=/tmp/gamut-deps" }
+before-all = "bash {project}/tools/build_deps.sh /tmp/gamut-deps"
+
+[tool.cibuildwheel.linux]
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
+
+[tool.cibuildwheel.macos]
+environment = { MACOSX_DEPLOYMENT_TARGET = "11.0", GAMUT_DEPS = "/tmp/gamut-deps", CMAKE_ARGS = "-DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT=/tmp/gamut-deps -DZLIB_ROOT=/tmp/gamut-deps" }
+
+[tool.cibuildwheel.windows]
+environment = { GAMUT_DEPS = "C:/gamut-deps", CMAKE_ARGS = "-DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT=C:/gamut-deps -DZLIB_ROOT=C:/gamut-deps" }
+# Git's bash by full path: a bare `bash` can resolve to the WSL launcher.
+before-all = '"C:/Program Files/Git/bin/bash.exe" {project}/tools/build_deps.sh C:/gamut-deps'

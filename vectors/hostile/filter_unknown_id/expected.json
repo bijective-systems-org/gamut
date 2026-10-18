@@ -1,1 +1,0 @@
-{"allow_extra":true,"description":"A field carrying filter 39999, which no HDF5 build has. It is marked optional, so the bytes are readable and only the pipeline is wrong.","required_errors":["E29"],"timeout_seconds":10}

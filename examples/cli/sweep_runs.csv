@@ -1,0 +1,5 @@
+mach,alpha,status,cl,cd
+0.3,0,converged,0.012,0.0081
+0.3,4,converged,0.452,0.0154
+0.5,0,converged,0.014,0.0083
+0.5,4,failed,nan,nan

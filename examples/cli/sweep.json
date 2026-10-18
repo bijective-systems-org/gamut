@@ -1,0 +1,9 @@
+{
+  "writer": "wind tunnel log",
+  "title": "Model B, first entry",
+  "parameters": {"mach": {"units": "1", "role": "condition"},
+                 "alpha": {"units": "degree", "role": "condition"}},
+  "labels": {"status": {"role": "status", "categories": ["converged", "failed"]}},
+  "scalars": {"cl": "1", "cd": "1"},
+  "runs": "sweep_runs.csv"
+}

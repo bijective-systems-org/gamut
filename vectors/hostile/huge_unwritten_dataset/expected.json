@@ -1,1 +1,0 @@
-{"allow_extra":true,"description":"A scalar slot declaring 10^12 rows in a file of two, chunked and never written. Validating it must not allocate; only an eager read is E41.","required_errors":["E16"],"timeout_seconds":10}
