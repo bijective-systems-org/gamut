@@ -42,8 +42,8 @@ with mestra.open("sweep.mes") as study:
 
 - **One file per study.** Runs, inputs, results, mesh and fields together,
   compressed, appended to one run at a time as a study grows.
-- **Partial reads.** One run, one region of every run, or one node across
-  thousands of runs, decompressing only the chunks that hold them.
+- **Reads by part.** One run, a region of every run, or one node across
+  thousands of runs, each one call that returns only what was asked for.
 - **Meaning that travels with the numbers.** Units on every value, checked;
   which runs failed; which rows share a geometry or belong to one transient
   run; uncertainty and gradients beside the values they describe.
@@ -56,8 +56,10 @@ with mestra.open("sweep.mes") as study:
   h5py, xarray and the netCDF tools read it without this package, and one
   command turns a study back into VTK files.
 
-[Benchmarks](docs/benchmarks.md) measure size and read speed against a
-folder of VTK files, plain HDF5, netCDF and Zarr on real studies.
+On two real studies, one mestra file was six times and two times smaller
+than the folder of VTK files each came as, and read one run, or the runs
+meeting a condition, in milliseconds. The [benchmarks](docs/benchmarks.md)
+compare it with VTK, HDF5, netCDF and Zarr, including where it is slower.
 
 ## Install
 

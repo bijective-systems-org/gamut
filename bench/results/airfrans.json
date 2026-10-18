@@ -1,0 +1,116 @@
+{
+ "case": "airfrans",
+ "machine": {
+  "python": "3.11.11",
+  "system": "macOS-27.0.1-arm64-arm-64bit",
+  "cpu": "Apple M3",
+  "memory_bytes": "8589934592",
+  "cores": "8",
+  "packages": {
+   "mestra": "1.0.0.dev0",
+   "numpy": "2.4.6",
+   "h5py": "3.16.0",
+   "netCDF4": "1.7.5",
+   "xarray": "2026.9.0",
+   "zarr": "3.1.6",
+   "pyarrow": "26.0.0",
+   "pandas": "3.0.6",
+   "pyvista": "0.49.1",
+   "vtk": "9.7.1"
+  },
+  "source": "3f40920"
+ },
+ "reads": {
+  "field": "p",
+  "row": 50,
+  "where": "inflow_speed > 50 and angle_of_attack > 5"
+ },
+ "shape": {
+  "runs": 100
+ },
+ "formats": {
+  "vtk_folder": {
+   "format": "vtk_folder",
+   "write_s": null,
+   "bytes": 1462537090,
+   "open": {
+    "median_s": 0.00032074993941932917,
+    "min_s": 0.0003037499263882637,
+    "max_s": 0.00040433299727737904,
+    "repeats": 5,
+    "checksum": 100
+   },
+   "one_run": {
+    "median_s": 0.12520108302123845,
+    "min_s": 0.1229319580597803,
+    "max_s": 0.13004062499385327,
+    "repeats": 5,
+    "checksum": 5839472.50930538
+   },
+   "query": {
+    "median_s": 0.00036150007508695126,
+    "min_s": 0.0003358330577611923,
+    "max_s": 0.000569624942727387,
+    "repeats": 5,
+    "checksum": 1541.0
+   }
+  },
+  "vtk_zip": {
+   "format": "vtk_zip",
+   "write_s": 39.889543000026606,
+   "bytes": 975513683
+  },
+  "mestra": {
+   "format": "mestra",
+   "write_s": 53.365558583056554,
+   "bytes": 709575325,
+   "open": {
+    "median_s": 0.0006878330605104566,
+    "min_s": 0.0006654590833932161,
+    "max_s": 0.0007367919897660613,
+    "repeats": 5,
+    "checksum": 100
+   },
+   "one_run": {
+    "median_s": 0.014899458969011903,
+    "min_s": 0.014837999944575131,
+    "max_s": 0.015228374977596104,
+    "repeats": 5,
+    "checksum": 5839472.50930538
+   },
+   "query": {
+    "median_s": 0.0007214590441435575,
+    "min_s": 0.000719957984983921,
+    "max_s": 0.0007509159622713923,
+    "repeats": 5,
+    "checksum": 1541.0
+   }
+  },
+  "hdf5_per_run": {
+   "format": "hdf5_per_run",
+   "write_s": 38.30362254101783,
+   "bytes": 993917696,
+   "open": {
+    "median_s": 8.937506936490536e-05,
+    "min_s": 8.066697046160698e-05,
+    "max_s": 0.00010850001126527786,
+    "repeats": 5,
+    "checksum": 100
+   },
+   "one_run": {
+    "median_s": 0.013768541975878179,
+    "min_s": 0.013602791936136782,
+    "max_s": 0.014140375074930489,
+    "repeats": 5,
+    "checksum": 5839472.50930538
+   },
+   "query": {
+    "median_s": 0.0029275420820340514,
+    "min_s": 0.0029082910623401403,
+    "max_s": 0.00305049994494766,
+    "repeats": 5,
+    "checksum": 1541.0
+   }
+  }
+ }
+}
