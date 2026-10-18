@@ -628,6 +628,24 @@ def hostile_cases(out):
             d.attrs.create(k, v)
         d.dims[0].attach_scale(f["row"])
     cases["hostile_tiny_chunks"] = {"rules": [], "reads": [{"scalar": "cl"}]}
+    # A point cloud whose fixed coordinates claim 2**40 nodes, none written:
+    # the support id hashes them, so a checker must refuse before reading.
+    p = os.path.join(out, "hostile_points_huge.mes")
+    shutil.copy(os.path.join(out, "point_cloud.mes"), p)
+    with h5py.File(p, "r+") as f:
+        old = f["mesh/coordinates"]
+        attrs = {k: old.attrs[k] for k in old.attrs if k != "DIMENSION_LIST"}
+        axes = old.shape[1]
+        old.dims[0].detach_scale(f["mesh/node"])
+        old.dims[1].detach_scale(f["mesh/axis"])
+        del f["mesh/coordinates"]
+        d = f.create_dataset("mesh/coordinates", shape=(1 << 40, axes), chunks=(1 << 14, axes),
+                             dtype="<f8")
+        for k, v in attrs.items():
+            d.attrs.create(k, v)
+        d.dims[0].attach_scale(f["mesh/node"])
+        d.dims[1].attach_scale(f["mesh/axis"])
+    cases["hostile_points_huge"] = {"rules": ["E23"], "reads": []}
     return cases
 
 

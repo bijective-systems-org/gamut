@@ -836,13 +836,17 @@ void Validator::mesh() {
       if (!dtype_of(o.info.type, &d) || d != DType::Int64) add("E4", "cells/offsets", "offsets are int64");
       if (!dtype_of(c.info.type, &d) || d != DType::Int64) add("E4", "cells/connectivity", "connectivity is int64");
       const bool grows = !shared;
-      check_dims(t, {"cell"}, {"/mesh/cell"});
-      check_dims(o, {"cell_plus_one"}, {"/mesh/cell_plus_one"});
-      check_dims(c, {"index"}, {"/mesh/index"});
+      // Cells whose lengths disagree with their scales are reported there
+      // and not walked: a declared length is not read past what it claims.
+      const bool types_dims = check_dims(t, {"cell"}, {"/mesh/cell"});
+      const bool offsets_dims = check_dims(o, {"cell_plus_one"}, {"/mesh/cell_plus_one"});
+      const bool connectivity_dims = check_dims(c, {"index"}, {"/mesh/index"});
+      const bool dims = types_dims && offsets_dims && connectivity_dims;
       check_storage(t, false, {grows});
       check_storage(o, false, {grows});
       check_storage(c, false, {grows});
       if (t.info.shape.size() == 1) n_cells = static_cast<std::int64_t>(t.info.shape[0]);
+      if (!dims) return;
       cell_types = t;
       cell_offsets = o;
       cell_connectivity = c;
@@ -947,6 +951,12 @@ void Validator::mesh() {
         // A point cloud's fixed coordinates, as float64, a block of nodes at a time.
         const std::int64_t nodes = static_cast<std::int64_t>(coords.info.shape[0]);
         const std::int64_t width = static_cast<std::int64_t>(coords.info.shape[1]);
+        if (static_cast<std::uint64_t>(nodes) * static_cast<std::uint64_t>(width) > kMaxDatasetElements) {
+          add("E23", "coordinates", "holds " + std::to_string(nodes) + " × " + std::to_string(width) +
+                                        " values, more than the " + std::to_string(kMaxDatasetElements) +
+                                        " a checker reads");
+          return;
+        }
         const std::int64_t step = std::max<std::int64_t>(1, (std::int64_t(1) << 16) / std::max<std::int64_t>(width, 1));
         std::vector<double> pts;
         for (std::int64_t a = 0; a < nodes; a += step) {
@@ -1330,13 +1340,25 @@ void Validator::warnings() {
       // cell; a changing mesh's values are stored end to end.
       const auto f = static_cast<std::uint64_t>(first);
       const std::vector<hsize_t>& shape = o.info.shape;
+      const bool node = o.h5.find("/node_fields/") != std::string::npos;
       std::string at = "element " + std::to_string(f);
       if (scalar) {
         at = "row " + std::to_string(f);
       } else if (shape.size() == 2 && shape[1] > 0) {
-        at = "row " + std::to_string(f / shape[1]) + ", " +
-             (o.h5.find("/node_fields/") != std::string::npos ? "node " : "cell ") +
+        at = "row " + std::to_string(f / shape[1]) + ", " + (node ? "node " : "cell ") +
              std::to_string(f % shape[1]);
+      } else if (shape.size() == 1) {
+        // A changing mesh: rows' values end to end, each row's start recorded.
+        const std::string p = node ? "/mesh/row_node_start" : "/mesh/row_cell_start";
+        if (file_->is_dataset(p)) {
+          const auto starts = ints(object(p, "", ""));
+          const auto it = std::upper_bound(starts.begin(), starts.end(), static_cast<std::int64_t>(f));
+          if (it != starts.begin()) {
+            const auto r = static_cast<std::size_t>(it - starts.begin() - 1);
+            at = "row " + std::to_string(r) + ", " + (node ? "node " : "cell ") +
+                 std::to_string(static_cast<std::int64_t>(f) - starts[r]);
+          }
+        }
       }
       add("W3", o.concept, counted(bad, "value is", "values are") + " missing or not finite, the "
                            "first at " + at);

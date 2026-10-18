@@ -210,8 +210,8 @@ def _human(doc: dict) -> str:
         if len(names) > 6:
             # Many names (a family's members): how many, and a few of them.
             spread = sorted(set(counts.values()))
-            each = "" if not spread else f", {spread[0]} runs each" if len(spread) == 1 else \
-                f", {spread[0]} to {spread[-1]} runs each"
+            each = "" if not spread else f", {_counted(spread[0], 'run')} each" \
+                if len(spread) == 1 else f", {spread[0]} to {spread[-1]} runs each"
             what = f"{len(names)} names{each}: {', '.join(names[:3])}, ..."
         elif counts:
             what = ", ".join(f"{n} {c}" for c, n in counts.items())

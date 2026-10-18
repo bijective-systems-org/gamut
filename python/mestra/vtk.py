@@ -490,6 +490,11 @@ def _cell(v: Any) -> str:
 # --- command line -------------------------------------------------------------------------
 
 
+def _counted(n: int, noun: str) -> str:
+    """"1 run", "3 runs": a count with its noun agreeing."""
+    return f"{n:,} {noun if n == 1 else noun + 's'}"
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="mestra-vtk", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="command", required=True)
@@ -518,7 +523,7 @@ def main(argv: list[str] | None = None) -> int:
         if a.json:
             print(json.dumps({"ok": False, "problems": problems}, indent=1))
         else:
-            print(f"{len(problems)} problem{'' if len(problems) == 1 else 's'}:", file=sys.stderr)
+            print(f"{_counted(len(problems), 'problem')}:", file=sys.stderr)
             for p in problems:
                 print(f"  {p}", file=sys.stderr)
         return 1
@@ -527,14 +532,17 @@ def main(argv: list[str] | None = None) -> int:
     elif "templates" in report:
         print("wrote " + " and ".join(report["templates"]) + "; " + report["next"])
     elif a.command == "import":
-        print(f"{report['file']}: {report['rows']} runs, geometry {report['geometry']}, "
-              f"{len(report['fields'])} fields, {len(report['mesh_labels'])} mesh labels")
+        geometry = {"fixed": "one fixed geometry", "per run": "a geometry per run"}.get(
+            report["geometry"], report["geometry"])
+        print(f"{report['file']}: {_counted(report['rows'], 'run')}, {geometry}, "
+              f"{_counted(len(report['fields']), 'field')}, "
+              f"{_counted(len(report['mesh_labels']), 'mesh label')}")
         for line in report["notes"] + [f"left out (not in the CSV): {f}" for f in report["left_out"]]:
             print(f"  {line}")
         for line in report["findings"]:
             print(f"  {line}")
     else:
-        print(f"{report['folder']}: {len(report['files'])} files, parameters.csv, fields.csv")
+        print(f"{report['folder']}: {_counted(len(report['files']), 'file')}, parameters.csv, fields.csv")
     if "templates" in report:
         return 2
     return 0 if report.get("ok") else 1

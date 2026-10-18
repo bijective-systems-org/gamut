@@ -156,6 +156,17 @@ def test_missing_values_are_located(tmp_path):
     found = {f.path: f.message for f in mestra.validate(p).warnings if f.rule == "W3"}
     assert found["cl"] == "2 values are missing or not finite, the first at row 0"
     assert found["node_fields/p"] == "1 value is missing or not finite, the first at row 1, node 4"
+    # On a changing mesh, by the row's own node.
+    p = str(tmp_path / "gaps_changing.mes")
+    small, cells_small = grid(2, 3)
+    with mestra.create(p, writer="t", mesh="changing", per="run",
+                       coordinates={"units": "m", "axes": 2}, parameters={"k": "1"},
+                       fields={"p": {"units": "Pa", "at": "node"}}) as s:
+        s.add_run({"k": 1.0}, points=pts, cells=cells, fields={"p": np.ones(9)})
+        s.add_run({"k": 2.0}, points=small, cells=cells_small,
+                  fields={"p": np.array([1.0, 1.0, 1.0, np.nan, 1.0, 1.0])})
+    found = {f.path: f.message for f in mestra.validate(p).warnings if f.rule == "W3"}
+    assert found["node_fields/p"] == "1 value is missing or not finite, the first at row 1, node 3"
 
 
 def test_meshes_larger_than_a_block_are_checked_whole(tmp_path):
