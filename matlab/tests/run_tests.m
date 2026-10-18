@@ -36,6 +36,9 @@ ok(isa(r.getScalar('cd'), 'single'), 'cd kept single');
 st = r.getLabel('status', 'rows', 3);
 ok(strcmp(st{1}, 'failed'), 'label by 1-based row');
 ok(isequal(r.select('mach > 0.45'), [3; 4; 5]), 'select 1-based');
+ok(isequal(r.select('mach>0.45'), [3; 4; 5]), 'select without spaces');
+c = r.categories('status');
+ok(isequal(c(:)', {'converged', 'failed'}), 'category table');
 ok(r.getConstant('s_ref') == 12.5, 'constant');
 ids = r.getRowIds();
 ok(isequal(ids', int64(0:4)), 'row ids 0-based values');
@@ -190,6 +193,23 @@ catch err
     ok(contains(err.message, 'closed') || strcmp(err.identifier, 'mestra:usage'), 'closed handle');
 end
 
+% The example in examples/matlab runs and writes a valid file.
+example = fullfile(fileparts(fileparts(here)), 'examples', 'matlab', 'one_mesh.m');
+if isfile(example)
+    written = run_example(example, tmp);
+    ok(isempty(mestra.validate(written)), 'the MATLAB example writes a valid file');
+end
+
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('mestra:tests', '%d failures', failures); end
+end
+
+function written = run_example(example, folder)
+% Runs an example script in its own workspace and folder, quietly.
+old = cd(folder);
+restore = onCleanup(@() cd(old));
+copyfile(example, folder);
+[~, name] = fileparts(example);
+evalc(name);
+written = fullfile(folder, 'cylinder.mes');
 end

@@ -30,6 +30,11 @@ from ._study import create, open as open_file
 from ._files import append as mestra_append, extract as mestra_extract
 from ._validate import validate
 
+
+def _counted(n: int, one: str, many: str | None = None) -> str:
+    """"1 run", "3 runs": a count with its noun agreeing."""
+    return f"{n:,} {one if n == 1 else many or one + 's'}"
+
 EXAMPLE = {
     "writer": "my sweep script",
     "title": "Wing A sweep",
@@ -137,25 +142,49 @@ def _summary(path: str) -> dict:
             if f.type == "shared":
                 if f._per == "fixed":
                     mesh["nodes"] = int(f.get_points().shape[0])
+                elif f.row_count:
+                    mesh["nodes"] = int(f.get_points(row=0).shape[0])
                 types, _, _ = f.get_cells()
                 mesh["cells"] = int(types.size)
                 mesh["support_id"] = d.get("support_id")
             mesh["node_fields"] = [{"name": n, **f.describe(n)} for n in f.names("node_fields")]
             mesh["cell_fields"] = [{"name": n, **f.describe(n)} for n in f.names("cell_fields")]
-            mesh["mesh_labels"] = [{"name": n, **f.describe(n)}
-                                   for n in f.names("node_labels") + f.names("cell_labels")]
+            mesh["mesh_labels"] = []
+            for n in f.names("node_labels") + f.names("cell_labels"):
+                entry = {"name": n, **f.describe(n)}
+                if entry.get("category"):
+                    entry["categories"] = f.categories(n)
+                mesh["mesh_labels"].append(entry)
             doc["mesh"] = mesh
         doc["models"] = [{"id": m, **f.describe(f"models/{m}")} for m in f.names("models")]
     return doc
 
 
+def _number(described: dict) -> str:
+    """A constant's value as a person writes it: 12.5, not 1.25e+01."""
+    text = described.get("value", "")
+    try:
+        return str(int(text)) if described.get("dtype") == "int64" else repr(float(text))
+    except ValueError:
+        return text
+
+
 def _human(doc: dict) -> str:
     kinds = {"table": "table", "shared": "shared mesh", "changing": "changing mesh"}
-    head = f"{os.path.basename(doc['file'])}: {kinds.get(doc['type'], doc['type'])}"
+    kind = kinds.get(doc["type"], doc["type"])
+    head = f"{os.path.basename(doc['file'])}: "
     if doc["kind"] == "model":
-        head += ", model file"
+        head += "model file" + (f" on a {kind}" if doc["type"] != "table" else "")
     else:
-        head += f", {doc['row_count']:,} run(s)"
+        head += f"{kind}, "
+        # Transient rows are saved steps; their runs are the run group's names.
+        group = next((p["run_group"] for p in doc["parameters"] if p.get("run_group")), None)
+        counts = next((l.get("counts") for l in doc["labels"] if l["name"] == group), None)
+        if counts:
+            runs = sum(1 for n in counts.values() if n)
+            head += f"{_counted(doc['row_count'], 'row')}, saved steps of {_counted(runs, 'run')}"
+        else:
+            head += _counted(doc["row_count"], "run")
     lines = [head]
     mesh = doc.get("mesh")
     if mesh:
@@ -164,14 +193,15 @@ def _human(doc: dict) -> str:
             parts.append(f"{mesh['nodes']:,} nodes")
         if "cells" in mesh:
             parts.append(f"{mesh['cells']:,} cells")
-        parts.append({"fixed": "fixed", "run": "geometry per run"}.get(
-            mesh["per"], f"geometry per {mesh['per'][6:]}" if mesh["per"] else ""))
+        what = "a mesh" if mesh["kind"] == "changing" else "geometry"
+        parts.append({"fixed": "fixed", "run": f"{what} per run"}.get(
+            mesh["per"], f"{what} per {mesh['per'][6:]}" if mesh["per"] else ""))
         lines.append("  mesh        " + ", ".join(p for p in parts if p))
     if doc["parameters"]:
         items = []
         for p in doc["parameters"]:
             rng = p.get("range") or ([p["lower"], p["upper"]] if "lower" in p else None)
-            r = f" {rng[0]:g}–{rng[1]:g}" if rng else ""
+            r = "" if not rng else f" {rng[0]:g}" if rng[0] == rng[1] else f" {rng[0]:g} to {rng[1]:g}"
             items.append(f"{p['name']} [{p['units']}]{r}")
         lines.append("  parameters  " + ", ".join(items))
     for l in doc["labels"]:
@@ -188,21 +218,23 @@ def _human(doc: dict) -> str:
         if fields:
             lines.append("  fields      " + "; ".join(fields))
         if mesh["mesh_labels"]:
-            lines.append("  zones       " + ", ".join(m["name"] for m in mesh["mesh_labels"]))
+            lines.append("  zones       " + "; ".join(
+                m["name"] + (": " + ", ".join(m["categories"]) if m.get("categories") else "")
+                for m in mesh["mesh_labels"]))
     rel = [s for s in doc["scalars"] + (mesh["node_fields"] + mesh["cell_fields"] if mesh else [])
            if s.get("of")]
     if rel:
         words = []
         for s in rel:
             if s.get("statistic") == "std":
-                words.append(f"{s['name']} (spread of {s['of']})")
+                words.append(f"{s['name']} (std of {s['of']})")
             elif s.get("statistic") == "quantile":
                 words.append(f"{s['name']} ({float(s['q']) * 100:g}% quantile of {s['of']})")
             else:
                 words.append(f"{s['name']} (d{s['of']}/d{s.get('with_respect_to')})")
         lines.append("  also        " + ", ".join(words))
     if doc["constants"]:
-        lines.append("  constants   " + ", ".join(f"{c['name']} = {c.get('value')} {c['units']}"
+        lines.append("  constants   " + ", ".join(f"{c['name']} = {_number(c)} {c['units']}"
                                                   for c in doc["constants"]))
     for m in doc["models"]:
         lines.append(f"  model       {m['id']}: {m.get('type')} reading {m.get('inputs')}")
@@ -240,8 +272,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
     r = validate(args.file)
     doc = {"file": args.file, "ok": r.ok, "errors": len(r.errors), "warnings": len(r.warnings),
            "findings": [f.__dict__ for f in r.findings]}
-    head = f"{'no' if not r.errors else len(r.errors)} error(s), " \
-           f"{'no' if not r.warnings else len(r.warnings)} warning(s)"
+    head = (f"{_counted(len(r.errors), 'error') if r.errors else 'no errors'}, "
+            f"{_counted(len(r.warnings), 'warning') if r.warnings else 'no warnings'}")
     lines = [head] + [f"  {f.rule} {f.path or '(file)'}: {f.message}" for f in r.findings]
     _emit(args, doc, "\n".join(lines))
     return 0 if r.ok else 1
@@ -380,7 +412,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         _cleanup(args.output)
         return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
     _emit(args, {"wrote": args.output, "rows": n, "problems": []},
-          f"wrote {args.output}: {n} run(s)")
+          f"wrote {args.output}: {_counted(n, 'run')}")
     return 0
 
 
@@ -393,7 +425,7 @@ def cmd_append(args: argparse.Namespace) -> int:
         except MestraError as e:
             return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
         _emit(args, {"appended": args.file, "rows": n, "problems": []},
-              f"appended {n} run(s) from {args.document} to {args.file}")
+              f"appended {_counted(n, 'run')} from {args.document} to {args.file}")
         return 0
     with open(args.document) as fh:
         doc = json.load(fh)
@@ -412,13 +444,13 @@ def cmd_append(args: argparse.Namespace) -> int:
     except MestraError as e:
         return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
     _emit(args, {"appended": args.file, "rows": n, "problems": []},
-          f"appended {n} run(s) to {args.file}")
+          f"appended {_counted(n, 'run')} to {args.file}")
     return 0
 
 
 def _report_problems(args: argparse.Namespace, problems: list[tuple[str, str]]) -> int:
     doc = {"problems": [{"key": k, "message": m} for k, m in problems]}
-    text = f"{len(problems)} problem(s):\n" + "\n".join(f"  {k}: {m}" for k, m in problems)
+    text = f"{_counted(len(problems), 'problem')}:\n" + "\n".join(f"  {k}: {m}" for k, m in problems)
     if args.json:
         print(json.dumps(doc, indent=1))
     else:
@@ -464,7 +496,7 @@ def _get_study(args: argparse.Namespace) -> int:
             positions = np.intersect1d(f.select(args.where), positions)
     mestra_extract(args.file, args.output, np.asarray(positions, dtype=np.int64))
     _emit(args, {"wrote": args.output, "rows": int(len(positions))},
-          f"wrote {len(positions)} run(s) to {args.output}")
+          f"wrote {_counted(len(positions), 'run')} to {args.output}")
     return 0
 
 

@@ -274,7 +274,8 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
                 and np.array_equal(c, conn0)):
             differ = _first_difference(t, o, c, types0, offsets0, conn0)
             problems.append(f"{f}: its cells differ from {files[0]}'s ({differ}); runs on "
-                            "different meshes need a correspondence first (TopoLink)")
+                            "different meshes need a correspondence first, from a mapping or "
+                            "morphing tool")
             continue
         if not np.array_equal(run["points"], first["points"]):
             fixed_geometry = False
@@ -505,7 +506,7 @@ def main(argv: list[str] | None = None) -> int:
         if a.json:
             print(json.dumps({"ok": False, "problems": problems}, indent=1))
         else:
-            print(f"{len(problems)} problem(s):", file=sys.stderr)
+            print(f"{len(problems)} problem{'' if len(problems) == 1 else 's'}:", file=sys.stderr)
             for p in problems:
                 print(f"  {p}", file=sys.stderr)
         return 1

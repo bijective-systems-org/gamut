@@ -247,6 +247,16 @@ void test_shared_fixed() {
   CHECK(region.size() == 12 && region[0] == 2.0 && region[1] == 3.0 && region[2] == 14.0);
   const auto one = read_f64(*r, "node_fields/p", Selection::list({5}));
   CHECK(one.size() == 12 && one[11] == 71.0);
+  // A buffer is a capacity: filled from the start, the rest left alone.
+  std::vector<double> roomy(20, -1.0);
+  r->read("node_fields/p", Selection::list({5}), Selection::range(0, 2), DType::Float64,
+          roomy.data(), roomy.size() * sizeof(double));
+  CHECK(roomy[0] == 60.0 && roomy[1] == 61.0 && roomy[2] == -1.0);
+  double tight = 0.0;
+  CHECK(!rule_of([&] {
+           r->read("node_fields/p", Selection::list({5}), Selection::range(0, 2),
+                   DType::Float64, &tight, sizeof tight);
+         }).empty());
   const auto coords = read_f64(*r, "coordinates");
   CHECK(coords.size() == 24 && coords[2] == 1.0);
   const auto zone = read_i64(*r, "cell_labels/zone");

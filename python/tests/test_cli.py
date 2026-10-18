@@ -54,7 +54,7 @@ def test_build_info_validate_get(tmp_path, capsys):
     assert [p["name"] for p in info["parameters"]] == ["alpha", "mach"]
     assert info["labels"][0]["counts"] == {"converged": 3, "failed": 1}
     code, text, _ = run(capsys, "info", target)
-    assert "shared mesh, 4 run(s)" in text and "p [Pa] at nodes" in text
+    assert "shared mesh, 4 runs" in text and "p [Pa] at nodes" in text
 
     code, out, _ = run(capsys, "validate", target, "--json")
     v = json.loads(out)

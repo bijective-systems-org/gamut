@@ -88,6 +88,9 @@ def test_sweep_on_one_mesh_and_region_reads(tmp_path):
         np.testing.assert_array_equal(region[:, 1], p_runs[:, 1])
         np.testing.assert_array_equal(f.get_points(), pts)
         assert f.get_mesh_label("zone").tolist() == [0, 0, 0, 1, 1, 1]
+        assert f.categories("zone") == ["inlet", "wall"]
+        with pytest.raises(mestra.MestraError, match="no category table"):
+            f.categories("mach")
         assert f.related("u")["vector"] == ["u", "v"]
         types, offsets, conn = f.get_cells()
         assert types.tolist() == [9] * 6 and offsets[-1] == 24
@@ -255,8 +258,13 @@ def test_select_where(tmp_path):
         assert f.select("mach > 0.4 and status == converged").tolist() == [2, 3]
         assert f.select('model == "k-omega SST" or alpha <= 0').tolist() == [0, 1, 3]
         assert f.select("not (mach > 0.4)").tolist() == [0]
-        with pytest.raises(mestra.MestraError, match="operator"):
-            f.select("(mach>0.4)and(alpha<5)")   # tokens are separated by spaces
+        # Operators need no spaces; a single = is not one.
+        assert f.select("(mach>0.4)and(alpha<5)").tolist() == [1, 2]
+        assert f.select("status==converged").tolist() == [0, 2, 3]
+        assert f.select('model!="k-omega SST"').tolist() == [0, 2]
+        assert f.select("alpha>=-1e-9").tolist() == [0, 1, 2, 3]
+        with pytest.raises(mestra.MestraError, match=r"operator \(==, !=, <, <=, >, >=\)"):
+            f.select("mach = 0.5")
     with mestra.open(p) as f:
         # NaN compares false, so these differ on row 1.
         assert f.select("cl <= 0.5").tolist() == [0, 2]

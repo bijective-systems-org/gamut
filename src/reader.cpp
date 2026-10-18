@@ -531,11 +531,13 @@ void Reader::read(const std::string& path, const Selection& runs,
   const std::vector<std::int64_t> shp = shape(path, runs, sites);
   std::int64_t count = 1;
   for (const auto x : shp) count *= x;
-  need(out_bytes == static_cast<std::size_t>(count) * dtype_size(mem), "",
-       path + ": the buffer holds " + std::to_string(out_bytes) +
-           " bytes and the read needs " +
-           std::to_string(static_cast<std::size_t>(count) * dtype_size(mem)),
+  // The buffer is a capacity: the read fills what it needs from the start.
+  const std::size_t needed = static_cast<std::size_t>(count) * dtype_size(mem);
+  need(out_bytes >= needed, "",
+       path + ": the buffer holds " + std::to_string(out_bytes) + " bytes and the read needs " +
+           std::to_string(needed),
        path);
+  out_bytes = needed;
   if (count == 0) return;
   const File& f = *file_;
   if (path == "row") {

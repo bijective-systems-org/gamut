@@ -143,6 +143,21 @@ def test_rules_fire_on_a_broken_mesh(shared, tmp_path, rule, edit):
     fires(broken(shared, tmp_path, edit), rule)
 
 
+def test_missing_values_are_located(tmp_path):
+    p = str(tmp_path / "gaps.mes")
+    pts, cells = grid(3, 3)
+    pressure = np.ones((2, 9))
+    pressure[1, 4] = np.nan
+    with mestra.create(p, writer="t", mesh="shared", per="fixed",
+                       coordinates={"units": "m", "axes": 2}, parameters={"k": "1"},
+                       scalars={"cl": "1"}, fields={"p": {"units": "Pa", "at": "node"}}) as s:
+        s.set_mesh(pts, cells)
+        s.add_runs({"k": [1.0, 2.0], "cl": [np.nan, np.nan]}, fields={"p": pressure})
+    found = {f.path: f.message for f in mestra.validate(p).warnings if f.rule == "W3"}
+    assert found["cl"] == "2 values are missing or not finite, the first at row 0"
+    assert found["node_fields/p"] == "1 value is missing or not finite, the first at row 1, node 4"
+
+
 def test_a_name_used_twice(shared, tmp_path):
     def edit(f):
         f["mesh/cell_fields/u"].attrs.modify("vector", np.bytes_(b"vel"))

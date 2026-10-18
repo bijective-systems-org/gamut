@@ -70,6 +70,8 @@ mktempdir() do tmp
             types, offsets, conn = Mestra.get_cells(f)
             @test types == cells[1] && offsets == cells[2] && conn == cells[3]   # 0-based nodes
             @test Mestra.get_mesh_label(f, "zone") == [0, 0, 0, 1, 1, 1]
+            @test Mestra.categories(f, "zone") == ["inlet", "wall"]
+            @test_throws MestraError Mestra.categories(f, "mach")
             @test Mestra.related(f, "u")["vector"] == ["u"]
         end
         # Threads give the same answer.

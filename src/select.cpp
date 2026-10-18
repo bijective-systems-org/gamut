@@ -26,6 +26,8 @@ struct Token {
   std::size_t at = 0;   // byte offset, for messages
 };
 
+bool is_op_char(char c) { return c == '=' || c == '!' || c == '<' || c == '>'; }
+
 std::vector<Token> tokenize(const std::string& s) {
   std::vector<Token> out;
   std::size_t i = 0;
@@ -50,10 +52,17 @@ std::vector<Token> tokenize(const std::string& s) {
       t.kind = Token::String;
       t.text = s.substr(i + 1, end - i - 1);
       i = end + 1;
+    } else if (is_op_char(c)) {
+      // An operator needs no spaces around it: "mach>0.7" is three tokens.
+      // Names never hold these characters (SPEC.md section 9.3).
+      const std::size_t n = i + 1 < s.size() && s[i + 1] == '=' ? 2 : 1;
+      t.kind = Token::Word;
+      t.text = s.substr(i, n);
+      i += n;
     } else {
       std::size_t j = i;
       while (j < s.size() && !std::isspace(static_cast<unsigned char>(s[j])) && s[j] != '(' &&
-             s[j] != ')') {
+             s[j] != ')' && s[j] != '"' && !is_op_char(s[j])) {
         ++j;
       }
       t.kind = Token::Word;

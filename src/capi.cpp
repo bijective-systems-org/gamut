@@ -1074,10 +1074,9 @@ int mes_tree_array(const mes_tree* t, const char* key, void* out, int64_t out_by
     clear(err);
     const auto& v = value_at(t, key);
     need(v.kind() == mestra::internal::Value::Kind::Numbers, "\"" + str(key) + "\" is not an array");
-    need(out_bytes == static_cast<int64_t>(v.bytes().size()), "the buffer holds " +
-                                                                  std::to_string(out_bytes) +
-                                                                  " bytes and the array " +
-                                                                  std::to_string(v.bytes().size()));
+    need(out_bytes >= static_cast<int64_t>(v.bytes().size()),
+         "the buffer holds " + std::to_string(out_bytes) + " bytes and the array " +
+             std::to_string(v.bytes().size()));
     if (out_bytes > 0) std::memcpy(out, v.bytes().data(), v.bytes().size());
     return 0;
   } catch (...) {

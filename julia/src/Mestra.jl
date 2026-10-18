@@ -711,6 +711,15 @@ end
 
 get_mesh_label(s::Study, name; row=nothing) = read(s, name, one_row(row), nothing, Int64; squeeze=false)
 
+"""    categories(study, name)    The category table of a label or mesh label: code c names entry c + 1."""
+function categories(s::Study, name)
+    t = get(describe(s, name), "category", "")
+    isempty(t) && throw(MestraError("", "$name has no category table; its codes are its values"))
+    out = Ref{Ptr{Cvoid}}(C_NULL)
+    @mes mes_table (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(s) cs(t) out
+    return take_strings(out[])
+end
+
 """    table(study; names=nothing, rows=nothing)    the run table as columns; labels as names."""
 function table(s::Study; names=nothing, rows=nothing)
     params = Mestra.names(s, "parameters")

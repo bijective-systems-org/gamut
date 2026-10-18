@@ -70,6 +70,11 @@ const AttrSpec kMeshLabelAttrs = {{"category", Kind::S}};
 const AttrSpec kModelAttrs = {{"type", Kind::S}, {"inputs", Kind::S}, {"repr", Kind::S}};
 const AttrSpec kNone = {};
 
+// "1 row is", "3 rows are": a count with its noun (and verb) agreeing.
+std::string counted(std::int64_t n, const char* one, const char* many) {
+  return std::to_string(n) + " " + (n == 1 ? one : many);
+}
+
 std::string where_word(const std::string& prefix) {
   return prefix.compare(0, 4, "node") == 0 ? "node" : "cell";
 }
@@ -1240,11 +1245,11 @@ void Validator::warnings() {
       return true;
     });
     if (bad > 0) {
-      add("W2", kv.first, std::to_string(bad) + " row(s) are not converged, the first row " +
-                          std::to_string(first) + "; training skips them by default");
+      add("W2", kv.first, counted(bad, "row is", "rows are") + " not converged, the first row " +
+                          std::to_string(first) + "; training skips such rows by default");
     }
   }
-  auto nonfinite = [&](const Object& o) {
+  auto nonfinite = [&](const Object& o, bool scalar) {
     if (!o.text("model").empty()) return;
     std::int64_t bad = 0, first = -1;
     bool negative = false;
@@ -1257,13 +1262,25 @@ void Validator::warnings() {
       return true;
     });
     if (bad > 0) {
-      add("W3", o.concept, std::to_string(bad) + " missing or non-finite value(s), the first at "
-                           "element " + std::to_string(first));
+      // Where a reader would look: a row, and on a shared mesh the node or
+      // cell; a changing mesh's values are stored end to end.
+      const auto f = static_cast<std::uint64_t>(first);
+      const std::vector<hsize_t>& shape = o.info.shape;
+      std::string at = "element " + std::to_string(f);
+      if (scalar) {
+        at = "row " + std::to_string(f);
+      } else if (shape.size() == 2 && shape[1] > 0) {
+        at = "row " + std::to_string(f / shape[1]) + ", " +
+             (o.h5.find("/node_fields/") != std::string::npos ? "node " : "cell ") +
+             std::to_string(f % shape[1]);
+      }
+      add("W3", o.concept, counted(bad, "value is", "values are") + " missing or not finite, the "
+                           "first at " + at);
     }
     if (o.text("statistic") == "std" && negative) add("W10", o.concept, "a std is never negative");
   };
-  for (const auto& kv : scalars_) nonfinite(kv.second);
-  for (const auto& kv : fields_) nonfinite(kv.second);
+  for (const auto& kv : scalars_) nonfinite(kv.second, true);
+  for (const auto& kv : fields_) nonfinite(kv.second, false);
   for (const auto& kv : parameters_) {
     // A parameter is never missing (spec section 3.8): E5, as the writer
     // refuses it. Bounds give W4.

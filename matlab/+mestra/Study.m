@@ -222,6 +222,16 @@ classdef Study < handle
             v = mestra_mex('read', s.Handle, name, s.pos(row), [], 4);
         end
 
+        function v = categories(s, name)
+            %CATEGORIES The category table of a label or mesh label, a cell
+            %   array of names: code c names entry c + 1.
+            t = mestra.internal.field(s.describe(name), 'category', '');
+            if isempty(t)
+                error('mestra:usage', '%s has no category table; its codes are its values', name);
+            end
+            v = mestra_mex('table', s.Handle, t);
+        end
+
         function t = table(s)
             %TABLE The run table as a MATLAB table: parameters, labels, scalars.
             t = table();

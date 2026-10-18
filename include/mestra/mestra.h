@@ -185,7 +185,9 @@ MES_API int mes_describe(const mes_file* f, const char* name, mes_strings** keys
 /* name: a parameter, label, scalar, constant, field or mesh label, or
  * "row", "coordinates", "cells/types", "cells/offsets",
  * "cells/connectivity".  rows and sites may be NULL (everything).  shape
- * holds up to 4 extents. */
+ * holds up to 4 extents.  mes_read converts to dtype and fills out from the
+ * start, in C order; out_bytes is its capacity, at least the product of the
+ * shape times the dtype's size. */
 MES_API int mes_shape(const mes_file* f, const char* name, const mes_sel* rows,
                       const mes_sel* sites, int64_t* shape, int* rank, mes_error* err);
 MES_API int mes_read(const mes_file* f, const char* name, const mes_sel* rows,
@@ -232,6 +234,7 @@ MES_API int mes_tree_strings(const mes_tree* t, const char* key, mes_strings** o
 /* shape holds up to 8 extents. */
 MES_API int mes_tree_array_info(const mes_tree* t, const char* key, int* dtype, int* rank,
                                 int64_t* shape, mes_error* err);
+/* out_bytes is the capacity of out, at least the array's size. */
 MES_API int mes_tree_array(const mes_tree* t, const char* key, void* out, int64_t out_bytes,
                            mes_error* err);
 

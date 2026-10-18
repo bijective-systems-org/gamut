@@ -412,6 +412,13 @@ class Study:
         rows = None if row is None else _one_row(row)
         return self._get(name, rows, dtype=np.int64, squeeze_row=False)
 
+    def categories(self, name: str) -> list[str]:
+        """The category table of a label or mesh label: code c names entry c."""
+        table = self.describe(name).get("category")
+        if not table:
+            raise MestraError("", f"{name} has no category table; its codes are its values")
+        return _lib.strings_out("mes_table", self._handle(), b(table))
+
     def table(self, names: Sequence[str] | None = None, rows: Any = None) -> dict[str, np.ndarray]:
         """The run table as columns: parameters, labels (as names), scalars."""
         self._need_reader()
@@ -541,7 +548,7 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
            title: str | None = None, license: str | None = None, references: str | None = None,
            source: str | None = None, generalisation_group: str | None = None,
            compression: bool = True) -> Study:
-    """Creates a data file and returns it open to add runs (interface §3)."""
+    """Creates a data file and returns it open to add runs."""
     if mesh is not None and per is None:
         raise MestraError("E6", "a mesh needs per: 'fixed', 'run' or 'group:<label>'")
     axes = _axes(coordinates)        # before the file exists: a refusal leaves none

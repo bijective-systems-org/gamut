@@ -265,6 +265,7 @@ def case_table(path):
          "values": np.array([0.01, 0.02, 0.03, 0.04], "<f4").astype(float).tolist()},
         {"label": "run", "rows": None, "names": ["a", "a", "b", "b"]},
         {"select": "mach > 0.35 and run == b", "positions": [2, 3]},
+        {"select": "(mach>0.35)and(run==b)", "positions": [2, 3]},
         {"info": "addons", "value": ["time", "gradients", "uncertainty"]},
         {"info": "type", "value": "table"},
     ]}
