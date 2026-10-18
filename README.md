@@ -66,7 +66,7 @@ cp = Gamut.open("cylinder.gamut") do study
 end
 ```
 
-C
+C and C++
 
 ```c
 CHECK(gamut_open("cylinder.gamut", &f, &err));
@@ -131,7 +131,7 @@ Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed
 end
 ```
 
-C
+C and C++
 
 ```c
 static void add_run(gamut_file* f, double gamma) {
@@ -185,7 +185,7 @@ Gamut.open("cylinder.gamut"; mode="a") do study
 end
 ```
 
-C
+C and C++
 
 ```c
 CHECK(gamut_open_append("cylinder.gamut", &f, &err));
