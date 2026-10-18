@@ -63,14 +63,14 @@ def write(fmt: str, folder: str, out: str) -> None:
             for k, name in enumerate(t["file"]):
                 run = from_pyvista(pv.read(os.path.join(folder, name)))
                 g = f.create_group(f"runs/{k:05d}")
-                g.create_dataset("points", data=run["points"], compression="gzip", compression_opts=4)
+                g.create_dataset("points", data=run["points"], compression="gzip", compression_opts=4, shuffle=True)
                 for part, values in zip(("types", "offsets", "connectivity"), run["cells"]):
-                    g.create_dataset(part, data=values, compression="gzip", compression_opts=4)
+                    g.create_dataset(part, data=values, compression="gzip", compression_opts=4, shuffle=True)
                 for where in ("point_data", "cell_data"):
                     for key, values in run[where].items():
                         if key not in SKIP:
                             g.create_dataset(f"{where}/{key}", data=values, compression="gzip",
-                                             compression_opts=4)
+                                             compression_opts=4, shuffle=True)
                 for c in t.columns:
                     g.attrs[c] = t[c][k] if t[c].dtype.kind == "f" else str(t[c][k])
 

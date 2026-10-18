@@ -116,7 +116,7 @@ def write_hdf5_per_run(d: dict, out: str) -> None:
         for k, m in enumerate(d["member"]):
             g = f.create_group(f"runs/{k:05d}")
             for name, values in d["fields"].items():
-                g.create_dataset(name, data=values[k], compression="gzip", compression_opts=4)
+                g.create_dataset(name, data=values[k], compression="gzip", compression_opts=4, shuffle=True)
             for name, column in d["table"].items():
                 v = column[k]
                 g.attrs[name] = v if isinstance(v, (float, np.floating)) else str(v)
