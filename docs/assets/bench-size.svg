@@ -1,13 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 372" width="680" height="372" role="img" aria-label="Size on disk">
 <style>
     .ink { fill: #1F2328; } .soft { fill: #59636E; } .grid { stroke: #D0D7DE; stroke-width: 1; }
-    .bar { fill: #8C959F; } .ours { fill: #4A9FF5; }
+    .bar { fill: #8C959F; } .ours { fill: #4A9FF5; } .page { fill: #FFFFFF; }
     @media (prefers-color-scheme: dark) {
-      .ink { fill: #E6EDF3; } .soft { fill: #9198A1; } .grid { stroke: #30363D; } .bar { fill: #6E7681; }
+      .page { fill: #0D1117; } .ink { fill: #E6EDF3; } .soft { fill: #9198A1; } .grid { stroke: #30363D; } .bar { fill: #6E7681; }
     }
     text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; }
     .h { font-size: 13px; font-weight: 600; }
   </style>
+<rect class="page" width="100%" height="100%"/>
 <text class="ink h" x="0" y="18">Size on disk</text>
 <text class="soft" x="0" y="36">each study against the folder of VTK files it came as; shorter is smaller</text>
 <text class="ink h" x="0" y="68">The capsule family</text>

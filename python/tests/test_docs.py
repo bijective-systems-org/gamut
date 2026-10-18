@@ -21,7 +21,7 @@ PAGES = sorted([*ROOT.glob("*.md"), *(ROOT / "docs").rglob("*.md"), *(ROOT / "be
 def test_relative_links_resolve(page):
     text = page.read_text(encoding="utf-8")
     text = re.sub(r"^```.*?^```", "", text, flags=re.M | re.S)       # not inside code
-    targets = re.findall(r"\]\(([^)\s]+)\)", text) + re.findall(r'src="([^"]+)"', text)
+    targets = re.findall(r"\]\(([^)\s]+)\)", text) + re.findall(r'(?:src|srcset)="([^"]+)"', text)
     for target in targets:
         # This repository's own absolute links (the README is also PyPI's
         # page, where relative ones break) are checked as local paths.

@@ -1,4 +1,4 @@
-"""Draw Gamut's logo (logo.svg) and mark (mark.svg).
+"""Draw Gamut's logo (logo.svg, and logo-dark.svg for dark pages) and mark (mark.svg).
 
 The mark is two sheets of one mesh, one behind the other: every run of a
 study lies on the same mesh, so a study is a stack of the same meshed sheet.
@@ -88,19 +88,21 @@ def main(inter: Path) -> int:
     # The small capitals a step heavier, so their strokes match the G's.
     rest, rest_width = outlines("AMUT", heavy, 36, x0 + g_width + 0.5, baseline, tracking=0.01)
     width = math.ceil(x0 + g_width + 0.5 + rest_width + 2)
-    style = (f"<style>.word {{ fill: {INK}; }} "
-             f"@media (prefers-color-scheme: dark) {{ .word {{ fill: {INK_DARK}; }} }}</style>")
     note = "<!-- Drawn by make_logo.py; see its docstring for what the mark means. -->"
-    (HERE / "logo.svg").write_text(
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {size:g}" '
-        f'width="{width}" height="{size:g}" role="img" aria-labelledby="gamut-logo">\n'
-        f'  <title id="gamut-logo">Gamut</title>\n  {note}\n  {style}\n'
-        f'  {mark(size, "gamut-logo")}\n  <path class="word" d="{g} {rest}"/>\n</svg>\n')
+    # Two fixed colourings rather than one that follows the system's colour scheme:
+    # GitHub's theme can differ from the system's, and the README's <picture> follows
+    # GitHub's.
+    for name, ink in (("logo.svg", INK), ("logo-dark.svg", INK_DARK)):
+        (HERE / name).write_text(
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {size:g}" '
+            f'width="{width}" height="{size:g}" role="img" aria-labelledby="gamut-logo">\n'
+            f'  <title id="gamut-logo">Gamut</title>\n  {note}\n'
+            f'  {mark(size, "gamut-logo")}\n  <path fill="{ink}" d="{g} {rest}"/>\n</svg>\n')
     (HERE / "mark.svg").write_text(
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {size:g} {size:g}" '
         f'width="{size:g}" height="{size:g}" role="img" aria-labelledby="gamut-mark">\n'
         f'  <title id="gamut-mark">Gamut</title>\n  {note}\n  {mark(size, "gamut-mark")}\n</svg>\n')
-    print(f"wrote logo.svg ({width} x {size:g}) and mark.svg in {HERE}")
+    print(f"wrote logo.svg and logo-dark.svg ({width} x {size:g}) and mark.svg in {HERE}")
     return 0
 
 

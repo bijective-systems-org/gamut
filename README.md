@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/logo.svg" alt="Gamut" width="240">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/logo-dark.svg">
+    <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/logo.svg" alt="Gamut" width="240">
+  </picture>
 </p>
 
 <p align="center">

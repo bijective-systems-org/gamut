@@ -29,9 +29,9 @@ READS = {"open": "Open", "one_run": "One run", "one_node": "One node, every run"
 
 STYLE = """<style>
     .ink { fill: #1F2328; } .soft { fill: #59636E; } .grid { stroke: #D0D7DE; stroke-width: 1; }
-    .bar { fill: #8C959F; } .ours { fill: #4A9FF5; }
+    .bar { fill: #8C959F; } .ours { fill: #4A9FF5; } .page { fill: #FFFFFF; }
     @media (prefers-color-scheme: dark) {
-      .ink { fill: #E6EDF3; } .soft { fill: #9198A1; } .grid { stroke: #30363D; } .bar { fill: #6E7681; }
+      .page { fill: #0D1117; } .ink { fill: #E6EDF3; } .soft { fill: #9198A1; } .grid { stroke: #30363D; } .bar { fill: #6E7681; }
     }
     text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; }
     .h { font-size: 13px; font-weight: 600; }
@@ -82,6 +82,7 @@ def bars(title: str, subtitle: str, items: list[tuple[str, float | None, str, bo
         ticks = [k * step for k in range(int(hi / step) + 1)] if step else []
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
            f'height="{height}" role="img" aria-label="{title}">', STYLE,
+           '<rect class="page" width="100%" height="100%"/>',
            f'<text class="ink h" x="0" y="18">{title}</text>',
            f'<text class="soft" x="0" y="36">{subtitle}</text>']
     for t in ticks:
