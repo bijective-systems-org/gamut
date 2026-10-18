@@ -14,9 +14,18 @@ namespace internal {
 namespace {
 
 // HDF5 prints its own error stack on any failure; the core reports
-// failures through mestra::Error instead.
+// failures through mestra::Error instead.  With its own copy of HDF5 the
+// core also loads no filter plugin: the format allows only gzip and
+// shuffle, which HDF5 has built in, so a file naming another filter is
+// refused rather than loading code from HDF5_PLUGIN_PATH.  A core sharing
+// the process's HDF5 leaves that setting to the process.
 struct SilenceHdf5 {
-  SilenceHdf5() { H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr); }
+  SilenceHdf5() {
+    H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
+#ifdef MESTRA_OWN_HDF5
+    H5PLset_loading_state(0);
+#endif
+  }
 };
 const SilenceHdf5 kSilence;
 

@@ -85,6 +85,11 @@ target_include_directories(mestra_core_objects
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src
          ${HDF5_INCLUDE_DIRS})
 target_compile_definitions(mestra_core_objects PRIVATE MESTRA_BUILDING ${HDF5_DEFINITIONS})
+if(MESTRA_STATIC_HDF5)
+  # The core owns its HDF5, and so may set it up (no filter plugins).
+  set(MESTRA_OWN_HDF5 MESTRA_OWN_HDF5)
+endif()
+target_compile_definitions(mestra_core_objects PRIVATE ${MESTRA_OWN_HDF5})
 target_compile_options(mestra_core_objects PRIVATE ${MESTRA_WARNINGS}
                        ${MESTRA_FP_FLAGS} ${MESTRA_SANITIZER_FLAGS})
 
@@ -109,7 +114,7 @@ if(MESTRA_BUILD_TESTS)
   add_executable(core_unit_tests tests/unit_tests.cpp $<TARGET_OBJECTS:mestra_core_objects>)
   target_include_directories(core_unit_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src ${HDF5_INCLUDE_DIRS})
-  target_compile_definitions(core_unit_tests PRIVATE ${HDF5_DEFINITIONS})
+  target_compile_definitions(core_unit_tests PRIVATE ${HDF5_DEFINITIONS} ${MESTRA_OWN_HDF5})
   target_compile_options(core_unit_tests PRIVATE ${MESTRA_WARNINGS}
                          ${MESTRA_FP_FLAGS} ${MESTRA_SANITIZER_FLAGS})
   target_link_libraries(core_unit_tests PRIVATE ${HDF5_HL_LIBRARIES} ${HDF5_C_LIBRARIES}
@@ -120,7 +125,7 @@ if(MESTRA_BUILD_TESTS)
                  $<TARGET_OBJECTS:mestra_core_objects>)
   target_include_directories(core_writer_reader_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src ${HDF5_INCLUDE_DIRS})
-  target_compile_definitions(core_writer_reader_tests PRIVATE ${HDF5_DEFINITIONS})
+  target_compile_definitions(core_writer_reader_tests PRIVATE ${HDF5_DEFINITIONS} ${MESTRA_OWN_HDF5})
   target_compile_options(core_writer_reader_tests PRIVATE ${MESTRA_WARNINGS}
                          ${MESTRA_FP_FLAGS} ${MESTRA_SANITIZER_FLAGS})
   target_link_libraries(core_writer_reader_tests PRIVATE ${HDF5_HL_LIBRARIES} ${HDF5_C_LIBRARIES}

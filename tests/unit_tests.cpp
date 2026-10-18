@@ -173,6 +173,11 @@ void test_h5_roundtrip() {
   }
   CHECK(saw_units);
   std::remove(path.c_str());
+#ifdef MESTRA_OWN_HDF5
+  // The core's own HDF5 loads no filter plugin (src/h5.cpp).
+  unsigned int plugins = 1;
+  CHECK(H5PLget_loading_state(&plugins) >= 0 && plugins == 0);
+#endif
 }
 
 }  // namespace
