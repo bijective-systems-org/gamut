@@ -1,5 +1,5 @@
 """The README quotes the examples exactly: its Python blocks are lines of the
-example scripts, its MATLAB, Julia and C blocks lines of the language
+example scripts, its MATLAB, Julia and C++ blocks lines of the language
 examples, and its output block what the README's own example prints."""
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ README = ROOT / "README.md"
 SOURCES = {"python": sorted(EXAMPLES.glob("[0-9][0-9]_*.py")),
            "matlab": [EXAMPLES / "matlab" / "one_mesh.m"],
            "julia": [EXAMPLES / "julia" / "one_mesh.jl"],
-           "c": [EXAMPLES / "c" / "one_mesh.c"]}
+           "cpp": [EXAMPLES / "cpp" / "one_mesh.cpp"]}
 
 pytestmark = pytest.mark.skipif(not (README.is_file() and EXAMPLES.is_dir()),
                                 reason="the README and examples are not beside this test (an installed package)")

@@ -132,6 +132,12 @@ if(GAMUT_BUILD_TESTS)
                         ZLIB::ZLIB Threads::Threads)
   add_test(NAME core_writer_reader_tests COMMAND core_writer_reader_tests
            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  # The C++ interface, linked to the shared library as a program using it is.
+  add_executable(header_tests tests/header_tests.cpp)
+  target_include_directories(header_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_compile_options(header_tests PRIVATE ${GAMUT_WARNINGS} ${GAMUT_SANITIZER_FLAGS})
+  target_link_libraries(header_tests PRIVATE gamut)
+  add_test(NAME header_tests COMMAND header_tests WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
 # Installing.  A Python wheel (scikit-build-core) takes the library alone,
@@ -152,7 +158,7 @@ else()
           LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
           ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
           RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-  install(FILES include/gamut/gamut.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/gamut)
+  install(FILES include/gamut/gamut.h include/gamut/gamut.hpp DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/gamut)
   install(EXPORT gamutTargets NAMESPACE gamut::
           DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/gamut)
   file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/gamutConfig.cmake.in

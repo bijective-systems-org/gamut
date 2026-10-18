@@ -21,8 +21,9 @@ HDF5 in the same process.
 Python has `create`, `open`, `append`, `extract`, `write_copy`,
 `validate`, `create_model` and `evaluate`; the `gamut` command line
 (`info`, `validate`, `build`, `append`, `get`); and `gamut-vtk`, which
-turns a folder of VTK runs into a study and back. MATLAB and Julia have
-the same calls in each language's spelling.
+turns a folder of VTK runs into a study and back. MATLAB, Julia and C++
+(the header-only `gamut/gamut.hpp`) have the same calls in each language's
+spelling, and C programs use the C interface, `gamut/gamut.h`.
 
 Readers check sizes before using memory, never follow links and load no
 HDF5 plugins ([security](docs/security.md)). The guide has fourteen pages,

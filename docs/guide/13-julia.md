@@ -73,4 +73,4 @@ from 0 in Python. Arrays come back with the axes in their logical order,
 - `Gamut.library_path()` names the core library in use, set by
   `GAMUT_LIBRARY`.
 
-Next: [C and C++](14-c-and-cpp.md).
+Next: [C++ and C](14-c-and-cpp.md).

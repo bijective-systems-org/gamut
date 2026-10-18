@@ -8,7 +8,7 @@
 
 <p align="center">
 An open file format for parametric simulation studies,<br>
-with libraries for Python, MATLAB, Julia and C.
+with libraries for Python, MATLAB, Julia, C++ and C.
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@ Gamut is a file format for parametric simulation studies: the hundreds or
 thousands of CFD or FEA runs behind a design sweep, an aerodynamic
 database or a surrogate model. One file holds the run table, each run's
 inputs, results and status, and, when the runs have a mesh, the mesh and
-every field on it, all with units. Python, MATLAB, Julia and C read and
+every field on it, all with units. Python, MATLAB, Julia and C++ read and
 write it with the same calls. Files are HDF5 laid out as netCDF-4, so h5py,
 xarray and the netCDF tools open them too, and a published specification
 says what every array in them means.
@@ -36,7 +36,7 @@ Nine runs of potential flow past a cylinder on one mesh: eight written as
 a sweep, a ninth added later, then read back. `points`,
 `cells` and `solve` stand for your mesh and your solver, and each block
 assumes the library is loaded (`import gamut`, `using Gamut`,
-`#include <gamut/gamut.h>`; in C, `CHECK` stops at an error). The complete
+`#include <gamut/gamut.hpp>`). The complete
 programs are in [`examples/`](https://github.com/bijective-systems-org/gamut/blob/main/examples).
 
 ### Read
@@ -66,15 +66,11 @@ cp = Gamut.open("cylinder.gamut") do study
 end
 ```
 
-C and C++
+C++
 
-```c
-CHECK(gamut_open("cylinder.gamut", &f, &err));
-int64_t node = 12;
-const gamut_sel one_node = {GAMUT_SEL_INDEX, 0, 0, &node, 1};
-double cp[9];                                          /* runs x nodes */
-CHECK(gamut_read(f, "cp", NULL, &one_node, GAMUT_FLOAT64, cp, sizeof cp, &err));
-CHECK(gamut_close(f, &err));
+```cpp
+auto study = gamut::open("cylinder.gamut");
+auto cp = study.get_field("cp", gamut::all, {12});    // runs x nodes
 ```
 
 All four read the same values, which each complete example prints:
@@ -83,7 +79,7 @@ All four read the same values, which each complete example prints:
 cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
 ```
 
-MATLAB and Julia count positions from 1, so node 12 in Python and C is
+MATLAB and Julia count positions from 1, so node 12 in Python and C++ is
 node 13 in MATLAB and Julia.
 
 ### Write
@@ -131,31 +127,17 @@ Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed
 end
 ```
 
-C and C++
+C++
 
-```c
-static void add_run(gamut_file* f, double gamma) {
-  static double cp[N_NODES];
-  solve(gamma, cp);
-  CHECK(gamut_batch_begin(f, 1, &err));
-  CHECK(gamut_batch_values(f, "gamma", GAMUT_FLOAT64, &gamma, 1, &err));
-  CHECK(gamut_batch_values(f, "cp", GAMUT_FLOAT64, cp, N_NODES, &err));
-  CHECK(gamut_batch_commit(f, NULL, &err));
-}
-```
-
-```c
-CHECK(gamut_create("cylinder.gamut", "example sweep", "shared", "fixed", &f, &err));
-CHECK(gamut_declare_coordinates(f, "m", GAMUT_FLOAT64, 2, "", "", &err));
-CHECK(gamut_declare_parameter(f, "gamma", "design", "m2 s-1", GAMUT_FLOAT64, 0, 0, 0, "", &err));
-CHECK(gamut_declare_result(f, "cp", "node", "1", GAMUT_FLOAT64, "", "", 0, 0, "", "", "", "", -1,
-                         "", "", &err));
-CHECK(gamut_geometry_begin(f, &err));
-CHECK(gamut_geometry_points(f, GAMUT_FLOAT64, points, N_NODES, 2, &err));
-CHECK(gamut_geometry_cells(f, types, N_CELLS, offsets, connectivity, 4 * N_CELLS, &err));
-CHECK(gamut_set_mesh(f, &err));
-for (int run = 0; run < 8; ++run) add_run(f, 0.5 * run);
-CHECK(gamut_close(f, &err));
+```cpp
+auto study = gamut::create("cylinder.gamut", "example sweep", "shared", "fixed");
+study.declare_coordinates("m", 2);
+study.declare_parameter("gamma", "design", "m2 s-1");
+study.declare_field("cp", "node", "1");
+study.set_mesh(points, cells);
+for (double gamma = 0.0; gamma < 3.75; gamma += 0.5)
+  study.add_run({{"gamma", gamma}}, {{"cp", solve(gamma)}});
+study.close();
 ```
 
 ### Add runs
@@ -185,19 +167,19 @@ Gamut.open("cylinder.gamut"; mode="a") do study
 end
 ```
 
-C and C++
+C++
 
-```c
-CHECK(gamut_open_append("cylinder.gamut", &f, &err));
-add_run(f, 4.0);
-CHECK(gamut_close(f, &err));
+```cpp
+auto study = gamut::open("cylinder.gamut", "a");
+study.add_run({{"gamma", 4.0}}, {{"cp", solve(4.0)}});
+study.close();
 ```
 
 ## What you can do with it
 
 | | |
 |---|---|
-| Use one file everywhere | Python, MATLAB, Julia and C call one C++ core, so a query returns the same values in each, and each reads what another wrote. |
+| Use one file everywhere | Python, MATLAB, Julia, C++ and C call one core, so a query returns the same values in each, and each reads what another wrote. |
 | Read only what you need | Choose runs by condition (`mach > 0.7 and status == converged`) and nodes by zone. On a shared mesh, one region of every run or one node across thousands of runs is a single read, and Python can convert values to the units you ask for ([reading parts](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/08-reading-parts.md)). |
 | Train models on it | Each field on a shared mesh is one block of runs × nodes (or cells). Labels record status, fidelity or solver, a split says which rows are for training and which for testing, and a file can name the group a fair test must hold out whole. Standard deviations, quantiles and derivatives are stored beside the results they describe ([run tables](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/01-run-tables.md), [uncertainty](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/06-uncertainty-and-gradients.md)). |
 | Share fitted models | A model is a file in the same format with no runs and no code inside. Evaluating it on new inputs gives an ordinary study; a model type of your own is registered by the software that defines it ([models](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/07-models.md)). |
@@ -233,7 +215,7 @@ against 124 ms from its VTK file.
 | Python 3.10 or later | `pip install gamut-format` |
 | MATLAB | `build_mex(core)` once in the `matlab` folder of a checkout |
 | Julia 1.9 or later | `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia")` |
-| C and C++ | CMake build and install, then `find_package(gamut)` |
+| C++ and C | CMake build and install, then `find_package(gamut)` and `#include <gamut/gamut.hpp>` |
 
 The Python wheels for macOS, Linux and Windows contain the core with HDF5
 linked in. MATLAB and Julia use the same core: the wheel's

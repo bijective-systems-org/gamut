@@ -1,17 +1,93 @@
-# 14. C and C++
+# 14. C++ and C
 
-The library every language uses is a C interface over a C++ core, declared
-in one header, [`gamut/gamut.h`](../../include/gamut/gamut.h). A solver
-or tool written in C or C++ links it to write its results as runs finish,
-or to read a study. Building and installing it
-is on the [installing](../install.md#c-and-c) page; with CMake,
-`find_package(gamut)` and `gamut::gamut` are all a project needs.
+The library every language uses is a C++ core behind a C interface,
+[`gamut/gamut.h`](../../include/gamut/gamut.h). C++ programs use
+[`gamut/gamut.hpp`](../../include/gamut/gamut.hpp), a header over that
+interface with the names of the Python package, exceptions for errors and
+standard containers for data; C programs, and other languages that call C,
+use `gamut.h` directly. Both are installed with the library
+([installing](../install.md#c-and-c)); with CMake, `find_package(gamut)`
+and `gamut::gamut` are all a project needs.
 
 The example writes eight runs of flow past a cylinder on one mesh, reopens
-the file to add a ninth, then reads one node in every run: the program
-of the [README](../../README.md#example).
+the file to add a ninth, then reads one node in every run: the program of
+the [README](../../README.md#example).
 
-## The conventions
+## C++
+
+### Writing
+
+```cpp
+auto study = gamut::create("cylinder.gamut", "example sweep", "shared", "fixed");
+study.declare_coordinates("m", 2);
+study.declare_parameter("gamma", "design", "m2 s-1");
+study.declare_field("cp", "node", "1");
+study.set_mesh(points, cells);
+for (double gamma = 0.0; gamma < 3.75; gamma += 0.5)
+  study.add_run({{"gamma", gamma}}, {{"cp", solve(gamma)}});
+study.close();
+```
+
+`create` takes the path, the writer, the mesh (`""` for a table of runs,
+`"shared"` or `"changing"`) and how often the geometry changes (`"fixed"`,
+`"run"` or `"group:<label>"`). Declarations come next, then the mesh, then
+runs. `points` are nodes × axes in C order and `cells` a `gamut::Cells` in
+VTK's convention, node numbers from 0. Each run gives its parameters and
+scalars as numbers and its labels by name, then its fields; `add_run`
+writes it all or nothing and returns its id. `solve` stands for the
+solver and returns `cp` at every node.
+
+A call that is refused throws `gamut::Error`, whose `rule()` names the rule
+of the specification (`"E7"`) when one applies and `path()` what it
+concerns. A study closes when it goes out of scope; `close()` does it
+sooner and throws if the file cannot be finished (a shared mesh never
+set), whereas leaving the scope then discards the file.
+
+### Adding runs
+
+```cpp
+auto study = gamut::open("cylinder.gamut", "a");
+study.add_run({{"gamma", 4.0}}, {{"cp", solve(4.0)}});
+study.close();
+```
+
+### Reading
+
+```cpp
+auto study = gamut::open("cylinder.gamut");
+auto cp = study.get_field("cp", gamut::all, {12});    // runs x nodes
+```
+
+```text
+cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
+```
+
+`get_field` takes the rows and the nodes (or cells) to read: `gamut::all`,
+positions such as `{12}`, or `gamut::Selection::range(start, stop)`. It
+returns a `gamut::Array<double>`: the values in C order and their shape,
+here 9 × 1, with `cp(i, j)` for one value. `gamut::open(path, "r", 4)`
+decompresses large reads in four threads.
+
+### The same calls
+
+| Python | C++ |
+|---|---|
+| `gamut.create(path, writer=w, mesh="shared", per="fixed", ...)` | `gamut::create(path, w, "shared", "fixed")`, then `declare_...` calls |
+| `study.add_run(values, fields=...)` | `study.add_run({{"gamma", 0.5}}, {{"cp", cp}})` |
+| `gamut.open(path, mode="a")` | `gamut::open(path, "a")` |
+| `study.get_field("p", rows=r, nodes=n)` | `study.get_field("p", r, n)` |
+| `study.select("mach > 0.7")`, `study.get_label(...)`, `study.describe(...)` | the same names |
+| `gamut.append`, `extract`, `write_copy`, `validate` | `gamut::append`, `extract`, `write_copy`, `validate` |
+
+Model files, notes and private records are written and read through
+`gamut.h`; `study.handle()` gives the open file to pass to it.
+
+## C
+
+The same program in C is
+[`examples/c/one_mesh.c`](../../examples/c/one_mesh.c).
+
+### The conventions
 
 - Every call returns 0, or returns nonzero and fills a `gamut_error` with the
   rule of the specification it concerns (when one applies), the path of
@@ -33,7 +109,7 @@ static gamut_error err;
   } while (0)
 ```
 
-## Writing
+### Writing
 
 Declarations come first, then the mesh, then runs. A batch of one or more
 runs is staged and committed all or nothing:
@@ -68,7 +144,7 @@ same way.
 string leaves a text attribute out, `has_q = 0` the quantile and
 `round_bits = -1` the rounding. The header comments each argument.
 
-## Reading
+### Reading
 
 ```c
 CHECK(gamut_open("cylinder.gamut", &f, &err));
@@ -90,7 +166,7 @@ run:
 cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
 ```
 
-## Notes
+### Notes
 
 - `gamut_close` finishes a file. If it refuses (a shared mesh never set),
   the handle stays open to fix and close again; `gamut_abandon` gives up,

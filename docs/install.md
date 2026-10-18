@@ -3,7 +3,7 @@
 Every language uses the same core library, written in C++. The Python
 wheels include it, with HDF5 linked inside, so it never meets another HDF5
 in the same process: h5py's, MATLAB's or a solver's. MATLAB and Julia can
-use the wheel's copy; C and C++ programs build the core from source.
+use the wheel's copy; C++ and C programs build the core from source.
 
 ## Python
 
@@ -89,7 +89,7 @@ the first call. From a checkout, `julia --project=julia` uses the package in
 place, and without `GAMUT_LIBRARY` it looks in `build/` at the top of the
 checkout.
 
-## C and C++
+## C++ and C
 
 With CMake 3.16 or later, a C++17 compiler and HDF5 1.12 or later:
 
@@ -99,7 +99,8 @@ cmake --build build
 cmake --install build --prefix /usr/local
 ```
 
-This installs `include/gamut/gamut.h`, the library and a CMake package:
+This installs the library, the C++ header `include/gamut/gamut.hpp` (C++17)
+and the C header `include/gamut/gamut.h` beside it, and a CMake package:
 
 ```cmake
 find_package(gamut 1.0 REQUIRED)

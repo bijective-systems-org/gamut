@@ -29,7 +29,7 @@ The same files from other places:
 | 11 | [Command line](11-command-line.md) | inspect, check, build and extract without writing code |
 | 12 | [MATLAB](12-matlab.md) | the same calls, in MATLAB's spelling |
 | 13 | [Julia](13-julia.md) | the same calls, in Julia's spelling |
-| 14 | [C and C++](14-c-and-cpp.md) | the core library itself |
+| 14 | [C++ and C](14-c-and-cpp.md) | the same calls in C++, and the C interface under every language |
 
 ## Words used throughout
 
