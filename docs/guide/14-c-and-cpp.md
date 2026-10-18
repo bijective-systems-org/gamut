@@ -7,8 +7,9 @@ or to read a study. Building and installing it
 is on the [installing](../install.md#c-and-c) page; with CMake,
 `find_package(gamut)` and `gamut::gamut` are all a project needs.
 
-The example writes the study of [page 2](02-one-mesh.md) run by run, then
-reads one node of the runs that meet a condition.
+The example writes nine runs of flow past a cylinder on one mesh, run by
+run, then reads one node of the runs that meet a condition: the program
+of the [README](../../README.md#example).
 
 ## The conventions
 
@@ -41,13 +42,11 @@ runs is staged and committed all or nothing:
 CHECK(gamut_create("cylinder.gamut", "example sweep", "shared", "fixed", &f, &err));
 CHECK(gamut_declare_coordinates(f, "m", GAMUT_FLOAT64, 2, "", "", &err));
 CHECK(gamut_declare_parameter(f, "gamma", "design", "m2 s-1", GAMUT_FLOAT64, 0, 0, 0, "", &err));
-CHECK(gamut_declare_mesh_label(f, "surface", "node", categories, 2, &err));
 CHECK(gamut_declare_result(f, "cp", "node", "1", GAMUT_FLOAT64, "", "", 0, 0, "", "", "", "", -1,
                          "", "", &err));
 CHECK(gamut_geometry_begin(f, &err));
 CHECK(gamut_geometry_points(f, GAMUT_FLOAT64, points, N_NODES, 2, &err));
 CHECK(gamut_geometry_cells(f, types, N_CELLS, offsets, connectivity, 4 * N_CELLS, &err));
-CHECK(gamut_geometry_label(f, "surface", surface, N_NODES, &err));
 CHECK(gamut_set_mesh(f, &err));
 ```
 

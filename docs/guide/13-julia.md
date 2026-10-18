@@ -6,8 +6,10 @@ declarations as `Dict`s or named tuples, `do` blocks that close the file,
 and positions counted from 1. The package needs the core library
 ([installing](../install.md#julia)).
 
-The example writes and reads the study of [page 2](02-one-mesh.md). From a
-working folder: `julia --project=<checkout>/julia <checkout>/examples/julia/one_mesh.jl`.
+The example writes nine runs of flow past a cylinder on one mesh, then
+reads the runs that meet a condition: the program of the
+[README](../../README.md#example). From a working folder:
+`julia --project=<checkout>/julia <checkout>/examples/julia/one_mesh.jl`.
 
 ## Writing
 
@@ -15,14 +17,16 @@ working folder: `julia --project=<checkout>/julia <checkout>/examples/julia/one_
 Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed",
               coordinates=(units="m", axes=2),
               parameters=Dict("gamma" => (units="m2 s-1", role="design")),
-              mesh_labels=Dict("surface" => (at="node", categories=["field", "wall"])),
               fields=Dict("cp" => (units="1", at="node"))) do study
-    Gamut.set_mesh!(study; points, cells, labels=Dict("surface" => surface))
+    Gamut.set_mesh!(study; points, cells)
     for gamma in range(0, 4; length=9)
-        u_theta = -sin.(t) .* (1 .+ 1 ./ r .^ 2) .+ gamma ./ (2π .* r)
-        u_r = cos.(t) .* (1 .- 1 ./ r .^ 2)
-        Gamut.add_run!(study, Dict("gamma" => gamma); fields=Dict("cp" => 1 .- (u_r .^ 2 .+ u_theta .^ 2)))
+        Gamut.add_run!(study, Dict("gamma" => gamma); fields=Dict("cp" => solve(gamma)))
     end
+end
+
+cp = Gamut.open("cylinder.gamut") do study
+    rows = Gamut.select(study, "gamma > 2")
+    Gamut.get_field(study, "cp"; rows, nodes=[13])           # runs × nodes, from 1
 end
 ```
 
@@ -30,26 +34,24 @@ end
 connectivity)`, in VTK's convention as in every language: the node numbers
 inside `connectivity` count from 0. The `do` block finishes the file when
 it ends, and removes it if the block throws and the file cannot be
-finished.
+finished. `solve` stands for the solver and returns `cp` at every node.
 
 ## Reading
 
 ```julia
-Gamut.open("cylinder.gamut") do study
-    println(study.type, " mesh, ", study.row_count, " runs, ", size(Gamut.get_points(study), 1), " nodes")
-    cp = Gamut.get_field(study, "cp")                         # runs × nodes
-    println("cp block: ", size(cp))
-    wall = findfirst(==("wall"), Gamut.categories(study, "surface")) - 1   # the code that means "wall"
-    on_wall = findall(==(wall), Gamut.get_mesh_label(study, "surface"))
-    lowest = minimum(Gamut.get_field(study, "cp"; nodes=on_wall); dims=2)
-    println("lowest cp on the wall, by run: ", round.(vec(lowest); digits=2))
-    println("one node across every run: ", round.(vec(Gamut.get_field(study, "cp"; nodes=[13])); digits=2))
+cp = Gamut.open("cylinder.gamut") do study
+    rows = Gamut.select(study, "gamma > 2")
+    Gamut.get_field(study, "cp"; rows, nodes=[13])           # runs × nodes, from 1
 end
 ```
 
-It prints the numbers [page 2](02-one-mesh.md) shows. Node 13 here is node
-12 there: positions count from 1 in Julia and from 0 in Python. Arrays come
-back with the axes in their logical order, `cp[run, node]`.
+```text
+cp on top of the cylinder where gamma > 2: -1.57 -1.32 -1.08 -0.86
+```
+
+Node 13 here is node 12 in Python: positions count from 1 in Julia and
+from 0 in Python. Arrays come back with the axes in their logical order,
+`cp[run, node]`.
 
 ## The same calls
 

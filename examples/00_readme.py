@@ -1,8 +1,8 @@
-"""The README's example: a sweep written run by run, then read by condition.
+"""A sweep on one mesh, written run by run, then read by condition.
 
-Potential flow past a cylinder at nine values of circulation, on one mesh
-that every run shares. The MATLAB, Julia and C examples ask the same file
-the same question and print the same numbers.
+Potential flow past a cylinder at nine values of circulation, on one ring
+of quadrilaterals. examples/matlab, julia and c hold the same program in
+those languages, and all four print the same line.
 """
 import numpy as np
 
@@ -17,12 +17,12 @@ def solve(gamma):
     return pressure(t, r, gamma=gamma)
 
 
-with gamut.create("cylinder.gamut", writer="my sweep", mesh="shared", per="fixed",
+with gamut.create("cylinder.gamut", writer="example sweep", mesh="shared", per="fixed",
                    coordinates={"units": "m", "axes": 2},
                    parameters={"gamma": {"units": "m2 s-1", "role": "design"}},
                    fields={"cp": {"units": "1", "at": "node"}}) as study:
-    study.set_mesh(points, cells)                          # once: every run shares it
-    for gamma in np.linspace(0.0, 4.0, 9):                 # one run at a time, as a solver finishes
+    study.set_mesh(points, cells)
+    for gamma in np.linspace(0.0, 4.0, 9):
         study.add_run({"gamma": gamma}, fields={"cp": solve(gamma)})
 
 with gamut.open("cylinder.gamut") as study:

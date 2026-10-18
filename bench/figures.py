@@ -126,6 +126,50 @@ def read_figure(r: dict, read: str, title: str, subtitle: str) -> str:
     return bars(title, subtitle, items, time_axis=True)
 
 
+def summary_figure(r: dict) -> str:
+    """The README's figure: one study, four measures, the same five formats in
+    the same order in every panel, each panel on its own linear scale."""
+    formats = ["gamut", "hdf5_per_run", "netcdf", "zarr", "vtk_folder"]
+    labels = {"gamut": "Gamut", "hdf5_per_run": "HDF5, a group per run", "netcdf": "netCDF-4",
+              "zarr": "Zarr", "vtk_folder": "VTK files"}
+    panels = [[("Size on disk", lambda f: f["bytes"], lambda f: megabytes(f["bytes"])),
+               ("Read one run", lambda f: f["one_run"]["median_s"], lambda f: seconds(f["one_run"]["median_s"]))],
+              [("Choose runs by condition, read them", lambda f: f["query"]["median_s"],
+                lambda f: seconds(f["query"]["median_s"])),
+               ("Read one node in every run", lambda f: f["one_node"]["median_s"],
+                lambda f: seconds(f["one_node"]["median_s"]))]]
+    width, left, gap, row, label_room = 760, 150, 28, 22, 64
+    panel = (width - left - gap) / 2
+    band = 30 + row * len(formats) + 18
+    top = 54
+    height = top + band * len(panels)
+    shape = r["shape"]
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
+           f'height="{height}" role="img" aria-label="Size and read times of Gamut, HDF5, netCDF-4, Zarr '
+           f'and VTK files for one study">', STYLE, '<rect class="page" width="100%" height="100%"/>',
+           f'<text class="ink h" x="0" y="18">One study in five formats</text>',
+           f'<text class="soft" x="0" y="36">{shape["runs"]:,} runs of a capsule family on one '
+           f'{shape["nodes"]:,}-node mesh; times are medians of five reads, each opening the file</text>']
+    for b, pair in enumerate(panels):
+        y0 = top + b * band
+        for i, fmt in enumerate(formats):
+            out.append(f'<text class="ink" x="{left - 10}" y="{y0 + 30 + i * row + 14}" '
+                       f'text-anchor="end">{labels[fmt]}</text>')
+        for c, (title, value, text) in enumerate(pair):
+            x0 = left + c * (panel + gap)
+            out.append(f'<text class="ink h" x="{x0:.1f}" y="{y0 + 18}">{title}</text>')
+            hi = max(value(r["formats"][fmt]) for fmt in formats)
+            for i, fmt in enumerate(formats):
+                f = r["formats"][fmt]
+                w = max((panel - label_room) * value(f) / hi, 2)
+                y = y0 + 30 + i * row
+                out.append(f'<rect class="{"ours" if fmt == "gamut" else "bar"}" x="{x0:.1f}" y="{y + 3}" '
+                           f'width="{w:.1f}" height="15" rx="2"/>')
+                out.append(f'<text class="soft" x="{x0 + w + 6:.1f}" y="{y + 15}">{text(f)}</text>')
+    out.append("</svg>")
+    return "\n".join(out) + "\n"
+
+
 def table(r: dict, reads: list[str]) -> str:
     head = "| Format | Size | Write | " + " | ".join(READS[x] for x in reads) + " |"
     rule = "|---|---:|---:|" + "---:|" * len(reads)
@@ -151,6 +195,7 @@ def generated() -> tuple[dict[str, str], dict[str, str]]:
     capsule = load("capsule_incidence")
     airfrans = load("airfrans")
     figures = {
+        "bench-summary.svg": summary_figure(capsule),
         "bench-size.svg": size_figure([("The capsule family", capsule), ("AirfRANS", airfrans)]),
         "bench-one-node.svg": read_figure(
             capsule, "one_node", "One node across every run",

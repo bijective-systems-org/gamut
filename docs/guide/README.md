@@ -4,6 +4,11 @@ Each page takes one idea, shows the script in [`examples/`](../../examples)
 that uses it, and what the script prints. Read the first two pages first;
 after that, take the pages in any order.
 
+The scripts run from a checkout with the Python package installed
+([installing](../install.md)); each writes its file in the current
+folder. `gamut info FILE` lists what a file holds and `gamut validate FILE`
+checks it, from any shell.
+
 | | Page | The example writes |
 |---|---|---|
 | 1 | [Run tables](01-run-tables.md) | a wing's polar: inputs, results and status, with units |

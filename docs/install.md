@@ -72,16 +72,22 @@ latest release on Linux.
 
 ## Julia
 
-Julia 1.9 or later. The package is in `julia/`, and needs the core library:
+Julia 1.9 or later. Add the package from this repository, and point it at
+a core library:
 
-```bash
-export GAMUT_LIBRARY=/path/to/libgamut.so      # .dylib on macOS, gamut.dll on Windows
-julia --project=julia -e 'using Gamut; println(Gamut.version())'
+```julia
+using Pkg
+Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia")
+ENV["GAMUT_LIBRARY"] = "/path/to/libgamut.dylib"   # .so on Linux, gamut.dll on Windows
+using Gamut
+Gamut.version()
 ```
 
-Without `GAMUT_LIBRARY`, it looks in `build/` at the top of the checkout.
 As for MATLAB, the Python wheel's core serves: set `GAMUT_LIBRARY` to the
-path `gamut.library_path()` prints.
+path `gamut.library_path()` prints, in the environment or in `ENV` before
+the first call. From a checkout, `julia --project=julia` uses the package in
+place, and without `GAMUT_LIBRARY` it looks in `build/` at the top of the
+checkout.
 
 ## C and C++
 

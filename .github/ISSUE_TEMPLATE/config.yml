@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Start here
-    url: https://github.com/bijective-systems-org/gamut/blob/main/docs/start-here.md
-    about: The road from installing to using it on your own studies, and the guide.
+  - name: The guide
+    url: https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/README.md
+    about: One page per concept, each with a script you can run.
   - name: The specification
     url: https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md
     about: The reference, by section.

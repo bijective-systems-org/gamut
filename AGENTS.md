@@ -22,7 +22,7 @@ that interface; a validator; a command line; VTK conversion.
 | `python/gamut/` | the Python layer (ctypes), the command line (`cli.py`), VTK conversion (`vtk.py`) |
 | `matlab/`, `julia/` | the MATLAB and Julia layers and their tests |
 | `examples/` | runnable examples; each guide page quotes one, and the README quotes `00_readme.py` and the MATLAB, Julia and C examples |
-| `docs/` | install, start-here, the guide, reference, security, comparison, benchmarks |
+| `docs/` | install, the guide, reference, security, comparison, benchmarks |
 | `bench/` | benchmark scripts and results; `bench/figures.py` writes the page's tables and figures |
 | `tools/` | `build_deps.sh` (static zlib and HDF5), `damaged_files.py` |
 

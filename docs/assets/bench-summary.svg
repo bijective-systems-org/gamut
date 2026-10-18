@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 370" width="760" height="370" role="img" aria-label="Size and read times of Gamut, HDF5, netCDF-4, Zarr and VTK files for one study">
+<style>
+    .ink { fill: #1F2328; } .soft { fill: #59636E; } .grid { stroke: #D0D7DE; stroke-width: 1; }
+    .bar { fill: #8C959F; } .ours { fill: #4A9FF5; } .page { fill: #FFFFFF; }
+    @media (prefers-color-scheme: dark) {
+      .page { fill: #0D1117; } .ink { fill: #E6EDF3; } .soft { fill: #9198A1; } .grid { stroke: #30363D; } .bar { fill: #6E7681; }
+    }
+    text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; }
+    .h { font-size: 13px; font-weight: 600; }
+  </style>
+<rect class="page" width="100%" height="100%"/>
+<text class="ink h" x="0" y="18">One study in five formats</text>
+<text class="soft" x="0" y="36">1,364 runs of a capsule family on one 6,722-node mesh; times are medians of five reads, each opening the file</text>
+<text class="ink" x="140" y="98" text-anchor="end">Gamut</text>
+<text class="ink" x="140" y="120" text-anchor="end">HDF5, a group per run</text>
+<text class="ink" x="140" y="142" text-anchor="end">netCDF-4</text>
+<text class="ink" x="140" y="164" text-anchor="end">Zarr</text>
+<text class="ink" x="140" y="186" text-anchor="end">VTK files</text>
+<text class="ink h" x="150.0" y="72">Size on disk</text>
+<rect class="ours" x="150.0" y="87" width="35.8" height="15" rx="2"/>
+<text class="soft" x="191.8" y="99">66 MB</text>
+<rect class="bar" x="150.0" y="109" width="42.1" height="15" rx="2"/>
+<text class="soft" x="198.1" y="121">77.8 MB</text>
+<rect class="bar" x="150.0" y="131" width="35.0" height="15" rx="2"/>
+<text class="soft" x="191.0" y="143">64.6 MB</text>
+<rect class="bar" x="150.0" y="153" width="36.5" height="15" rx="2"/>
+<text class="soft" x="192.5" y="165">67.5 MB</text>
+<rect class="bar" x="150.0" y="175" width="227.0" height="15" rx="2"/>
+<text class="soft" x="383.0" y="187">419 MB</text>
+<text class="ink h" x="469.0" y="72">Read one run</text>
+<rect class="ours" x="469.0" y="87" width="4.8" height="15" rx="2"/>
+<text class="soft" x="479.8" y="99">1.18 ms</text>
+<rect class="bar" x="469.0" y="109" width="2.0" height="15" rx="2"/>
+<text class="soft" x="477.0" y="121">255 µs</text>
+<rect class="bar" x="469.0" y="131" width="227.0" height="15" rx="2"/>
+<text class="soft" x="702.0" y="143">56.1 ms</text>
+<rect class="bar" x="469.0" y="153" width="18.9" height="15" rx="2"/>
+<text class="soft" x="493.9" y="165">4.68 ms</text>
+<rect class="bar" x="469.0" y="175" width="11.4" height="15" rx="2"/>
+<text class="soft" x="486.4" y="187">2.82 ms</text>
+<text class="ink" x="140" y="256" text-anchor="end">Gamut</text>
+<text class="ink" x="140" y="278" text-anchor="end">HDF5, a group per run</text>
+<text class="ink" x="140" y="300" text-anchor="end">netCDF-4</text>
+<text class="ink" x="140" y="322" text-anchor="end">Zarr</text>
+<text class="ink" x="140" y="344" text-anchor="end">VTK files</text>
+<text class="ink h" x="150.0" y="230">Choose runs by condition, read them</text>
+<rect class="ours" x="150.0" y="245" width="3.7" height="15" rx="2"/>
+<text class="soft" x="159.7" y="257">1.04 ms</text>
+<rect class="bar" x="150.0" y="267" width="227.0" height="15" rx="2"/>
+<text class="soft" x="383.0" y="279">63.5 ms</text>
+<rect class="bar" x="150.0" y="289" width="23.8" height="15" rx="2"/>
+<text class="soft" x="179.8" y="301">6.65 ms</text>
+<rect class="bar" x="150.0" y="311" width="13.1" height="15" rx="2"/>
+<text class="soft" x="169.1" y="323">3.67 ms</text>
+<rect class="bar" x="150.0" y="333" width="8.5" height="15" rx="2"/>
+<text class="soft" x="164.5" y="345">2.38 ms</text>
+<text class="ink h" x="469.0" y="230">Read one node in every run</text>
+<rect class="ours" x="469.0" y="245" width="5.8" height="15" rx="2"/>
+<text class="soft" x="480.8" y="257">124 ms</text>
+<rect class="bar" x="469.0" y="267" width="3.7" height="15" rx="2"/>
+<text class="soft" x="478.7" y="279">80.1 ms</text>
+<rect class="bar" x="469.0" y="289" width="2.5" height="15" rx="2"/>
+<text class="soft" x="477.5" y="301">54.4 ms</text>
+<rect class="bar" x="469.0" y="311" width="2.0" height="15" rx="2"/>
+<text class="soft" x="477.0" y="323">4.29 ms</text>
+<rect class="bar" x="469.0" y="333" width="227.0" height="15" rx="2"/>
+<text class="soft" x="702.0" y="345">4.9 s</text>
+</svg>
