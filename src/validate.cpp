@@ -163,6 +163,9 @@ class Validator {
   // the checker's element cap, as ints() and floats().
   template <class T, class F>
   void each(const Object& o, F f);
+  bool check_cells(const Object& t, const Object& o, const Object& c,
+                   const std::vector<std::int64_t>& cn, const std::vector<std::int64_t>& cc,
+                   Sha256* digest);
 
   void root_attrs();
   void walk_links();
@@ -389,6 +392,112 @@ std::vector<double> Validator::floats(const Object& o) {
   std::vector<double> out(n);
   if (n) file_->read(o.h5, DType::Float64, {}, out.data(), n * 8);
   return out;
+}
+
+// The cells, a block at a time, so a mesh of any size is checked in bounded
+// memory: each type against spec section 15, offsets from 0 to the
+// connectivity's length with each cell's node count, and every node number
+// inside its instance (cn, cc: where each instance's nodes and cells start;
+// one instance on a shared mesh). `digest`, when given, takes the types, the
+// offsets and the connectivity in that order (spec section 14). False when a
+// finding stopped the walk.
+bool Validator::check_cells(const Object& t, const Object& o, const Object& c,
+                            const std::vector<std::int64_t>& cn,
+                            const std::vector<std::int64_t>& cc, Sha256* digest) {
+  for (const Object* x : {&t, &o, &c}) {
+    if (x->info.shape.size() != 1) return false;   // check_dims reports the shape
+    if (x->info.shape[0] > kMaxDatasetElements) {
+      add("E23", x->concept, "holds " + std::to_string(x->info.shape[0]) + " entries, more than the " +
+                                 std::to_string(kMaxDatasetElements) + " a checker reads");
+      return false;
+    }
+  }
+  const auto n = static_cast<std::int64_t>(t.info.shape[0]);
+  const auto nc = static_cast<std::int64_t>(c.info.shape[0]);
+  if (static_cast<std::int64_t>(o.info.shape[0]) != n + 1) {
+    add("E10", "cells", "cell_offsets needs one more entry than there are cells");
+    return false;
+  }
+  const std::int64_t block = std::int64_t(1) << 16;
+  std::vector<std::int64_t> tv, ov, cv;
+  auto read = [&](const Object& x, std::int64_t a, std::int64_t b, std::vector<std::int64_t>& out) {
+    out.resize(static_cast<std::size_t>(b - a));
+    if (b > a) file_->read(x.h5, DType::Int64, {Selection::range(a, b)}, out.data(), out.size() * 8);
+  };
+  for (std::int64_t a = 0; a < n; a += block) {
+    const std::int64_t b = std::min(n, a + block);
+    read(t, a, b, tv);
+    for (std::int64_t j = a; j < b; ++j) {
+      const auto type = tv[static_cast<std::size_t>(j - a)];
+      if (nodes_of_type(static_cast<int>(type)) == 0) {
+        add("E6", "cells", "cell " + std::to_string(j) + " has type " + std::to_string(type) +
+                               ", not in spec section 15");
+        return false;
+      }
+    }
+    if (digest) {
+      const std::vector<std::uint8_t> t8(tv.begin(), tv.end());
+      digest->update(t8.data(), t8.size());
+    }
+  }
+  // Offsets, with the types again for each cell's node count; where each
+  // instance's connectivity starts is noted on the way.
+  std::vector<std::int64_t> bound;
+  std::size_t next = 0;
+  for (std::int64_t a = 0; a <= n; a += block) {
+    const std::int64_t b = std::min(n, a + block);    // cells [a, b), offsets [a, b]
+    read(o, a, b + 1, ov);
+    read(t, a, b, tv);
+    if (a == 0 && ov[0] != 0) {
+      add("E10", "cells", "cell_offsets must start at 0");
+      return false;
+    }
+    for (std::int64_t j = a; j <= b; ++j) {
+      while (next < cc.size() && cc[next] == j) {
+        bound.push_back(ov[static_cast<std::size_t>(j - a)]);
+        ++next;
+      }
+      if (j == b) break;
+      const int want = nodes_of_type(static_cast<int>(tv[static_cast<std::size_t>(j - a)]));
+      const std::int64_t have = ov[static_cast<std::size_t>(j - a + 1)] - ov[static_cast<std::size_t>(j - a)];
+      if (have < 0 || (want > 0 && have != want) || (want < 0 && have < 3)) {
+        add("E10", "cells", "cell " + std::to_string(j) + " has " + std::to_string(have) +
+                                " nodes, which its type does not allow");
+        return false;
+      }
+    }
+    if (digest) digest->update(ov.data(), static_cast<std::size_t>(b - a) * 8);
+    if (b == n) {
+      if (ov.back() != nc) {
+        add("E10", "cells", "cell_offsets must end at the connectivity's length, " +
+                                std::to_string(nc));
+        return false;
+      }
+      if (digest) digest->update(&ov.back(), 8);
+      break;
+    }
+  }
+  // Node numbers, each inside its instance.
+  std::size_t k = 0;
+  for (std::int64_t a = 0; a < nc; a += block) {
+    const std::int64_t b = std::min(nc, a + block);
+    read(c, a, b, cv);
+    for (std::int64_t q = a; q < b; ++q) {
+      while (k + 2 < bound.size() && q >= bound[k + 1]) ++k;
+      const std::int64_t nodes = cn[k + 1] - cn[k];
+      const auto v = cv[static_cast<std::size_t>(q - a)];
+      if (v < 0 || v >= nodes) {
+        add("E10", "cells", cn.size() == 2
+                                ? "a node number is outside [0, " + std::to_string(nodes) + ")"
+                                : "connectivity entry " + std::to_string(q) + " names node " +
+                                      std::to_string(v) + ", outside its instance's " +
+                                      std::to_string(nodes) + " nodes");
+        return false;
+      }
+    }
+    if (digest) digest->update(cv.data(), cv.size() * 8);
+  }
+  return true;
 }
 
 void Validator::root_attrs() {
@@ -715,7 +824,8 @@ void Validator::mesh() {
   if (axes_ < 1 || axes_ > 3) add("E24", "coordinates", "coordinates have one to three axes");
   const bool cells = file_->exists("/mesh/cell_types");
   // Cells.
-  std::vector<std::int64_t> types, offsets, conn;
+  std::optional<Object> cell_types, cell_offsets, cell_connectivity;
+  std::int64_t n_cells = 0;
   if (cells) {
     guarded("cells", [&] {
       Object t = object("/mesh/cell_types", "cells/types", "cell_types");
@@ -732,11 +842,13 @@ void Validator::mesh() {
       check_storage(t, false, {grows});
       check_storage(o, false, {grows});
       check_storage(c, false, {grows});
-      types = ints(t);
-      offsets = ints(o);
-      conn = ints(c);
+      if (t.info.shape.size() == 1) n_cells = static_cast<std::int64_t>(t.info.shape[0]);
+      cell_types = t;
+      cell_offsets = o;
+      cell_connectivity = c;
     });
   }
+  const bool have_cells = cell_types && cell_offsets && cell_connectivity;
   // Mesh labels.
   for (const char* prefix : {"node_labels", "cell_labels"}) {
     for (const Member& mm : file_->members(std::string("/mesh/") + prefix)) {
@@ -822,48 +934,27 @@ void Validator::mesh() {
     for (const char* cut : {"n_nodes", "n_cells", "n_instances"}) {
       if (m.has(cut)) add("W5", "mesh", std::string(cut) + " is not an attribute of version 1");
     }
-    if (cells) {
-      const std::int64_t n = static_cast<std::int64_t>(types.size());
-      if (offsets.size() != static_cast<std::size_t>(n + 1) || (n > 0 && offsets[0] != 0)) {
-        add("E10", "cells", "cell_offsets needs one more entry than there are cells and starts at 0");
-      } else {
-        for (std::int64_t j = 0; j < n; ++j) {
-          const int want = nodes_of_type(static_cast<int>(types[static_cast<std::size_t>(j)]));
-          const std::int64_t have = offsets[static_cast<std::size_t>(j + 1)] - offsets[static_cast<std::size_t>(j)];
-          if (want == 0) {
-            add("E6", "cells", "cell " + std::to_string(j) + " has type " +
-                               std::to_string(types[static_cast<std::size_t>(j)]) + ", not in spec section 15");
-            break;
-          }
-          if (have < 0 || (want > 0 && have != want) || (want < 0 && have < 3)) {
-            add("E10", "cells", "cell " + std::to_string(j) + " has " + std::to_string(have) +
-                                " nodes, which its type does not allow");
-            break;
-          }
-        }
-        if (!offsets.empty() && offsets.back() != static_cast<std::int64_t>(conn.size())) {
-          add("E10", "cells", "cell_offsets must end at the connectivity's length");
-        }
-        for (const auto v : conn) {
-          if (v < 0 || v >= n_nodes_) {
-            add("E10", "cells", "a node number is outside [0, " + std::to_string(n_nodes_) + ")");
-            break;
-          }
-        }
-      }
-    }
-    // Support id (spec section 14).
+    // Cells and the support id (spec section 14), a block at a time.
     guarded("mesh", [&] {
       Sha256 h;
       const std::int64_t nn = n_nodes_;
       h.update(&nn, 8);
-      std::vector<std::uint8_t> t8(types.begin(), types.end());
-      if (!t8.empty()) h.update(t8.data(), t8.size());
-      if (!offsets.empty()) h.update(offsets.data(), offsets.size() * 8);
-      if (!conn.empty()) h.update(conn.data(), conn.size() * 8);
-      if (!cells && per_ == "fixed") {
-        const auto pts = floats(coords);
-        if (!pts.empty()) h.update(pts.data(), pts.size() * 8);
+      if (cells && (!have_cells || !check_cells(*cell_types, *cell_offsets, *cell_connectivity,
+                                                {0, n_nodes_}, {0, n_cells}, &h))) {
+        return;
+      }
+      if (!cells && per_ == "fixed" && coords.info.shape.size() == 2) {
+        // A point cloud's fixed coordinates, as float64, a block of nodes at a time.
+        const std::int64_t nodes = static_cast<std::int64_t>(coords.info.shape[0]);
+        const std::int64_t width = static_cast<std::int64_t>(coords.info.shape[1]);
+        const std::int64_t step = std::max<std::int64_t>(1, (std::int64_t(1) << 16) / std::max<std::int64_t>(width, 1));
+        std::vector<double> pts;
+        for (std::int64_t a = 0; a < nodes; a += step) {
+          const std::int64_t b = std::min(nodes, a + step);
+          pts.resize(static_cast<std::size_t>((b - a) * width));
+          file_->read(coords.h5, DType::Float64, {Selection::range(a, b)}, pts.data(), pts.size() * 8);
+          h.update(pts.data(), pts.size() * 8);
+        }
       }
       const std::string want = h.hex();
       const std::string have = m.text("support_id");
@@ -917,40 +1008,13 @@ void Validator::mesh() {
         return true;
       };
       const bool nodes_ok = monotone(cn, n_nodes_, "instance_nodes");
-      const bool cells_ok =
-          !cells || monotone(cc, static_cast<std::int64_t>(types.size()), "instance_cells");
+      const bool cells_ok = !cells || monotone(cc, n_cells, "instance_cells");
       instances_ = std::max<std::int64_t>(0, static_cast<std::int64_t>(cn.size()) - 1);
       if (cells && cc.size() != cn.size()) {
         add("E21", "mesh", "instance_nodes and instance_cells differ in length");
       }
-      if (nodes_ok && cells_ok && cells && cc.size() == cn.size()) {
-        if (offsets.size() != types.size() + 1 || offsets[0] != 0 ||
-            offsets.back() != static_cast<std::int64_t>(conn.size())) {
-          add("E10", "cells", "cell_offsets must start at 0, have one more entry than cells and end "
-                              "at the connectivity's length");
-        } else {
-          for (std::size_t k = 0; k + 1 < cn.size(); ++k) {
-            const std::int64_t nk = cn[k + 1] - cn[k];
-            for (std::int64_t j = cc[k]; j < cc[k + 1]; ++j) {
-              const auto uj = static_cast<std::size_t>(j);
-              const int want = nodes_of_type(static_cast<int>(types[uj]));
-              const std::int64_t have = offsets[uj + 1] - offsets[uj];
-              if (want == 0 || have < 0 || (want > 0 && have != want) || (want < 0 && have < 3)) {
-                add(want == 0 ? "E6" : "E10", "cells", "cell " + std::to_string(j) + " is not a "
-                                                       "valid cell of its type");
-                return;
-              }
-              for (std::int64_t q = offsets[uj]; q < offsets[uj + 1]; ++q) {
-                const auto v = conn[static_cast<std::size_t>(q)];
-                if (v < 0 || v >= nk) {
-                  add("E10", "cells", "cell " + std::to_string(j) + " names node " + std::to_string(v) +
-                                      ", outside its instance's " + std::to_string(nk) + " nodes");
-                  return;
-                }
-              }
-            }
-          }
-        }
+      if (nodes_ok && cells_ok && cells && have_cells && cc.size() == cn.size()) {
+        check_cells(*cell_types, *cell_offsets, *cell_connectivity, cn, cc, nullptr);
       }
       // Row starts: checked while the rows fit the checker's cap, as ints().
       if (static_cast<std::uint64_t>(rows_) > kMaxCheckElements) return;

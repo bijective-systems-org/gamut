@@ -158,6 +158,40 @@ def test_missing_values_are_located(tmp_path):
     assert found["node_fields/p"] == "1 value is missing or not finite, the first at row 1, node 4"
 
 
+def test_meshes_larger_than_a_block_are_checked_whole(tmp_path):
+    # The cell checks read 65,536 entries at a time; a defect in a later
+    # block is found as one in the first is.
+    import h5py
+    pts, cells = grid(301, 301)                       # 90,000 quads, 360,000 entries
+    path = str(tmp_path / "big.mes")
+    with mestra.create(path, writer="t", mesh="shared", per="fixed",
+                       coordinates={"units": "m", "axes": 2}, parameters={"k": "1"}) as s:
+        s.set_mesh(pts, cells)
+        s.add_run({"k": 1.0})
+    clean(path)
+    for edit, rule in ((lambda f: f["mesh/cell_connectivity"].__setitem__(300_000, 10**6), "E10"),
+                       (lambda f: f["mesh/cell_offsets"].__setitem__(70_000, 3), "E10")):
+        broken = str(tmp_path / "broken.mes")
+        shutil.copy(path, broken)
+        with h5py.File(broken, "r+") as f:
+            edit(f)
+        assert rule in {x.rule for x in mestra.validate(broken).errors}
+
+    # A changing mesh: a node number valid for the file but not for its
+    # instance, in the second instance, past the first block.
+    small, cells_small = grid(201, 201)
+    path = str(tmp_path / "changing.mes")
+    with mestra.create(path, writer="t", mesh="changing", per="run",
+                       coordinates={"units": "m", "axes": 2}, parameters={"k": "1"}) as s:
+        s.add_run({"k": 1.0}, points=pts, cells=cells)
+        s.add_run({"k": 2.0}, points=small, cells=cells_small)
+    clean(path)
+    with h5py.File(path, "r+") as f:
+        f["mesh/cell_connectivity"][360_000 + 100_000] = len(small) + 5
+    errors = mestra.validate(path).errors
+    assert [x.rule for x in errors] == ["E10"] and "outside its instance" in errors[0].message
+
+
 def test_a_name_used_twice(shared, tmp_path):
     def edit(f):
         f["mesh/cell_fields/u"].attrs.modify("vector", np.bytes_(b"vel"))
