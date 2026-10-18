@@ -21,21 +21,21 @@
 <line class="grid" x1="590.0" y1="46" x2="590.0" y2="208"/>
 <text class="soft" x="590.0" y="226" text-anchor="middle">10 s</text>
 <text class="ink" x="180" y="67" text-anchor="end">Zarr (xarray)</text>
-<rect class="bar" x="190" y="56" width="63.2" height="16" rx="2"/>
-<text class="soft" x="259.2" y="68">4.28 ms</text>
+<rect class="bar" x="190" y="56" width="63.3" height="16" rx="2"/>
+<text class="soft" x="259.3" y="68">4.29 ms</text>
 <text class="ink" x="180" y="93" text-anchor="end">mestra, 4 threads</text>
-<rect class="ours" x="190" y="82" width="158.3" height="16" rx="2"/>
-<text class="soft" x="354.3" y="94">38.3 ms</text>
+<rect class="ours" x="190" y="82" width="157.7" height="16" rx="2"/>
+<text class="soft" x="353.7" y="94">37.8 ms</text>
 <text class="ink" x="180" y="119" text-anchor="end">netCDF-4 (xarray)</text>
-<rect class="bar" x="190" y="108" width="174.0" height="16" rx="2"/>
-<text class="soft" x="370.0" y="120">55 ms</text>
+<rect class="bar" x="190" y="108" width="173.6" height="16" rx="2"/>
+<text class="soft" x="369.6" y="120">54.4 ms</text>
 <text class="ink" x="180" y="145" text-anchor="end">HDF5, a group per run</text>
-<rect class="bar" x="190" y="134" width="192.2" height="16" rx="2"/>
-<text class="soft" x="388.2" y="146">83.6 ms</text>
+<rect class="bar" x="190" y="134" width="190.4" height="16" rx="2"/>
+<text class="soft" x="386.4" y="146">80.1 ms</text>
 <text class="ink" x="180" y="171" text-anchor="end">mestra</text>
-<rect class="ours" x="190" y="160" width="210.4" height="16" rx="2"/>
-<text class="soft" x="406.4" y="172">127 ms</text>
+<rect class="ours" x="190" y="160" width="209.4" height="16" rx="2"/>
+<text class="soft" x="405.4" y="172">124 ms</text>
 <text class="ink" x="180" y="197" text-anchor="end">VTK folder</text>
-<rect class="bar" x="190" y="186" width="364.7" height="16" rx="2"/>
-<text class="soft" x="560.7" y="198">4.44 s</text>
+<rect class="bar" x="190" y="186" width="369.0" height="16" rx="2"/>
+<text class="soft" x="565.0" y="198">4.9 s</text>
 </svg>

@@ -12,17 +12,17 @@
 <text class="soft" x="0" y="36">AirfRANS, 100 runs on their own meshes; median of five, shorter is faster</text>
 <line class="grid" x1="190.0" y1="46" x2="190.0" y2="130"/>
 <text class="soft" x="190.0" y="148" text-anchor="middle">0</text>
-<line class="grid" x1="342.1" y1="46" x2="342.1" y2="130"/>
-<text class="soft" x="342.1" y="148" text-anchor="middle">50 ms</text>
-<line class="grid" x1="494.3" y1="46" x2="494.3" y2="130"/>
-<text class="soft" x="494.3" y="148" text-anchor="middle">100 ms</text>
-<text class="ink" x="180" y="67" text-anchor="end">HDF5, a group per run</text>
-<rect class="bar" x="190" y="56" width="41.9" height="16" rx="2"/>
-<text class="soft" x="237.9" y="68">13.8 ms</text>
-<text class="ink" x="180" y="93" text-anchor="end">mestra</text>
-<rect class="ours" x="190" y="82" width="45.3" height="16" rx="2"/>
-<text class="soft" x="241.3" y="94">14.9 ms</text>
+<line class="grid" x1="343.7" y1="46" x2="343.7" y2="130"/>
+<text class="soft" x="343.7" y="148" text-anchor="middle">50 ms</text>
+<line class="grid" x1="497.5" y1="46" x2="497.5" y2="130"/>
+<text class="soft" x="497.5" y="148" text-anchor="middle">100 ms</text>
+<text class="ink" x="180" y="67" text-anchor="end">mestra</text>
+<rect class="ours" x="190" y="56" width="47.1" height="16" rx="2"/>
+<text class="soft" x="243.1" y="68">15.3 ms</text>
+<text class="ink" x="180" y="93" text-anchor="end">HDF5, a group per run</text>
+<rect class="bar" x="190" y="82" width="50.1" height="16" rx="2"/>
+<text class="soft" x="246.1" y="94">16.3 ms</text>
 <text class="ink" x="180" y="119" text-anchor="end">VTK folder</text>
 <rect class="bar" x="190" y="108" width="381.0" height="16" rx="2"/>
-<text class="soft" x="577.0" y="120">125 ms</text>
+<text class="soft" x="577.0" y="120">124 ms</text>
 </svg>
