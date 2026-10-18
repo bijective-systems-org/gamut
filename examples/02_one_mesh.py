@@ -21,14 +21,14 @@ quads = [[j * n_theta + i, j * n_theta + (i + 1) % n_theta,
 cells = (np.full(len(quads), 9, np.uint8),                # VTK quadrilateral
          np.arange(0, 4 * len(quads) + 1, 4),
          np.array(quads).ravel())
-wall = np.r_[np.ones(n_theta, int), np.zeros(n_theta * (n_r - 1), int)]   # the first ring
+surface = np.r_[np.ones(n_theta, int), np.zeros(n_theta * (n_r - 1), int)]   # wall: the first ring
 
 with mestra.create("cylinder.mes", writer="example sweep", mesh="shared", per="fixed",
                    coordinates={"units": "m", "axes": 2},
                    parameters={"gamma": {"units": "m2 s-1", "role": "design"}},
                    mesh_labels={"surface": {"at": "node", "categories": ["field", "wall"]}},
                    fields={"cp": {"units": "1", "at": "node"}}) as study:
-    study.set_mesh(points, cells, labels={"surface": wall})
+    study.set_mesh(points, cells, labels={"surface": surface})
     for gamma in np.linspace(0.0, 4.0, 9):
         u_theta = -np.sin(t) * (1 + 1 / r**2) + gamma / (2 * np.pi * r)
         u_r = np.cos(t) * (1 - 1 / r**2)
@@ -39,6 +39,7 @@ with mestra.open("cylinder.mes") as study:
     print(study.type, "mesh,", study.row_count, "runs,", len(study.get_points()), "nodes")
     cp = study.get_field("cp")                             # runs x nodes
     print("cp block:", cp.shape)
-    on_wall = np.flatnonzero(study.get_mesh_label("surface") == 1)
+    wall = study.categories("surface").index("wall")      # the code that means "wall"
+    on_wall = np.flatnonzero(study.get_mesh_label("surface") == wall)
     print("lowest cp on the wall, by run:", study.get_field("cp", nodes=on_wall).min(axis=1).round(2))
     print("one node across every run:", study.get_field("cp", nodes=[12]).ravel().round(2))

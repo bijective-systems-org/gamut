@@ -1,8 +1,8 @@
 """A family of geometries that share one mesh topology.
 
 Three cylinders of different radius, meshed with the same topology, so node
-k is the same place on every member (a correspondence, as TopoLink builds
-for real geometry). Each member is run at several circulations. The
+k is the same place on every member (a correspondence, which a mapping or
+morphing tool builds for real geometry). Each member is run at several circulations. The
 coordinates are stored once per member; fields stay one block of runs x
 nodes, comparable node by node across the whole family.
 """

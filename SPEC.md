@@ -142,8 +142,8 @@ Units are strings in the UDUNITS-2 grammar that CF uses (`Pa`, `m s-1`,
 `W m-2`, `1` for dimensionless; §13). They are required on every
 parameter, scalar, constant, field and on coordinates; a string that does
 not parse is an error (E7). Labels carry none. A library may convert
-values to other units when reading and when appending (the interface
-specification says how); the file stores the units the producer declared.
+values to other units when reading and when appending; the file stores
+the units the producer declared.
 
 ### 3.8 Missing values
 
@@ -171,7 +171,7 @@ it changes, declared by `per` on the mesh:
 | `per` | Meaning | Example |
 |---|---|---|
 | `fixed` | one geometry for every run | a condition sweep on one mesh |
-| `group:<label>` | one geometry per category of a group label | a TopoLink family run at several conditions per member |
+| `group:<label>` | one geometry per category of a group label | a family of shapes meshed with one topology, run at several conditions per member |
 | `run` | one geometry per run | a mesh that deforms with every run |
 
 Connectivity and mesh labels never change in a shared mesh; `per` applies
@@ -243,8 +243,8 @@ arrangement VTKHDF uses for meshes that change from step to step.
 
 Nothing in a changing-mesh file claims that node k of one instance relates
 to node k of another. Turning a changing-mesh study into a shared-mesh one
-needs a correspondence between the instances, which is what TopoLink
-produces.
+needs a correspondence between the instances, which a mapping or morphing
+tool produces.
 
 ## 6. Relations: uncertainty and derivatives
 

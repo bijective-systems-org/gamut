@@ -2,7 +2,7 @@
 
 Two transient runs, each saved at many time steps. Time is a parameter with
 the role `time`, and a group label says which run each step belongs to, so
-a split never puts one run's steps on both sides.
+tools keep a run's steps together.
 """
 import numpy as np
 

@@ -25,7 +25,8 @@ for k, gamma in enumerate((0.0, 2.0, 4.0)):
     grid.point_data["cp"] = pressure(t, r, gamma=gamma)
     grid.save(f"{folder}/run_{k:03d}.vtu")
 
-print(vtk.import_folder(folder, "from_vtk.mes"))          # writes the two tables, then stops
+first = vtk.import_folder(folder, "from_vtk.mes")         # writes two tables, then stops
+print("to fill in:", first["templates"])
 with open(f"{folder}/parameters.csv", "w") as table:
     table.write("file,gamma\nunits,m2 s-1\n" +
                 "".join(f"run_{k:03d}.vtu,{g}\n" for k, g in enumerate((0.0, 2.0, 4.0))))
@@ -33,4 +34,4 @@ with open(f"{folder}/fields.csv", "w") as table:
     table.write("name,units\ncoordinates,m\ncp,1\n")
 report = vtk.import_folder(folder, "from_vtk.mes")
 print(report["rows"], "runs imported, geometry", report["geometry"])
-print(vtk.export_study("from_vtk.mes", "back")["files"])
+print("written back:", vtk.export_study("from_vtk.mes", "back")["files"])

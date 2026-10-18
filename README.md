@@ -42,8 +42,8 @@ with mestra.open("sweep.mes") as study:
 
 - **One file per study.** Runs, inputs, results, mesh and fields together,
   compressed, appended to one run at a time as a study grows.
-- **Partial reads that stay fast.** One run, one region of every run, or one
-  node across thousands of runs, without reading the rest.
+- **Partial reads.** One run, one region of every run, or one node across
+  thousands of runs, decompressing only the chunks that hold them.
 - **Meaning that travels with the numbers.** Units on every value, checked;
   which runs failed; which rows share a geometry or belong to one transient
   run; uncertainty and gradients beside the values they describe.

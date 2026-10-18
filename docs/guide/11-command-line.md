@@ -1,0 +1,100 @@
+# 11. Command line
+
+`mestra` inspects, checks, builds and extracts study files without code:
+for a quick look at a file someone sent, for shell scripts, and for tools
+in other languages. Data goes to files, and problems are reported all at
+once, each with what it concerns.
+
+The sessions below run in a folder holding the files of the first two
+examples (`polar.mes`, `cylinder.mes`) and the documents in
+[`examples/cli/`](../../examples/cli).
+
+## Looking inside
+
+```console
+$ mestra info cylinder.mes
+cylinder.mes: shared mesh, 9 runs
+  mesh        576 nodes, 528 cells, fixed
+  parameters  gamma [m2 s-1] 0 to 4
+  fields      cp [1] at nodes
+  zones       surface: field, wall
+  file        ... KB
+$ mestra validate polar.mes
+no errors, 3 warnings
+  W2 status: 1 row is not converged, the first row 17; training skips such rows by default
+  W3 cd: 1 value is missing or not finite, the first at row 17
+  W3 cl: 1 value is missing or not finite, the first at row 17
+```
+
+`validate` checks every rule of the [specification](../../SPEC.md) and
+names each one a file breaks. Errors make a file invalid; warnings say
+what a reader should know, such as runs that failed.
+
+## Taking data out
+
+```console
+$ mestra get polar.mes mach alpha cl --where "status == converged" -o polar.csv
+wrote polar.csv: mach 17 [1], alpha 17 [degree], cl 17 [1]
+$ mestra get cylinder.mes cp --zone surface=wall --rows 0:3 -o wall.npy
+wrote wall.npy: cp 3x48 [1]
+$ mestra get polar.mes --where "mach == 0.7" -o mach07.mes
+wrote 6 runs to mach07.mes
+```
+
+- `--where` chooses runs by condition, `--rows` by position (`0:3`, or
+  `2,5,9`), and `--zone LABEL=NAME` the nodes or cells of one zone.
+- The output's extension decides its form: `.csv` (one line per run, its
+  id first; a field goes alone, a column per node), `.npy` (one array),
+  `.npz` (several, with the row ids), or `.mes`, a smaller study file with
+  the chosen runs and their ids.
+
+## Building a file
+
+A file can be built from a JSON document that declares what it holds, and
+a CSV with one line per run:
+
+```json
+{
+  "writer": "wind tunnel log",
+  "title": "Model B, first entry",
+  "parameters": {"mach": {"units": "1", "role": "condition"},
+                 "alpha": {"units": "degree", "role": "condition"}},
+  "labels": {"status": {"role": "status", "categories": ["converged", "failed"]}},
+  "scalars": {"cl": "1", "cd": "1"},
+  "runs": "sweep_runs.csv"
+}
+```
+
+```csv
+mach,alpha,status,cl,cd
+0.3,0,converged,0.012,0.0081
+0.3,4,converged,0.452,0.0154
+0.5,0,converged,0.014,0.0083
+0.5,4,failed,nan,nan
+```
+
+```console
+$ mestra build sweep.json -o sweep.mes
+wrote sweep.mes: 4 runs
+$ mestra append sweep.mes second_entry.json
+appended 2 runs to sweep.mes
+```
+
+The declarations are those of `mestra.create` ([run tables](01-run-tables.md)).
+An appended document needs only its `runs`; `mestra append` also takes
+another study file and adds all of its runs. For fields, the document names
+a mesh file (`.npz`), and each run's line names a `.npy` of its values;
+`mestra build --example` prints a complete document with the layout of
+both explained.
+
+## For scripts and agents
+
+- `--json` makes any command print one JSON document instead, of a shape
+  that stays the same across versions; `mestra get` still writes its data
+  to the output file.
+- The exit status is 0 on success, 1 when a file or document has errors,
+  and 2 for a command used wrongly.
+- `mestra --version` gives the package version and the format version it
+  writes.
+
+Next: [MATLAB](12-matlab.md).
