@@ -6,7 +6,7 @@
 
 #include "names.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 namespace {
@@ -210,4 +210,4 @@ void write_dict_group(File& f, const std::string& path, const Dict& d, bool top_
 }
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core

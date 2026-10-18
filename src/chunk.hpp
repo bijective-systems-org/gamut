@@ -9,7 +9,7 @@
 
 #include "types.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 const std::size_t kChunkBytes = 262144;   // T
@@ -38,6 +38,6 @@ bool chunk_larger_than_default(const std::vector<hsize_t>& chunk,
                                const std::vector<hsize_t>& dflt);
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_CHUNK_HPP

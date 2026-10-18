@@ -33,15 +33,15 @@ template <class F>
 std::string rule_of(F f) {
   try {
     f();
-  } catch (const gamut::Error& e) {
+  } catch (const gamut_core::Error& e) {
     return e.rule().empty() ? std::string("error") : e.rule();
   }
   return std::string();
 }
 
-using gamut::DType;
-using gamut::Selection;
-using namespace gamut::internal;
+using gamut_core::DType;
+using gamut_core::Selection;
+using namespace gamut_core::internal;
 
 Column f64(const std::vector<double>& v) {
   return Column::of(DType::Float64, v.data(), static_cast<std::int64_t>(v.size()));
@@ -135,7 +135,7 @@ void test_table_run_at_a_time() {
     w->declare_label("status", "status", {"converged", "failed"});
     w->declare_result(scalar("cl", "1"));
     w->declare_result(scalar("cd", "1", DType::Float32));
-    gamut::internal::Constant c;
+    gamut_core::internal::Constant c;
     c.name = "s_ref";
     c.units = "m2";
     c.f = 12.5;
@@ -398,7 +398,7 @@ int main() {
   for (const auto& t : tests) {
     try {
       t.second();
-    } catch (const gamut::Error& e) {
+    } catch (const gamut_core::Error& e) {
       ++g_failures;
       std::fprintf(stderr, "%s: unexpected error %s: %s\n", t.first, e.rule().c_str(), e.what());
     } catch (const std::exception& e) {

@@ -11,7 +11,7 @@
 
 #include "value.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 struct Nearest {
@@ -44,6 +44,6 @@ std::vector<double> nearest_values(const Nearest& m, const std::string& output,
 std::int64_t nearest_output_size(const Nearest& m, const std::string& output);
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_NEAREST_HPP

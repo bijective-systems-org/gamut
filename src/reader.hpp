@@ -14,7 +14,7 @@
 #include "types.hpp"
 #include "value.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 // Builds the schema from attributes, shapes and the (small) category
@@ -74,6 +74,6 @@ class Reader {
 };
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_READER_HPP

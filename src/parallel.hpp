@@ -12,7 +12,7 @@
 #include "h5.hpp"
 #include "types.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 // Reads `sel` (ranges or everything per axis) of a chunked dataset into
@@ -25,6 +25,6 @@ bool read_parallel(const File& f, const std::string& path, DType mem,
                    std::size_t out_bytes, int threads);
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_PARALLEL_HPP

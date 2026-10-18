@@ -7,7 +7,7 @@
 #include <map>
 #include <memory>
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 namespace {
@@ -250,4 +250,4 @@ std::vector<std::int64_t> select_rows(const Reader& reader, const std::string& w
 }
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core

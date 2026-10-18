@@ -343,9 +343,9 @@ class Study {
       }
     }
     stage_fields(fields);
+    std::vector<int64_t> ids(static_cast<size_t>(n));   // before the commit: nothing can fail after it
     int64_t first = 0;
     detail::check(gamut_batch_commit(f_, &first, &e), e);
-    std::vector<int64_t> ids(static_cast<size_t>(n));
     for (int64_t i = 0; i < n; ++i) ids[static_cast<size_t>(i)] = first + i;
     return ids;
   }
@@ -514,7 +514,9 @@ class Study {
       detail::check(gamut_geometry_points(f_, GAMUT_FLOAT64, points.data(),
                                           static_cast<int64_t>(points.size()) / axes_, axes_, &e), e);
     }
-    if (cells && cells->offsets.size() != cells->types.size() + 1)
+    // Cells, when there are any (none is a point cloud), need one more offset
+    // than cells.
+    if (cells && !cells->types.empty() && cells->offsets.size() != cells->types.size() + 1)
       throw Error("E5", "cells: offsets need one more entry than there are cells (" +
                         std::to_string(cells->types.size() + 1) + "), not " + std::to_string(cells->offsets.size()));
     if (cells)

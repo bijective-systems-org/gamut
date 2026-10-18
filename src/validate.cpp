@@ -19,7 +19,7 @@
 #include "types.hpp"
 #include "units.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 bool Report::ok() const { return errors() == 0; }
@@ -1458,4 +1458,4 @@ Report Validator::run() {
 Report validate_file(const std::string& path) { return Validator(path).run(); }
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core

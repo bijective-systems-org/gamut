@@ -299,6 +299,15 @@ void test_refusals_before_the_library() {
   CHECK(refused([&] { s.set_mesh(std::vector<double>(5, 0.0), ring_cells(8)); }) == "E5");
   s.abandon();
   CHECK(refused([] { gamut::open("cells.gamut"); }) != "");          // abandoned and removed
+  {
+    auto cloud = gamut::create("cloud.gamut", "header tests", "shared", "fixed");   // probes, no cells
+    cloud.declare_coordinates("m", 3);
+    cloud.declare_field("p", "node", "Pa");
+    cloud.set_mesh({0, 0, 0, 1, 0, 0, 0, 1, 0}, gamut::Cells{});
+    cloud.add_run({}, {{"p", {1.0, 2.0, 3.0}}});
+    cloud.close();
+  }
+  CHECK((gamut::open("cloud.gamut").get_field("p").values == std::vector<double>{1.0, 2.0, 3.0}));
   std::FILE* text = std::fopen("not_a_study.gamut", "w");
   std::fputs("not HDF5\n", text);
   std::fclose(text);

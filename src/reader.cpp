@@ -9,7 +9,7 @@
 #include "names.hpp"
 #include "parallel.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 namespace {
@@ -721,4 +721,4 @@ std::vector<std::string> Reader::label_names(const std::string& name,
 }
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core

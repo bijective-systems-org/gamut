@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 Value Value::boolean(bool v) {
@@ -133,4 +133,4 @@ void set_path(Dict& root, const std::string& path, Value v) {
 }
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core

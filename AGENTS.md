@@ -41,11 +41,9 @@ over that interface; a validator; a command line; VTK conversion.
 
 - **One implementation.** A rule lives in the core. A language layer that
   checks or computes something the core should is a defect.
-- **Two `gamut` namespaces.** `gamut.hpp` declares public `gamut::Error`,
-  `gamut::Selection` and others; the core's own code in `src/` uses the same
-  namespace for internal types. They meet only through the C interface:
-  never include `gamut.hpp` in a core source or a core test, and link
-  programs using it to the shared library, which exports only `gamut_*`.
+- **Namespaces.** The core's own C++ in `src/` is `gamut_core`; the
+  public C++ header owns `gamut`. They meet only through the C interface,
+  and the shared library exports only `gamut_*`.
 - **Models hold no code.** A model's numbers are plain data; the software
   that owns a model type registers it (Python and MATLAB; Julia evaluates
   the built-in nearest model only). An unregistered type opens and reads;

@@ -17,7 +17,7 @@
 #include <cstddef>
 #include <string>
 
-namespace gamut {
+namespace gamut_core {
 namespace {
 
 // The bounds of section 32: the string comes out of a file, and the
@@ -292,4 +292,4 @@ bool units_parse(const std::string& units) {
   return Grammar(units).whole();
 }
 
-}  // namespace gamut
+}  // namespace gamut_core

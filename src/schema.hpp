@@ -12,7 +12,7 @@
 
 #include "types.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 // The relation attributes of spec section 6.
@@ -139,6 +139,6 @@ std::string result_path(const Result& r);
 std::string mesh_label_path(const MeshLabel& m);
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_SCHEMA_HPP
