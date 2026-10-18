@@ -30,8 +30,8 @@
 <text class="ink h" x="469.0" y="72">Read one run</text>
 <rect class="ours" x="469.0" y="87" width="4.8" height="15" rx="2"/>
 <text class="soft" x="479.8" y="99">1.18 ms</text>
-<rect class="bar" x="469.0" y="109" width="2.0" height="15" rx="2"/>
-<text class="soft" x="477.0" y="121">255 µs</text>
+<rect class="bar" x="469.0" y="109" width="1.0" height="15" rx="2"/>
+<text class="soft" x="476.0" y="121">255 µs</text>
 <rect class="bar" x="469.0" y="131" width="227.0" height="15" rx="2"/>
 <text class="soft" x="702.0" y="143">56.1 ms</text>
 <rect class="bar" x="469.0" y="153" width="18.9" height="15" rx="2"/>
@@ -43,7 +43,7 @@
 <text class="ink" x="140" y="300" text-anchor="end">netCDF-4</text>
 <text class="ink" x="140" y="322" text-anchor="end">Zarr</text>
 <text class="ink" x="140" y="344" text-anchor="end">VTK files</text>
-<text class="ink h" x="150.0" y="230">Choose runs by condition, read them</text>
+<text class="ink h" x="150.0" y="230">Choose runs by condition, read a result of each</text>
 <rect class="ours" x="150.0" y="245" width="3.7" height="15" rx="2"/>
 <text class="soft" x="159.7" y="257">1.04 ms</text>
 <rect class="bar" x="150.0" y="267" width="227.0" height="15" rx="2"/>
@@ -61,8 +61,8 @@
 <text class="soft" x="478.7" y="279">80.1 ms</text>
 <rect class="bar" x="469.0" y="289" width="2.5" height="15" rx="2"/>
 <text class="soft" x="477.5" y="301">54.4 ms</text>
-<rect class="bar" x="469.0" y="311" width="2.0" height="15" rx="2"/>
-<text class="soft" x="477.0" y="323">4.29 ms</text>
+<rect class="bar" x="469.0" y="311" width="0.2" height="15" rx="2"/>
+<text class="soft" x="475.2" y="323">4.29 ms</text>
 <rect class="bar" x="469.0" y="333" width="227.0" height="15" rx="2"/>
 <text class="soft" x="702.0" y="345">4.9 s</text>
 </svg>

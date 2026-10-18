@@ -26,7 +26,7 @@ no errors, 3 warnings
   W3 cl: 1 value is missing or not finite, the first at row 17
 ```
 
-`validate` checks every rule of the [specification](../../SPEC.md) and
+`validate` checks the rules of the [specification](../../SPEC.md) and
 names each one a file breaks. Errors make a file invalid; warnings say
 what a reader should know, such as runs that failed.
 

@@ -106,5 +106,8 @@ find_package(gamut 1.0 REQUIRED)
 target_link_libraries(my_tool PRIVATE gamut::gamut)
 ```
 
-Add `-DGAMUT_STATIC_HDF5=ON` (with `tools/build_deps.sh` as above) to link
-HDF5 into the library.
+On Linux, a core linked to a shared HDF5 can bind to another copy of HDF5
+in the same process (h5py's, MATLAB's, a solver's) and crash. If your
+program may load one, link HDF5 into the library with
+`-DGAMUT_STATIC_HDF5=ON` and `tools/build_deps.sh`, as above; the Python
+wheels are built that way.

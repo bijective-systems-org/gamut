@@ -62,7 +62,7 @@ identity: its `file_id` and creation time.
 - To add runs as they finish, open the file to append instead:
   `gamut.open(path, mode="a")` takes `add_run` and `add_runs` as `create`
   does, without copying the file.
-- `validate` checks a file against every rule of the specification and
+- `validate` checks a file against the rules of the specification and
   returns a report: `ok`, then `errors` and `warnings`, each finding with
   its rule, the path of what it concerns, and a message.
 

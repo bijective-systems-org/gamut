@@ -23,6 +23,19 @@ results and status), the mesh, and every field, with the units of every
 number. Files are HDF5 laid out as netCDF-4, and one C++ core reads and
 writes them for Python, MATLAB, Julia and C.
 
+## What it does
+
+| | |
+|---|---|
+| Languages | Python, MATLAB, Julia and C call one C++ core, so a query returns the same values in each, and any of them reads a file another wrote. h5py, xarray and the netCDF tools read the files without Gamut. |
+| Units | Every parameter, result, field and constant declares its units (`Pa`, `m s-1`, `degree`); a file without them is refused when written. Python converts on read and write ([reading parts](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/08-reading-parts.md)). |
+| Run metadata | Parameters are marked as design inputs, operating conditions or time. Labels record a run's status, fidelity, solver or any other category, and a split records which rows are for training and which for testing. A file can name the group a fair test must hold out whole, such as one shape of a family ([run tables](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/01-run-tables.md)). |
+| Uncertainty and gradients | A standard deviation, a quantile or a derivative is stored as a result that names the result it describes, so a plotting or training script finds it without naming conventions ([uncertainty](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/06-uncertainty-and-gradients.md)). |
+| Meshes | One mesh for every run, with each field stored as one block of runs × nodes; one geometry per member of a family of shapes on one topology; or a different mesh per run ([one mesh](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/02-one-mesh.md), [families](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/03-geometry-families.md)). |
+| Model files | A fitted model is a file of the same shape with no runs, holding the model's numbers but no code. Evaluating it on new inputs gives an ordinary study ([models](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/07-models.md)). |
+| Reads | Runs are chosen by condition (`mach > 0.7 and status == converged`), and one run, one region or one node across every run is read without the rest of the file. HDF5 handles one call at a time, so Gamut fetches compressed chunks through it and decompresses them on several threads. |
+| Checks | `gamut validate` tests a file against the 34 numbered rules of the [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md). A corpus of 64 valid, broken and hostile files runs against all four languages in CI, and readers check sizes before allocating memory and never follow links ([files from outside](https://github.com/bijective-systems-org/gamut/blob/main/docs/security.md)). |
+
 ## Example
 
 Nine runs of potential flow past a cylinder, each written as it finishes,
@@ -122,7 +135,8 @@ All four print the same line, and any of them reads a file another wrote:
 cp on top of the cylinder where gamma > 2: -1.57 -1.32 -1.08 -0.86
 ```
 
-MATLAB and Julia count positions from 1, so node 12 there is node 13.
+MATLAB and Julia count positions from 1, so node 12 in Python and C is node 13 in
+MATLAB and Julia.
 
 ## Performance
 
@@ -132,10 +146,10 @@ MATLAB and Julia count positions from 1, so node 12 there is node 13.
 
 Measured on an Apple M3 with the files in the operating system's cache.
 Gamut is about the size of netCDF-4 and Zarr and a sixth of the VTK files.
-Its chunks are laid out for reading whole runs, so reading one node across
-every run is slower than in Zarr or netCDF-4 (38 ms with four threads). On
-a second study, with 177,000-node meshes, one run reads in 15 ms against
-124 ms from its VTK file. The
+Its chunks are laid out for reading whole runs, so one node across every
+run takes 124 ms, slower than netCDF-4 (54 ms) and Zarr (4 ms); with four
+threads it takes 38 ms. On a second study, with 177,000-node meshes, one
+run reads in 15 ms against 124 ms from its VTK file. The
 [benchmarks page](https://github.com/bijective-systems-org/gamut/blob/main/docs/benchmarks.md) has every number, the method and
 the scripts to repeat it.
 
@@ -144,37 +158,15 @@ the scripts to repeat it.
 | Language | Install |
 |---|---|
 | Python 3.10 or later | `pip install gamut-format` |
-| MATLAB | `build_mex` once in the `matlab` folder of a checkout |
+| MATLAB | `build_mex(core)` once in the `matlab` folder of a checkout |
 | Julia 1.9 or later | `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia")` |
 | C and C++ | CMake build and install, then `find_package(gamut)` |
 
 The Python wheels for macOS, Linux and Windows contain the core with HDF5
 linked in. MATLAB and Julia use the same core: the wheel's
-(`gamut.library_path()` prints where it is) or one built from source.
+(`gamut.library_path()` prints where it is) or one built with CMake.
 Until version 1 is on PyPI, run `pip install .` in a checkout.
 [Installing](https://github.com/bijective-systems-org/gamut/blob/main/docs/install.md) has the details for each language.
-
-## What a file records
-
-Every parameter, result, field and constant declares its units, in the
-UDUNITS grammar netCDF-CF uses (`Pa`, `m s-1`, `degree`). A file without
-them is refused when written. Python converts units on read and write;
-MATLAB, Julia and C return values in the stored units.
-
-Parameters have a role: design input, operating condition or time. A
-status label marks the runs that converged, a split records the training
-and test sets, and a file can name the group a fair test must hold out
-whole, such as one shape of a family. The mesh can be shared by every
-run, given per member of a family of shapes on one topology, or differ
-from run to run. A fitted model is stored as a file of the same shape with
-no runs, and evaluating it produces an ordinary study.
-
-h5py, xarray and the netCDF tools read the files without this package.
-`gamut-vtk` converts to and from a folder of VTK files, and
-`gamut validate` names every rule of the
-[specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md) a file breaks. The readers check sizes before
-allocating memory and never follow links
-([files from outside](https://github.com/bijective-systems-org/gamut/blob/main/docs/security.md)).
 
 ## Documentation
 

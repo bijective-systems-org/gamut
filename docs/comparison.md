@@ -29,7 +29,7 @@ units, roles and statuses written in the file rather than kept in a
 script. On a shared mesh, node k is the same point in every run, so a
 field is one block of runs × nodes: one run, one region of every run, or
 one node across thousands of runs is a single read, and a model can be
-trained on the block directly. A validator names every rule a file
+trained on the block directly. A validator names the rules a file
 breaks, and a corpus of valid, broken and hostile files holds every
 implementation to the specification. A fitted model is stored in the same
 terms as the data, and evaluating it produces an ordinary study.

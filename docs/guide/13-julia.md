@@ -23,11 +23,6 @@ Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed
         Gamut.add_run!(study, Dict("gamma" => gamma); fields=Dict("cp" => solve(gamma)))
     end
 end
-
-cp = Gamut.open("cylinder.gamut") do study
-    rows = Gamut.select(study, "gamma > 2")
-    Gamut.get_field(study, "cp"; rows, nodes=[13])           # runs × nodes, from 1
-end
 ```
 
 `points` is nodes × axes; `cells` is a tuple `(types, offsets,

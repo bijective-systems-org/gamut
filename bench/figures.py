@@ -134,7 +134,7 @@ def summary_figure(r: dict) -> str:
               "zarr": "Zarr", "vtk_folder": "VTK files"}
     panels = [[("Size on disk", lambda f: f["bytes"], lambda f: megabytes(f["bytes"])),
                ("Read one run", lambda f: f["one_run"]["median_s"], lambda f: seconds(f["one_run"]["median_s"]))],
-              [("Choose runs by condition, read them", lambda f: f["query"]["median_s"],
+              [("Choose runs by condition, read a result of each", lambda f: f["query"]["median_s"],
                 lambda f: seconds(f["query"]["median_s"])),
                ("Read one node in every run", lambda f: f["one_node"]["median_s"],
                 lambda f: seconds(f["one_node"]["median_s"]))]]
@@ -161,7 +161,7 @@ def summary_figure(r: dict) -> str:
             hi = max(value(r["formats"][fmt]) for fmt in formats)
             for i, fmt in enumerate(formats):
                 f = r["formats"][fmt]
-                w = max((panel - label_room) * value(f) / hi, 2)
+                w = (panel - label_room) * value(f) / hi
                 y = y0 + 30 + i * row
                 out.append(f'<rect class="{"ours" if fmt == "gamut" else "bar"}" x="{x0:.1f}" y="{y + 3}" '
                            f'width="{w:.1f}" height="15" rx="2"/>')
