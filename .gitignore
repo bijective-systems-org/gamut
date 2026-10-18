@@ -23,3 +23,6 @@ julia/Manifest.toml
 bench/results/raw/
 
 .DS_Store
+matlab/libmestra.*
+matlab/mestra.dll
+matlab/mestra.lib
