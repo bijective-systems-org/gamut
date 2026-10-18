@@ -1,9 +1,9 @@
 cff-version: 1.2.0
 message: >-
   If you use mestra in published work, please cite it as below, and
-  name the specification version your files declare (the root
-  attribute `format`, for example "mestra/0").
-title: "mestra: an open container for simulation and surrogate data"
+  name the format version your files declare (the root attribute
+  `format`, for example "mestra/1").
+title: "mestra: an open file format for simulation studies"
 type: software
 authors:
   - name: "Bijective Systems"
@@ -11,19 +11,20 @@ repository-code: "https://github.com/bijective-systems-org/mestra"
 url: "https://github.com/bijective-systems-org/mestra"
 license: Apache-2.0
 abstract: >-
-  mestra is an open file format for the data of a parametric or
-  time-dependent simulation study and for the surrogate models fitted
-  to it. One HDF5 file, laid out to be a valid netCDF-4 file, holds the
-  rows of a study with keys that carry roles (design, condition, time,
-  group, split, status), scalars with units, fields on a shared mesh
-  or axis, uncertainty, and fitted models as callables; a validator
-  checks what the file claims. Readers and writers in Python, C++,
-  MATLAB and Julia are held to one specification and a shared
-  conformance corpus.
+  mestra is an open file format for the results of a parametric
+  simulation study and the models fitted to it. One HDF5 file, laid
+  out as a valid netCDF-4 file, holds the run table (parameters with
+  roles, labels, statuses, splits and scalar results, every number with
+  its units), the mesh the fields live on, the fields themselves as one
+  block of runs by nodes when the runs share a mesh, uncertainty and
+  gradients beside the values they describe, and fitted models in the
+  same terms as the data. One C++ core, with Python, MATLAB, Julia and C
+  interfaces, implements the specification, and a shared corpus of
+  valid, broken and hostile files holds every language to it.
 keywords:
   - simulation data
-  - surrogate model
   - parametric study
+  - surrogate model
   - HDF5
   - netCDF-4
   - mesh
