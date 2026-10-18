@@ -55,9 +55,9 @@ damaged copies of three valid files, truncated, with single bits flipped,
 or with runs of bytes zeroed, each in a child process.
 
 Measured on 17 October 2026 with the packaged core (HDF5 1.14.6 linked in):
-419 copies were answered by rule, none crashed, and one hung inside HDF5's
-reader of a dimension-scale list. Every HDF5 reader, netCDF's included,
-reads those lists the same way.
+419 copies were answered by rule, none crashed, and one hung inside HDF5
+itself, which every HDF5 reader, netCDF's included, would do on that file.
+It has been reported to the HDF Group.
 
 So for a file nobody vouches for, the process boundary is the defence:
 
