@@ -11,13 +11,19 @@ from _cylinder import pressure, ring
 
 points, cells, t, r = ring()
 
+
+def solve(gamma):
+    """Stands for the solver: cp at every node for one value of circulation."""
+    return pressure(t, r, gamma=gamma)
+
+
 with gamut.create("cylinder.gamut", writer="my sweep", mesh="shared", per="fixed",
                    coordinates={"units": "m", "axes": 2},
                    parameters={"gamma": {"units": "m2 s-1", "role": "design"}},
                    fields={"cp": {"units": "1", "at": "node"}}) as study:
     study.set_mesh(points, cells)                          # once: every run shares it
     for gamma in np.linspace(0.0, 4.0, 9):                 # one run at a time, as a solver finishes
-        study.add_run({"gamma": gamma}, fields={"cp": pressure(t, r, gamma=gamma)})
+        study.add_run({"gamma": gamma}, fields={"cp": solve(gamma)})
 
 with gamut.open("cylinder.gamut") as study:
     rows = study.select("gamma > 2")

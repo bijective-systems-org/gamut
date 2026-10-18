@@ -48,7 +48,7 @@ has the full comparison and how it was measured.
 ## Example
 
 A sweep written one run at a time, as a solver finishes each, then read by
-condition (`points`, `cells` and `pressure` stand for your mesh and your
+condition (`points`, `cells` and `solve` stand for your mesh and your
 solver):
 
 ```python
@@ -58,7 +58,7 @@ with gamut.create("cylinder.gamut", writer="my sweep", mesh="shared", per="fixed
                    fields={"cp": {"units": "1", "at": "node"}}) as study:
     study.set_mesh(points, cells)                          # once: every run shares it
     for gamma in np.linspace(0.0, 4.0, 9):                 # one run at a time, as a solver finishes
-        study.add_run({"gamma": gamma}, fields={"cp": pressure(t, r, gamma=gamma)})
+        study.add_run({"gamma": gamma}, fields={"cp": solve(gamma)})
 
 with gamut.open("cylinder.gamut") as study:
     rows = study.select("gamma > 2")
@@ -153,14 +153,14 @@ instead. MATLAB, Julia and C or C++: see
 
 ## Documentation
 
-- [**Start here**](https://github.com/bijective-systems-org/gamut/blob/main/docs/start-here.md): the first ten minutes, the first day,
-  the first week.
-- [**Guide**](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/README.md): one page per concept, each with a
-  script you can run.
-- [**Specification**](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md): the format itself, for anyone writing
-  another implementation.
-- [**How it compares**](https://github.com/bijective-systems-org/gamut/blob/main/docs/comparison.md) with VTK, CGNS, Exodus,
-  netCDF-CF and Zarr.
+[Start here](https://github.com/bijective-systems-org/gamut/blob/main/docs/start-here.md)
+takes you from installing to your own studies. The
+[guide](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/README.md)
+has one page per concept, each with a script you can run. The
+[specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md)
+defines the format for anyone writing another implementation, and
+[how it compares](https://github.com/bijective-systems-org/gamut/blob/main/docs/comparison.md)
+sets it beside VTK, CGNS, Exodus, netCDF-CF and Zarr.
 
 ## Status
 
