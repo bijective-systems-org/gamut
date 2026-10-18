@@ -73,8 +73,8 @@ what it can do.
   linked in, such as the one inside the Python wheel, so the two never
   meet ([installing](../install.md#matlab)).
 - Values arrive in the units they were stored in, which
-  `study.describe(name).units` names. Converting units on a read is
-  Python's alone for now, through pint.
+  `study.describe(name).units` names. Converting them is left to the
+  caller; only Python's reads convert, through pint.
 - Keep names, table entries and labels to ASCII if MATLAB will read the
   file; the format allows any UTF-8.
 

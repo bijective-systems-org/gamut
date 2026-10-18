@@ -70,5 +70,6 @@ So for a file nobody vouches for, the process boundary is the defence:
 
 A file that crashes or hangs a reader outside HDF5, or that a reader
 accepts against the [specification](../SPEC.md), is a bug. Please report it
-privately through the repository's security advisories on GitHub, with
-the file if you can share it.
+privately through GitHub's
+[vulnerability reporting](https://github.com/bijective-systems-org/mestra/security/advisories/new)
+for this repository, with the file if you can share it.

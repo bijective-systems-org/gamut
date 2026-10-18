@@ -65,8 +65,8 @@ back with the axes in their logical order, `cp[run, node]`.
 ## Worth knowing
 
 - Values arrive in the units they were stored in, which
-  `Mestra.describe(study, name)["units"]` names. Converting units on a
-  read is Python's alone for now.
+  `Mestra.describe(study, name)["units"]` names. Converting them is left
+  to the caller; only Python's reads convert, through pint.
 - Julia evaluates model files whose models are the built-in nearest
   neighbour; models of other types are registered in Python or MATLAB.
 - `Mestra.library_path()` names the core library in use, set by

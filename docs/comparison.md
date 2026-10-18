@@ -46,7 +46,8 @@ several of these on real studies.
   declared tensors (store components), and fields as model inputs. The
   [specification](../SPEC.md#18-additions-planned-within-version-1) lists
   what is planned within version 1.
-- **Unit conversion on reads** is in Python only for now.
+- **Unit conversion on reads** is Python's alone, through pint; MATLAB,
+  Julia and C return values in the units they were stored in.
 
 ## Moving between them
 
