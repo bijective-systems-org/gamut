@@ -1,10 +1,10 @@
 """The Python package over the shared core, end to end: each kind of study
-the owner walked through on 17 October, written with the library and read
-back with it."""
+the format holds, written with the library and read back with it."""
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -288,6 +288,11 @@ def test_notes_private_and_units(tmp_path):
         with pytest.raises(mestra.MestraError, match="convert"):
             f.get_scalar("q", units="m")
     assert mestra.validate(p).findings == ()
+
+
+def test_library_path_names_the_loaded_core():
+    path = Path(mestra.library_path())
+    assert path.is_file() and path.name == mestra._lib._library_name()
 
 
 def test_package_and_core_versions_agree():

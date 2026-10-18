@@ -1,5 +1,5 @@
-"""Study files: create and add runs, or open and read (interface sections
-3 and 4).  Every call goes to the shared core."""
+"""Study files: create and add runs, or open and read.  Every call goes to
+the shared core."""
 
 from __future__ import annotations
 
@@ -476,7 +476,7 @@ class Study:
 
     def select(self, where: str) -> np.ndarray:
         """The positions of the rows `where` selects, e.g.
-        "mach > 0.5 and status == converged" (interface section 4)."""
+        "mach > 0.5 and status == converged" (docs/reference/selecting.md)."""
         self._need_reader()
         out = np.empty(max(self.row_count, 1), dtype=np.int64)
         n = ctypes.c_int64()

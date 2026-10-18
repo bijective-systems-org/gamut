@@ -1,4 +1,4 @@
-"""The command line: agents first, people second (interface section 9).
+"""mestra: inspect, check, build and extract study files.
 
     mestra info FILE [--json]
     mestra validate FILE [--json]
@@ -7,10 +7,10 @@
     mestra get FILE NAME... [--where EXPR] [--rows SEL] [--zone LABEL=NAME] -o OUT [--json]
 
 Readable text by default; `--json` prints one document of the shape given
-in each command's docstring, which is part of the interface promise.  Big
-data goes to files; every problem is reported at once with where it is and
-what to do.  Exit status: 0 success, 1 the file or document has errors,
-2 a usage error.
+in each command's docstring, kept stable across versions for scripts and
+agents.  Big data goes to files; every problem is reported at once with
+where it is and what to do.  Exit status: 0 success, 1 the file or document
+has errors, 2 a usage error.
 """
 
 from __future__ import annotations
@@ -387,7 +387,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 def cmd_append(args: argparse.Namespace) -> int:
     """--json: {"appended": FILE, "rows": n, "problems": [{key, message}]}"""
     if args.document.lower().endswith(".mes"):
-        # Every row of another study file (interface section 6).
+        # Every row of another study file.
         try:
             n = mestra_append(args.file, args.document)
         except MestraError as e:
@@ -562,6 +562,9 @@ def cmd_get(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="mestra", description=__doc__.split("\n\n")[0])
+    from . import __version__, FORMAT
+    parser.add_argument("--version", action="version",
+                        version=f"mestra {__version__} (files {FORMAT})")
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("info", help="describe a file")
     p.add_argument("file")

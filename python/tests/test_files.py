@@ -1,4 +1,4 @@
-"""append, extract and write_copy (interface section 6): each kind of file,
+"""append, extract and write_copy: each kind of file,
 the refusals, ids, tables merged by name, and identity kept on a rewrite."""
 
 from __future__ import annotations

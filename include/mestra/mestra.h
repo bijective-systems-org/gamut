@@ -195,8 +195,8 @@ MES_API int mes_label_names(const mes_file* f, const char* label, const mes_sel*
                             mes_strings** out, mes_error* err);
 MES_API int mes_table(const mes_file* f, const char* table, mes_strings** out,
                       mes_error* err);
-/* The positions of the rows `where` selects (interface section 4), written
- * to out (room for `capacity`, at least the row count); *n says how many. */
+/* The positions of the rows `where` selects (docs/reference/selecting.md),
+ * written to out (room for `capacity`, at least the row count); *n says how many. */
 MES_API int mes_select(const mes_file* f, const char* where, int64_t* out, int64_t capacity,
                        int64_t* n, mes_error* err);
 
@@ -260,7 +260,7 @@ MES_API int mes_evaluate_begin(const mes_file* model, const char* out_path, mes_
                                mes_error* err);
 
 /* --- Checking ------------------------------------------------------------- */
-/* Copies between files (interface section 6).  Each validates its source
+/* Copies between files.  Each validates its source
  * first and checks everything before the first row is written.
  * mes_append adds src's rows to dst in place (new ids continuing dst's,
  * tables merged by name); both need the same declarations, mesh and

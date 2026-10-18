@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-5 0 261 53" width="261" height="53"
+     role="img" aria-labelledby="mestra-logo" fill="none" stroke-width="5.0"
+     stroke-linecap="round" stroke-linejoin="round">
+  <title id="mestra-logo">mestra</title>
+  <!-- The mark: one closed outline on four nodes, two of its edges on the
+       square through them and two on the circle through the same four: one
+       shape becoming another without moving a node, as a family of meshes
+       morphs while its nodes stay in correspondence. -->
+  <style>
+    .mark { stroke: #4A9FF5; }
+    .word { stroke: #1F2328; }
+    .node { fill: #1F2328; stroke: none; }
+    @media (prefers-color-scheme: dark) {
+      .word { stroke: #E6EDF3; }
+      .node { fill: #E6EDF3; }
+    }
+  </style>
+  <path class="mark" stroke-linejoin="miter" stroke-miterlimit="10"
+        d="M21.50 7.50L40.50 26.50A19.00 19.00 0 0 1 21.50 45.50L2.50 26.50A19.00 19.00 0 0 1 21.50 7.50Z"/>
+  <circle class="node" cx="21.5" cy="7.5" r="4"/>
+  <circle class="node" cx="40.5" cy="26.5" r="4"/>
+  <circle class="node" cx="21.5" cy="45.5" r="4"/>
+  <circle class="node" cx="2.5" cy="26.5" r="4"/>
+  <g class="word">
+    <path d="M58.50 46.00L58.50 31.00A11.00 15.00 0 0 1 80.50 31.00L80.50 46.00M80.50 31.00A11.00 15.00 0 0 1 102.50 31.00L102.50 46.00"/>
+    <path d="M110.00 31.00L140.00 31.00M140.00 31.00A15.00 15.00 0 1 0 134.23 42.82"/>
+    <path d="M166.22 20.45A9.00 7.50 0 1 0 158.00 31.00A9.00 7.50 0 1 1 149.78 41.55"/>
+    <path d="M181.00 7.00L181.00 46.00M175.00 16.00L192.00 16.00"/>
+    <path d="M198.50 46.00L198.50 31.00A12.00 15.00 0 0 1 210.50 16.00"/>
+    <path d="M218.50 31.00A15.00 15.00 0 1 1 248.50 31.00A15.00 15.00 0 1 1 218.50 31.00M248.50 16.00L248.50 46.00"/>
+  </g>
+</svg>

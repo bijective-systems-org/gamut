@@ -751,7 +751,7 @@ int mes_describe(const mes_file* f, const char* name, mes_strings** keys, mes_st
     const Reader& r = reader_of(f);
     std::vector<std::pair<std::string, std::string>> pairs;
     if (str(name).empty()) {
-      // The file itself (interface section 4).
+      // The file itself.
       const Schema& s = r.schema();
       const std::pair<const char*, std::string> all[] = {
           {"format", "mestra/1"}, {"kind", s.kind}, {"type", s.type()},

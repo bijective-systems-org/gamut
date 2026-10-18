@@ -71,7 +71,8 @@ def _find_library() -> str:
         "cmake -S . -B build && cmake --build build")
 
 
-_lib = ctypes.CDLL(_find_library())
+path = _find_library()
+_lib = ctypes.CDLL(path)
 
 _P = ctypes.c_void_p
 _S = ctypes.c_char_p

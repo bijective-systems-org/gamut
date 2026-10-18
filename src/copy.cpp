@@ -276,7 +276,7 @@ std::vector<std::int64_t> positions(const Selection& sel, std::int64_t n) {
   return out;
 }
 
-// What append needs to hold between two files (interface section 6).
+// What append needs to hold between two files.
 // Returns how the source's mesh-label codes become the destination's.
 CodeMaps check_same(const Reader& dst, const Reader& src) {
   CodeMaps maps;

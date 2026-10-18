@@ -2,7 +2,7 @@
     Mestra
 
 Julia over the mestra core library: the same calls as Python and MATLAB,
-in Julia's spelling (interface section 7). Positions (rows, nodes, cells)
+in Julia's spelling. Positions (rows, nodes, cells)
 are 1-based; arrays come back with the logical axes in order, `p[run, node]`.
 Cell connectivity holds the stored 0-based node numbers, as in every
 language (VTK's convention).
@@ -334,7 +334,7 @@ end
                   constants, mesh, per, coordinates, precision, round_bits, title,
                   license, references, source, generalisation_group, compression)
 
-Creates a data file and returns it open to add runs (interface section 3).
+Creates a data file and returns it open to add runs.
 Declarations are Dicts (or NamedTuples) from a name to its units text or
 to its specification, as in Python: `parameters = Dict("mach" => "1")`,
 `fields = Dict("p" => (units = "Pa", at = "node"))`.

@@ -1,5 +1,5 @@
-"""Copies between files (interface section 6), done by the core: each
-validates its source and checks everything before the first row."""
+"""Copies between files, done by the core: each validates its source and
+checks everything before the first row is written."""
 
 from __future__ import annotations
 

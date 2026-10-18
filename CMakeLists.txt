@@ -135,7 +135,10 @@ endif()
 # outside the install (a source build), the library keeps the path to it.
 set_target_properties(mestra PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 if(SKBUILD)
-  install(TARGETS mestra LIBRARY DESTINATION mestra/_native RUNTIME DESTINATION mestra/_native)
+  # On Windows the import library (mestra.lib) goes too, so MATLAB's gateway
+  # can be built against the wheel's core.
+  install(TARGETS mestra LIBRARY DESTINATION mestra/_native RUNTIME DESTINATION mestra/_native
+                         ARCHIVE DESTINATION mestra/_native)
 else()
   include(GNUInstallDirs)
   include(CMakePackageConfigHelpers)

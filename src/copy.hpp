@@ -1,4 +1,4 @@
-// Copies between files (interface section 6): every row goes through the
+// Copies between files: every row goes through the
 // writer, so a copy meets every rule a writer checks.
 #ifndef MESTRA_CORE_COPY_HPP
 #define MESTRA_CORE_COPY_HPP

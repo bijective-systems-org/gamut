@@ -3,7 +3,7 @@ function registerModelType(className)
 %   mestra.registerModelType('romlib.mestra.GP')
 %   The class has a constant property Type (its name in model files), a
 %   static method load(numbers), and methods call(model, inputs, wanted)
-%   and save(model) (interface section 5).  numbers is the model's data as
+%   and save(model) (SPEC.md section 7.3).  numbers is the model's data as
 %   a struct.  Registration lasts for the MATLAB session.
 className = char(className);
 mc = meta.class.fromName(className);

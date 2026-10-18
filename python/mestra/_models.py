@@ -116,7 +116,7 @@ _REGISTRY: dict[str, type] = {}
 def register_model_type(cls: type) -> type:
     """Registers a model type: a class with a `type` name, a classmethod
     `load(numbers)`, and methods `call(inputs, wanted)` and `save()`
-    (interface section 5).  Usable as a decorator."""
+    (SPEC.md section 7.3).  Usable as a decorator."""
     name = getattr(cls, "type", None)
     if not isinstance(name, str) or not name:
         raise MestraError("", "a model type has a class attribute `type`, its name")

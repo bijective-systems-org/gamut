@@ -1,4 +1,4 @@
-// The `where` selector of interface section 4: rows whose parameters,
+// The `where` selector (docs/reference/selecting.md): rows whose parameters,
 // scalars and labels satisfy an expression.
 #ifndef MESTRA_CORE_SELECT_HPP
 #define MESTRA_CORE_SELECT_HPP

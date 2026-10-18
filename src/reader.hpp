@@ -1,5 +1,5 @@
 // Reading files: the schema from metadata alone, and values by concept
-// path with run and site selections (interface section 4).
+// path with run and site selections.
 #ifndef MESTRA_CORE_READER_HPP
 #define MESTRA_CORE_READER_HPP
 

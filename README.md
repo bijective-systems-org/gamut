@@ -1,130 +1,92 @@
-# mestra
+<p align="center">
+  <img src="docs/assets/logo.svg" alt="mestra" width="240">
+</p>
 
-[![PyPI](https://img.shields.io/pypi/v/mestra)](https://pypi.org/project/mestra/)
-[![Licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
+<p align="center">
+An open file format for simulation studies: every run, the mesh it ran on,<br>
+and what each number means, in one file that reads the same way from Python,
+MATLAB, Julia and C.
+</p>
 
-An open file format for the results of a simulation study and the
-surrogate models fitted to them. One file holds every run of a study
-and says what each number is, so that a reader can check its claims
-instead of assuming them.
+---
 
-A parametric study usually ends as a folder of solver outputs, a
-spreadsheet of the inputs and a script that knows how to join them.
-What the numbers mean -- their units, which runs failed, which rows
-share a geometry, which were held out -- lives in that script, and
-every tool that reads the folder has to guess it again. mestra writes
-it into the file, where a validator can check it:
+A parametric study usually ends as a folder of solver outputs, a spreadsheet
+of inputs and a script that knows how to join them. mestra keeps the runs,
+their inputs and results, the mesh and its fields in one compressed file,
+with units, roles and statuses written down, so the study can be shared,
+checked and used to train models without the script.
 
-- A train/test split that puts one geometry, or one transient run, on
-  both sides is reported (W01). Such a split does not test
-  generalisation to unseen units; consumers choose and enforce the
-  modelling policy.
-- Every field and scalar carries units in the UDUNITS grammar that CF
-  uses (E11, W10), and every run can say whether it converged (W02).
-- Whether every row is on the same mesh is stated in the file, and
-  each mesh carries an id hashed from its node count and connectivity
-  (E08). Matching ids establish structural support identity, not that
-  independent producers gave node k the same physical meaning.
-  Producers establish that correspondence before rows are compared
-  or combined.
-- A fitted model can be a file of the same shape with no rows: its
-  slots name the callable that serves them and its keys carry bounds.
-  A file may also carry rows, stored values and callable slots together;
-  each slot's `source`, rather than the row count, decides its content.
-  A matching support id checks structure, not model validity.
+<p align="center">
+  <img src="docs/assets/one-study-one-file.svg" alt="A folder of VTK files, a parameters table and a joining script become one file holding the run table, the mesh, and every field as one block of runs by nodes." width="760">
+</p>
 
-It is for engineers who run parametric or transient studies and want
-the results to outlive the script that made them, for people who fit
-surrogate or reduced-order models to CFD and FEA results, and for
-anyone publishing a simulation dataset for machine learning, where the
-split and the units should travel with the data.
+## In a few lines
 
-Nothing is locked in. A mestra file is HDF5, laid out so that it is
-also a valid netCDF-4 file, and `h5dump`, `ncdump` and xarray open it
-without this package:
+```python
+import mestra
 
-    import xarray as xr
-    xr.open_datatree("run.mes")     # every group, every named dimension
+with mestra.create("sweep.mes", writer="my solver", mesh="shared", per="fixed",
+                   coordinates={"units": "m", "axes": 3},
+                   parameters={"mach": "1", "alpha": "degree"},
+                   fields={"p": {"units": "Pa", "at": "node"}}) as study:
+    study.set_mesh(points, cells)                       # once: every run shares it
+    for mach, alpha, pressure in runs:                  # from your solver
+        study.add_run({"mach": mach, "alpha": alpha}, fields={"p": pressure})
 
-Reading a callable's interface does not execute it: evaluation needs the
-software that owns its type and any licence that software requires.
-Generic netCDF tools can read the public layout, but their rewrites are
-not necessarily conforming mestra files (SPEC section 21).
+with mestra.open("sweep.mes") as study:
+    fast = study.select("mach > 0.7")
+    p = study.get_field("p", rows=fast)                 # runs x nodes, in Pa
+```
 
-What mestra adds is the meaning: roles, units, alignment, statistics
-and models, stored as attributes any HDF5 reader can see.
-[How it relates to VTK, CGNS, netCDF-CF and the machine-learning
-dataset formats](docs/comparison.md).
+## What it gives you
 
-What a file holds:
+- **One file per study.** Runs, inputs, results, mesh and fields together,
+  compressed, appended to one run at a time as a study grows.
+- **Partial reads that stay fast.** One run, one region of every run, or one
+  node across thousands of runs, without reading the rest.
+- **Meaning that travels with the numbers.** Units on every value, checked;
+  which runs failed; which rows share a geometry or belong to one transient
+  run; uncertainty and gradients beside the values they describe.
+- **Models in the same terms as the data.** A fitted surrogate is a file of
+  the same shape with no rows, and evaluating it gives an ordinary study.
+- **The same answers in every language.** One C++ core behind Python,
+  MATLAB, Julia and C, checked against the specification by a shared corpus
+  of valid, broken and hostile files.
+- **Nothing locked in.** Underneath it is HDF5 laid out as netCDF-4, so
+  h5py, xarray and the netCDF tools read it without this package, and one
+  command turns a study back into VTK files.
 
-    rows        one observation each, located by keys that carry roles
-    scalars     per-row quantities, with units
-    supports    a mesh, a one-dimensional axis, or none
-    arrays      fields and labels on a support, with what they vary
-                along: the row, a group, or nothing
-    callables   a slot may name the model that produces it, so a
-                fitted model may have no rows
-    alignment   every row on the same support: stated, and checkable
+[Benchmarks](docs/benchmarks.md) measure size and read speed against a
+folder of VTK files, plain HDF5, netCDF and Zarr on real studies.
 
-Install:
+## Install
 
-    python   pip install mestra   (or pip install -e python/ from a checkout)
-    matlab   addpath('<this repository>/matlab')
-    c++      cmake -S cpp -B cpp/build -DHDF5_ROOT="$HDF5_ROOT"
-             cmake --build cpp/build -j
-    julia    julia --project=julia   (or Pkg.develop(path="julia"))
+```bash
+pip install mestra            # Python 3.10 or later; wheels for macOS, Linux and Windows
+pip install "mestra[vtk]"     # with VTK import and export
+```
 
-Write a file and read a value back by name:
+MATLAB, Julia and C or C++: see [installing](docs/install.md).
 
-    import mestra
+## Where next
 
-    ds = mestra.Dataset(writer="my tool 1")
-    ds.add_key("mach", [0.4, 0.8], role="condition", units="1")
-    s = ds.add_support("s0", coordinates=[0., 1., 2.], units="m")
-    s.add_node_array("pressure", [[101., 102., 103.],
-                                  [201., 202., 203.]],
-                     units="Pa", dims=("row", "node"))
-    mestra.write(ds, "run.mes")
-    with mestra.read("run.mes") as d:
-        p = d.supports["s0"].node_arrays["pressure"]
-        print(p.values.at(row=1, node=2, component=0))    # 203.0
+- [**Start here**](docs/start-here.md): the first ten minutes, the first day,
+  the first week.
+- [**Guide**](docs/guide/README.md): one page per concept, each with a
+  script you can run.
+- [**Specification**](SPEC.md): the format itself, for anyone writing
+  another implementation.
+- [**How it compares**](docs/comparison.md) with VTK, CGNS, Exodus,
+  netCDF-CF and Zarr.
 
-Then check it, or anyone else's file, from a shell:
+## Status
 
-    $ mestra validate run.mes
-    0 error(s), 0 warning(s)
-    $ mestra info run.mes          # keys, supports and slots, one screen
+Version 1 of the format (`mestra/1`) is specified and implemented: the C++
+core, Python, MATLAB and Julia, the validator, the command line and VTK
+conversion. It is not yet released on PyPI; until it is, install from a
+checkout with `pip install .` (see [installing](docs/install.md)).
 
-The same thing on a mesh, with three members and a label, runnable:
-[`docs/examples/a-support-and-a-field/`](docs/examples/a-support-and-a-field/).
-A split that leaks, and a split by member that does not:
-[`docs/examples/groups-and-splits/`](docs/examples/groups-and-splits/).
+## License
 
-[`docs/guide.md`](docs/guide.md) is the format in plain words with one
-example per concept, [`SPEC.md`](SPEC.md) is the reference, and each of
-[`python/`](python/), [`matlab/`](matlab/), [`cpp/`](cpp/) and
-[`julia/`](julia/) has a README for that interface.
-
-Status: **specification version 0**, with Python, MATLAB, C++ and Julia
-implementations checked against a 152-case conformance corpus and a
-hostile-file subset. Within version 0 the meaning of an existing file
-does not change; what may be added, and how, is in
-[CONTRIBUTING.md](CONTRIBUTING.md). MATLAB supports ASCII strings only;
-see the [capability table](docs/compatibility.md) for implementation
-limits and the distinction between reading a model file and executing
-its callable. The name is written `mestra`, lower case, everywhere. No
-implementation is the reference: the spec and the corpus are.
-
-Questions, a file the format cannot represent, or a reader that gets
-something wrong: [open an issue](https://github.com/bijective-systems-org/mestra/issues/new/choose).
-If you use mestra in published work, [CITATION.cff](CITATION.cff) says
-how to cite it.
-
-Licence: code under Apache-2.0 (see LICENSE); specification text under
-CC-BY-4.0. Copyright (c) 2026 Bijective Systems.
-
-[Contributing and changing the format](CONTRIBUTING.md) describes the
-compatibility rules and how to run the checks; [AGENTS.md](AGENTS.md)
-is the reading map for working on the code. [Releasing](docs/releasing.md) describes the checks
-required for a release and for updating downstream consumers.
+[Apache 2.0](LICENSE). Made by [Bijective Systems](https://github.com/bijective-systems-org).
+If you use mestra in published work, please cite it ([CITATION.cff](CITATION.cff)).

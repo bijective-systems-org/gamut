@@ -12,7 +12,7 @@
 
 namespace mestra {
 
-// Every failure the core raises.  `rule` is the identifier of spec
+// Every failure the core raises.  `rule` is the identifier of SPEC.md
 // section 16 when one applies (E1 ... E24, W1 ... W10) and empty when no
 // rule covers the failure (a missing file, a wrong argument).  `path` is
 // a concept path (`node_fields/p`), never an HDF5 path, or empty.
@@ -96,7 +96,7 @@ using FilterPipeline = std::vector<FilterStep>;
 FilterPipeline default_pipeline();
 
 // A selection along one axis: everything, a half-open range, or a
-// strictly increasing list of indices (spec interface section 4).
+// strictly increasing list of indices.
 struct Selection {
   enum Kind { All = 0, Range = 1, Index = 2 };
   Kind kind = All;
