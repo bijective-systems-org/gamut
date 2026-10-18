@@ -30,7 +30,7 @@ them:
 
 ```python
 first = vtk.import_folder(folder, "from_vtk.mes")         # writes two tables, then stops
-print("to fill in:", first["templates"])
+print("to fill in:", ", ".join(os.path.basename(t) for t in first["templates"]))
 with open(f"{folder}/parameters.csv", "w") as table:
     table.write("file,gamma\nunits,m2 s-1\n" +
                 "".join(f"run_{k:03d}.vtu,{g}\n" for k, g in enumerate((0.0, 2.0, 4.0))))
@@ -42,7 +42,7 @@ print("written back:", vtk.export_study("from_vtk.mes", "back")["files"])
 ```
 
 ```text
-to fill in: ['runs/parameters.csv', 'runs/fields.csv']
+to fill in: parameters.csv, fields.csv
 3 runs imported, geometry fixed
 written back: ['run_000.vtu', 'run_001.vtu', 'run_002.vtu']
 ```
