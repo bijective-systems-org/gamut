@@ -19,7 +19,7 @@
 #include "types.hpp"
 #include "units.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 bool Report::ok() const { return errors() == 0; }
@@ -241,7 +241,7 @@ void Validator::check_name(const std::string& name, const std::string& concept, 
   if (!legal_netcdf_name(name)) {
     add("E8", concept, "\"" + name + "\" is not a legal name (spec section 9.3)");
   } else if (reserved_name(name)) {
-    add("E8", concept, "\"" + name + "\" takes the reserved prefix mestra_");
+    add("E8", concept, "\"" + name + "\" takes the reserved prefix gamut_");
   } else if (root && (kReservedRoot.count(name) || name.compare(0, 9, "category_") == 0)) {
     add("E8", concept, "\"" + name + "\" is a reserved name at the root (spec section 9.3)");
   }
@@ -507,10 +507,10 @@ void Validator::root_attrs() {
   root.attrs = file_->attributes("/");
   check_attrs(root, kRootAttrs);
   const std::string format = root.text("format");
-  if (format != "mestra/1") {
+  if (format != "gamut/1") {
     add("E1", "", format.empty() ? "the file has no format attribute; it is not a file of this "
                                    "format"
-                                 : "format is \"" + format + "\"; this version reads mestra/1");
+                                 : "format is \"" + format + "\"; this version reads gamut/1");
   }
   kind_ = root.text("kind");
   if (kind_ != "data" && kind_ != "model") {
@@ -1458,4 +1458,4 @@ Report Validator::run() {
 Report validate_file(const std::string& path) { return Validator(path).run(); }
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut

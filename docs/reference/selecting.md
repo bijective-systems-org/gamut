@@ -1,6 +1,6 @@
 # Selecting runs
 
-`select` (Python, MATLAB, Julia), `mes_select` (C) and `--where` (the
+`select` (Python, MATLAB, Julia), `gamut_select` (C) and `--where` (the
 command line) take a condition and return the positions of the rows that
 meet it, in increasing order. The language is the same everywhere, because
 the core evaluates it.

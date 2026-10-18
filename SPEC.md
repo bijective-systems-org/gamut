@@ -1,6 +1,6 @@
-# The mestra file format, version 1
+# The Gamut file format, version 1
 
-A mestra file holds one parametric simulation study, or one model fitted
+A Gamut file holds one parametric simulation study, or one model fitted
 to such a study, and says what every number in it is. This document is the
 format's definition: the libraries in this repository implement it, and
 anyone may write another implementation from it.
@@ -402,7 +402,7 @@ variable-length types in the data and attributes this format defines. The
 dimension-scale machinery (`DIMENSION_LIST`, `REFERENCE_LIST`) is exempt;
 readers ignore it, and also `CLASS`, `NAME`, `DIMENSION_LABELS`,
 `_Netcdf4Dimid`, `_Netcdf4Coordinates`, `_nc3_strict` and `_NCProperties`.
-The extension is `.mes`; the root attribute `format` decides, not the
+The extension is `.gamut`; the root attribute `format` decides, not the
 extension.
 
 ### 9.2 Attributes
@@ -427,7 +427,7 @@ spaces; names hold no spaces.
 Every group, dataset, attribute and dimension name is a legal netCDF-4
 name: not empty; no `/` or NUL; letters, digits, `_`, `-`, `.`, `+`; first
 character a letter, digit or underscore; no leading or trailing space.
-Names a producer chooses must not begin with `mestra_`, and in the root
+Names a producer chooses must not begin with `gamut_`, and in the root
 must not be `row`, `coordinates`, `categories`, `mesh`, `models`, `notes`,
 `private` or `VTKHDF`, or begin with `category_` (E8). Names are unique in
 the file (§4.4).
@@ -479,7 +479,7 @@ model data.
 
 ### 10.1 Every file
 
-    /                          format = "mestra/1", kind (data | model),
+    /                          format = "gamut/1", kind (data | model),
                                writer, created, file_id,
                                title?, license?, references?, source?,
                                generalisation_group? (data), trained_on? (model),
@@ -679,7 +679,7 @@ They map to the group `/models/<id>`:
 | integer / float / boolean | an attribute: int64 / float64 / int8 (0 or 1; read back as a boolean) |
 | string | a string attribute |
 | null | the string attribute whose bytes are exactly `00 6E 75 6C 6C` (a NUL then `null`) |
-| numeric array, list of numbers | a dataset in C order, dimension scales `mestra_<dataset>_d<i>` |
+| numeric array, list of numbers | a dataset in C order, dimension scales `gamut_<dataset>_d<i>` |
 | list of strings | a one-dimensional fixed-length string dataset |
 
 Dataset dtypes: int8 (boolean), int32, int64, float64, fixed-length UTF-8.
@@ -687,7 +687,7 @@ A zero-dimensional array is written as the number it holds. An array with
 a zero extent keeps its dtype, with that axis unlimited. A ragged or mixed
 list, a list of dictionaries, a list of nulls, any other dtype and a string
 holding NUL are not representable; the writer refuses them (E18). Keys are
-legal names not beginning with `mestra_`; a writer visits keys in
+legal names not beginning with `gamut_`; a writer visits keys in
 ascending order of their UTF-8 bytes; readers do not depend on order. A
 reader that does not know a model's type copies the group unchanged.
 
@@ -781,7 +781,7 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 
 | Rule | Finding |
 |---|---|
-| E1 | `format` missing or not `mestra/1`; `kind` missing or not `data` or `model` |
+| E1 | `format` missing or not `gamut/1`; `kind` missing or not `data` or `model` |
 | E2 | a required attribute or object of §10 absent |
 | E3 | an attribute stored with an encoding other than §9.2's, or not valid UTF-8 |
 | E4 | a dataset with a dtype §11.1 does not allow; a string dataset not valid UTF-8 or holding a NUL |
@@ -823,7 +823,7 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 
 ## 17. Versions and additions
 
-`format` reads `mestra/1`. A reader refuses another major version, naming
+`format` reads `gamut/1`. A reader refuses another major version, naming
 it. Within version 1, additions are additive: a reader that meets an
 attribute, group, role or statistic word it does not know reports W5 and
 goes on, ignoring the object. A result with an unknown `statistic` is read

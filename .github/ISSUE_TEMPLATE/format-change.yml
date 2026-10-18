@@ -26,7 +26,7 @@ body:
     attributes:
       label: Within version 1, or a new version
       description: >-
-        Additive within mestra/1 (SPEC.md section 17: a reader that does
+        Additive within gamut/1 (SPEC.md section 17: a reader that does
         not know it reports W5 and goes on), or a new major version.
     validations:
       required: true

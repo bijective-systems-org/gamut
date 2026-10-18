@@ -5,11 +5,11 @@
 
 For three valid files of the corpus (a table, a shared mesh, a changing
 mesh), writes 140 damaged copies each (40 truncations, 80 single-bit flips,
-20 runs of 16 zeroed bytes, from a fixed seed) and runs `mestra validate
+20 runs of 16 zeroed bytes, from a fixed seed) and runs `gamut validate
 --json` on each in a child process. Prints how many were answered (a
 report, by rule), crashed (ended by a signal), hung (over the timeout) or
 escaped (ended otherwise, such as a Python traceback), and each that was
-not answered. Set MESTRA_LIBRARY to measure a particular build of the core.
+not answered. Set GAMUT_LIBRARY to measure a particular build of the core.
 """
 
 from __future__ import annotations
@@ -48,20 +48,20 @@ def main() -> int:
     ap.add_argument("--work", default=None)
     ap.add_argument("--timeout", type=float, default=20.0)
     args = ap.parse_args()
-    work = args.work or tempfile.mkdtemp(prefix="mestra-damaged-")
+    work = args.work or tempfile.mkdtemp(prefix="gamut-damaged-")
     os.makedirs(work, exist_ok=True)
     rng = random.Random(20261017)
     outcomes: Counter[str] = Counter()
     lost = []
     for case in CASES:
-        with open(os.path.join(args.corpus, case + ".mes"), "rb") as fh:
+        with open(os.path.join(args.corpus, case + ".gamut"), "rb") as fh:
             data = fh.read()
         for what, content in damaged(data, rng):
-            path = os.path.join(work, "damaged.mes")
+            path = os.path.join(work, "damaged.gamut")
             with open(path, "wb") as fh:
                 fh.write(content)
             try:
-                r = subprocess.run([sys.executable, "-m", "mestra.cli", "validate", "--json", path],
+                r = subprocess.run([sys.executable, "-m", "gamut.cli", "validate", "--json", path],
                                    capture_output=True, text=True, timeout=args.timeout)
                 if r.returncode < 0:
                     kind = "crashed"

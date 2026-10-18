@@ -8,6 +8,6 @@ switch char(name)
     case 'double', code = 6;
     case 'int64', code = 4;
     otherwise
-        error('mestra:E4', 'precision %s is not float32, float64 or int64', name);
+        error('gamut:E4', 'precision %s is not float32, float64 or int64', name);
 end
 end

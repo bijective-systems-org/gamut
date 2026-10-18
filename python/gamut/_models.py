@@ -14,7 +14,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from . import _lib
-from ._lib import MestraError, b, call
+from ._lib import GamutError, b, call
 from ._study import Study, _axes, _precision, _spec, open as _open
 
 # --- dictionaries <-> core trees --------------------------------------------
@@ -22,11 +22,11 @@ from ._study import Study, _axes, _precision, _spec, open as _open
 
 def _to_tree(numbers: Mapping[str, Any]) -> ctypes.c_void_p:
     handle = ctypes.c_void_p()
-    call("mes_tree_new", ctypes.byref(handle))
+    call("gamut_tree_new", ctypes.byref(handle))
     try:
         _fill(handle, "", numbers)
     except BaseException:
-        _lib._lib.mes_tree_free(handle)
+        _lib._lib.gamut_tree_free(handle)
         raise
     return handle
 
@@ -34,77 +34,77 @@ def _to_tree(numbers: Mapping[str, Any]) -> ctypes.c_void_p:
 def _fill(h: ctypes.c_void_p, prefix: str, d: Mapping[str, Any]) -> None:
     for key, value in d.items():
         if not isinstance(key, str):
-            raise MestraError("E18", f"model-data keys are strings, not {key!r}")
+            raise GamutError("E18", f"model-data keys are strings, not {key!r}")
         path = f"{prefix}/{key}" if prefix else key
         if value is None:
-            call("mes_tree_set_null", h, b(path))
+            call("gamut_tree_set_null", h, b(path))
         elif isinstance(value, (bool, np.bool_)):
-            call("mes_tree_set_bool", h, b(path), 1 if value else 0)
+            call("gamut_tree_set_bool", h, b(path), 1 if value else 0)
         elif isinstance(value, (int, np.integer)):
-            call("mes_tree_set_int", h, b(path), int(value))
+            call("gamut_tree_set_int", h, b(path), int(value))
         elif isinstance(value, (float, np.floating)):
-            call("mes_tree_set_float", h, b(path), float(value))
+            call("gamut_tree_set_float", h, b(path), float(value))
         elif isinstance(value, str):
-            call("mes_tree_set_string", h, b(path), b(value))
+            call("gamut_tree_set_string", h, b(path), b(value))
         elif isinstance(value, Mapping):
-            call("mes_tree_set_dict", h, b(path))
+            call("gamut_tree_set_dict", h, b(path))
             _fill(h, path, value)
         elif isinstance(value, (list, tuple)) and value and all(isinstance(x, str) for x in value):
-            call("mes_tree_set_strings", h, b(path), _lib.string_array(list(value)), len(value))
+            call("gamut_tree_set_strings", h, b(path), _lib.string_array(list(value)), len(value))
         else:
             arr = np.asarray(value)
             if arr.dtype.kind in "US":
                 items = [str(x) for x in arr.ravel()]
-                call("mes_tree_set_strings", h, b(path), _lib.string_array(items), len(items))
+                call("gamut_tree_set_strings", h, b(path), _lib.string_array(items), len(items))
                 continue
             if arr.ndim == 0:
-                raise MestraError("E18", f"{path}: a zero-dimensional array is stored as the "
+                raise GamutError("E18", f"{path}: a zero-dimensional array is stored as the "
                                          "number it holds")
             if arr.dtype == np.bool_:
-                arr, code = arr.astype(np.int8), _lib.MES_INT8
+                arr, code = arr.astype(np.int8), _lib.GAMUT_INT8
             elif arr.dtype == np.int32:
-                code = _lib.MES_INT32
+                code = _lib.GAMUT_INT32
             elif arr.dtype.kind in "iu":
-                arr, code = arr.astype(np.int64), _lib.MES_INT64
+                arr, code = arr.astype(np.int64), _lib.GAMUT_INT64
             elif arr.dtype == np.float64:
-                code = _lib.MES_FLOAT64
+                code = _lib.GAMUT_FLOAT64
             else:
-                raise MestraError("E18", f"{path}: model data holds booleans, int32, int64 and "
+                raise GamutError("E18", f"{path}: model data holds booleans, int32, int64 and "
                                          f"float64 arrays, not {arr.dtype}")
             arr = np.ascontiguousarray(arr)
             shape = (ctypes.c_int64 * arr.ndim)(*arr.shape)
-            call("mes_tree_set_array", h, b(path), code, arr.ctypes.data_as(ctypes.c_void_p),
+            call("gamut_tree_set_array", h, b(path), code, arr.ctypes.data_as(ctypes.c_void_p),
                  arr.ndim, shape)
 
 
 def _from_tree(h: ctypes.c_void_p, prefix: str = "") -> dict[str, Any]:
     out: dict[str, Any] = {}
-    for key in _lib.strings_out("mes_tree_keys", h, b(prefix)):
+    for key in _lib.strings_out("gamut_tree_keys", h, b(prefix)):
         path = f"{prefix}/{key}" if prefix else key
         kind = ctypes.c_int()
-        call("mes_tree_kind", h, b(path), ctypes.byref(kind))
+        call("gamut_tree_kind", h, b(path), ctypes.byref(kind))
         k = kind.value
         if k == 0:
             out[key] = None
         elif k in (1, 2, 3):
             i, f = ctypes.c_int64(), ctypes.c_double()
-            call("mes_tree_scalar", h, b(path), ctypes.byref(i), ctypes.byref(f))
+            call("gamut_tree_scalar", h, b(path), ctypes.byref(i), ctypes.byref(f))
             out[key] = bool(i.value) if k == 1 else (i.value if k == 2 else f.value)
         elif k == 4:
-            out[key] = _lib.strings_out("mes_tree_strings", h, b(path))[0]
+            out[key] = _lib.strings_out("gamut_tree_strings", h, b(path))[0]
         elif k == 6:
-            out[key] = _lib.strings_out("mes_tree_strings", h, b(path))
+            out[key] = _lib.strings_out("gamut_tree_strings", h, b(path))
         elif k == 7:
             out[key] = _from_tree(h, path)
         else:
             dtype, rank = ctypes.c_int(), ctypes.c_int()
             shape = (ctypes.c_int64 * 8)()
-            call("mes_tree_array_info", h, b(path), ctypes.byref(dtype), ctypes.byref(rank), shape)
-            np_dtype = {_lib.MES_INT8: np.int8, _lib.MES_INT32: np.int32,
-                        _lib.MES_INT64: np.int64, _lib.MES_FLOAT64: np.float64}[dtype.value]
+            call("gamut_tree_array_info", h, b(path), ctypes.byref(dtype), ctypes.byref(rank), shape)
+            np_dtype = {_lib.GAMUT_INT8: np.int8, _lib.GAMUT_INT32: np.int32,
+                        _lib.GAMUT_INT64: np.int64, _lib.GAMUT_FLOAT64: np.float64}[dtype.value]
             arr = np.empty(tuple(shape[i] for i in range(rank.value)), dtype=np_dtype)
-            call("mes_tree_array", h, b(path), arr.ctypes.data_as(ctypes.c_void_p), arr.nbytes)
-            out[key] = arr.astype(bool) if dtype.value == _lib.MES_INT8 else arr
+            call("gamut_tree_array", h, b(path), arr.ctypes.data_as(ctypes.c_void_p), arr.nbytes)
+            out[key] = arr.astype(bool) if dtype.value == _lib.GAMUT_INT8 else arr
     return out
 
 
@@ -119,10 +119,10 @@ def register_model_type(cls: type) -> type:
     (SPEC.md section 7.3).  Usable as a decorator."""
     name = getattr(cls, "type", None)
     if not isinstance(name, str) or not name:
-        raise MestraError("", "a model type has a class attribute `type`, its name")
+        raise GamutError("", "a model type has a class attribute `type`, its name")
     for method in ("load", "call", "save"):
         if not callable(getattr(cls, method, None)):
-            raise MestraError("", f"a model type provides {method}")
+            raise GamutError("", f"a model type provides {method}")
     _REGISTRY[name] = cls
     return cls
 
@@ -143,9 +143,9 @@ class Nearest:
         self.outputs = {k: np.asarray(v, dtype=np.float64) for k, v in outputs.items()}
         handle = _to_tree(self.save())
         try:
-            call("mes_nearest_check", handle)
+            call("gamut_nearest_check", handle)
         finally:
-            _lib._lib.mes_tree_free(handle)
+            _lib._lib.gamut_tree_free(handle)
 
     @classmethod
     def load(cls, numbers: Mapping[str, Any]) -> "Nearest":
@@ -167,17 +167,17 @@ class Nearest:
             out: dict[str, dict] = {}
             for output, kind, *extra in wanted:
                 if kind != "values":
-                    raise MestraError("", f"nearest gives values only, not {kind}")
+                    raise GamutError("", f"nearest gives values only, not {kind}")
                 per = ctypes.c_int64()
-                call("mes_nearest_output_size", handle, b(output), ctypes.byref(per))
+                call("gamut_nearest_output_size", handle, b(output), ctypes.byref(per))
                 values = np.empty(n * per.value, dtype=np.float64)
-                call("mes_nearest_call", handle, names, ptrs, len(cols), n, b(output),
+                call("gamut_nearest_call", handle, names, ptrs, len(cols), n, b(output),
                      values.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), values.size)
                 shape = self.outputs[output].shape[1:]
                 out.setdefault(output, {})["values"] = values.reshape((n,) + shape)
             return out
         finally:
-            _lib._lib.mes_tree_free(handle)
+            _lib._lib.gamut_tree_free(handle)
 
 
 register_model_type(Nearest)
@@ -194,10 +194,10 @@ class ModelFile(Study):
         handle = _to_tree(numbers)
         try:
             names = list(inputs)
-            call("mes_add_model", self._handle(), b(id), b(model.type), _lib.string_array(names),
+            call("gamut_add_model", self._handle(), b(id), b(model.type), _lib.string_array(names),
                  len(names), handle, b(repr or ""))
         finally:
-            _lib._lib.mes_tree_free(handle)
+            _lib._lib.gamut_tree_free(handle)
 
 
 def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None = None,
@@ -212,7 +212,7 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
     bounds; every scalar and field names the model and output computing it."""
     axes = _axes(coordinates)        # before the file exists: a refusal leaves none
     handle = ctypes.c_void_p()
-    call("mes_create_model", b(path), b(writer), b(mesh or ""), b(per), ctypes.byref(handle))
+    call("gamut_create_model", b(path), b(writer), b(mesh or ""), b(per), ctypes.byref(handle))
     study = ModelFile(handle, path, writing=True)
     study._mesh_kind, study._per = mesh or "", per if mesh else ""
     study._axes = axes
@@ -220,30 +220,30 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
         for key, value in (("title", title), ("license", license), ("references", references),
                            ("source", source)):
             if value is not None:
-                call("mes_set_attribute", handle, b(key), b(value))
+                call("gamut_set_attribute", handle, b(key), b(value))
         if trained_on:
-            call("mes_set_attribute", handle, b("trained_on"), b(" ".join(trained_on)))
+            call("gamut_set_attribute", handle, b("trained_on"), b(" ".join(trained_on)))
         for name, value in (labels or {}).items():
             spec = {"role": value} if isinstance(value, str) else dict(value)
             cats = list(spec.get("categories", []))
-            call("mes_declare_label", handle, b(name), b(spec.get("role", "categorical")),
+            call("gamut_declare_label", handle, b(name), b(spec.get("role", "categorical")),
                  _lib.string_array(cats), len(cats))
         for name, value in (parameters or {}).items():
             spec = _spec(value, "units")
             if "lower" not in spec or "upper" not in spec:
-                raise MestraError("E16", f"{name}: a model file's parameters need bounds, the "
+                raise GamutError("E16", f"{name}: a model file's parameters need bounds, the "
                                          "model's domain")
-            call("mes_declare_parameter", handle, b(name), b(spec.get("role", "design")),
+            call("gamut_declare_parameter", handle, b(name), b(spec.get("role", "design")),
                  b(spec.get("units")), _precision(spec.get("dtype")), 1, float(spec["lower"]),
                  float(spec["upper"]), b(spec.get("run_group", "")))
         if coordinates is not None:
-            call("mes_declare_coordinates", handle, b(coordinates.get("units")),
+            call("gamut_declare_coordinates", handle, b(coordinates.get("units")),
                  _precision(coordinates.get("precision")), int(coordinates.get("axes", 3)),
                  b(coordinates.get("model", "")), b(coordinates.get("output", "")))
 
         def declare(name: str, spec: dict, where: str) -> None:
             q = spec.get("q")
-            call("mes_declare_result", handle, b(name), b(where), b(spec.get("units")),
+            call("gamut_declare_result", handle, b(name), b(where), b(spec.get("units")),
                  _precision(spec.get("precision")), b(spec.get("of", "")),
                  b(spec.get("statistic", "")), 0 if q is None else 1, float(q or 0.0),
                  b(spec.get("method", "")), b(spec.get("with_respect_to", "")),
@@ -258,11 +258,11 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
         for name, value in (constants or {}).items():
             number, units = value
             if isinstance(number, np.float32):
-                call("mes_set_constant", handle, b(name), b(units), _lib.MES_FLOAT32, float(number), 0)
+                call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_FLOAT32, float(number), 0)
             elif isinstance(number, (int, np.integer)) and not isinstance(number, bool):
-                call("mes_set_constant", handle, b(name), b(units), _lib.MES_INT64, 0.0, int(number))
+                call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_INT64, 0.0, int(number))
             else:
-                call("mes_set_constant", handle, b(name), b(units), _lib.MES_FLOAT64,
+                call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_FLOAT64,
                      float(number), 0)
     except BaseException:
         # A half-declared file is not wanted; the declaration error stands.
@@ -294,17 +294,17 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
     model reads geometry the file does not store."""
     with _open(model_path) as m:
         if m.kind != "model":
-            raise MestraError("E16", f"{model_path} is not a model file")
+            raise GamutError("E16", f"{model_path} is not a model file")
         params = m.names("parameters")
         labels = m.names("labels")
         lengths = {len(np.atleast_1d(np.asarray(v))) for v in inputs.values()}
         if len(lengths) != 1:
-            raise MestraError("E5", "every input needs the same number of rows")
+            raise GamutError("E5", "every input needs the same number of rows")
         n = lengths.pop()
         table: dict[str, np.ndarray] = {}
         for name in params:
             if name not in inputs:
-                raise MestraError("E2", f"the input {name} is missing")
+                raise GamutError("E2", f"the input {name} is missing")
             d = m.describe(name)
             col = np.atleast_1d(np.asarray(inputs[name],
                                            dtype=np.int64 if d.get("dtype") == "int64" else np.float64))
@@ -317,17 +317,17 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
         label_names: dict[str, list[str]] = {}
         for name in labels:
             if name not in inputs:
-                raise MestraError("E2", f"the input {name} is missing")
-            entries = _lib.strings_out("mes_table", m._handle(), b(m.describe(name)["category"]))
+                raise GamutError("E2", f"the input {name} is missing")
+            entries = _lib.strings_out("gamut_table", m._handle(), b(m.describe(name)["category"]))
             given = [str(x) for x in np.atleast_1d(np.asarray(inputs[name]))]
             unknown = [g for g in given if g not in entries]
             if unknown:
-                raise MestraError("E9", f"{name}: {unknown[0]!r} is not in the model's table")
+                raise GamutError("E9", f"{name}: {unknown[0]!r} is not in the model's table")
             table[name] = np.array([entries.index(g) for g in given], dtype=np.int64)
             label_names[name] = given
         unknown_inputs = set(inputs) - set(params) - set(labels)
         if unknown_inputs:
-            raise MestraError("E2", f"{sorted(unknown_inputs)[0]} is not an input of this model")
+            raise GamutError("E2", f"{sorted(unknown_inputs)[0]} is not an input of this model")
         if coordinates is not None:
             table["coordinates"] = np.asarray(coordinates, dtype=np.float64)
         elif m._mesh_kind and m._per == "fixed":
@@ -359,30 +359,30 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
             d = m.describe(f"models/{model_id}")
             cls = _REGISTRY.get(d["type"])
             if cls is None:
-                raise MestraError("", f"the model {model_id} is of type {d['type']!r}, whose "
+                raise GamutError("", f"the model {model_id} is of type {d['type']!r}, whose "
                                       "software is not registered here (register_model_type)")
             handle = ctypes.c_void_p()
-            call("mes_model_numbers", m._handle(), b(model_id), ctypes.byref(handle))
+            call("gamut_model_numbers", m._handle(), b(model_id), ctypes.byref(handle))
             try:
                 numbers = _from_tree(handle)
             finally:
-                _lib._lib.mes_tree_free(handle)
+                _lib._lib.gamut_tree_free(handle)
             model = cls.load(numbers)
             reads = d["inputs"].split()
             given = {k: table[k] for k in reads if k in table}
             missing = [k for k in reads if k not in given]
             if missing:
-                raise MestraError("E2", f"the model {model_id} reads {missing[0]}, which was not "
+                raise GamutError("E2", f"the model {model_id} reads {missing[0]}, which was not "
                                         "given")
             outputs[model_id] = model.call(given, asks)
         # The data file.
         out_path = path
         temporary = path is None
         if temporary:
-            fd, out_path = tempfile.mkstemp(suffix=".mes")
+            fd, out_path = tempfile.mkstemp(suffix=".gamut")
             os.close(fd)
         writer = ctypes.c_void_p()
-        call("mes_evaluate_begin", m._handle(), b(out_path), ctypes.byref(writer))
+        call("gamut_evaluate_begin", m._handle(), b(out_path), ctypes.byref(writer))
         w = Study(writer, out_path, writing=True)
         w._mesh_kind, w._per = m._mesh_kind, m._per
         try:
@@ -392,7 +392,7 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
             for name, model_id, output, request in requests:
                 record = outputs[model_id].get(output)
                 if record is None:
-                    raise MestraError("", f"the model {model_id} gave no output {output}")
+                    raise GamutError("", f"the model {model_id} gave no output {output}")
                 kind = request[1]
                 if kind == "values":
                     values = record.get("values")
@@ -403,7 +403,7 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
                 else:
                     values = record.get("derivatives", {}).get(request[2])
                 if values is None:
-                    raise MestraError("", f"the model {model_id} gave no {kind} for {output}")
+                    raise GamutError("", f"the model {model_id} gave no {kind} for {output}")
                 values = np.asarray(values)
                 if values.ndim == 1:
                     columns[name] = values
@@ -416,7 +416,7 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
                 elif coordinates is not None:
                     pts = np.asarray(coordinates, dtype=np.float64)
                 else:
-                    raise MestraError("E2", "this model file's geometry changes per run; give "
+                    raise GamutError("E2", "this model file's geometry changes per run; give "
                                             "coordinates")
                 points = [np.asarray(pts[i]) for i in range(n)]
             w.add_runs(columns, fields=fields, points=points)
@@ -424,6 +424,6 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
             w.close()
     if temporary:
         handle = ctypes.c_void_p()
-        call("mes_open", b(out_path), ctypes.byref(handle))
+        call("gamut_open", b(out_path), ctypes.byref(handle))
         return _Temporary(handle, out_path, writing=False)
     return _open(out_path)

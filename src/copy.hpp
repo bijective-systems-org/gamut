@@ -1,14 +1,14 @@
 // Copies between files: every row goes through the
 // writer, so a copy meets every rule a writer checks.
-#ifndef MESTRA_CORE_COPY_HPP
-#define MESTRA_CORE_COPY_HPP
+#ifndef GAMUT_CORE_COPY_HPP
+#define GAMUT_CORE_COPY_HPP
 
 #include <cstdint>
 #include <string>
 
 #include "types.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 // The rows of `src` added to `dst` in place, with new ids continuing
@@ -27,6 +27,6 @@ void extract_file(const std::string& src, const std::string& dst, const Selectio
 void write_copy_file(const std::string& src, const std::string& dst);
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_COPY_HPP
+#endif  // GAMUT_CORE_COPY_HPP

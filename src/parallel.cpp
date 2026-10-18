@@ -9,7 +9,7 @@
 #include <mutex>
 #include <thread>
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 namespace {
@@ -312,4 +312,4 @@ bool read_parallel(const File& f, const std::string& path, DType mem,
 }
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut

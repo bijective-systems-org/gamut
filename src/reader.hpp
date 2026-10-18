@@ -1,7 +1,7 @@
 // Reading files: the schema from metadata alone, and values by concept
 // path with run and site selections.
-#ifndef MESTRA_CORE_READER_HPP
-#define MESTRA_CORE_READER_HPP
+#ifndef GAMUT_CORE_READER_HPP
+#define GAMUT_CORE_READER_HPP
 
 #include <cstdint>
 #include <memory>
@@ -14,7 +14,7 @@
 #include "types.hpp"
 #include "value.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 // Builds the schema from attributes, shapes and the (small) category
@@ -74,6 +74,6 @@ class Reader {
 };
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_READER_HPP
+#endif  // GAMUT_CORE_READER_HPP

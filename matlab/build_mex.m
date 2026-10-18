@@ -1,15 +1,15 @@
 function build_mex(library)
-%BUILD_MEX Builds the MATLAB gateway to the mestra core.
+%BUILD_MEX Builds the MATLAB gateway to the Gamut core.
 %   build_mex                 % uses the core built in <checkout>/build
-%   build_mex(library)        % a libmestra.dylib, libmestra.so or mestra.dll
+%   build_mex(library)        % a libgamut.dylib, libgamut.so or gamut.dll
 %
 %   The core library is copied beside the gateway, so this folder is all
-%   MATLAB needs on its path. A core built with MESTRA_STATIC_HDF5 (as the
+%   MATLAB needs on its path. A core built with GAMUT_STATIC_HDF5 (as the
 %   Python wheels are) carries its own HDF5 and never meets MATLAB's.
 %   Needs a C++ compiler that `mex -setup C++` accepts.
 here = fileparts(mfilename('fullpath'));
 if nargin < 1 || isempty(library)
-    names = {'libmestra.dylib', 'libmestra.so', 'mestra.dll'};
+    names = {'libgamut.dylib', 'libgamut.so', 'gamut.dll'};
     library = '';
     for k = 1:numel(names)
         candidate = fullfile(here, '..', 'build', names{k});
@@ -18,14 +18,14 @@ if nargin < 1 || isempty(library)
         if isfile(candidate), library = candidate; break; end
     end
     if isempty(library)
-        error('mestra:usage', ['no core library in %s; build it first ' ...
+        error('gamut:usage', ['no core library in %s; build it first ' ...
             '(cmake -S . -B build && cmake --build build) or give its path'], ...
             fullfile(here, '..', 'build'));
     end
 end
 library = char(library);
 if ~isfile(library)
-    error('mestra:usage', 'no file %s', library);
+    error('gamut:usage', 'no file %s', library);
 end
 [libdir, ~, ext] = fileparts(library);
 copyfile(library, here);
@@ -34,12 +34,12 @@ if ~strcmp(ext, '.dll')
     [~, base] = fileparts(library);
     linkname = regexprep(base, '^lib', '');
 else
-    linkname = 'mestra';
-    implib = fullfile(libdir, 'mestra.lib');
+    linkname = 'gamut';
+    implib = fullfile(libdir, 'gamut.lib');
 end
 include = fullfile(here, '..', 'include');
-args = {'-largeArrayDims', ['-I' include], fullfile(here, 'mestra_mex.cpp'), ...
-        '-output', fullfile(here, 'mestra_mex')};
+args = {'-largeArrayDims', ['-I' include], fullfile(here, 'gamut_mex.cpp'), ...
+        '-output', fullfile(here, 'gamut_mex')};
 if ismac
     args = [args, {['-L' here], ['-l' linkname], ...
             'CXXFLAGS=$CXXFLAGS -std=c++17', ...
@@ -50,10 +50,10 @@ elseif isunix
             'LDFLAGS=$LDFLAGS -Wl,-rpath,''$ORIGIN'''}];
 else
     if ~isfile(implib)
-        error('mestra:usage', 'no import library %s beside the DLL', implib);
+        error('gamut:usage', 'no import library %s beside the DLL', implib);
     end
     args = [args, {'COMPFLAGS=$COMPFLAGS /std:c++17', implib}];
 end
 mex(args{:});
-fprintf('built %s with the core %s\n', fullfile(here, ['mestra_mex.' mexext]), library);
+fprintf('built %s with the core %s\n', fullfile(here, ['gamut_mex.' mexext]), library);
 end

@@ -5,15 +5,15 @@
  * run as a solver would, then read back by condition and by node. Every
  * call returns 0, or fills the error record and returns nonzero.
  *
- *   cc one_mesh.c -I<prefix>/include -L<prefix>/lib -lmestra -lm -o one_mesh
+ *   cc one_mesh.c -I<prefix>/include -L<prefix>/lib -lgamut -lm -o one_mesh
  */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <mestra/mestra.h>
+#include <gamut/gamut.h>
 
-static mes_error err;
+static gamut_error err;
 
 /* Stops at the first failure and says what it was. */
 #define CHECK(call)                                                                \
@@ -46,19 +46,19 @@ int main(void) {
     for (int v = 0; v < 4; ++v) connectivity[4 * c + v] = quad[v];
   }
 
-  mes_file* f = NULL;
+  gamut_file* f = NULL;
   const char* categories[] = {"field", "wall"};
-  CHECK(mes_create("cylinder.mes", "example sweep", "shared", "fixed", &f, &err));
-  CHECK(mes_declare_coordinates(f, "m", MES_FLOAT64, 2, "", "", &err));
-  CHECK(mes_declare_parameter(f, "gamma", "design", "m2 s-1", MES_FLOAT64, 0, 0, 0, "", &err));
-  CHECK(mes_declare_mesh_label(f, "surface", "node", categories, 2, &err));
-  CHECK(mes_declare_result(f, "cp", "node", "1", MES_FLOAT64, "", "", 0, 0, "", "", "", "", -1,
+  CHECK(gamut_create("cylinder.gamut", "example sweep", "shared", "fixed", &f, &err));
+  CHECK(gamut_declare_coordinates(f, "m", GAMUT_FLOAT64, 2, "", "", &err));
+  CHECK(gamut_declare_parameter(f, "gamma", "design", "m2 s-1", GAMUT_FLOAT64, 0, 0, 0, "", &err));
+  CHECK(gamut_declare_mesh_label(f, "surface", "node", categories, 2, &err));
+  CHECK(gamut_declare_result(f, "cp", "node", "1", GAMUT_FLOAT64, "", "", 0, 0, "", "", "", "", -1,
                            "", "", &err));
-  CHECK(mes_geometry_begin(f, &err));
-  CHECK(mes_geometry_points(f, MES_FLOAT64, points, N_NODES, 2, &err));
-  CHECK(mes_geometry_cells(f, types, N_CELLS, offsets, connectivity, 4 * N_CELLS, &err));
-  CHECK(mes_geometry_label(f, "surface", surface, N_NODES, &err));
-  CHECK(mes_set_mesh(f, &err));
+  CHECK(gamut_geometry_begin(f, &err));
+  CHECK(gamut_geometry_points(f, GAMUT_FLOAT64, points, N_NODES, 2, &err));
+  CHECK(gamut_geometry_cells(f, types, N_CELLS, offsets, connectivity, 4 * N_CELLS, &err));
+  CHECK(gamut_geometry_label(f, "surface", surface, N_NODES, &err));
+  CHECK(gamut_set_mesh(f, &err));
   for (int run = 0; run < 9; ++run) {
     const double gamma = 0.5 * run;
     for (int k = 0; k < N_NODES; ++k) {
@@ -66,23 +66,23 @@ int main(void) {
       const double u_r = cos(t[k]) * (1 - 1 / (r[k] * r[k]));
       cp[k] = 1 - (u_r * u_r + u_t * u_t);
     }
-    CHECK(mes_batch_begin(f, 1, &err));             /* one run, all or nothing */
-    CHECK(mes_batch_values(f, "gamma", MES_FLOAT64, &gamma, 1, &err));
-    CHECK(mes_batch_values(f, "cp", MES_FLOAT64, cp, N_NODES, &err));
-    CHECK(mes_batch_commit(f, NULL, &err));
+    CHECK(gamut_batch_begin(f, 1, &err));             /* one run, all or nothing */
+    CHECK(gamut_batch_values(f, "gamma", GAMUT_FLOAT64, &gamma, 1, &err));
+    CHECK(gamut_batch_values(f, "cp", GAMUT_FLOAT64, cp, N_NODES, &err));
+    CHECK(gamut_batch_commit(f, NULL, &err));
   }
-  CHECK(mes_close(f, &err));
+  CHECK(gamut_close(f, &err));
 
-  CHECK(mes_open("cylinder.mes", &f, &err));
+  CHECK(gamut_open("cylinder.gamut", &f, &err));
   int64_t rows[9], n = 0, node = 12;
-  CHECK(mes_select(f, "gamma > 2", rows, 9, &n, &err));
-  const mes_sel chosen = {MES_SEL_INDEX, 0, 0, rows, n};
-  const mes_sel one_node = {MES_SEL_INDEX, 0, 0, &node, 1};
+  CHECK(gamut_select(f, "gamma > 2", rows, 9, &n, &err));
+  const gamut_sel chosen = {GAMUT_SEL_INDEX, 0, 0, rows, n};
+  const gamut_sel one_node = {GAMUT_SEL_INDEX, 0, 0, &node, 1};
   double values[9];
-  CHECK(mes_read(f, "cp", &chosen, &one_node, MES_FLOAT64, values, sizeof values, &err));
+  CHECK(gamut_read(f, "cp", &chosen, &one_node, GAMUT_FLOAT64, values, sizeof values, &err));
   printf("cp at node %lld where gamma > 2:", (long long)node);
   for (int64_t i = 0; i < n; ++i) printf(" %.2f", values[i]);
   printf("\n");
-  CHECK(mes_close(f, &err));
+  CHECK(gamut_close(f, &err));
   return 0;
 }

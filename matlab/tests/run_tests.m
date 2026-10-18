@@ -1,5 +1,5 @@
 function run_tests()
-% MATLAB tests of the mestra wrapper over the shared core.  Run with
+% MATLAB tests of the Gamut wrapper over the shared core.  Run with
 %   matlab -batch "addpath('<abs>/matlab/tests'); run_tests"
 here = fileparts(mfilename('fullpath'));
 addpath(fileparts(here));
@@ -16,8 +16,8 @@ failures = 0; checks = 0;
     end
 
 % A table, one run at a time.
-p = fullfile(tmp, 'polar.mes');
-s = mestra.create(p, 'writer', 'matlab tests', ...
+p = fullfile(tmp, 'polar.gamut');
+s = gamut.create(p, 'writer', 'matlab tests', ...
     'parameters', struct('mach', struct('units', '1', 'role', 'condition'), 'alpha', 'degree'), ...
     'labels', struct('status', struct('role', 'status', 'categories', {{'converged', 'failed'}})), ...
     'scalars', struct('cl', '1', 'cd', '1'), 'constants', struct('s_ref', {{12.5, 'm2'}}));
@@ -27,7 +27,7 @@ for i = 1:5
         'cl', 0.1 * i, 'cd', single(0.01)));
 end
 s.close();
-r = mestra.open(p);
+r = gamut.open(p);
 ok(r.rowCount() == 5, 'row count');
 ok(strcmp(r.type(), 'table'), 'type');
 cl = r.getScalar('cl');
@@ -45,79 +45,79 @@ ok(isequal(ids', int64(0:4)), 'row ids 0-based values');
 t = r.table();
 ok(height(t) == 5 && any(strcmp(t.Properties.VariableNames, 'cl')), 'table');
 r.close();
-f = mestra.validate(p);
+f = gamut.validate(p);
 ok(numel(f) == 1 && strcmp(f(1).rule, 'W2'), 'validate: one W2');
 
 % A shared mesh with fields; logical (row, node) order.
-p = fullfile(tmp, 'sweep.mes');
+p = fullfile(tmp, 'sweep.gamut');
 [X, Y] = meshgrid(0:2, 0:1);
 pts = [X(:) Y(:)];        % 6 nodes, MATLAB column order of the grid
-s = mestra.create(p, 'writer', 'matlab tests', 'mesh', 'shared', 'per', 'fixed', ...
+s = gamut.create(p, 'writer', 'matlab tests', 'mesh', 'shared', 'per', 'fixed', ...
     'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'), ...
     'fields', struct('pf', struct('units', 'Pa', 'at', 'node')));
 s.setMesh(pts, {uint8([9 9]), [0 4 8], [0 2 3 1 2 4 5 3]});
 P = reshape(1:18, 3, 6);  % 3 runs x 6 nodes
 s.addRuns(struct('k', [1; 2; 3]), 'fields', struct('pf', P));
 s.close();
-r = mestra.open(p);
+r = gamut.open(p);
 ok(isequal(r.getField('pf'), P), 'field round trip, run x node');
 ok(isequal(r.getField('pf', 'rows', 2, 'nodes', [2 3]), P(2, [2 3])), 'field selection 1-based');
 ok(isequal(r.getPoints(), pts), 'points');
 [types, offsets, conn] = r.getCells();
 ok(isequal(types', uint8([9 9])) && offsets(end) == 8 && conn(1) == 0, 'cells');
 r.close();
-rt = mestra.open(p, 'threads', 4);
+rt = gamut.open(p, 'threads', 4);
 ok(isequal(rt.getField('pf'), P), 'parallel read');
 rt.close();
 
 % Append in place.
-s = mestra.open(p, 'mode', 'a');
+s = gamut.open(p, 'mode', 'a');
 s.addRun(struct('k', 4), 'fields', struct('pf', 100:105));
 s.close();
-r = mestra.open(p);
+r = gamut.open(p);
 ok(r.rowCount() == 4 && isequal(r.getField('pf', 'rows', 4), 100:105), 'append');
 r.close();
 
 % Model files: the built-in nearest model with one input (MATLAB cannot tell
 % a one-element array from a number; the gateway keeps the ranks), and a
 % registered plug-in serving values and std.
-mp = fullfile(tmp, 'nearest.mes');
-s = mestra.createModel(mp, 'writer', 'matlab tests', ...
+mp = fullfile(tmp, 'nearest.gamut');
+s = gamut.createModel(mp, 'writer', 'matlab tests', ...
     'parameters', struct('alpha', struct('units', 'degree', 'lower', 0, 'upper', 10)), ...
     'scalars', struct('cl', struct('units', '1', 'model', 'fit', 'output', 'cl')));
-s.addModel('fit', mestra.Nearest({'alpha'}, 0, 10, [0; 5; 10], struct('cl', [0.1; 0.5; 1.0])), ...
+s.addModel('fit', gamut.Nearest({'alpha'}, 0, 10, [0; 5; 10], struct('cl', [0.1; 0.5; 1.0])), ...
     {'alpha'});
 s.close();
-ok(isempty(mestra.validate(mp)), 'nearest model file validates');
+ok(isempty(gamut.validate(mp)), 'nearest model file validates');
 
 % A refused close keeps the file open to fix and close again.
-rp = fullfile(tmp, 'refused.mes');
-s = mestra.createModel(rp, 'writer', 'matlab tests', ...
+rp = fullfile(tmp, 'refused.gamut');
+s = gamut.createModel(rp, 'writer', 'matlab tests', ...
     'parameters', struct('alpha', struct('units', 'degree', 'lower', 0, 'upper', 10)), ...
     'scalars', struct('cl', struct('units', '1', 'model', 'fit', 'output', 'cl')));
 try
     s.close();
     ok(false, 'close without a model refused');
 catch err
-    ok(strcmp(err.identifier, 'mestra:E16'), ['refused close: ' err.identifier]);
+    ok(strcmp(err.identifier, 'gamut:E16'), ['refused close: ' err.identifier]);
 end
-s.addModel('fit', mestra.Nearest({'alpha'}, 0, 10, [0; 10], struct('cl', [1; 2])), {'alpha'});
+s.addModel('fit', gamut.Nearest({'alpha'}, 0, 10, [0; 10], struct('cl', [1; 2])), {'alpha'});
 s.close();
-ok(isempty(mestra.validate(rp)), 'closed after the fix');
-out = mestra.evaluate(mp, struct('alpha', [1; 4; 9]));
+ok(isempty(gamut.validate(rp)), 'closed after the fix');
+out = gamut.evaluate(mp, struct('alpha', [1; 4; 9]));
 ok(isequal(out.getScalar('cl'), [0.1; 0.5; 1.0]), 'nearest evaluated');
 ok(isequal(out.getParameter('alpha'), [1; 4; 9]), 'inputs kept');
 tmpPath = out.Path;
 out.close();
 ok(~isfile(tmpPath), 'temporary evaluated file removed on close');
-r = mestra.open(mp);
-numbers = mestra_mex('model_numbers', r.Handle, 'fit');
+r = gamut.open(mp);
+numbers = gamut_mex('model_numbers', r.Handle, 'fit');
 r.close();
-back = mestra.Nearest.load(numbers);
+back = gamut.Nearest.load(numbers);
 ok(isequal(back.X, [0; 5; 10]) && isequal(back.Lower, 0), 'nearest numbers read back');
 
-lp = fullfile(tmp, 'linear.mes');
-s = mestra.createModel(lp, 'writer', 'matlab tests', ...
+lp = fullfile(tmp, 'linear.gamut');
+s = gamut.createModel(lp, 'writer', 'matlab tests', ...
     'parameters', struct('x', struct('units', 'm', 'lower', -1, 'upper', 1)), ...
     'scalars', struct('y', struct('units', '1', 'model', 'lin', 'output', 'y'), ...
         'y_std', struct('units', '1', 'model', 'lin', 'output', 'y', 'of', 'y', ...
@@ -126,82 +126,82 @@ lin = testmodels.Linear(); lin.A = 1; lin.B = 2; lin.Std = 0.25; lin.Input = 'x'
 s.addModel('lin', lin, {'x'});
 s.close();
 try
-    mestra.evaluate(lp, struct('x', [0; 0.5]));
+    gamut.evaluate(lp, struct('x', [0; 0.5]));
     ok(false, 'unregistered type refused');
 catch err
     ok(contains(err.message, 'not registered'), ['unregistered type: ' err.message]);
 end
-mestra.registerModelType('testmodels.Linear');
-ep = fullfile(tmp, 'evaluated.mes');
-out = mestra.evaluate(lp, struct('x', [0; 0.5]), 'path', ep);
+gamut.registerModelType('testmodels.Linear');
+ep = fullfile(tmp, 'evaluated.gamut');
+out = gamut.evaluate(lp, struct('x', [0; 0.5]), 'path', ep);
 ok(isequal(out.getScalar('y'), [1; 2]) && isequal(out.getScalar('y_std'), [0.25; 0.25]), ...
     'plug-in values and std');
 out.close();
-ok(isfile(ep) && isempty(mestra.validate(ep)), 'evaluated file kept and valid');
+ok(isfile(ep) && isempty(gamut.validate(ep)), 'evaluated file kept and valid');
 
 % Copies between files: append, extract, writeCopy.
-ca = fullfile(tmp, 'ca.mes'); cb = fullfile(tmp, 'cb.mes'); ce = fullfile(tmp, 'ce.mes');
-cw = fullfile(tmp, 'cw.mes');
-s = mestra.create(ca, 'writer', 'w', 'parameters', struct('x', 'm'), ...
+ca = fullfile(tmp, 'ca.gamut'); cb = fullfile(tmp, 'cb.gamut'); ce = fullfile(tmp, 'ce.gamut');
+cw = fullfile(tmp, 'cw.gamut');
+s = gamut.create(ca, 'writer', 'w', 'parameters', struct('x', 'm'), ...
     'labels', struct('case', 'categorical'));
 s.addRuns(struct('x', [1; 2], 'case', {{'p'; 'q'}}));
 s.close();
-s = mestra.create(cb, 'writer', 'w', 'parameters', struct('x', 'm'), ...
+s = gamut.create(cb, 'writer', 'w', 'parameters', struct('x', 'm'), ...
     'labels', struct('case', 'categorical'));
 s.addRuns(struct('x', [3; 4], 'case', {{'r'; 'p'}}));
 s.close();
-ok(mestra.append(ca, cb) == 2, 'append returns the rows added');
-mestra.extract(ca, ce, [2 4]);
-r = mestra.open(ce);
+ok(gamut.append(ca, cb) == 2, 'append returns the rows added');
+gamut.extract(ca, ce, [2 4]);
+r = gamut.open(ce);
 ok(isequal(r.getRowIds(), [1; 3]) && isequal(r.getLabel('case'), {'q'; 'p'}), 'extract keeps ids');
 r.close();
-mestra.writeCopy(ca, cw);
-r = mestra.open(cw); q = mestra.open(ca);
+gamut.writeCopy(ca, cw);
+r = gamut.open(cw); q = gamut.open(ca);
 ok(strcmp(r.describe().file_id, q.describe().file_id) && isequal(r.getParameter('x'), [1; 2; 3; 4]), ...
     'writeCopy keeps identity and values');
 r.close(); q.close();
 try
-    mestra.append(ca, ca);
+    gamut.append(ca, ca);
     ok(false, 'append to itself refused');
 catch err
-    ok(startsWith(err.identifier, 'mestra:'), 'append to itself refused');
+    ok(startsWith(err.identifier, 'gamut:'), 'append to itself refused');
 end
 
 % Errors carry their rule.
 try
-    mestra.create(fullfile(tmp, 'bad.mes'), 'writer', 'w', 'parameters', struct('x', 'm//s'));
+    gamut.create(fullfile(tmp, 'bad.gamut'), 'writer', 'w', 'parameters', struct('x', 'm//s'));
     ok(false, 'bad units refused');
 catch err
-    ok(strcmp(err.identifier, 'mestra:E7'), ['bad units identifier: ' err.identifier]);
+    ok(strcmp(err.identifier, 'gamut:E7'), ['bad units identifier: ' err.identifier]);
 end
 % In a mesh file too, a declaration error is its own, and the half-made
 % file is removed.
-bad = fullfile(tmp, 'badmesh.mes');
+bad = fullfile(tmp, 'badmesh.gamut');
 try
-    mestra.create(bad, 'writer', 'w', 'mesh', 'shared', 'per', 'fixed', ...
+    gamut.create(bad, 'writer', 'w', 'mesh', 'shared', 'per', 'fixed', ...
         'coordinates', struct('units', 'm', 'axes', 2), ...
         'fields', struct('q', struct('units', 'm//s', 'at', 'node')));
     ok(false, 'bad field units refused');
 catch err
-    ok(strcmp(err.identifier, 'mestra:E7'), ['mesh file bad units identifier: ' err.identifier]);
+    ok(strcmp(err.identifier, 'gamut:E7'), ['mesh file bad units identifier: ' err.identifier]);
     ok(~isfile(bad), 'half-declared mesh file removed');
 end
 try
-    r = mestra.open(p); r.close(); r.getField('pf');
+    r = gamut.open(p); r.close(); r.getField('pf');
     ok(false, 'closed file refused');
 catch err
-    ok(contains(err.message, 'closed') || strcmp(err.identifier, 'mestra:usage'), 'closed handle');
+    ok(contains(err.message, 'closed') || strcmp(err.identifier, 'gamut:usage'), 'closed handle');
 end
 
 % The example in examples/matlab runs and writes a valid file.
 example = fullfile(fileparts(fileparts(here)), 'examples', 'matlab', 'one_mesh.m');
 if isfile(example)
     written = run_example(example, tmp);
-    ok(isempty(mestra.validate(written)), 'the MATLAB example writes a valid file');
+    ok(isempty(gamut.validate(written)), 'the MATLAB example writes a valid file');
 end
 
 fprintf('%d checks, %d failures\n', checks, failures);
-if failures > 0, error('mestra:tests', '%d failures', failures); end
+if failures > 0, error('gamut:tests', '%d failures', failures); end
 end
 
 function written = run_example(example, folder)
@@ -211,5 +211,5 @@ restore = onCleanup(@() cd(old));
 copyfile(example, folder);
 [~, name] = fileparts(example);
 evalc(name);
-written = fullfile(folder, 'cylinder.mes');
+written = fullfile(folder, 'cylinder.gamut');
 end

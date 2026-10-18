@@ -7,11 +7,11 @@ a reader finds them without naming conventions.
 """
 import numpy as np
 
-import mestra
+import gamut
 
 alpha = np.linspace(0.0, 8.0, 9)
 cl = 0.11 * alpha
-with mestra.create("uncertain.mes", writer="example ensemble",
+with gamut.create("uncertain.gamut", writer="example ensemble",
                    parameters={"alpha": {"units": "degree"}},
                    scalars={"cl": "1",
                             "cl_std": {"units": "1", "of": "cl", "statistic": "std"},
@@ -24,7 +24,7 @@ with mestra.create("uncertain.mes", writer="example ensemble",
                     "cl_p05": cl - 1.645 * spread, "cl_p95": cl + 1.645 * spread,
                     "dcl_dalpha": np.full(9, 0.11)})
 
-with mestra.open("uncertain.mes") as study:
+with gamut.open("uncertain.gamut") as study:
     related = study.related("cl")
     print("what describes cl:", related)
     low = study.get_scalar(related["quantiles"][0.05])

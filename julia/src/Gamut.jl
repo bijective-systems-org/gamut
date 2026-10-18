@@ -1,21 +1,21 @@
 """
-    Mestra
+    Gamut
 
-Julia over the mestra core library: the same calls as Python and MATLAB,
+Julia over the Gamut core library: the same calls as Python and MATLAB,
 in Julia's spelling. Positions (rows, nodes, cells)
 are 1-based; arrays come back with the logical axes in order, `p[run, node]`.
 Cell connectivity holds the stored 0-based node numbers, as in every
 language (VTK's convention).
 
-The core is found at `ENV["MESTRA_LIBRARY"]`, else beside this package in
+The core is found at `ENV["GAMUT_LIBRARY"]`, else beside this package in
 `build/` at the top of a checkout. Model plug-ins come later; the built-in
 `Nearest` evaluates.
 """
-module Mestra
+module Gamut
 
 using Libdl
 
-export MestraError
+export GamutError
 
 # --- the library ----------------------------------------------------------------------
 
@@ -23,9 +23,9 @@ const HANDLE = Ref{Ptr{Cvoid}}(C_NULL)
 const SYMBOLS = Dict{Symbol,Ptr{Cvoid}}()
 
 function library_path()
-    p = get(ENV, "MESTRA_LIBRARY", "")
+    p = get(ENV, "GAMUT_LIBRARY", "")
     isempty(p) || return p
-    name = Sys.isapple() ? "libmestra.dylib" : Sys.iswindows() ? "mestra.dll" : "libmestra.so"
+    name = Sys.isapple() ? "libgamut.dylib" : Sys.iswindows() ? "gamut.dll" : "libgamut.so"
     return normpath(joinpath(@__DIR__, "..", "..", "build", name))
 end
 
@@ -33,8 +33,8 @@ function sym(name::Symbol)
     get!(SYMBOLS, name) do
         if HANDLE[] == C_NULL
             p = library_path()
-            isfile(p) || error("the mestra core library ($p) was not found; set " *
-                               "MESTRA_LIBRARY to its path, or build it from a checkout: " *
+            isfile(p) || error("the Gamut core library ($p) was not found; set " *
+                               "GAMUT_LIBRARY to its path, or build it from a checkout: " *
                                "cmake -S . -B build && cmake --build build")
             HANDLE[] = Libdl.dlopen(p)
         end
@@ -57,18 +57,18 @@ struct CSel
 end
 
 """
-    MestraError(rule, message, path)
+    GamutError(rule, message, path)
 
 The one error: `rule` is the spec's rule id ("E7") or empty, `path` a
 concept path (`node_fields/p`) or empty, `message` what went wrong.
 """
-struct MestraError <: Exception
+struct GamutError <: Exception
     rule::String
     message::String
     path::String
 end
-MestraError(rule, message) = MestraError(rule, message, "")
-Base.showerror(io::IO, e::MestraError) =
+GamutError(rule, message) = GamutError(rule, message, "")
+Base.showerror(io::IO, e::GamutError) =
     print(io, isempty(e.rule) ? e.message : "$(e.rule): $(e.message)")
 
 function text(t::NTuple)
@@ -79,7 +79,7 @@ end
 function check(status, err::Ref{CError})
     status == 0 && return nothing
     e = err[]
-    throw(MestraError(text(e.rule), text(e.message), text(e.path)))
+    throw(GamutError(text(e.rule), text(e.message), text(e.path)))
 end
 
 # A status-returning core call: @mes name (argument types...) arguments...
@@ -95,7 +95,7 @@ end
 """A name or text for the C side; a NUL would end it early, so it is refused."""
 function cs(s)
     t = string(s)
-    occursin('\0', t) && throw(MestraError("", "$(repr(t)) holds a NUL character, which no " *
+    occursin('\0', t) && throw(GamutError("", "$(repr(t)) holds a NUL character, which no " *
                                                  "name or text may hold"))
     return t
 end
@@ -108,16 +108,16 @@ end
 
 function take_strings(h::Ptr{Cvoid})
     try
-        n = ccall(sym(:mes_strings_count), Int64, (Ptr{Cvoid},), h)
-        return String[unsafe_string(ccall(sym(:mes_strings_get), Cstring, (Ptr{Cvoid}, Int64),
+        n = ccall(sym(:gamut_strings_count), Int64, (Ptr{Cvoid},), h)
+        return String[unsafe_string(ccall(sym(:gamut_strings_get), Cstring, (Ptr{Cvoid}, Int64),
                                           h, i)) for i in 0:n-1]
     finally
-        ccall(sym(:mes_strings_free), Cvoid, (Ptr{Cvoid},), h)
+        ccall(sym(:gamut_strings_free), Cvoid, (Ptr{Cvoid},), h)
     end
 end
 
-version() = unsafe_string(ccall(sym(:mes_version), Cstring, ()))
-format() = unsafe_string(ccall(sym(:mes_format), Cstring, ()))
+version() = unsafe_string(ccall(sym(:gamut_version), Cstring, ()))
+format() = unsafe_string(ccall(sym(:gamut_format), Cstring, ()))
 
 const DTYPE = Dict(UInt8 => 1, Int8 => 2, Int32 => 3, Int64 => 4, Float32 => 5, Float64 => 6)
 const AS_GIVEN = 0
@@ -126,7 +126,7 @@ function precision_code(v)
     v === nothing && return AS_GIVEN
     t = Dict("float32" => 5, "float64" => 6, "int64" => 4)
     key = v isa Type ? lowercase(string(v)) : string(v)
-    haskey(t, key) || throw(MestraError("E4", "precision $(repr(v)) is not float32, float64 " *
+    haskey(t, key) || throw(GamutError("E4", "precision $(repr(v)) is not float32, float64 " *
                                               "or int64"))
     return t[key]
 end
@@ -151,7 +151,7 @@ end
 selection(::Nothing, what) = Selection(CSel(0, 0, 0, C_NULL, 0), Int64[], false)
 selection(::Colon, what) = selection(nothing, what)
 function selection(x::Integer, what)
-    x isa Bool && throw(MestraError("", "$what: positions are integers, ranges or nothing"))
+    x isa Bool && throw(GamutError("", "$what: positions are integers, ranges or nothing"))
     keep = Int64[x - 1]
     return Selection(CSel(2, 0, 0, pointer(keep), 1), keep, true)
 end
@@ -160,19 +160,19 @@ function selection(r::AbstractUnitRange{<:Integer}, what)
 end
 function selection(v::AbstractVector, what)
     eltype(v) <: Integer && !(eltype(v) <: Bool) || isempty(v) ||
-        throw(MestraError("", "$what: positions are integers, ranges or nothing; got " *
+        throw(GamutError("", "$what: positions are integers, ranges or nothing; got " *
                               "$(eltype(v)) values"))
     keep = Int64[i - 1 for i in v]
     return Selection(CSel(2, 0, 0, pointer(keep), length(keep)), keep, false)
 end
-selection(x, what) = throw(MestraError("", "$what: positions are integers, ranges or " *
+selection(x, what) = throw(GamutError("", "$what: positions are integers, ranges or " *
                                            "nothing; got $(typeof(x))"))
 
 # --- the study ------------------------------------------------------------------------
 
 """
-A study file open to write (`Mestra.create`, `Mestra.open(path; mode="a")`)
-or to read (`Mestra.open`). Close it with `close`, or use the do-block forms.
+A study file open to write (`Gamut.create`, `Gamut.open(path; mode="a")`)
+or to read (`Gamut.open`). Close it with `close`, or use the do-block forms.
 """
 mutable struct Study
     handle::Ptr{Cvoid}
@@ -194,8 +194,8 @@ mutable struct Study
             h = getfield(x, :handle)
             h == C_NULL && return
             err = Ref{CError}()
-            if ccall(sym(:mes_close), Cint, (Ptr{Cvoid}, Ref{CError}), h, err) != 0
-                ccall(sym(:mes_abandon), Cvoid, (Ptr{Cvoid}, Cint), h, 0)
+            if ccall(sym(:gamut_close), Cint, (Ptr{Cvoid}, Ref{CError}), h, err) != 0
+                ccall(sym(:gamut_abandon), Cvoid, (Ptr{Cvoid}, Cint), h, 0)
             end
             setfield!(x, :handle, C_NULL)
         end
@@ -204,7 +204,7 @@ mutable struct Study
 end
 
 function handle(s::Study)
-    s.handle == C_NULL && throw(MestraError("", "$(s.path) is closed"))
+    s.handle == C_NULL && throw(GamutError("", "$(s.path) is closed"))
     return s.handle
 end
 
@@ -212,7 +212,7 @@ end
 # keeps the study open to fix and close again.
 function Base.close(s::Study)
     s.handle == C_NULL && return nothing
-    @mes mes_close (Ptr{Cvoid},) s.handle
+    @mes gamut_close (Ptr{Cvoid},) s.handle
     s.handle = C_NULL
     s.remove_on_close && isfile(s.path) && rm(s.path)
     return nothing
@@ -223,13 +223,13 @@ end
 function abandon(s::Study, remove::Bool)
     s.handle == C_NULL && return nothing
     h, s.handle = s.handle, C_NULL
-    ccall(sym(:mes_abandon), Cvoid, (Ptr{Cvoid}, Cint), h, remove ? 1 : 0)
+    ccall(sym(:gamut_abandon), Cvoid, (Ptr{Cvoid}, Cint), h, remove ? 1 : 0)
     return nothing
 end
 
 Base.isopen(s::Study) = s.handle != C_NULL
 Base.show(io::IO, s::Study) =
-    print(io, "Mestra.Study(", repr(s.path), s.writing ? ", writing" : "", isopen(s) ? "" : ", closed", ")")
+    print(io, "Gamut.Study(", repr(s.path), s.writing ? ", writing" : "", isopen(s) ? "" : ", closed", ")")
 
 function with_study(f, s::Study)
     try
@@ -248,8 +248,8 @@ function with_study(f, s::Study)
     end
 end
 
-need_writer(s::Study) = s.writing || throw(MestraError("", "$(s.path) was opened to read"))
-need_reader(s::Study) = !s.writing || throw(MestraError("", "$(s.path) is open to write; " *
+need_writer(s::Study) = s.writing || throw(GamutError("", "$(s.path) was opened to read"))
+need_reader(s::Study) = !s.writing || throw(GamutError("", "$(s.path) is open to write; " *
                                                           "close it and open it to read"))
 
 # --- creating ---------------------------------------------------------------------------
@@ -257,7 +257,7 @@ need_reader(s::Study) = !s.writing || throw(MestraError("", "$(s.path) is open t
 spec(v::AbstractString, key) = Dict{String,Any}(key => String(v))
 spec(v::NamedTuple, key) = Dict{String,Any}(string(k) => x for (k, x) in pairs(v))
 spec(v::AbstractDict, key) = Dict{String,Any}(string(k) => x for (k, x) in v)
-spec(v, key) = throw(MestraError("", "a declaration is units text, a NamedTuple or a Dict"))
+spec(v, key) = throw(GamutError("", "a declaration is units text, a NamedTuple or a Dict"))
 
 pairs_of(::Nothing) = Pair{String,Any}[]
 pairs_of(d::AbstractDict) = [string(k) => v for (k, v) in d]
@@ -269,42 +269,42 @@ function declare(h, kw)
     precision = Dict(pairs_of(get(kw, :precision, nothing)))
     round_bits = Dict(pairs_of(get(kw, :round_bits, nothing)))
     if !get(kw, :compression, true)
-        @mes mes_set_compression (Ptr{Cvoid}, Cint, Cint) h 0 0
+        @mes gamut_set_compression (Ptr{Cvoid}, Cint, Cint) h 0 0
     end
     for key in (:title, :license, :references, :source, :trained_on)
         v = get(kw, key, nothing)
         v === nothing && continue
         value = v isa AbstractVector ? join(string.(v), " ") : string(v)
-        @mes mes_set_attribute (Ptr{Cvoid}, Cstring, Cstring) h cs(key) cs(value)
+        @mes gamut_set_attribute (Ptr{Cvoid}, Cstring, Cstring) h cs(key) cs(value)
     end
     for (name, v) in pairs_of(get(kw, :labels, nothing))
         d = v === Bool ? Dict{String,Any}("role" => "categorical", "categories" => ["false", "true"]) :
             v isa AbstractString ? Dict{String,Any}("role" => v) : spec(v, "role")
         strs, ptrs = cstrings(get(d, "categories", String[]))
         GC.@preserve strs begin
-            @mes mes_declare_label (Ptr{Cvoid}, Cstring, Cstring, Ptr{Ptr{UInt8}}, Int64) h cs(name) cs(getstr(d, "role", "categorical")) ptrs length(ptrs)
+            @mes gamut_declare_label (Ptr{Cvoid}, Cstring, Cstring, Ptr{Ptr{UInt8}}, Int64) h cs(name) cs(getstr(d, "role", "categorical")) ptrs length(ptrs)
         end
     end
     for (name, v) in pairs_of(get(kw, :parameters, nothing))
         d = spec(v, "units")
         has = haskey(d, "lower") || haskey(d, "upper")
-        @mes mes_declare_parameter (Ptr{Cvoid}, Cstring, Cstring, Cstring, Cint, Cint, Cdouble, Cdouble, Cstring) h cs(name) cs(getstr(d, "role", "design")) cs(getstr(d, "units")) precision_code(get(precision, name, get(d, "dtype", nothing))) (has ? 1 : 0) Float64(get(d, "lower", 0.0)) Float64(get(d, "upper", 0.0)) cs(getstr(d, "run_group"))
+        @mes gamut_declare_parameter (Ptr{Cvoid}, Cstring, Cstring, Cstring, Cint, Cint, Cdouble, Cdouble, Cstring) h cs(name) cs(getstr(d, "role", "design")) cs(getstr(d, "units")) precision_code(get(precision, name, get(d, "dtype", nothing))) (has ? 1 : 0) Float64(get(d, "lower", 0.0)) Float64(get(d, "upper", 0.0)) cs(getstr(d, "run_group"))
     end
     c = get(kw, :coordinates, nothing)
     if c !== nothing
         d = spec(c, "units")
-        @mes mes_declare_coordinates (Ptr{Cvoid}, Cstring, Cint, Cint, Cstring, Cstring) h cs(getstr(d, "units")) precision_code(get(d, "precision", nothing)) Int(get(d, "axes", 3)) cs(getstr(d, "model")) cs(getstr(d, "output"))
+        @mes gamut_declare_coordinates (Ptr{Cvoid}, Cstring, Cint, Cint, Cstring, Cstring) h cs(getstr(d, "units")) precision_code(get(d, "precision", nothing)) Int(get(d, "axes", 3)) cs(getstr(d, "model")) cs(getstr(d, "output"))
     end
     for (name, v) in pairs_of(get(kw, :mesh_labels, nothing))
         d = spec(v, "at")
         strs, ptrs = cstrings(get(d, "categories", String[]))
         GC.@preserve strs begin
-            @mes mes_declare_mesh_label (Ptr{Cvoid}, Cstring, Cstring, Ptr{Ptr{UInt8}}, Int64) h cs(name) cs(getstr(d, "at", "cell")) ptrs length(ptrs)
+            @mes gamut_declare_mesh_label (Ptr{Cvoid}, Cstring, Cstring, Ptr{Ptr{UInt8}}, Int64) h cs(name) cs(getstr(d, "at", "cell")) ptrs length(ptrs)
         end
     end
     function result(name, d, where)
         q = get(d, "q", nothing)
-        @mes mes_declare_result (Ptr{Cvoid}, Cstring, Cstring, Cstring, Cint, Cstring, Cstring, Cint, Cdouble, Cstring, Cstring, Cstring, Cstring, Cint, Cstring, Cstring) h cs(name) cs(where) cs(getstr(d, "units")) precision_code(get(precision, name, get(d, "precision", nothing))) cs(getstr(d, "of")) cs(getstr(d, "statistic")) (q === nothing ? 0 : 1) Float64(something(q, 0.0)) cs(getstr(d, "method")) cs(getstr(d, "with_respect_to")) cs(getstr(d, "axis")) cs(getstr(d, "vector")) Int(get(round_bits, name, get(d, "round_bits", -1))) cs(getstr(d, "model")) cs(getstr(d, "output"))
+        @mes gamut_declare_result (Ptr{Cvoid}, Cstring, Cstring, Cstring, Cint, Cstring, Cstring, Cint, Cdouble, Cstring, Cstring, Cstring, Cstring, Cint, Cstring, Cstring) h cs(name) cs(where) cs(getstr(d, "units")) precision_code(get(precision, name, get(d, "precision", nothing))) cs(getstr(d, "of")) cs(getstr(d, "statistic")) (q === nothing ? 0 : 1) Float64(something(q, 0.0)) cs(getstr(d, "method")) cs(getstr(d, "with_respect_to")) cs(getstr(d, "axis")) cs(getstr(d, "vector")) Int(get(round_bits, name, get(d, "round_bits", -1))) cs(getstr(d, "model")) cs(getstr(d, "output"))
     end
     for (name, v) in pairs_of(get(kw, :scalars, nothing))
         result(name, spec(v, "units"), "scalar")
@@ -315,22 +315,22 @@ function declare(h, kw)
     end
     g = get(kw, :generalisation_group, nothing)
     if g !== nothing
-        @mes mes_set_generalisation_group (Ptr{Cvoid}, Cstring) h cs(g)
+        @mes gamut_set_generalisation_group (Ptr{Cvoid}, Cstring) h cs(g)
     end
     for (name, v) in pairs_of(get(kw, :constants, nothing))
         number, units = v
         if number isa Float32
-            @mes mes_set_constant (Ptr{Cvoid}, Cstring, Cstring, Cint, Cdouble, Int64) h cs(name) cs(units) 5 Float64(number) 0
+            @mes gamut_set_constant (Ptr{Cvoid}, Cstring, Cstring, Cint, Cdouble, Int64) h cs(name) cs(units) 5 Float64(number) 0
         elseif number isa Integer && !(number isa Bool)
-            @mes mes_set_constant (Ptr{Cvoid}, Cstring, Cstring, Cint, Cdouble, Int64) h cs(name) cs(units) 4 0.0 Int64(number)
+            @mes gamut_set_constant (Ptr{Cvoid}, Cstring, Cstring, Cint, Cdouble, Int64) h cs(name) cs(units) 4 0.0 Int64(number)
         else
-            @mes mes_set_constant (Ptr{Cvoid}, Cstring, Cstring, Cint, Cdouble, Int64) h cs(name) cs(units) 6 Float64(number) 0
+            @mes gamut_set_constant (Ptr{Cvoid}, Cstring, Cstring, Cint, Cdouble, Int64) h cs(name) cs(units) 6 Float64(number) 0
         end
     end
 end
 
 """
-    Mestra.create(path; writer, parameters, labels, scalars, fields, mesh_labels,
+    Gamut.create(path; writer, parameters, labels, scalars, fields, mesh_labels,
                   constants, mesh, per, coordinates, precision, round_bits, title,
                   license, references, source, generalisation_group, compression)
 
@@ -343,22 +343,22 @@ function axes_of(kw)
     c = get(kw, :coordinates, nothing)
     c === nothing && return 3
     v = get(spec(c, "units"), "axes", 3)
-    (v isa Integer && !(v isa Bool)) || throw(MestraError("E24", "coordinates: axes is 1, 2 or 3, not $(repr(v))"))
+    (v isa Integer && !(v isa Bool)) || throw(GamutError("E24", "coordinates: axes is 1, 2 or 3, not $(repr(v))"))
     return Int(v)
 end
 
 function create(path::AbstractString; writer::AbstractString, mesh=nothing, per=nothing, kw...)
     mesh !== nothing && per === nothing &&
-        throw(MestraError("E6", "a mesh needs per: \"fixed\", \"run\" or \"group:<label>\""))
+        throw(GamutError("E6", "a mesh needs per: \"fixed\", \"run\" or \"group:<label>\""))
     axes_of(kw)                      # before the file exists: a refusal leaves none
     out = Ref{Ptr{Cvoid}}(C_NULL)
-    @mes mes_create (Cstring, Cstring, Cstring, Cstring, Ref{Ptr{Cvoid}}) cs(path) cs(writer) cs(something(mesh, "")) cs(something(per, "fixed")) out
+    @mes gamut_create (Cstring, Cstring, Cstring, Cstring, Ref{Ptr{Cvoid}}) cs(path) cs(writer) cs(something(mesh, "")) cs(something(per, "fixed")) out
     return started(Study(out[], String(path), true, something(mesh, ""), something(per, "")), kw)
 end
 create(f::Function, path::AbstractString; kw...) = with_study(f, create(path; kw...))
 
 """
-    Mestra.create_model(path; writer, parameters, labels, scalars, fields, constants,
+    Gamut.create_model(path; writer, parameters, labels, scalars, fields, constants,
                         mesh, per, coordinates, trained_on, title, license,
                         references, source)
 
@@ -368,7 +368,7 @@ naming the model and output that computes it; then `add_model!`.
 function create_model(path::AbstractString; writer::AbstractString, mesh=nothing, per="fixed", kw...)
     axes_of(kw)                      # before the file exists: a refusal leaves none
     out = Ref{Ptr{Cvoid}}(C_NULL)
-    @mes mes_create_model (Cstring, Cstring, Cstring, Cstring, Ref{Ptr{Cvoid}}) cs(path) cs(writer) cs(something(mesh, "")) cs(per) out
+    @mes gamut_create_model (Cstring, Cstring, Cstring, Cstring, Ref{Ptr{Cvoid}}) cs(path) cs(writer) cs(something(mesh, "")) cs(per) out
     return started(Study(out[], String(path), true, something(mesh, ""), mesh === nothing ? "" : per), kw)
 end
 create_model(f::Function, path::AbstractString; kw...) = with_study(f, create_model(path; kw...))
@@ -381,7 +381,7 @@ function started(s::Study, kw)
     unknown = setdiff(keys(kw), DECLARATIONS)
     if !isempty(unknown)
         abandon(s, true)
-        throw(MestraError("", "unknown keyword $(first(unknown)); the declarations are " *
+        throw(GamutError("", "unknown keyword $(first(unknown)); the declarations are " *
                               join(DECLARATIONS, ", ")))
     end
     s.axes = axes_of(kw)
@@ -396,7 +396,7 @@ function started(s::Study, kw)
 end
 
 """
-    Mestra.open(path; mode="r", threads=1)
+    Gamut.open(path; mode="r", threads=1)
 
 Opens a file to read, or with `mode="a"` to add runs in place. `threads`
 decompresses field reads in that many threads.
@@ -404,23 +404,23 @@ decompresses field reads in that many threads.
 function open(path::AbstractString; mode::AbstractString="r", threads::Integer=1)
     out = Ref{Ptr{Cvoid}}(C_NULL)
     if mode == "r"
-        @mes mes_open (Cstring, Ref{Ptr{Cvoid}}) cs(path) out
+        @mes gamut_open (Cstring, Ref{Ptr{Cvoid}}) cs(path) out
         s = Study(out[], String(path), false)
         s.mesh_kind = info(s, "mesh_kind")
         s.per = info(s, "per")
         s.group = startswith(s.per, "group:") ? s.per[7:end] : ""
-        threads != 1 && @mes mes_set_threads (Ptr{Cvoid}, Cint) s.handle threads
+        threads != 1 && @mes gamut_set_threads (Ptr{Cvoid}, Cint) s.handle threads
         return s
     elseif mode == "a"
         kind, per, axes = open(path) do r
             r.mesh_kind, r.per, isempty(r.mesh_kind) ? 3 : parse(Int, get(describe(r, "coordinates"), "axes", "3"))
         end
-        @mes mes_open_append (Cstring, Ref{Ptr{Cvoid}}) cs(path) out
+        @mes gamut_open_append (Cstring, Ref{Ptr{Cvoid}}) cs(path) out
         s = Study(out[], String(path), true, kind, per)
         s.axes = axes
         return s
     end
-    throw(MestraError("", "mode is \"r\" or \"a\""))
+    throw(GamutError("", "mode is \"r\" or \"a\""))
 end
 open(f::Function, path::AbstractString; kw...) = with_study(f, open(path; kw...))
 
@@ -433,18 +433,18 @@ function stage_geometry(s::Study, points, cells, labels)
         T = eltype(p) <: AbstractFloat ? eltype(p) : Float64
         buf = c_order(convert(Array{T}, p))
         GC.@preserve buf begin
-            @mes mes_geometry_points (Ptr{Cvoid}, Cint, Ptr{Cvoid}, Int64, Cint) h DTYPE[T] pointer(buf) size(p, 1) size(p, 2)
+            @mes gamut_geometry_points (Ptr{Cvoid}, Cint, Ptr{Cvoid}, Int64, Cint) h DTYPE[T] pointer(buf) size(p, 1) size(p, 2)
         end
     end
     if cells !== nothing
         types = Vector{UInt8}(cells[1])
         offsets = Vector{Int64}(cells[2])
         conn = Vector{Int64}(cells[3])
-        @mes mes_geometry_cells (Ptr{Cvoid}, Ptr{UInt8}, Int64, Ptr{Int64}, Ptr{Int64}, Int64) h types length(types) offsets conn length(conn)
+        @mes gamut_geometry_cells (Ptr{Cvoid}, Ptr{UInt8}, Int64, Ptr{Int64}, Ptr{Int64}, Int64) h types length(types) offsets conn length(conn)
     end
     for (name, v) in pairs_of(labels)
         vals = Vector{Int64}(v)
-        @mes mes_geometry_label (Ptr{Cvoid}, Cstring, Ptr{Int64}, Int64) h cs(name) vals length(vals)
+        @mes gamut_geometry_label (Ptr{Cvoid}, Cstring, Ptr{Int64}, Int64) h cs(name) vals length(vals)
     end
 end
 
@@ -458,14 +458,14 @@ coordinates come with the runs, `n_nodes` instead of points.
 function set_mesh!(s::Study; points=nothing, cells=nothing, labels=nothing, n_nodes=nothing)
     need_writer(s)
     h = handle(s)
-    @mes mes_geometry_begin (Ptr{Cvoid},) h
+    @mes gamut_geometry_begin (Ptr{Cvoid},) h
     if points === nothing
-        n_nodes === nothing && throw(MestraError("", "give the points, or n_nodes when the " *
+        n_nodes === nothing && throw(GamutError("", "give the points, or n_nodes when the " *
                                                      "coordinates come with the runs"))
-        @mes mes_geometry_points (Ptr{Cvoid}, Cint, Ptr{Cvoid}, Int64, Cint) h 6 C_NULL n_nodes s.axes
+        @mes gamut_geometry_points (Ptr{Cvoid}, Cint, Ptr{Cvoid}, Int64, Cint) h 6 C_NULL n_nodes s.axes
     end
     stage_geometry(s, points, cells, labels)
-    @mes mes_set_mesh (Ptr{Cvoid},) h
+    @mes gamut_set_mesh (Ptr{Cvoid},) h
     return nothing
 end
 
@@ -495,14 +495,14 @@ Adds many runs at once: `columns` maps each name to one value per run;
 function add_runs!(s::Study, columns; fields=nothing, points=nothing, cells=nothing, mesh_labels=nothing)
     cols = Dict{String,Any}(pairs_of(columns))
     lengths = unique(length(v) for v in values(cols))
-    length(lengths) == 1 || throw(MestraError("E5", "every column needs the same number of runs"))
+    length(lengths) == 1 || throw(GamutError("E5", "every column needs the same number of runs"))
     return commit!(s, lengths[1], cols, Dict{String,Any}(pairs_of(fields)), points, cells, mesh_labels)
 end
 
 function commit!(s::Study, n, columns, fields, points, cells, mesh_labels)
     need_writer(s)
     h = handle(s)
-    @mes mes_batch_begin (Ptr{Cvoid}, Int64) h n
+    @mes gamut_batch_begin (Ptr{Cvoid}, Int64) h n
     keep = Any[]
     group_names = nothing
     for (name, vals) in columns
@@ -511,26 +511,26 @@ function commit!(s::Study, n, columns, fields, points, cells, mesh_labels)
             names = String[x === true ? "true" : x === false ? "false" : string(x) for x in v]
             strs, ptrs = cstrings(names)
             GC.@preserve strs begin
-                @mes mes_batch_names (Ptr{Cvoid}, Cstring, Ptr{Ptr{UInt8}}, Int64) h cs(name) ptrs length(ptrs)
+                @mes gamut_batch_names (Ptr{Cvoid}, Cstring, Ptr{Ptr{UInt8}}, Int64) h cs(name) ptrs length(ptrs)
             end
             name == s.group && (group_names = names)
             continue
         end
         buf = numbers(v)
         push!(keep, buf)
-        @mes mes_batch_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64) h cs(name) DTYPE[eltype(buf)] pointer(buf) length(buf)
+        @mes gamut_batch_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64) h cs(name) DTYPE[eltype(buf)] pointer(buf) length(buf)
     end
     for (name, vals) in fields
         buf = numbers(c_order(vals))
         push!(keep, buf)
-        @mes mes_batch_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64) h cs(name) DTYPE[eltype(buf)] pointer(buf) length(buf)
+        @mes gamut_batch_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64) h cs(name) DTYPE[eltype(buf)] pointer(buf) length(buf)
     end
     if points !== nothing
         pts = collect(points)
         cls = cells === nothing ? fill(nothing, length(pts)) : collect(cells)
         mls = mesh_labels === nothing ? fill(nothing, length(pts)) : collect(mesh_labels)
         if !isempty(s.group)
-            group_names === nothing && throw(MestraError("E2", "give $(s.group) by name so " *
+            group_names === nothing && throw(GamutError("E2", "give $(s.group) by name so " *
                                                                "geometry can be matched to members"))
             first_run = Dict{String,Int}()
             for (i, member) in enumerate(group_names)
@@ -538,26 +538,26 @@ function commit!(s::Study, n, columns, fields, points, cells, mesh_labels)
                 if haskey(first_run, member)
                     j = first_run[member]
                     (pts[i] == pts[j] && cls[i] == cls[j] && mls[i] == mls[j]) ||
-                        throw(MestraError("", "$(s.group) \"$member\" is given two different " *
+                        throw(GamutError("", "$(s.group) \"$member\" is given two different " *
                                               "geometries in one batch (runs $j and $i)", s.group))
                     continue
                 end
                 first_run[member] = i
-                @mes mes_geometry_begin (Ptr{Cvoid},) h
+                @mes gamut_geometry_begin (Ptr{Cvoid},) h
                 stage_geometry(s, pts[i], cls[i], mls[i])
-                @mes mes_batch_geometry_for_member (Ptr{Cvoid}, Cstring) h cs(member)
+                @mes gamut_batch_geometry_for_member (Ptr{Cvoid}, Cstring) h cs(member)
             end
         else
             for i in eachindex(pts)
-                @mes mes_geometry_begin (Ptr{Cvoid},) h
+                @mes gamut_geometry_begin (Ptr{Cvoid},) h
                 stage_geometry(s, pts[i], cls[i], mls[i])
-                @mes mes_batch_geometry_for_row (Ptr{Cvoid},) h
+                @mes gamut_batch_geometry_for_row (Ptr{Cvoid},) h
             end
         end
     end
     first = Ref{Int64}(0)
     GC.@preserve keep begin
-        @mes mes_batch_commit (Ptr{Cvoid}, Ref{Int64}) h first
+        @mes gamut_batch_commit (Ptr{Cvoid}, Ref{Int64}) h first
     end
     return collect(first[]:first[]+n-1)
 end
@@ -567,23 +567,23 @@ end
 function numbers(v::AbstractArray)
     T = eltype(v)
     T <: Union{Float32,Float64,Int8,UInt8,Int32,Int64} && return collect(v)
-    T <: Bool && throw(MestraError("E4", "booleans are given as a label's names"))
+    T <: Bool && throw(GamutError("E4", "booleans are given as a label's names"))
     T <: Integer && return Vector{Int64}(vec(v))
     T <: Real && return Vector{Float64}(vec(v))
     all(x -> x isa Integer && !(x isa Bool), v) && return Int64[x for x in v]
     all(x -> x isa Real, v) && return Float64[x for x in v]
-    throw(MestraError("E4", "values are numbers; got $(T)"))
+    throw(GamutError("E4", "values are numbers; got $(T)"))
 end
 
 """    set_note!(study, key, value)    Free-form public notes: text, integers, floats."""
 function set_note!(s::Study, key, value)
     h = handle(s)
     if value isa Integer && !(value isa Bool)
-        @mes mes_set_note_int (Ptr{Cvoid}, Cstring, Int64) h cs(key) Int64(value)
+        @mes gamut_set_note_int (Ptr{Cvoid}, Cstring, Int64) h cs(key) Int64(value)
     elseif value isa Real
-        @mes mes_set_note_float (Ptr{Cvoid}, Cstring, Cdouble) h cs(key) Float64(value)
+        @mes gamut_set_note_float (Ptr{Cvoid}, Cstring, Cdouble) h cs(key) Float64(value)
     else
-        @mes mes_set_note_text (Ptr{Cvoid}, Cstring, Cstring) h cs(key) cs(value)
+        @mes gamut_set_note_text (Ptr{Cvoid}, Cstring, Cstring) h cs(key) cs(value)
     end
 end
 
@@ -591,7 +591,7 @@ end
 
 function info(s::Study, key)
     out = Ref{Ptr{Cvoid}}(C_NULL)
-    @mes mes_info (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(s) cs(key) out
+    @mes gamut_info (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(s) cs(key) out
     v = take_strings(out[])
     return isempty(v) ? "" : v[1]
 end
@@ -603,7 +603,7 @@ function Base.getproperty(s::Study, name::Symbol)
     name === :addons && return begin
         need_reader(s)
         out = Ref{Ptr{Cvoid}}(C_NULL)
-        @mes mes_info (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(s) "addons" out
+        @mes gamut_info (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(s) "addons" out
         take_strings(out[])
     end
     return getfield(s, name)
@@ -614,7 +614,7 @@ Base.propertynames(::Study) = (:path, :kind, :type, :row_count, :addons)
 function names(s::Study, group)
     need_reader(s)
     out = Ref{Ptr{Cvoid}}(C_NULL)
-    @mes mes_names (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(s) cs(group) out
+    @mes gamut_names (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(s) cs(group) out
     return take_strings(out[])
 end
 
@@ -624,7 +624,7 @@ function describe(s::Study, name=nothing)
     key = name === nothing ? "" : string(name)
     get!(s.described, key) do
         k, v = Ref{Ptr{Cvoid}}(C_NULL), Ref{Ptr{Cvoid}}(C_NULL)
-        @mes mes_describe (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}, Ref{Ptr{Cvoid}}) handle(s) cs(key) k v
+        @mes gamut_describe (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}, Ref{Ptr{Cvoid}}) handle(s) cs(key) k v
         Dict(zip(take_strings(k[]), take_strings(v[])))
     end |> copy
 end
@@ -637,10 +637,10 @@ function read(s::Study, name, rows, sites, ::Type{T}; squeeze=true) where {T}
     rsel, ssel = Ref(r.sel), Ref(x.sel)
     rk, xk = r.keep, x.keep
     GC.@preserve rk xk begin
-        @mes mes_shape (Ptr{Cvoid}, Cstring, Ref{CSel}, Ref{CSel}, Ptr{Int64}, Ref{Cint}) handle(s) cs(name) rsel ssel shape rank
+        @mes gamut_shape (Ptr{Cvoid}, Cstring, Ref{CSel}, Ref{CSel}, Ptr{Int64}, Ref{Cint}) handle(s) cs(name) rsel ssel shape rank
         dims = shape[1:rank[]]
         buf = Vector{T}(undef, prod(dims; init=1))
-        @mes mes_read (Ptr{Cvoid}, Cstring, Ref{CSel}, Ref{CSel}, Cint, Ptr{Cvoid}, Int64) handle(s) cs(name) rsel ssel DTYPE[T] pointer(buf) sizeof(buf)
+        @mes gamut_read (Ptr{Cvoid}, Cstring, Ref{CSel}, Ref{CSel}, Cint, Ptr{Cvoid}, Int64) handle(s) cs(name) rsel ssel DTYPE[T] pointer(buf) sizeof(buf)
     end
     out = from_c_order(buf, dims)
     if squeeze && r.single && length(dims) >= 1 && dims[1] == 1
@@ -664,7 +664,7 @@ function get_label(s::Study, name; rows=nothing)
     rsel = Ref(r.sel)
     rk = r.keep
     GC.@preserve rk begin
-        @mes mes_label_names (Ptr{Cvoid}, Cstring, Ref{CSel}, Ref{Ptr{Cvoid}}) handle(s) cs(name) rsel out
+        @mes gamut_label_names (Ptr{Cvoid}, Cstring, Ref{CSel}, Ref{Ptr{Cvoid}}) handle(s) cs(name) rsel out
     end
     v = take_strings(out[])
     return r.single ? v[1] : v
@@ -677,7 +677,7 @@ end
 
 function one_row(row)
     row === nothing && return nothing
-    (row isa Integer && !(row isa Bool)) || throw(MestraError("", "row: one integer position; got $(repr(row))"))
+    (row isa Integer && !(row isa Bool)) || throw(GamutError("", "row: one integer position; got $(repr(row))"))
     return [row]
 end
 
@@ -690,7 +690,7 @@ end
 
 """    get_points(study; row=nothing)    nodes × axes; a row is needed unless per = fixed."""
 function get_points(s::Study; row=nothing)
-    row === nothing && s.per != "fixed" && throw(MestraError("", "this mesh's geometry changes; give the row"))
+    row === nothing && s.per != "fixed" && throw(GamutError("", "this mesh's geometry changes; give the row"))
     T = get(describe(s, "coordinates"), "dtype", "") == "float32" ? Float32 : Float64
     out = read(s, "coordinates", one_row(row), nothing, T; squeeze=false)
     return row !== nothing && s.mesh_kind == "shared" ? out[1, :, :] : out
@@ -701,7 +701,7 @@ function get_field(s::Study, name; rows=nothing, nodes=nothing, cells=nothing)
     sites = nodes !== nothing ? nodes : cells
     if s.mesh_kind == "changing"
         rows isa Integer && !(rows isa Bool) || rows isa AbstractVector && length(rows) == 1 ||
-            throw(MestraError("", "$name: a changing mesh is read one row at a time; reads " *
+            throw(GamutError("", "$name: a changing mesh is read one row at a time; reads " *
                                   "across rows need a shared mesh"))
         rows = rows isa Integer ? [rows] : collect(rows)
     end
@@ -714,17 +714,17 @@ get_mesh_label(s::Study, name; row=nothing) = read(s, name, one_row(row), nothin
 """    categories(study, name)    The category table of a label or mesh label: code c names entry c + 1."""
 function categories(s::Study, name)
     t = get(describe(s, name), "category", "")
-    isempty(t) && throw(MestraError("", "$name has no category table; its codes are its values"))
+    isempty(t) && throw(GamutError("", "$name has no category table; its codes are its values"))
     out = Ref{Ptr{Cvoid}}(C_NULL)
-    @mes mes_table (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(s) cs(t) out
+    @mes gamut_table (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(s) cs(t) out
     return take_strings(out[])
 end
 
 """    table(study; names=nothing, rows=nothing)    the run table as columns; labels as names."""
 function table(s::Study; names=nothing, rows=nothing)
-    params = Mestra.names(s, "parameters")
-    labels = Mestra.names(s, "labels")
-    names = something(names, vcat(params, labels, Mestra.names(s, "scalars")))
+    params = Gamut.names(s, "parameters")
+    labels = Gamut.names(s, "labels")
+    names = something(names, vcat(params, labels, Gamut.names(s, "scalars")))
     out = Dict{String,Any}()
     for n in names
         out[n] = n in labels ? get_label(s, n; rows) : n in params ? get_parameter(s, n; rows) :
@@ -738,7 +738,7 @@ function select(s::Study, where)
     need_reader(s)
     out = Vector{Int64}(undef, max(s.row_count, 1))
     n = Ref{Int64}(0)
-    @mes mes_select (Ptr{Cvoid}, Cstring, Ptr{Int64}, Int64, Ref{Int64}) handle(s) cs(where) out length(out) n
+    @mes gamut_select (Ptr{Cvoid}, Cstring, Ptr{Int64}, Int64, Ref{Int64}) handle(s) cs(where) out length(out) n
     return out[1:n[]] .+ 1
 end
 
@@ -747,7 +747,7 @@ function related(s::Study, name)
     out = Dict{String,Any}("std" => nothing, "quantiles" => Dict{Float64,String}(),
                            "derivatives" => Dict{String,String}(), "vector" => String[])
     mine = describe(s, name)
-    for group in ("scalars", "node_fields", "cell_fields"), other in Mestra.names(s, group)
+    for group in ("scalars", "node_fields", "cell_fields"), other in Gamut.names(s, group)
         d = describe(s, other)
         if get(d, "of", "") == name
             st = get(d, "statistic", "")
@@ -765,7 +765,7 @@ end
 # --- copies between files --------------------------------------------------------------
 
 """
-    Mestra.append!(dst, src)
+    Gamut.append!(dst, src)
 
 Adds the rows of `src` to `dst` in place and returns how many: new ids
 continuing dst's, tables merged by name. Both need the same declarations
@@ -774,12 +774,12 @@ found in both; everything is checked before the first row is written.
 """
 function append!(dst::AbstractString, src::AbstractString)
     n = Ref{Int64}(0)
-    @mes mes_append (Cstring, Cstring, Ref{Int64}) cs(dst) cs(src) n
+    @mes gamut_append (Cstring, Cstring, Ref{Int64}) cs(dst) cs(src) n
     return Int(n[])
 end
 
 """
-    Mestra.extract(src, dst, rows)
+    Gamut.extract(src, dst, rows)
 
 The selected rows of `src` (1-based positions or a range) as a new file
 `dst`: ids kept, every table whole, a changing mesh's instances reduced to
@@ -790,19 +790,19 @@ function extract(src::AbstractString, dst::AbstractString, rows)
     rsel = Ref(r.sel)
     rk = r.keep
     GC.@preserve rk begin
-        @mes mes_extract (Cstring, Cstring, Ref{CSel}) cs(src) cs(dst) rsel
+        @mes gamut_extract (Cstring, Cstring, Ref{CSel}) cs(src) cs(dst) rsel
     end
     return nothing
 end
 
 """
-    Mestra.write_copy(src, dst)
+    Gamut.write_copy(src, dst)
 
 `src` rewritten as `dst` with the default layout (chunks, compression),
 keeping its identity (file_id, created).
 """
 write_copy(src::AbstractString, dst::AbstractString) =
-    (@mes mes_write_copy (Cstring, Cstring) cs(src) cs(dst); nothing)
+    (@mes gamut_write_copy (Cstring, Cstring) cs(src) cs(dst); nothing)
 
 # --- validation -------------------------------------------------------------------------
 
@@ -813,22 +813,22 @@ struct Finding
     message::String
 end
 
-"""    Mestra.validate(path)    the findings of spec section 16 (empty when the file is valid)."""
+"""    Gamut.validate(path)    the findings of spec section 16 (empty when the file is valid)."""
 function validate(path::AbstractString)
     out = Ref{Ptr{Cvoid}}(C_NULL)
-    @mes mes_validate (Cstring, Ref{Ptr{Cvoid}}) cs(path) out
+    @mes gamut_validate (Cstring, Ref{Ptr{Cvoid}}) cs(path) out
     r = out[]
     try
-        n = ccall(sym(:mes_report_count), Int64, (Ptr{Cvoid},), r)
+        n = ccall(sym(:gamut_report_count), Int64, (Ptr{Cvoid},), r)
         findings = Finding[]
         for i in 0:n-1
             rule, sev, p, msg = (Ref{Cstring}() for _ in 1:4)
-            ccall(sym(:mes_report_get), Cint, (Ptr{Cvoid}, Int64, Ref{Cstring}, Ref{Cstring}, Ref{Cstring}, Ref{Cstring}), r, i, rule, sev, p, msg)
+            ccall(sym(:gamut_report_get), Cint, (Ptr{Cvoid}, Int64, Ref{Cstring}, Ref{Cstring}, Ref{Cstring}, Ref{Cstring}), r, i, rule, sev, p, msg)
             push!(findings, Finding(unsafe_string(rule[]), unsafe_string(sev[]), unsafe_string(p[]), unsafe_string(msg[])))
         end
         return findings
     finally
-        ccall(sym(:mes_report_free), Cvoid, (Ptr{Cvoid},), r)
+        ccall(sym(:gamut_report_free), Cvoid, (Ptr{Cvoid},), r)
     end
 end
 
@@ -836,12 +836,12 @@ end
 
 function to_tree(numbers::AbstractDict)
     out = Ref{Ptr{Cvoid}}(C_NULL)
-    @mes mes_tree_new (Ref{Ptr{Cvoid}},) out
+    @mes gamut_tree_new (Ref{Ptr{Cvoid}},) out
     t = out[]
     try
         fill_tree(t, "", numbers)
     catch
-        ccall(sym(:mes_tree_free), Cvoid, (Ptr{Cvoid},), t)
+        ccall(sym(:gamut_tree_free), Cvoid, (Ptr{Cvoid},), t)
         rethrow()
     end
     return t
@@ -851,34 +851,34 @@ function fill_tree(t, prefix, d)
     for (k, v) in d
         key = isempty(prefix) ? string(k) : "$prefix/$k"
         if v === nothing
-            @mes mes_tree_set_null (Ptr{Cvoid}, Cstring) t cs(key)
+            @mes gamut_tree_set_null (Ptr{Cvoid}, Cstring) t cs(key)
         elseif v isa Bool
-            @mes mes_tree_set_bool (Ptr{Cvoid}, Cstring, Cint) t cs(key) (v ? 1 : 0)
+            @mes gamut_tree_set_bool (Ptr{Cvoid}, Cstring, Cint) t cs(key) (v ? 1 : 0)
         elseif v isa Integer
-            @mes mes_tree_set_int (Ptr{Cvoid}, Cstring, Int64) t cs(key) Int64(v)
+            @mes gamut_tree_set_int (Ptr{Cvoid}, Cstring, Int64) t cs(key) Int64(v)
         elseif v isa Real
-            @mes mes_tree_set_float (Ptr{Cvoid}, Cstring, Cdouble) t cs(key) Float64(v)
+            @mes gamut_tree_set_float (Ptr{Cvoid}, Cstring, Cdouble) t cs(key) Float64(v)
         elseif v isa AbstractString
-            @mes mes_tree_set_string (Ptr{Cvoid}, Cstring, Cstring) t cs(key) cs(v)
+            @mes gamut_tree_set_string (Ptr{Cvoid}, Cstring, Cstring) t cs(key) cs(v)
         elseif v isa AbstractDict
-            @mes mes_tree_set_dict (Ptr{Cvoid}, Cstring) t cs(key)
+            @mes gamut_tree_set_dict (Ptr{Cvoid}, Cstring) t cs(key)
             fill_tree(t, key, v)
         elseif v isa AbstractArray && eltype(v) <: AbstractString
             strs, ptrs = cstrings(vec(v))
             GC.@preserve strs begin
-                @mes mes_tree_set_strings (Ptr{Cvoid}, Cstring, Ptr{Ptr{UInt8}}, Int64) t cs(key) ptrs length(ptrs)
+                @mes gamut_tree_set_strings (Ptr{Cvoid}, Cstring, Ptr{Ptr{UInt8}}, Int64) t cs(key) ptrs length(ptrs)
             end
         elseif v isa AbstractArray
             a = eltype(v) <: Bool ? Int8.(v) : eltype(v) <: Union{Int32,Int64,Float64} ? v :
                 eltype(v) <: Integer ? Int64.(v) :
-                throw(MestraError("E18", "$key: model data holds Bool, Int32, Int64 and Float64 arrays"))
+                throw(GamutError("E18", "$key: model data holds Bool, Int32, Int64 and Float64 arrays"))
             buf = c_order(a)
             shape = Int64[size(a)...]
             GC.@preserve buf begin
-                @mes mes_tree_set_array (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Cint, Ptr{Int64}) t cs(key) DTYPE[eltype(buf)] pointer(buf) ndims(a) shape
+                @mes gamut_tree_set_array (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Cint, Ptr{Int64}) t cs(key) DTYPE[eltype(buf)] pointer(buf) ndims(a) shape
             end
         else
-            throw(MestraError("E18", "$key: $(typeof(v)) is not model data"))
+            throw(GamutError("E18", "$key: $(typeof(v)) is not model data"))
         end
     end
 end
@@ -886,20 +886,20 @@ end
 function from_tree(t, prefix="")
     out = Dict{String,Any}()
     keys = Ref{Ptr{Cvoid}}(C_NULL)
-    @mes mes_tree_keys (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) t cs(prefix) keys
+    @mes gamut_tree_keys (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) t cs(prefix) keys
     for k in take_strings(keys[])
         key = isempty(prefix) ? k : "$prefix/$k"
         kind = Ref{Cint}(0)
-        @mes mes_tree_kind (Ptr{Cvoid}, Cstring, Ref{Cint}) t cs(key) kind
+        @mes gamut_tree_kind (Ptr{Cvoid}, Cstring, Ref{Cint}) t cs(key) kind
         if kind[] == 0
             out[k] = nothing
         elseif kind[] in (1, 2, 3)
             i, f = Ref{Int64}(0), Ref{Cdouble}(0)
-            @mes mes_tree_scalar (Ptr{Cvoid}, Cstring, Ref{Int64}, Ref{Cdouble}) t cs(key) i f
+            @mes gamut_tree_scalar (Ptr{Cvoid}, Cstring, Ref{Int64}, Ref{Cdouble}) t cs(key) i f
             out[k] = kind[] == 1 ? i[] != 0 : kind[] == 2 ? i[] : f[]
         elseif kind[] in (4, 6)
             s = Ref{Ptr{Cvoid}}(C_NULL)
-            @mes mes_tree_strings (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) t cs(key) s
+            @mes gamut_tree_strings (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) t cs(key) s
             v = take_strings(s[])
             out[k] = kind[] == 4 ? v[1] : v
         elseif kind[] == 7
@@ -907,11 +907,11 @@ function from_tree(t, prefix="")
         else
             dtype, rank = Ref{Cint}(0), Ref{Cint}(0)
             shape = zeros(Int64, 8)
-            @mes mes_tree_array_info (Ptr{Cvoid}, Cstring, Ref{Cint}, Ref{Cint}, Ptr{Int64}) t cs(key) dtype rank shape
+            @mes gamut_tree_array_info (Ptr{Cvoid}, Cstring, Ref{Cint}, Ref{Cint}, Ptr{Int64}) t cs(key) dtype rank shape
             T = Dict(2 => Int8, 3 => Int32, 4 => Int64, 6 => Float64)[dtype[]]
             dims = shape[1:rank[]]
             buf = Vector{T}(undef, prod(dims; init=1))
-            @mes mes_tree_array (Ptr{Cvoid}, Cstring, Ptr{Cvoid}, Int64) t cs(key) pointer(buf) sizeof(buf)
+            @mes gamut_tree_array (Ptr{Cvoid}, Cstring, Ptr{Cvoid}, Int64) t cs(key) pointer(buf) sizeof(buf)
             a = from_c_order(buf, dims)
             out[k] = T == Int8 ? Bool.(a) : a
         end
@@ -920,7 +920,7 @@ function from_tree(t, prefix="")
 end
 
 """
-    Mestra.Nearest(columns, lower, upper, x, outputs)
+    Gamut.Nearest(columns, lower, upper, x, outputs)
 
 The built-in model: for each input row, the outputs of the closest stored
 point (spec section 7.5), evaluated by the core so every language gets the
@@ -939,9 +939,9 @@ struct Nearest
                 Dict{String,Array{Float64}}(string(k) => Float64.(v) for (k, v) in pairs_of(outputs)))
         t = to_tree(save(m))
         try
-            @mes mes_nearest_check (Ptr{Cvoid},) t
+            @mes gamut_nearest_check (Ptr{Cvoid},) t
         finally
-            ccall(sym(:mes_tree_free), Cvoid, (Ptr{Cvoid},), t)
+            ccall(sym(:gamut_tree_free), Cvoid, (Ptr{Cvoid},), t)
         end
         return m
     end
@@ -961,19 +961,19 @@ function call(m::Nearest, inputs, wanted)
         ptrs = Ptr{Cdouble}[pointer(c) for c in cols]
         for w in wanted
             output, kind = w[1], w[2]
-            kind == "values" || throw(MestraError("", "nearest gives values only, not $kind"))
+            kind == "values" || throw(GamutError("", "nearest gives values only, not $kind"))
             per = Ref{Int64}(0)
-            @mes mes_nearest_output_size (Ptr{Cvoid}, Cstring, Ref{Int64}) t cs(output) per
+            @mes gamut_nearest_output_size (Ptr{Cvoid}, Cstring, Ref{Int64}) t cs(output) per
             buf = Vector{Float64}(undef, nrows * per[])
             GC.@preserve strs cols begin
-                @mes mes_nearest_call (Ptr{Cvoid}, Ptr{Ptr{UInt8}}, Ptr{Ptr{Cdouble}}, Cint, Int64, Cstring, Ptr{Cdouble}, Int64) t names ptrs length(cols) nrows cs(output) buf length(buf)
+                @mes gamut_nearest_call (Ptr{Cvoid}, Ptr{Ptr{UInt8}}, Ptr{Ptr{Cdouble}}, Cint, Int64, Cstring, Ptr{Cdouble}, Int64) t names ptrs length(cols) nrows cs(output) buf length(buf)
             end
             shape = size(m.outputs[output])[2:end]
             get!(out, output, Dict{String,Any}())["values"] =
                 isempty(shape) ? buf : from_c_order(buf, (nrows, shape...))
         end
     finally
-        ccall(sym(:mes_tree_free), Cvoid, (Ptr{Cvoid},), t)
+        ccall(sym(:gamut_tree_free), Cvoid, (Ptr{Cvoid},), t)
     end
     return out
 end
@@ -984,17 +984,17 @@ function add_model!(s::Study, id, model, inputs; repr="")
     try
         strs, ptrs = cstrings(inputs)
         GC.@preserve strs begin
-            @mes mes_add_model (Ptr{Cvoid}, Cstring, Cstring, Ptr{Ptr{UInt8}}, Int64, Ptr{Cvoid}, Cstring) handle(s) cs(id) cs(model_type(model)) ptrs length(ptrs) t cs(repr)
+            @mes gamut_add_model (Ptr{Cvoid}, Cstring, Cstring, Ptr{Ptr{UInt8}}, Int64, Ptr{Cvoid}, Cstring) handle(s) cs(id) cs(model_type(model)) ptrs length(ptrs) t cs(repr)
         end
     finally
-        ccall(sym(:mes_tree_free), Cvoid, (Ptr{Cvoid},), t)
+        ccall(sym(:gamut_tree_free), Cvoid, (Ptr{Cvoid},), t)
     end
 end
 
 const LOADERS = Dict{String,Function}("nearest" => load_nearest)
 
 """
-    Mestra.evaluate(model_path, inputs; path=nothing, coordinates=nothing)
+    Gamut.evaluate(model_path, inputs; path=nothing, coordinates=nothing)
 
 Evaluates a model file on a table of inputs (spec section 7.4) and returns
 the resulting data file open to read. `inputs` maps each parameter to
@@ -1003,18 +1003,18 @@ length. Without `path` the file is temporary, removed on close.
 """
 function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=nothing)
     open(model_path) do m
-        m.kind == "model" || throw(MestraError("E16", "$model_path is not a model file"))
+        m.kind == "model" || throw(GamutError("E16", "$model_path is not a model file"))
         params, labels = names(m, "parameters"), names(m, "labels")
         given = Dict{String,Any}(pairs_of(inputs))
         lengths = unique(length(v) for v in values(given))
-        length(lengths) == 1 || throw(MestraError("E5", "every input needs the same number of rows"))
+        length(lengths) == 1 || throw(GamutError("E5", "every input needs the same number of rows"))
         n = lengths[1]
         unknown = setdiff(keys(given), vcat(params, labels))
-        isempty(unknown) || throw(MestraError("E2", "$(first(sort(collect(unknown)))) is not an input of this model"))
+        isempty(unknown) || throw(GamutError("E2", "$(first(sort(collect(unknown)))) is not an input of this model"))
         tbl = Dict{String,Any}()
         label_names = Dict{String,Vector{String}}()
         for name in params
-            haskey(given, name) || throw(MestraError("E2", "the input $name is missing"))
+            haskey(given, name) || throw(GamutError("E2", "the input $name is missing"))
             d = describe(m, name)
             col = get(d, "dtype", "") == "int64" ? Vector{Int64}(given[name]) : Vector{Float64}(given[name])
             lo, hi = parse(Float64, d["lower"]), parse(Float64, d["upper"])
@@ -1023,15 +1023,15 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
             tbl[name] = col
         end
         for name in labels
-            haskey(given, name) || throw(MestraError("E2", "the input $name is missing"))
+            haskey(given, name) || throw(GamutError("E2", "the input $name is missing"))
             out = Ref{Ptr{Cvoid}}(C_NULL)
-            @mes mes_table (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(m) cs(describe(m, name)["category"]) out
+            @mes gamut_table (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(m) cs(describe(m, name)["category"]) out
             entries = take_strings(out[])
             names_given = String[string(x) for x in given[name]]
             codes = Int64[]
             for g in names_given
                 i = findfirst(==(g), entries)
-                i === nothing && throw(MestraError("E9", "$name: $(repr(g)) is not in the model's table"))
+                i === nothing && throw(GamutError("E9", "$name: $(repr(g)) is not in the model's table"))
                 push!(codes, i - 1)
             end
             tbl[name] = codes
@@ -1063,24 +1063,24 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
         for (id, asks) in wanted
             d = describe(m, "models/$id")
             loader = get(LOADERS, d["type"], nothing)
-            loader === nothing && throw(MestraError("", "the model $id is of type $(repr(d["type"])), " *
+            loader === nothing && throw(GamutError("", "the model $id is of type $(repr(d["type"])), " *
                                                         "whose software is not registered here"))
             out = Ref{Ptr{Cvoid}}(C_NULL)
-            @mes mes_model_numbers (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(m) cs(id) out
+            @mes gamut_model_numbers (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(m) cs(id) out
             numbers = try
                 from_tree(out[])
             finally
-                ccall(sym(:mes_tree_free), Cvoid, (Ptr{Cvoid},), out[])
+                ccall(sym(:gamut_tree_free), Cvoid, (Ptr{Cvoid},), out[])
             end
             model = loader(numbers)
             reads = split(d["inputs"])
             missing_ = [k for k in reads if !haskey(tbl, k)]
-            isempty(missing_) || throw(MestraError("E2", "the model $id reads $(missing_[1]), which was not given"))
+            isempty(missing_) || throw(GamutError("E2", "the model $id reads $(missing_[1]), which was not given"))
             outputs[id] = call(model, Dict(String(k) => tbl[k] for k in reads), asks)
         end
-        out_path = path === nothing ? tempname() * ".mes" : String(path)
+        out_path = path === nothing ? tempname() * ".gamut" : String(path)
         w = Ref{Ptr{Cvoid}}(C_NULL)
-        @mes mes_evaluate_begin (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(m) cs(out_path) w
+        @mes gamut_evaluate_begin (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(m) cs(out_path) w
         ws = Study(w[], out_path, true, m.mesh_kind, m.per)
         try
             columns = Dict{String,Any}(k => tbl[k] for k in params)
@@ -1091,13 +1091,13 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
             scalars = names(m, "scalars")
             for (name, id, output, req) in requests
                 record = get(outputs[id], output, nothing)
-                record === nothing && throw(MestraError("", "the model $id gave no output $output"))
+                record === nothing && throw(GamutError("", "the model $id gave no output $output"))
                 kind = req[2]
                 v = kind == "values" ? get(record, "values", nothing) :
                     kind == "std" ? get(record, "std", nothing) :
                     kind == "quantile" ? get(get(record, "quantiles", Dict()), req[3], nothing) :
                     get(get(record, "derivatives", Dict()), req[3], nothing)
-                v === nothing && throw(MestraError("", "the model $id gave no $kind for $output"))
+                v === nothing && throw(GamutError("", "the model $id gave no $kind for $output"))
                 if name in scalars
                     columns[name] = vec(v)
                 else
@@ -1109,7 +1109,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
                 pts = !isempty(get(coordinate, "model", "")) ?
                       outputs[coordinate["model"]][coordinate["output"]]["values"] :
                       coordinates !== nothing ? Float64.(coordinates) :
-                      throw(MestraError("E2", "this model file's geometry changes per run; give coordinates"))
+                      throw(GamutError("E2", "this model file's geometry changes per run; give coordinates"))
                 points = [pts[i, :, :] for i in 1:n]
             end
             add_runs!(ws, columns; fields, points)

@@ -43,10 +43,10 @@
   <path class="accent" d="M210 150 H262 M254 143 L263 150 L254 157"/>
 
   <!-- One file -->
-  <text class="ink h" x="290" y="28">One mestra file</text>
+  <text class="ink h" x="290" y="28">One Gamut file</text>
   <rect class="wash" x="290" y="44" width="450" height="232" rx="6"/>
   <rect class="accent" x="290" y="44" width="450" height="232" rx="6"/>
-  <text class="soft s" x="304" y="64">study.mes</text>
+  <text class="soft s" x="304" y="64">study.gamut</text>
 
   <!-- Run table -->
   <text class="ink" x="304" y="90">Run table</text>

@@ -1,6 +1,6 @@
 // The block (chunk) rule of spec section 11.4.
-#ifndef MESTRA_CORE_CHUNK_HPP
-#define MESTRA_CORE_CHUNK_HPP
+#ifndef GAMUT_CORE_CHUNK_HPP
+#define GAMUT_CORE_CHUNK_HPP
 
 #include <hdf5.h>
 
@@ -9,7 +9,7 @@
 
 #include "types.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 const std::size_t kChunkBytes = 262144;   // T
@@ -38,6 +38,6 @@ bool chunk_larger_than_default(const std::vector<hsize_t>& chunk,
                                const std::vector<hsize_t>& dflt);
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_CHUNK_HPP
+#endif  // GAMUT_CORE_CHUNK_HPP

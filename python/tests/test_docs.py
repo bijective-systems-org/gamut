@@ -25,8 +25,8 @@ def test_relative_links_resolve(page):
     for target in targets:
         # This repository's own absolute links (the README is also PyPI's
         # page, where relative ones break) are checked as local paths.
-        own = re.match(r"https://(?:github\.com/bijective-systems-org/mestra/(?:blob|tree)/main/|"
-                       r"raw\.githubusercontent\.com/bijective-systems-org/mestra/main/)(.+)", target)
+        own = re.match(r"https://(?:github\.com/bijective-systems-org/gamut/(?:blob|tree)/main/|"
+                       r"raw\.githubusercontent\.com/bijective-systems-org/gamut/main/)(.+)", target)
         if own:
             path = (ROOT / own.group(1).split("#")[0]).resolve()
             assert path.exists(), f"{page.relative_to(ROOT)} links to {target}, which does not exist"

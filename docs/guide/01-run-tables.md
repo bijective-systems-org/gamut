@@ -11,7 +11,7 @@ A file is created with everything it will hold declared up front: each
 name, its units and its role. Nothing is guessed later from the data.
 
 ```python
-with mestra.create("polar.mes", writer="example sweep",
+with gamut.create("polar.gamut", writer="example sweep",
                    parameters={"mach": {"units": "1", "role": "condition"},
                                "alpha": {"units": "degree", "role": "condition"}},
                    labels={"status": {"role": "status", "categories": ["converged", "failed"]}},
@@ -53,7 +53,7 @@ and the file is removed when it cannot.
 ## Reading
 
 ```python
-with mestra.open("polar.mes") as study:
+with gamut.open("polar.gamut") as study:
     print(study.row_count, "runs;", study.describe()["title"])
     print("lift at Mach 0.7:", study.get_scalar("cl", rows=study.select("mach == 0.7")).round(3))
     print("runs that failed:", study.select("status == failed"))
@@ -80,7 +80,7 @@ file says about a name, or about the file itself.
   ([combining files](09-combining-files.md)).
 - `study.table()` returns the whole run table as columns, labels as names,
   ready for `pandas.DataFrame`.
-- `mestra validate polar.mes` reports the failed run and its missing
+- `gamut validate polar.gamut` reports the failed run and its missing
   results as warnings, so whoever receives the file sees them without
   being told.
 

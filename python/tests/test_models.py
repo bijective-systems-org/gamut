@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import mestra
+import gamut
 
 
 def reference_nearest(x, lower, upper, q):
@@ -28,13 +28,13 @@ def reference_nearest(x, lower, upper, q):
 
 
 def test_nearest_model_file_and_evaluation(tmp_path):
-    mp = str(tmp_path / "cl_model.mes")
+    mp = str(tmp_path / "cl_model.gamut")
     pts = np.array([[0.0], [1.0], [2.0]])
     x = np.array([[0.3, 0.0], [0.6, 4.0], [0.3, 4.0], [0.6, 0.0]])
-    model = mestra.Nearest(["mach", "alpha"], [0.3, 0.0], [0.6, 4.0], x,
+    model = gamut.Nearest(["mach", "alpha"], [0.3, 0.0], [0.6, 4.0], x,
                            {"cl": [0.0, 0.5, 0.4, 0.1],
                             "p": [[1, 1, 1], [2, 2, 2], [3, 3, 3], [4, 4, 4]]})
-    with mestra.create_model(mp, writer="romlib", mesh="shared", per="fixed",
+    with gamut.create_model(mp, writer="romlib", mesh="shared", per="fixed",
                              coordinates={"units": "m", "axes": 1},
                              parameters={"mach": {"units": "1", "role": "condition", "lower": 0.3, "upper": 0.6},
                                          "alpha": {"units": "degree", "role": "condition", "lower": 0.0, "upper": 4.0}},
@@ -43,23 +43,23 @@ def test_nearest_model_file_and_evaluation(tmp_path):
                              trained_on=["0000-training-file"]) as f:
         f.set_mesh(pts)
         f.add_model("fit", model, inputs=["mach", "alpha"], repr="nearest of 4 runs")
-    assert mestra.validate(mp).findings == ()
-    with mestra.open(mp) as f:
+    assert gamut.validate(mp).findings == ()
+    with gamut.open(mp) as f:
         assert f.kind == "model" and f.row_count == 0
         assert f.describe("models/fit")["type"] == "nearest"
         assert f.describe()["trained_on"] == "0000-training-file"
         file_id = f.describe()["file_id"]
     inputs = {"mach": [0.31, 0.58, 0.45], "alpha": [3.9, 0.2, 2.0]}
-    out_path = str(tmp_path / "pred.mes")
-    with mestra.evaluate(mp, inputs, path=out_path) as pred:
+    out_path = str(tmp_path / "pred.gamut")
+    with gamut.evaluate(mp, inputs, path=out_path) as pred:
         idx = reference_nearest(x, [0.3, 0.0], [0.6, 4.0], np.column_stack(list(inputs.values())))
         np.testing.assert_array_equal(pred.get_scalar("cl"), np.array([0.0, 0.5, 0.4, 0.1])[idx])
         np.testing.assert_array_equal(pred.get_field("p")[:, 0], np.array([1, 2, 3, 4.0])[idx])
         assert pred.describe()["evaluated_from"] == file_id
         np.testing.assert_array_equal(pred.get_points(), pts)
-    assert mestra.validate(out_path).findings == ()
+    assert gamut.validate(out_path).findings == ()
     # In memory: a temporary file that disappears on close.
-    p = mestra.evaluate(mp, inputs)
+    p = gamut.evaluate(mp, inputs)
     path = p.path
     assert p.row_count == 3
     p.close()
@@ -71,7 +71,7 @@ def test_nearest_matches_the_written_out_rule_exactly():
     rng = np.random.default_rng(3)
     x = rng.random((200, 3))
     lower, upper = [0.0, 0.0, 0.5], [1.0, 1.0, 0.5]   # a fixed column is left out
-    m = mestra.Nearest(["a", "b", "c"], lower, upper, x, {"i": np.arange(200.0)})
+    m = gamut.Nearest(["a", "b", "c"], lower, upper, x, {"i": np.arange(200.0)})
     q = rng.random((300, 3))
     got = m.call({"a": q[:, 0], "b": q[:, 1], "c": q[:, 2]}, [("i", "values")])["i"]["values"]
     assert got.astype(int).tolist() == reference_nearest(x, lower, upper, q)
@@ -79,7 +79,7 @@ def test_nearest_matches_the_written_out_rule_exactly():
     assert np.isnan(nan[0])
 
 
-@mestra.register_model_type
+@gamut.register_model_type
 class Line:
     """A model type of a user's own: y = a * x + b with a constant spread."""
 
@@ -105,8 +105,8 @@ class Line:
 
 
 def test_plug_in_with_std_quantiles_and_derivatives(tmp_path):
-    mp = str(tmp_path / "line.mes")
-    with mestra.create_model(mp, writer="tests",
+    mp = str(tmp_path / "line.gamut")
+    with gamut.create_model(mp, writer="tests",
                              parameters={"x": {"units": "m", "lower": 0.0, "upper": 10.0}},
                              scalars={"y": {"units": "1", "model": "line", "output": "y"},
                                       "y_std": {"units": "1", "model": "line", "output": "y", "of": "y", "statistic": "std"},
@@ -115,9 +115,9 @@ def test_plug_in_with_std_quantiles_and_derivatives(tmp_path):
                                       "dy_dx": {"units": "m-1", "model": "line", "output": "y", "of": "y",
                                                 "with_respect_to": "x"}}) as f:
         f.add_model("line", Line(2.0, 1.0, 0.1), inputs=["x"])
-    assert mestra.validate(mp).findings == ()
+    assert gamut.validate(mp).findings == ()
     with pytest.warns(UserWarning, match="W4"):
-        pred = mestra.evaluate(mp, {"x": [1.0, 2.0, 11.0]})
+        pred = gamut.evaluate(mp, {"x": [1.0, 2.0, 11.0]})
     with pred:
         np.testing.assert_allclose(pred.get_scalar("y"), [3.0, 5.0, 23.0])
         np.testing.assert_allclose(pred.get_scalar("y_std"), [0.1] * 3)
@@ -127,17 +127,17 @@ def test_plug_in_with_std_quantiles_and_derivatives(tmp_path):
 
 
 def test_refusals(tmp_path):
-    mp = str(tmp_path / "bad.mes")
-    with pytest.raises(mestra.MestraError) as e:
-        mestra.create_model(mp, writer="t", parameters={"x": "m"})
+    mp = str(tmp_path / "bad.gamut")
+    with pytest.raises(gamut.GamutError) as e:
+        gamut.create_model(mp, writer="t", parameters={"x": "m"})
     assert e.value.rule == "E16"
-    with pytest.raises(mestra.MestraError) as e:
-        with mestra.create_model(mp, writer="t", parameters={"x": {"units": "m", "lower": 0, "upper": 1}},
+    with pytest.raises(gamut.GamutError) as e:
+        with gamut.create_model(mp, writer="t", parameters={"x": {"units": "m", "lower": 0, "upper": 1}},
                                  scalars={"y": {"units": "1", "model": "missing", "output": "y"}}):
             pass
     assert e.value.rule in ("E16", "E17")
     # A model whose software is not registered can be read but not evaluated.
-    mp2 = str(tmp_path / "foreign.mes")
+    mp2 = str(tmp_path / "foreign.gamut")
 
     class Foreign:
         type = "elsewhere.secret"
@@ -145,15 +145,15 @@ def test_refusals(tmp_path):
         def save(self):
             return {"w": np.zeros(3)}
 
-    with mestra.create_model(mp2, writer="t", parameters={"x": {"units": "m", "lower": 0, "upper": 1}},
+    with gamut.create_model(mp2, writer="t", parameters={"x": {"units": "m", "lower": 0, "upper": 1}},
                              scalars={"y": {"units": "1", "model": "m", "output": "y"}}) as f:
         f.add_model("m", Foreign(), inputs=["x"])
-    with pytest.raises(mestra.MestraError, match="not registered"):
-        mestra.evaluate(mp2, {"x": [0.5]})
+    with pytest.raises(gamut.GamutError, match="not registered"):
+        gamut.evaluate(mp2, {"x": [0.5]})
     # A nearest model whose bounds differ from its parameters' is refused.
-    mp3 = str(tmp_path / "bounds.mes")
-    with pytest.raises(mestra.MestraError) as e:
-        with mestra.create_model(mp3, writer="t", parameters={"x": {"units": "m", "lower": 0, "upper": 1}},
+    mp3 = str(tmp_path / "bounds.gamut")
+    with pytest.raises(gamut.GamutError) as e:
+        with gamut.create_model(mp3, writer="t", parameters={"x": {"units": "m", "lower": 0, "upper": 1}},
                                  scalars={"y": {"units": "1", "model": "n", "output": "y"}}) as f:
-            f.add_model("n", mestra.Nearest(["x"], [0.0], [2.0], [[0.0]], {"y": [1.0]}), inputs=["x"])
+            f.add_model("n", gamut.Nearest(["x"], [0.0], [2.0], [[0.0]], {"y": [1.0]}), inputs=["x"])
     assert e.value.rule == "E17"

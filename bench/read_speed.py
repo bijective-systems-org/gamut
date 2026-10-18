@@ -1,7 +1,7 @@
 """Read and write speed of the core on a study shaped like the scale study's
 large case: 128 runs of 262,144 nodes, five float32 fields per run.
 
-    MESTRA_LIBRARY=build-release/libmestra.dylib \\
+    GAMUT_LIBRARY=build-release/libgamut.dylib \\
         python bench/read_speed.py /path/to/scratch [--keep]
 
 Prints one JSON document.  Reads are warm (the file is in the page cache
@@ -19,7 +19,7 @@ import time
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
-import mestra  # noqa: E402
+import gamut  # noqa: E402
 
 RUNS, NODES, FIELDS = 128, 262_144, ("p", "t", "u", "v", "w")
 
@@ -44,11 +44,11 @@ def timed(fn, repeat=5):
 def main() -> None:
     scratch = sys.argv[1]
     keep = "--keep" in sys.argv
-    path = os.path.join(scratch, "bench_shared.mes")
+    path = os.path.join(scratch, "bench_shared.gamut")
     x = np.linspace(0, 20, NODES)
     pts = np.stack([x, np.zeros(NODES), np.zeros(NODES)], axis=1)
     t0 = time.perf_counter()
-    with mestra.create(path, writer="bench", mesh="shared", per="fixed",
+    with gamut.create(path, writer="bench", mesh="shared", per="fixed",
                        coordinates={"units": "m", "axes": 3},
                        parameters={"mach": {"units": "1", "role": "condition"}},
                        fields={f: {"units": "1", "at": "node"} for f in FIELDS}) as s:
@@ -64,7 +64,7 @@ def main() -> None:
 
     result = {"runs": RUNS, "nodes": NODES, "fields": len(FIELDS),
               "raw_bytes": raw, "file_bytes": size, "write_s": round(write_s, 3)}
-    with mestra.open(path) as f:
+    with gamut.open(path) as f:
         one, _ = timed(lambda: [f.get_field(n, rows=64) for n in FIELDS])
         region = slice(100_000, 100_000 + NODES // 100)
         reg, _ = timed(lambda: [f.get_field(n, nodes=region) for n in FIELDS])

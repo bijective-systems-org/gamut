@@ -1,4 +1,4 @@
 {
-  global: mes_*;
+  global: gamut_*;
   local: *;
 };

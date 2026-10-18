@@ -9,7 +9,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from . import _lib, _units
-from ._lib import MestraError, Selection, b, call
+from ._lib import GamutError, Selection, b, call
 
 
 def _same_geometry(a: tuple, b_: tuple) -> bool:
@@ -30,7 +30,7 @@ def _same_geometry(a: tuple, b_: tuple) -> bool:
 def _one_row(row: Any) -> list[int]:
     """One row position, as the one-element list the core reads."""
     if isinstance(row, (bool, np.bool_)) or not isinstance(row, (int, np.integer)):
-        raise MestraError("", f"row: one integer position; got {row!r}")
+        raise GamutError("", f"row: one integer position; got {row!r}")
     return [int(row)]
 
 
@@ -44,19 +44,19 @@ def _spec(value: Any, key: str) -> dict:
 def _axes(coordinates: Mapping[str, Any] | None) -> int:
     value = (coordinates or {}).get("axes", 3)
     if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
-        raise MestraError("E24", f"coordinates: axes is 1, 2 or 3, not {value!r}")
+        raise GamutError("E24", f"coordinates: axes is 1, 2 or 3, not {value!r}")
     return int(value)
 
 
 def _precision(value: Any) -> int:
     if value is None:
-        return _lib.MES_AS_GIVEN
-    table = {"float32": _lib.MES_FLOAT32, "float64": _lib.MES_FLOAT64,
-             "int64": _lib.MES_INT64}
+        return _lib.GAMUT_AS_GIVEN
+    table = {"float32": _lib.GAMUT_FLOAT32, "float64": _lib.GAMUT_FLOAT64,
+             "int64": _lib.GAMUT_INT64}
     try:
         return table[str(np.dtype(value)) if not isinstance(value, str) else value]
     except (KeyError, TypeError):
-        raise MestraError("E4", f"precision {value!r} is not float32, float64 or int64") from None
+        raise GamutError("E4", f"precision {value!r} is not float32, float64 or int64") from None
 
 
 class Study:
@@ -86,7 +86,7 @@ class Study:
         """Finishes the file.  A refused close (a shared mesh never set, a
         model file without a model) keeps it open to fix and close again."""
         if self._h is not None:
-            call("mes_close", self._h)
+            call("gamut_close", self._h)
             self._h = None
 
     def _abandon(self, remove: bool) -> None:
@@ -94,7 +94,7 @@ class Study:
         file this handle created.  For giving up after an error."""
         if self._h is not None:
             h, self._h = self._h, None
-            _lib._lib.mes_abandon(h, int(remove))
+            _lib._lib.gamut_abandon(h, int(remove))
 
     def __enter__(self) -> "Study":
         return self
@@ -105,7 +105,7 @@ class Study:
             # cannot be finished is discarded, and the refusal raised.
             try:
                 self.close()
-            except MestraError:
+            except GamutError:
                 self._abandon(remove=True)
                 raise
             return
@@ -113,7 +113,7 @@ class Study:
         # discard a file this study created; the first error stands.
         try:
             self.close()
-        except MestraError:
+        except GamutError:
             self._abandon(remove=True)
 
     def __del__(self) -> None:
@@ -127,18 +127,18 @@ class Study:
 
     def _handle(self) -> ctypes.c_void_p:
         if self._h is None:
-            raise MestraError("", f"{self.path} is closed")
+            raise GamutError("", f"{self.path} is closed")
         return self._h
 
     def _need_writer(self) -> None:
         if not self._writing:
-            raise MestraError("", f"{self.path} was opened to read; add runs to a file "
-                                  "from mestra.create or mestra.open(path, mode='a')")
+            raise GamutError("", f"{self.path} was opened to read; add runs to a file "
+                                  "from gamut.create or gamut.open(path, mode='a')")
 
     def _need_reader(self) -> None:
         if self._writing:
-            raise MestraError("", f"{self.path} is open to write; close it and open it "
-                                  "with mestra.open to read")
+            raise GamutError("", f"{self.path} is open to write; close it and open it "
+                                  "with gamut.open to read")
 
     # --- writing ----------------------------------------------------------
 
@@ -149,14 +149,14 @@ class Study:
         coordinates come with the runs, give `n_nodes` instead of points."""
         self._need_writer()
         h = self._handle()
-        call("mes_geometry_begin", h)
+        call("gamut_geometry_begin", h)
         if points is None:
             if n_nodes is None:
-                raise MestraError("", "give the points, or n_nodes when the coordinates "
+                raise GamutError("", "give the points, or n_nodes when the coordinates "
                                       "come with the runs")
-            call("mes_geometry_points", h, _lib.MES_FLOAT64, None, int(n_nodes), self._axes)
+            call("gamut_geometry_points", h, _lib.GAMUT_FLOAT64, None, int(n_nodes), self._axes)
         self._stage_geometry(points, cells, labels or {}, nodes_hint=n_nodes)
-        call("mes_set_mesh", h)
+        call("gamut_set_mesh", h)
 
     def _stage_geometry(self, points: Any, cells: Any, labels: Mapping[str, Any],
                         nodes_hint: int | None) -> None:
@@ -164,21 +164,21 @@ class Study:
         if points is not None:
             pts = _lib.as_array(points)
             if pts.ndim != 2:
-                raise MestraError("E5", "points are nodes x axes")
-            call("mes_geometry_points", h, _lib.dtype_code(pts), pts.ctypes.data_as(ctypes.c_void_p),
+                raise GamutError("E5", "points are nodes x axes")
+            call("gamut_geometry_points", h, _lib.dtype_code(pts), pts.ctypes.data_as(ctypes.c_void_p),
                  pts.shape[0], pts.shape[1])
         elif nodes_hint is None and cells is not None:
-            raise MestraError("", "give the points, or n_nodes through points of the right shape")
+            raise GamutError("", "give the points, or n_nodes through points of the right shape")
         if cells is not None:
             types, offsets, conn = cells
             t = np.ascontiguousarray(np.asarray(types, dtype=np.uint8))
             o = np.ascontiguousarray(np.asarray(offsets, dtype=np.int64))
             c = np.ascontiguousarray(np.asarray(conn, dtype=np.int64))
-            call("mes_geometry_cells", h, t.ctypes.data_as(ctypes.c_void_p), len(t),
+            call("gamut_geometry_cells", h, t.ctypes.data_as(ctypes.c_void_p), len(t),
                  o.ctypes.data_as(ctypes.c_void_p), c.ctypes.data_as(ctypes.c_void_p), len(c))
         for name, values in labels.items():
             v = np.ascontiguousarray(np.asarray(values, dtype=np.int64))
-            call("mes_geometry_label", h, b(name), v.ctypes.data_as(ctypes.c_void_p), len(v))
+            call("gamut_geometry_label", h, b(name), v.ctypes.data_as(ctypes.c_void_p), len(v))
 
     def add_run(self, values: Mapping[str, Any], *, fields: Mapping[str, Any] | None = None,
                 points: Any = None, cells: Any = None,
@@ -197,7 +197,7 @@ class Study:
         if isinstance(value, tuple) and len(value) == 2 and isinstance(value[1], str):
             target = self._declared_units.get(name)
             if target is None:
-                raise MestraError("", f"{name} has no declared units to convert to")
+                raise GamutError("", f"{name} has no declared units to convert to")
             return float(_units.convert(value[0], value[1], target))
         return value
 
@@ -210,7 +210,7 @@ class Study:
         group member) when the geometry changes."""
         lengths = {len(v) if _lib.iterable(v) else 1 for v in columns.values()}
         if len(lengths) != 1:
-            raise MestraError("E5", "every column needs the same number of runs")
+            raise GamutError("E5", "every column needs the same number of runs")
         return self._commit(lengths.pop(), dict(columns), dict(fields or {}), points, cells,
                             mesh_labels)
 
@@ -219,7 +219,7 @@ class Study:
                 mesh_labels: Sequence[Mapping[str, Any]] | None) -> list[int]:
         self._need_writer()
         h = self._handle()
-        call("mes_batch_begin", h, n)
+        call("gamut_batch_begin", h, n)
         keep = []
         group_names: list[str] | None = None
         for name, vals in columns.items():
@@ -232,18 +232,18 @@ class Study:
             if arr.dtype.kind in "US" or arr.dtype == object or arr.dtype == np.bool_:
                 names = ["true" if x is True or x is np.True_ else
                          "false" if x is False or x is np.False_ else str(x) for x in arr.tolist()]
-                call("mes_batch_names", h, b(name), _lib.string_array(names), len(names))
+                call("gamut_batch_names", h, b(name), _lib.string_array(names), len(names))
                 if name == self._group:
                     group_names = names
                 continue
             a = _lib.as_array(arr).ravel()
             keep.append(a)
-            call("mes_batch_values", h, b(name), _lib.dtype_code(a), a.ctypes.data_as(ctypes.c_void_p),
+            call("gamut_batch_values", h, b(name), _lib.dtype_code(a), a.ctypes.data_as(ctypes.c_void_p),
                  a.size)
         for name, vals in fields.items():
             a = _lib.as_array(vals).ravel()
             keep.append(a)
-            call("mes_batch_values", h, b(name), _lib.dtype_code(a), a.ctypes.data_as(ctypes.c_void_p),
+            call("gamut_batch_values", h, b(name), _lib.dtype_code(a), a.ctypes.data_as(ctypes.c_void_p),
                  a.size)
         if points is not None:
             points = list(points)
@@ -254,7 +254,7 @@ class Study:
                 # keyed by the member's name.  A repeat must be the same
                 # geometry; a different one is refused, not dropped.
                 if group_names is None:
-                    raise MestraError("E2", f"give {self._group} by name so geometry can be "
+                    raise GamutError("E2", f"give {self._group} by name so geometry can be "
                                             "matched to members")
                 first: dict[str, int] = {}
                 for i, member in enumerate(group_names):
@@ -264,28 +264,28 @@ class Study:
                         j = first[member]
                         if not _same_geometry((points[i], cells[i], mesh_labels[i]),
                                               (points[j], cells[j], mesh_labels[j])):
-                            raise MestraError("", f"{self._group} \"{member}\" is given two "
+                            raise GamutError("", f"{self._group} \"{member}\" is given two "
                                                   f"different geometries in one batch (runs {j} "
                                                   f"and {i})", self._group)
                         continue
                     first[member] = i
-                    call("mes_geometry_begin", h)
+                    call("gamut_geometry_begin", h)
                     self._stage_geometry(points[i], cells[i], mesh_labels[i] or {}, None)
-                    call("mes_batch_geometry_for_member", h, b(member))
+                    call("gamut_batch_geometry_for_member", h, b(member))
             else:
                 for i in range(len(points)):
-                    call("mes_geometry_begin", h)
+                    call("gamut_geometry_begin", h)
                     self._stage_geometry(points[i], cells[i], mesh_labels[i] or {}, None)
-                    call("mes_batch_geometry_for_row", h)
+                    call("gamut_batch_geometry_for_row", h)
         first = ctypes.c_int64()
-        call("mes_batch_commit", h, ctypes.byref(first))
+        call("gamut_batch_commit", h, ctypes.byref(first))
         del keep
         return list(range(first.value, first.value + n))
 
     # --- reading ------------------------------------------------------------
 
     def _info(self, key: str) -> str:
-        values = _lib.strings_out("mes_info", self._handle(), b(key))
+        values = _lib.strings_out("gamut_info", self._handle(), b(key))
         return values[0] if values else ""
 
     @property
@@ -301,7 +301,7 @@ class Study:
     @property
     def addons(self) -> list[str]:
         self._need_reader()
-        return _lib.strings_out("mes_info", self._handle(), b("addons"))
+        return _lib.strings_out("gamut_info", self._handle(), b("addons"))
 
     @property
     def row_count(self) -> int:
@@ -312,7 +312,7 @@ class Study:
 
     def names(self, group: str) -> list[str]:
         self._need_reader()
-        return _lib.strings_out("mes_names", self._handle(), b(group))
+        return _lib.strings_out("gamut_names", self._handle(), b(group))
 
     def describe(self, name: str | None = None) -> dict[str, str]:
         """A concept's attributes as text, or with no name the file's own."""
@@ -320,7 +320,7 @@ class Study:
         key = name or ""
         cached = self._described.get(key)
         if cached is None:
-            keys, values = _lib.two_strings_out("mes_describe", self._handle(), b(key))
+            keys, values = _lib.two_strings_out("gamut_describe", self._handle(), b(key))
             cached = self._described[key] = dict(zip(keys, values))
         return dict(cached)
 
@@ -343,7 +343,7 @@ class Study:
         shape = (ctypes.c_int64 * 4)()
         rank = ctypes.c_int()
         all_sites = Selection(None, "sites")
-        call("mes_shape", self._handle(), b(name), rows.pointer(), all_sites.pointer(), shape,
+        call("gamut_shape", self._handle(), b(name), rows.pointer(), all_sites.pointer(), shape,
              ctypes.byref(rank))
         dims = [shape[i] for i in range(rank.value)]
         if name == "coordinates":
@@ -363,7 +363,7 @@ class Study:
         self._need_reader()
         r = Selection(rows, "rows")
         r.resolve(self.row_count)
-        out = np.array(_lib.strings_out("mes_label_names", self._handle(), b(name), r.pointer()),
+        out = np.array(_lib.strings_out("gamut_label_names", self._handle(), b(name), r.pointer()),
                        dtype=str)
         return out[0] if r.single else out
 
@@ -387,7 +387,7 @@ class Study:
 
     def get_points(self, row: int | None = None, units: str | None = None) -> np.ndarray:
         if row is None and self._per not in ("fixed",):
-            raise MestraError("", "this mesh's geometry changes; give the row")
+            raise GamutError("", "this mesh's geometry changes; give the row")
         rows = None if row is None else _one_row(row)
         out = self._get("coordinates", rows, dtype=self._coordinate_dtype(), squeeze_row=False)
         if row is not None and self._mesh_kind == "shared":
@@ -400,7 +400,7 @@ class Study:
         if self._mesh_kind == "changing":
             one = isinstance(rows, (list, tuple, np.ndarray)) and len(rows) == 1
             if not one and (rows is None or _lib.iterable(rows) or isinstance(rows, slice)):
-                raise MestraError("", f"{name}: a changing mesh is read one row at a time; "
+                raise GamutError("", f"{name}: a changing mesh is read one row at a time; "
                                       "reads across rows need a shared mesh")
             rows = list(rows) if one else _one_row(rows)
         # A changing mesh's field has no row axis (one row at a time).
@@ -416,8 +416,8 @@ class Study:
         """The category table of a label or mesh label: code c names entry c."""
         table = self.describe(name).get("category")
         if not table:
-            raise MestraError("", f"{name} has no category table; its codes are its values")
-        return _lib.strings_out("mes_table", self._handle(), b(table))
+            raise GamutError("", f"{name} has no category table; its codes are its values")
+        return _lib.strings_out("gamut_table", self._handle(), b(table))
 
     def table(self, names: Sequence[str] | None = None, rows: Any = None) -> dict[str, np.ndarray]:
         """The run table as columns: parameters, labels (as names), scalars."""
@@ -446,14 +446,14 @@ class Study:
             return _NotesWriter(self)
         keys, kinds, values = [], [], []
         k, t, v = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
-        call("mes_notes", self._handle(), ctypes.byref(k), ctypes.byref(t), ctypes.byref(v))
+        call("gamut_notes", self._handle(), ctypes.byref(k), ctypes.byref(t), ctypes.byref(v))
         try:
             for h, dst in ((k, keys), (t, kinds), (v, values)):
-                for i in range(_lib._lib.mes_strings_count(h)):
-                    dst.append(_lib._lib.mes_strings_get(h, i).decode("utf-8"))
+                for i in range(_lib._lib.gamut_strings_count(h)):
+                    dst.append(_lib._lib.gamut_strings_get(h, i).decode("utf-8"))
         finally:
             for h in (k, t, v):
-                _lib._lib.mes_strings_free(h)
+                _lib._lib.gamut_strings_free(h)
         cast = {"int": int, "float": float, "bool": lambda x: x == "1", "text": str}
         return {key: cast[kind](val) for key, kind, val in zip(keys, kinds, values)}
 
@@ -461,18 +461,18 @@ class Study:
         """A producer's own record: bytes no other reader interprets."""
         self._need_writer()
         buf = bytes(data)
-        call("mes_set_private", self._handle(), b(name), buf, len(buf))
+        call("gamut_set_private", self._handle(), b(name), buf, len(buf))
 
     def private_names(self) -> list[str]:
         self._need_reader()
-        return _lib.strings_out("mes_private_names", self._handle())
+        return _lib.strings_out("gamut_private_names", self._handle())
 
     def get_private(self, name: str) -> bytes:
         self._need_reader()
         n = ctypes.c_int64()
-        call("mes_get_private", self._handle(), b(name), None, 0, ctypes.byref(n))
+        call("gamut_get_private", self._handle(), b(name), None, 0, ctypes.byref(n))
         out = ctypes.create_string_buffer(max(n.value, 1))
-        call("mes_get_private", self._handle(), b(name), out, n.value, ctypes.byref(n))
+        call("gamut_get_private", self._handle(), b(name), out, n.value, ctypes.byref(n))
         return out.raw[: n.value]
 
     def _in_units(self, name: str, values: np.ndarray, units: str | None) -> np.ndarray:
@@ -487,7 +487,7 @@ class Study:
         self._need_reader()
         out = np.empty(max(self.row_count, 1), dtype=np.int64)
         n = ctypes.c_int64()
-        call("mes_select", self._handle(), b(where), out.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
+        call("gamut_select", self._handle(), b(where), out.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
              out.size, ctypes.byref(n))
         return out[: n.value].copy()
 
@@ -530,13 +530,13 @@ class _NotesWriter:
     def __setitem__(self, key: str, value: Any) -> None:
         h = self._study._handle()
         if isinstance(value, bool) or isinstance(value, (int, np.integer)):
-            call("mes_set_note_int", h, b(key), int(value))
+            call("gamut_set_note_int", h, b(key), int(value))
         elif isinstance(value, (float, np.floating)):
-            call("mes_set_note_float", h, b(key), float(value))
+            call("gamut_set_note_float", h, b(key), float(value))
         elif isinstance(value, str):
-            call("mes_set_note_text", h, b(key), b(value))
+            call("gamut_set_note_text", h, b(key), b(value))
         else:
-            raise MestraError("", f"a note is text, an integer or a float, not {type(value).__name__}")
+            raise GamutError("", f"a note is text, an integer or a float, not {type(value).__name__}")
 
 
 def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = None,
@@ -550,10 +550,10 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
            compression: bool = True) -> Study:
     """Creates a data file and returns it open to add runs."""
     if mesh is not None and per is None:
-        raise MestraError("E6", "a mesh needs per: 'fixed', 'run' or 'group:<label>'")
+        raise GamutError("E6", "a mesh needs per: 'fixed', 'run' or 'group:<label>'")
     axes = _axes(coordinates)        # before the file exists: a refusal leaves none
     handle = ctypes.c_void_p()
-    call("mes_create", b(path), b(writer), b(mesh or ""), b(per or "fixed"), ctypes.byref(handle))
+    call("gamut_create", b(path), b(writer), b(mesh or ""), b(per or "fixed"), ctypes.byref(handle))
     study = Study(handle, path, writing=True)
     study._mesh_kind = mesh or ""
     study._per = per or ""
@@ -566,11 +566,11 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
         precision = dict(precision or {})
         round_bits = dict(round_bits or {})
         if not compression:
-            call("mes_set_compression", handle, 0, 0)
+            call("gamut_set_compression", handle, 0, 0)
         for key, value in (("title", title), ("license", license),
                            ("references", references), ("source", source)):
             if value is not None:
-                call("mes_set_attribute", handle, b(key), b(value))
+                call("gamut_set_attribute", handle, b(key), b(value))
         for name, value in (labels or {}).items():
             if value is bool:
                 spec = {"role": "categorical", "categories": ["false", "true"]}
@@ -579,28 +579,28 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
             else:
                 spec = dict(value)
             cats = list(spec.get("categories", []))
-            call("mes_declare_label", handle, b(name), b(spec.get("role", "categorical")),
+            call("gamut_declare_label", handle, b(name), b(spec.get("role", "categorical")),
                  _lib.string_array(cats), len(cats))
         for name, value in (parameters or {}).items():
             spec = _spec(value, "units")
             has = "lower" in spec or "upper" in spec
-            call("mes_declare_parameter", handle, b(name), b(spec.get("role", "design")),
+            call("gamut_declare_parameter", handle, b(name), b(spec.get("role", "design")),
                  b(spec.get("units")), _precision(precision.get(name, spec.get("dtype"))),
                  1 if has else 0, float(spec.get("lower", 0.0)), float(spec.get("upper", 0.0)),
                  b(spec.get("run_group", "")))
         if coordinates is not None:
-            call("mes_declare_coordinates", handle, b(coordinates.get("units")),
+            call("gamut_declare_coordinates", handle, b(coordinates.get("units")),
                  _precision(coordinates.get("precision")), int(coordinates.get("axes", 3)),
                  b(coordinates.get("model", "")), b(coordinates.get("output", "")))
         for name, value in (mesh_labels or {}).items():
             spec = dict(value)
             cats = list(spec.get("categories", []))
-            call("mes_declare_mesh_label", handle, b(name), b(spec.get("at", "cell")),
+            call("gamut_declare_mesh_label", handle, b(name), b(spec.get("at", "cell")),
                  _lib.string_array(cats), len(cats))
 
         def declare(name: str, spec: dict, where: str) -> None:
             q = spec.get("q")
-            call("mes_declare_result", handle, b(name), b(where), b(spec.get("units")),
+            call("gamut_declare_result", handle, b(name), b(where), b(spec.get("units")),
                  _precision(precision.get(name, spec.get("precision"))),
                  b(spec.get("of", "")), b(spec.get("statistic", "")), 0 if q is None else 1,
                  float(q or 0.0), b(spec.get("method", "")), b(spec.get("with_respect_to", "")),
@@ -614,15 +614,15 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
             spec = _spec(value, "units")
             declare(name, spec, spec.get("at", "node"))
         if generalisation_group is not None:
-            call("mes_set_generalisation_group", handle, b(generalisation_group))
+            call("gamut_set_generalisation_group", handle, b(generalisation_group))
         for name, value in (constants or {}).items():
             number, units = value
             if isinstance(number, np.float32):
-                call("mes_set_constant", handle, b(name), b(units), _lib.MES_FLOAT32, float(number), 0)
+                call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_FLOAT32, float(number), 0)
             elif isinstance(number, (int, np.integer)) and not isinstance(number, bool):
-                call("mes_set_constant", handle, b(name), b(units), _lib.MES_INT64, 0.0, int(number))
+                call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_INT64, 0.0, int(number))
             else:
-                call("mes_set_constant", handle, b(name), b(units), _lib.MES_FLOAT64, float(number), 0)
+                call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_FLOAT64, float(number), 0)
     except BaseException:
         # A half-declared file is not wanted; the declaration error stands.
         study._abandon(remove=True)
@@ -635,9 +635,9 @@ def open(path: str, mode: str = "r", threads: int = 1) -> Study:  # noqa: A001
     `threads` decompresses field reads in that many threads."""
     handle = ctypes.c_void_p()
     if mode == "r":
-        call("mes_open", b(path), ctypes.byref(handle))
+        call("gamut_open", b(path), ctypes.byref(handle))
         if threads != 1:
-            call("mes_set_threads", handle, int(threads))
+            call("gamut_set_threads", handle, int(threads))
         return Study(handle, path, writing=False)
     if mode == "a":
         reader = open(path, "r")
@@ -645,10 +645,10 @@ def open(path: str, mode: str = "r", threads: int = 1) -> Study:  # noqa: A001
         declared = {n: reader.describe(n).get("units", "")
                     for n in reader.names("parameters") + reader.names("scalars")}
         reader.close()
-        call("mes_open_append", b(path), ctypes.byref(handle))
+        call("gamut_open_append", b(path), ctypes.byref(handle))
         study = Study(handle, path, writing=True)
         study._mesh_kind, study._per = kind, per
         study._group = per[6:] if per.startswith("group:") else None
         study._declared_units = declared
         return study
-    raise MestraError("", f"mode {mode!r} is 'r' or 'a'")
+    raise GamutError("", f"mode {mode!r} is 'r' or 'a'")

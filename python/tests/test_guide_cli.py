@@ -1,4 +1,4 @@
-"""The command-line page of the guide runs as written: every `$ mestra`
+"""The command-line page of the guide runs as written: every `$ gamut`
 line gives the output shown under it (`...` stands for text that varies,
 such as a file's size), and every document it shows is the one in
 examples/cli."""
@@ -16,7 +16,7 @@ import sys
 import pytest
 
 from _pages import EXAMPLES, GUIDE, ROOT, blocks
-from mestra import cli
+from gamut import cli
 
 PAGE = GUIDE / "11-command-line.md"
 DOCUMENTS = EXAMPLES / "cli"
@@ -42,8 +42,8 @@ def _matches(expected: str, got: str) -> bool:
 def test_the_command_line_page_runs(tmp_path, capsys, monkeypatch):
     env = dict(os.environ)
     package = pathlib.Path(__file__).resolve().parents[1]
-    import mestra
-    if pathlib.Path(mestra.__file__).resolve().is_relative_to(package):
+    import gamut
+    if pathlib.Path(gamut.__file__).resolve().is_relative_to(package):
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(package), env.get("PYTHONPATH")]))
     for script in ("01_run_table.py", "02_one_mesh.py"):
         subprocess.run([sys.executable, str(ROOT / "examples" / script)], cwd=tmp_path, env=env,
@@ -62,7 +62,7 @@ def test_the_command_line_page_runs(tmp_path, capsys, monkeypatch):
     assert steps, "the page has sessions"
     for command, expected in steps:
         argv = shlex.split(command)
-        assert argv[0] == "mestra", command
+        assert argv[0] == "gamut", command
         cli.main(argv[1:])
         got = capsys.readouterr().out.rstrip("\n").split("\n")
         assert len(got) == len(expected) and all(map(_matches, expected, got)), \

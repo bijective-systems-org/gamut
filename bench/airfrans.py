@@ -1,5 +1,5 @@
 """A subset of AirfRANS, a public set of 2-D RANS runs around airfoils, as a
-folder of VTK runs ready for `mestra-vtk import`.
+folder of VTK runs ready for `gamut-vtk import`.
 
     python bench/airfrans.py FOLDER [--runs 100]
 

@@ -4,7 +4,7 @@
 
 #include "types.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace {
 
 const std::uint32_t kK[64] = {
@@ -147,4 +147,4 @@ std::string sha256_hex(const std::string& data) {
   return sha256_hex(data.data(), data.size());
 }
 
-}  // namespace mestra
+}  // namespace gamut

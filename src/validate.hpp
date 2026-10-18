@@ -1,12 +1,12 @@
 // The validator of spec section 16: every rule it can decide, from the file
 // alone, reported with a concept path and a sentence saying what to do.
-#ifndef MESTRA_CORE_VALIDATE_HPP
-#define MESTRA_CORE_VALIDATE_HPP
+#ifndef GAMUT_CORE_VALIDATE_HPP
+#define GAMUT_CORE_VALIDATE_HPP
 
 #include <string>
 #include <vector>
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 struct Finding {
@@ -33,6 +33,6 @@ Report validate_file(const std::string& path);
 const std::size_t kMaxCheckElements = std::size_t(1) << 26;
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_VALIDATE_HPP
+#endif  // GAMUT_CORE_VALIDATE_HPP

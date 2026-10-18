@@ -21,7 +21,7 @@ about the rest.
   packaged core loads no HDF5 filter plugins; the format allows only gzip
   and shuffle, which HDF5 has built in, and a file naming another filter
   is refused.
-- **Everything is reported, nothing is assumed.** `mestra validate` reports
+- **Everything is reported, nothing is assumed.** `gamut validate` reports
   every rule a file breaks, with where and why. A read a reader cannot
   carry out safely is refused with the rule and the path of what it
   concerns, never answered with a guess.
@@ -43,7 +43,7 @@ which any of the reads in the [guide](guide/08-reading-parts.md) does. The
 [corpus](../corpus) holds hostile files built to cross each limit, and
 every language is tested against them. Below the limits, validating takes
 time in proportion to what a file declares: a small file that declares two
-billion cells keeps `mestra validate` busy for about a minute before it
+billion cells keeps `gamut validate` busy for about a minute before it
 reports what is wrong.
 
 ## What it does not protect against
@@ -61,7 +61,7 @@ It has been reported to the HDF Group.
 
 So for a file nobody vouches for, the process boundary is the defence:
 
-- check it with `mestra validate FILE` (or `mestra info`) in a child
+- check it with `gamut validate FILE` (or `gamut info`) in a child
   process with a time limit, before opening it in a long-running program;
 - in a service that opens files from users, read in a worker process it
   can kill.
@@ -71,5 +71,5 @@ So for a file nobody vouches for, the process boundary is the defence:
 A file that crashes or hangs a reader outside HDF5, or that a reader
 accepts against the [specification](../SPEC.md), is a bug. Please report it
 privately through GitHub's
-[vulnerability reporting](https://github.com/bijective-systems-org/mestra/security/advisories/new)
+[vulnerability reporting](https://github.com/bijective-systems-org/gamut/security/advisories/new)
 for this repository, with the file if you can share it.

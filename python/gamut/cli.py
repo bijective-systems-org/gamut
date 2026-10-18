@@ -1,10 +1,10 @@
-"""mestra: inspect, check, build and extract study files.
+"""gamut: inspect, check, build and extract study files.
 
-    mestra info FILE [--json]
-    mestra validate FILE [--json]
-    mestra build DOC.json -o FILE [--json]       mestra build --example
-    mestra append FILE DOC.json [--json]
-    mestra get FILE NAME... [--where EXPR] [--rows SEL] [--zone LABEL=NAME] -o OUT [--json]
+    gamut info FILE [--json]
+    gamut validate FILE [--json]
+    gamut build DOC.json -o FILE [--json]       gamut build --example
+    gamut append FILE DOC.json [--json]
+    gamut get FILE NAME... [--where EXPR] [--rows SEL] [--zone LABEL=NAME] -o OUT [--json]
 
 Readable text by default; `--json` prints one document of the shape given
 in each command's docstring, kept stable across versions for scripts and
@@ -25,9 +25,9 @@ from typing import Any
 import numpy as np
 
 from . import _lib
-from ._lib import MestraError
+from ._lib import GamutError
 from ._study import create, open as open_file
-from ._files import append as mestra_append, extract as mestra_extract
+from ._files import append as gamut_append, extract as gamut_extract
 from ._validate import validate
 
 
@@ -120,7 +120,7 @@ def _summary(path: str) -> dict:
         for name in f.names("labels"):
             l = f.describe(name)
             entry = {"name": name, "role": l.get("role")}
-            table = _lib.strings_out("mes_table", f._handle(), _lib.b(l.get("category", name)))
+            table = _lib.strings_out("gamut_table", f._handle(), _lib.b(l.get("category", name)))
             entry["categories"] = table
             if f.row_count:
                 # Counted from the codes a block at a time: no string per row.
@@ -384,7 +384,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         print(EXAMPLE_NOTES, file=sys.stderr)
         return 0
     if not args.document or not args.output:
-        print("mestra build DOC.json -o FILE (or mestra build --example)", file=sys.stderr)
+        print("gamut build DOC.json -o FILE (or gamut build --example)", file=sys.stderr)
         return 2
     with open(args.document) as fh:
         doc = json.load(fh)
@@ -417,7 +417,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     except Problems as e:
         _cleanup(args.output)
         return _report_problems(args, e.problems)
-    except MestraError as e:
+    except GamutError as e:
         _cleanup(args.output)
         return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
     _emit(args, {"wrote": args.output, "rows": n, "problems": []},
@@ -427,11 +427,11 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 def cmd_append(args: argparse.Namespace) -> int:
     """--json: {"appended": FILE, "rows": n, "problems": [{key, message}]}"""
-    if args.document.lower().endswith(".mes"):
+    if args.document.lower().endswith(".gamut"):
         # Every row of another study file.
         try:
-            n = mestra_append(args.file, args.document)
-        except MestraError as e:
+            n = gamut_append(args.file, args.document)
+        except GamutError as e:
             return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
         _emit(args, {"appended": args.file, "rows": n, "problems": []},
               f"appended {_counted(n, 'run')} from {args.document} to {args.file}")
@@ -450,7 +450,7 @@ def cmd_append(args: argparse.Namespace) -> int:
             n = _add_rows(study, doc, base, fields, labels)
     except Problems as e:
         return _report_problems(args, e.problems)
-    except MestraError as e:
+    except GamutError as e:
         return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
     _emit(args, {"appended": args.file, "rows": n, "problems": []},
           f"appended {_counted(n, 'run')} to {args.file}")
@@ -486,15 +486,15 @@ def _rows_arg(text: str | None) -> Any:
             return slice(int(a) if a else None, int(b) if b else None)
         return [int(x) for x in text.split(",")]
     except ValueError:
-        raise MestraError("", f"--rows takes positions (3 or 0,2,5) or a range (0:10), not "
+        raise GamutError("", f"--rows takes positions (3 or 0,2,5) or a range (0:10), not "
                               f"{text!r}") from None
 
 
 def _get_study(args: argparse.Namespace) -> int:
-    """get -o NAME.mes: the selected rows as a smaller study file, every name
-    kept (mestra.extract). --json: {"wrote": OUT, "rows": n}"""
+    """get -o NAME.gamut: the selected rows as a smaller study file, every name
+    kept (gamut.extract). --json: {"wrote": OUT, "rows": n}"""
     if args.names or args.zone:
-        raise MestraError("", "a smaller study file keeps every name and every node; give no "
+        raise GamutError("", "a smaller study file keeps every name and every node; give no "
                               "names and no --zone")
     with open_file(args.file) as f:
         rows = _rows_arg(args.rows)
@@ -503,7 +503,7 @@ def _get_study(args: argparse.Namespace) -> int:
             positions = positions[rows]
         if args.where:
             positions = np.intersect1d(f.select(args.where), positions)
-    mestra_extract(args.file, args.output, np.asarray(positions, dtype=np.int64))
+    gamut_extract(args.file, args.output, np.asarray(positions, dtype=np.int64))
     _emit(args, {"wrote": args.output, "rows": int(len(positions))},
           f"wrote {_counted(len(positions), 'run')} to {args.output}")
     return 0
@@ -514,10 +514,10 @@ def cmd_get(args: argparse.Namespace) -> int:
     "units": {name: units}}"""
     out = args.output
     ext = os.path.splitext(out)[1].lower()
-    if ext == ".mes":
+    if ext == ".gamut":
         return _get_study(args)
     if not args.names:
-        raise MestraError("", "name what to write (or write a smaller study file: -o NAME.mes)")
+        raise GamutError("", "name what to write (or write a smaller study file: -o NAME.gamut)")
     with open_file(args.file) as f:
         rows = _rows_arg(args.rows)
         if args.where:
@@ -535,12 +535,12 @@ def cmd_get(args: argparse.Namespace) -> int:
                 chosen_rows = np.arange(f.row_count)[rows] if rows is not None else \
                     np.arange(f.row_count)
                 if len(np.atleast_1d(chosen_rows)) != 1:
-                    raise MestraError("", "--zone on a changing mesh reads one row; give it "
+                    raise GamutError("", "--zone on a changing mesh reads one row; give it "
                                           "with --rows N")
                 codes = f.get_mesh_label(label, row=int(np.atleast_1d(chosen_rows)[0]))
             else:
                 codes = f.get_mesh_label(label)
-            table = _lib.strings_out("mes_table", f._handle(), _lib.b(d["category"])) \
+            table = _lib.strings_out("gamut_table", f._handle(), _lib.b(d["category"])) \
                 if d.get("category") else None
             want = table.index(value) if table else int(value)
             sites = np.flatnonzero(codes == want)
@@ -554,7 +554,7 @@ def cmd_get(args: argparse.Namespace) -> int:
             if name in fields:
                 at = f.describe(name).get("location")
                 if zone_at and at != zone_at:
-                    raise MestraError("", f"the zone {args.zone} marks {zone_at}s and {name} is at "
+                    raise GamutError("", f"the zone {args.zone} marks {zone_at}s and {name} is at "
                                           f"{at}s; choose a zone at {at}s")
                 data[name] = f.get_field(name, rows=rows, nodes=sites)
             elif name in labels:
@@ -602,10 +602,10 @@ def cmd_get(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="mestra", description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(prog="gamut", description=__doc__.split("\n\n")[0])
     from . import __version__, FORMAT
     parser.add_argument("--version", action="version",
-                        version=f"mestra {__version__} (files {FORMAT})")
+                        version=f"gamut {__version__} (files {FORMAT})")
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("info", help="describe a file")
     p.add_argument("file")
@@ -622,7 +622,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_build)
     p = sub.add_parser("append", help="add runs to a file in place, from a JSON document or "
-                                      "every row of another study file (.mes)")
+                                      "every row of another study file (.gamut)")
     p.add_argument("file")
     p.add_argument("document")
     p.add_argument("--json", action="store_true")
@@ -639,7 +639,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except MestraError as e:
+    except GamutError as e:
         if getattr(args, "json", False):
             print(json.dumps({"error": {"rule": e.rule, "path": e.path, "message": e.message}},
                              indent=1))

@@ -9,7 +9,7 @@ values of circulation.
 ## Writing
 
 ```python
-with mestra.create("cylinder.mes", writer="example sweep", mesh="shared", per="fixed",
+with gamut.create("cylinder.gamut", writer="example sweep", mesh="shared", per="fixed",
                    coordinates={"units": "m", "axes": 2},
                    parameters={"gamma": {"units": "m2 s-1", "role": "design"}},
                    mesh_labels={"surface": {"at": "node", "categories": ["field", "wall"]}},
@@ -40,7 +40,7 @@ study.add_run({"gamma": gamma}, fields={"cp": cp.ravel()})
 ## Reading
 
 ```python
-with mestra.open("cylinder.mes") as study:
+with gamut.open("cylinder.gamut") as study:
     print(study.type, "mesh,", study.row_count, "runs,", len(study.get_points()), "nodes")
     cp = study.get_field("cp")                             # runs x nodes
     print("cp block:", cp.shape)

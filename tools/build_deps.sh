@@ -7,7 +7,7 @@
 #   bash tools/build_deps.sh PREFIX [DOWNLOAD_DIR]
 #
 # then configure the core with
-#   -DMESTRA_STATIC_HDF5=ON -DHDF5_ROOT=PREFIX -DZLIB_ROOT=PREFIX
+#   -DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT=PREFIX -DZLIB_ROOT=PREFIX
 #
 # Needs cmake 3.20 or later and a C compiler; uses Ninja when present.
 # Sources are checked against their published SHA-256 before use.
@@ -19,7 +19,7 @@ mkdir -p "$prefix" "$downloads"
 # Absolute paths; on Windows (Git Bash) in the C:/... form CMake expects.
 prefix=$(cd "$prefix" && { pwd -W 2>/dev/null || pwd; })
 downloads=$(cd "$downloads" && { pwd -W 2>/dev/null || pwd; })
-jobs=${MESTRA_BUILD_JOBS:-2}
+jobs=${GAMUT_BUILD_JOBS:-2}
 
 generator=()
 if command -v ninja > /dev/null 2>&1 && [ "${OS:-}" != "Windows_NT" ]; then

@@ -11,7 +11,7 @@
 #include "validate.hpp"
 #include "writer.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 namespace {
@@ -473,4 +473,4 @@ void write_copy_file(const std::string& src, const std::string& dst) {
 }
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut

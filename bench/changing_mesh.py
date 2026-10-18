@@ -6,7 +6,7 @@ file.
 
 FOLDER holds one .vtu per run with parameters.csv and fields.csv, as
 bench/airfrans.py writes it. The formats: the folder itself, the folder
-zipped, one mestra file written by `mestra-vtk import`, and HDF5 written
+zipped, one Gamut file written by `gamut-vtk import`, and HDF5 written
 with h5py, a group per run. (netCDF and Zarr have no standard layout for a
 set of different meshes, so they are measured on one mesh only.) Each is
 measured in a fresh process: opening, reading one run's points and field,
@@ -30,13 +30,13 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import machine, run_child, size_of, timed  # noqa: E402
 
-FORMATS = ("vtk_folder", "vtk_zip", "mestra", "hdf5_per_run")
+FORMATS = ("vtk_folder", "vtk_zip", "gamut", "hdf5_per_run")
 SKIP = ("vtkOriginalPointIds", "vtkOriginalCellIds", "cell_ids")
 
 
 def path_of(folder: str, work: str, fmt: str) -> str:
     return folder if fmt == "vtk_folder" else os.path.join(
-        work, {"vtk_zip": "vtk.zip", "mestra": "study.mes", "hdf5_per_run": "per_run.h5"}[fmt])
+        work, {"vtk_zip": "vtk.zip", "gamut": "study.gamut", "hdf5_per_run": "per_run.h5"}[fmt])
 
 
 def runs_of(folder: str):
@@ -50,14 +50,14 @@ def write(fmt: str, folder: str, out: str) -> None:
         with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
             for name in sorted(f for f in os.listdir(folder) if not f.startswith(".")):
                 z.write(os.path.join(folder, name), name)
-    elif fmt == "mestra":
-        from mestra import vtk
+    elif fmt == "gamut":
+        from gamut import vtk
         report = vtk.import_folder(folder, out, skip=SKIP)
         assert report["ok"], report
     elif fmt == "hdf5_per_run":
         import h5py
         import pyvista as pv
-        from mestra.vtk import from_pyvista
+        from gamut.vtk import from_pyvista
         t = runs_of(folder)
         with h5py.File(out, "w") as f:
             for k, name in enumerate(t["file"]):
@@ -103,20 +103,20 @@ def readers(fmt: str, path: str, field: str, row: int, cond):
             return float(np.flatnonzero(mask(table())).sum())
         return opened, one_run, query
 
-    if fmt == "mestra":
-        import mestra
+    if fmt == "gamut":
+        import gamut
         expr = " and ".join(f"{c} {op} {v}" for c, op, v in cond)
 
         def opened():
-            with mestra.open(path) as s:
+            with gamut.open(path) as s:
                 return s.row_count
 
         def one_run():
-            with mestra.open(path) as s:
+            with gamut.open(path) as s:
                 return float(s.get_points(row=row).sum() + s.get_field(field, rows=row).sum())
 
         def query():
-            with mestra.open(path) as s:
+            with gamut.open(path) as s:
                 return float(s.select(expr).sum())
         return opened, one_run, query
 
@@ -163,7 +163,7 @@ def main() -> None:
             return
         if os.path.exists(out):
             os.remove(out)
-        for module in {"mestra": ["mestra", "mestra.vtk"], "hdf5_per_run": ["h5py", "pyvista"]}.get(
+        for module in {"gamut": ["gamut", "gamut.vtk"], "hdf5_per_run": ["h5py", "pyvista"]}.get(
                 args.format, []):
             __import__(module)
         start = time.perf_counter()

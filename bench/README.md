@@ -6,10 +6,10 @@ process, checks that every format read the same numbers, and saves a JSON
 result with the machine and the versions.
 
 ```bash
-pip install "mestra[vtk]" h5py netCDF4 xarray zarr pyarrow
+pip install "gamut-format[vtk]" h5py netCDF4 xarray zarr pyarrow
 
-# A study on one mesh (any mestra file with a shared mesh):
-python bench/shared_mesh.py run STUDY.mes WORK_DIR bench/results/NAME.json
+# A study on one mesh (any gamut file with a shared mesh):
+python bench/shared_mesh.py run STUDY.gamut WORK_DIR bench/results/NAME.json
 
 # A folder of VTK runs on their own meshes; this fetches 100 runs of
 # AirfRANS (1.5 GB) by range requests from its 10 GB zip:

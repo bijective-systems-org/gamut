@@ -4,8 +4,8 @@
 // dimension-scale index were hardened against hostile files; the reads
 // and writes are generalised to typed buffers and per-axis selections.
 // Internal.
-#ifndef MESTRA_CORE_H5_HPP
-#define MESTRA_CORE_H5_HPP
+#ifndef GAMUT_CORE_H5_HPP
+#define GAMUT_CORE_H5_HPP
 
 #include <hdf5.h>
 
@@ -19,7 +19,7 @@
 
 #include "types.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 // An HDF5 identifier that closes itself.
@@ -239,6 +239,6 @@ bool is_spec_float64(const AttrType& t);
 bool dtype_of(const AttrType& t, DType* out);
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_H5_HPP
+#endif  // GAMUT_CORE_H5_HPP

@@ -8,7 +8,7 @@ import shutil
 import numpy as np
 import pytest
 
-import mestra
+import gamut
 
 h5py = pytest.importorskip("h5py")
 
@@ -27,8 +27,8 @@ def grid(nx, ny):
 
 @pytest.fixture
 def table(tmp_path):
-    p = str(tmp_path / "table.mes")
-    with mestra.create(p, writer="t",
+    p = str(tmp_path / "table.gamut")
+    with gamut.create(p, writer="t",
                        parameters={"mach": {"units": "1", "role": "condition", "lower": 0.0, "upper": 1.0},
                                    "t": {"units": "s", "role": "time", "run_group": "run"}},
                        labels={"run": "group", "split": {"role": "split", "categories": ["train", "test"]}},
@@ -42,9 +42,9 @@ def table(tmp_path):
 
 @pytest.fixture
 def shared(tmp_path):
-    p = str(tmp_path / "shared.mes")
+    p = str(tmp_path / "shared.gamut")
     pts, cells = grid(3, 3)
-    with mestra.create(p, writer="t", mesh="shared", per="fixed",
+    with gamut.create(p, writer="t", mesh="shared", per="fixed",
                        coordinates={"units": "m", "axes": 2}, parameters={"k": "1"},
                        mesh_labels={"zone": {"at": "cell", "categories": ["in", "out"]}},
                        fields={"p": {"units": "Pa", "at": "node"},
@@ -57,7 +57,7 @@ def shared(tmp_path):
 
 
 def clean(path):
-    r = mestra.validate(path)
+    r = gamut.validate(path)
     assert r.findings == (), [f"{f.rule} {f.path}: {f.message}" for f in r.findings]
 
 
@@ -66,33 +66,33 @@ def test_files_the_library_writes_are_clean(table, shared, tmp_path):
     clean(shared)
     # The other kinds.
     pts, cells = grid(3, 3)
-    fam = str(tmp_path / "fam.mes")
-    with mestra.create(fam, writer="t", mesh="shared", per="group:member",
+    fam = str(tmp_path / "fam.gamut")
+    with gamut.create(fam, writer="t", mesh="shared", per="group:member",
                        coordinates={"units": "m", "axes": 2}, labels={"member": "group"},
                        parameters={"k": "1"}, fields={"p": {"units": "Pa", "at": "node"}}) as s:
         s.set_mesh(cells=cells, n_nodes=9)
         s.add_runs({"member": ["b", "a", "b"], "k": [1.0, 2.0, 3.0]}, fields={"p": np.zeros((3, 9))},
                    points=[pts, pts * 2, pts])
     clean(fam)
-    ch = str(tmp_path / "ch.mes")
-    with mestra.create(ch, writer="t", mesh="changing", per="run",
+    ch = str(tmp_path / "ch.gamut")
+    with gamut.create(ch, writer="t", mesh="changing", per="run",
                        coordinates={"units": "m", "axes": 2}, parameters={"k": "1"},
                        fields={"p": {"units": "Pa", "at": "node"}}) as s:
         s.add_run({"k": 1.0}, fields={"p": np.zeros(9)}, points=pts, cells=cells)
         p2, c2 = grid(2, 2)
         s.add_run({"k": 2.0}, fields={"p": np.zeros(4)}, points=p2, cells=c2)
     clean(ch)
-    with mestra.open(ch, mode="a") as s:
+    with gamut.open(ch, mode="a") as s:
         s.add_run({"k": 3.0}, fields={"p": np.zeros(4)}, points=p2, cells=c2)
     clean(ch)
 
 
 def broken(path, tmp_path, edit):
-    q = str(tmp_path / "broken.mes")
+    q = str(tmp_path / "broken.gamut")
     shutil.copy(path, q)
     with h5py.File(q, "r+") as f:
         edit(f)
-    return mestra.validate(q)
+    return gamut.validate(q)
 
 
 def fires(report, rule, path=None):
@@ -102,7 +102,7 @@ def fires(report, rule, path=None):
 
 
 @pytest.mark.parametrize("rule, edit", [
-    ("E1", lambda f: f.attrs.modify("format", np.bytes_(b"mestra/9"))),
+    ("E1", lambda f: f.attrs.modify("format", np.bytes_(b"gamut/9"))),
     ("E2", lambda f: f.attrs.__delitem__("file_id")),
     ("E3", lambda f: (f["mach"].attrs.__delitem__("lower"), f["mach"].attrs.create("lower", 0, dtype="i8"))),
     ("E7", lambda f: (f["mach"].attrs.__delitem__("units"),
@@ -144,28 +144,28 @@ def test_rules_fire_on_a_broken_mesh(shared, tmp_path, rule, edit):
 
 
 def test_missing_values_are_located(tmp_path):
-    p = str(tmp_path / "gaps.mes")
+    p = str(tmp_path / "gaps.gamut")
     pts, cells = grid(3, 3)
     pressure = np.ones((2, 9))
     pressure[1, 4] = np.nan
-    with mestra.create(p, writer="t", mesh="shared", per="fixed",
+    with gamut.create(p, writer="t", mesh="shared", per="fixed",
                        coordinates={"units": "m", "axes": 2}, parameters={"k": "1"},
                        scalars={"cl": "1"}, fields={"p": {"units": "Pa", "at": "node"}}) as s:
         s.set_mesh(pts, cells)
         s.add_runs({"k": [1.0, 2.0], "cl": [np.nan, np.nan]}, fields={"p": pressure})
-    found = {f.path: f.message for f in mestra.validate(p).warnings if f.rule == "W3"}
+    found = {f.path: f.message for f in gamut.validate(p).warnings if f.rule == "W3"}
     assert found["cl"] == "2 values are missing or not finite, the first at row 0"
     assert found["node_fields/p"] == "1 value is missing or not finite, the first at row 1, node 4"
     # On a changing mesh, by the row's own node.
-    p = str(tmp_path / "gaps_changing.mes")
+    p = str(tmp_path / "gaps_changing.gamut")
     small, cells_small = grid(2, 3)
-    with mestra.create(p, writer="t", mesh="changing", per="run",
+    with gamut.create(p, writer="t", mesh="changing", per="run",
                        coordinates={"units": "m", "axes": 2}, parameters={"k": "1"},
                        fields={"p": {"units": "Pa", "at": "node"}}) as s:
         s.add_run({"k": 1.0}, points=pts, cells=cells, fields={"p": np.ones(9)})
         s.add_run({"k": 2.0}, points=small, cells=cells_small,
                   fields={"p": np.array([1.0, 1.0, 1.0, np.nan, 1.0, 1.0])})
-    found = {f.path: f.message for f in mestra.validate(p).warnings if f.rule == "W3"}
+    found = {f.path: f.message for f in gamut.validate(p).warnings if f.rule == "W3"}
     assert found["node_fields/p"] == "1 value is missing or not finite, the first at row 1, node 3"
 
 
@@ -174,32 +174,32 @@ def test_meshes_larger_than_a_block_are_checked_whole(tmp_path):
     # block is found as one in the first is.
     import h5py
     pts, cells = grid(301, 301)                       # 90,000 quads, 360,000 entries
-    path = str(tmp_path / "big.mes")
-    with mestra.create(path, writer="t", mesh="shared", per="fixed",
+    path = str(tmp_path / "big.gamut")
+    with gamut.create(path, writer="t", mesh="shared", per="fixed",
                        coordinates={"units": "m", "axes": 2}, parameters={"k": "1"}) as s:
         s.set_mesh(pts, cells)
         s.add_run({"k": 1.0})
     clean(path)
     for edit, rule in ((lambda f: f["mesh/cell_connectivity"].__setitem__(300_000, 10**6), "E10"),
                        (lambda f: f["mesh/cell_offsets"].__setitem__(70_000, 3), "E10")):
-        broken = str(tmp_path / "broken.mes")
+        broken = str(tmp_path / "broken.gamut")
         shutil.copy(path, broken)
         with h5py.File(broken, "r+") as f:
             edit(f)
-        assert rule in {x.rule for x in mestra.validate(broken).errors}
+        assert rule in {x.rule for x in gamut.validate(broken).errors}
 
     # A changing mesh: a node number valid for the file but not for its
     # instance, in the second instance, past the first block.
     small, cells_small = grid(201, 201)
-    path = str(tmp_path / "changing.mes")
-    with mestra.create(path, writer="t", mesh="changing", per="run",
+    path = str(tmp_path / "changing.gamut")
+    with gamut.create(path, writer="t", mesh="changing", per="run",
                        coordinates={"units": "m", "axes": 2}, parameters={"k": "1"}) as s:
         s.add_run({"k": 1.0}, points=pts, cells=cells)
         s.add_run({"k": 2.0}, points=small, cells=cells_small)
     clean(path)
     with h5py.File(path, "r+") as f:
         f["mesh/cell_connectivity"][360_000 + 100_000] = len(small) + 5
-    errors = mestra.validate(path).errors
+    errors = gamut.validate(path).errors
     assert [x.rule for x in errors] == ["E10"] and "outside its instance" in errors[0].message
 
 
@@ -224,7 +224,7 @@ def test_storage_rules(table, tmp_path):
 
 
 def test_unreadable_file_is_one_finding(tmp_path):
-    p = tmp_path / "not.mes"
+    p = tmp_path / "not.gamut"
     p.write_bytes(b"not an hdf5 file")
-    r = mestra.validate(str(p))
+    r = gamut.validate(str(p))
     assert r.error_ids == ["E1"] and len(r.findings) == 1

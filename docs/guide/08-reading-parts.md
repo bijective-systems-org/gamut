@@ -11,7 +11,7 @@ of the runs, in kilopascals.
 ## Reading
 
 ```python
-with mestra.open("parts.mes") as study:
+with gamut.open("parts.gamut") as study:
     rows = study.select("speed >= 20 and gamma > 1 and status == converged")
     print("chosen rows:", rows)
     wall = study.categories("surface").index("wall")
@@ -39,7 +39,7 @@ slice. A zone comes from a mesh label: `categories` gives its names, and
 the positions where the label holds a name's code are that zone.
 
 **Units.** Every read takes `units`, and converts from the stored units.
-Conversion needs the `units` extra (`pip install "mestra[units]"`, which
+Conversion needs the `units` extra (`pip install "gamut-format[units]"`, which
 brings pint); without it, a read that asks for other units is refused.
 Leave `units` out to get values in the units they were stored in, which
 `describe(name)["units"]` names.
@@ -48,7 +48,7 @@ Leave `units` out to get values in the units they were stored in, which
 
 - Writing converts too: a value given as `(number, "units")` in `add_run`
   is converted to the declared units before it is stored.
-- `mestra.open(path, threads=4)` decompresses large field reads in four
+- `gamut.open(path, threads=4)` decompresses large field reads in four
   threads, with the same result as one.
 - Opening a file reads its structure and attributes only. Nothing else is
   read until it is asked for.

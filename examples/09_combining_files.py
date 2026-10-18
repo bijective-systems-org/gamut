@@ -4,11 +4,11 @@
 names merged); `extract` keeps chosen runs as a new file, their ids kept;
 `write_copy` rewrites a file with the default layout, keeping its identity.
 """
-import mestra
+import gamut
 
 
 def sweep(path, machs):
-    with mestra.create(path, writer="example sweep",
+    with gamut.create(path, writer="example sweep",
                        parameters={"mach": {"units": "1", "role": "condition"}},
                        labels={"status": {"role": "status", "categories": ["converged", "failed"]}},
                        scalars={"cd": "1"}) as study:
@@ -17,16 +17,16 @@ def sweep(path, machs):
                            "cd": 0.01 + 0.05 * max(0.0, mach - 0.7) ** 2})
 
 
-sweep("monday.mes", [0.5, 0.6, 0.7])
-sweep("tuesday.mes", [0.8, 0.9])
-print("appended", mestra.append("monday.mes", "tuesday.mes"), "runs")
+sweep("monday.gamut", [0.5, 0.6, 0.7])
+sweep("tuesday.gamut", [0.8, 0.9])
+print("appended", gamut.append("monday.gamut", "tuesday.gamut"), "runs")
 
-with mestra.open("monday.mes") as study:
+with gamut.open("monday.gamut") as study:
     good = study.select("status == converged")
-mestra.extract("monday.mes", "converged.mes", good)
-mestra.write_copy("converged.mes", "converged_copy.mes")
+gamut.extract("monday.gamut", "converged.gamut", good)
+gamut.write_copy("converged.gamut", "converged_copy.gamut")
 
-with mestra.open("converged.mes") as study, mestra.open("converged_copy.mes") as copy:
+with gamut.open("converged.gamut") as study, gamut.open("converged_copy.gamut") as copy:
     print("kept ids:", study.get_row_ids(), "mach:", study.get_parameter("mach"))
     print("same file id after the rewrite:", study.describe()["file_id"] == copy.describe()["file_id"])
-print("valid:", mestra.validate("converged.mes").ok)
+print("valid:", gamut.validate("converged.gamut").ok)

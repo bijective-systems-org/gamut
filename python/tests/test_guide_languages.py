@@ -11,7 +11,7 @@ import sys
 
 import pytest
 
-import mestra
+import gamut
 from _pages import EXAMPLES, GUIDE, ROOT, blocks, contiguous
 
 PAGES = {"12-matlab.md": ("matlab", EXAMPLES / "matlab" / "one_mesh.m"),
@@ -35,11 +35,11 @@ def test_language_page_quotes_its_example(page):
 @pytest.mark.skipif(sys.platform.startswith("win") or shutil.which("cc") is None,
                     reason="needs a C compiler named cc")
 def test_c_example_prints_what_its_page_shows(tmp_path):
-    library = pathlib.Path(mestra.library_path())
+    library = pathlib.Path(gamut.library_path())
     program = tmp_path / "one_mesh"
     subprocess.run(["cc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
                     str(EXAMPLES / "c" / "one_mesh.c"), f"-I{ROOT / 'include'}",
-                    f"-L{library.parent}", "-lmestra", "-lm", f"-Wl,-rpath,{library.parent}",
+                    f"-L{library.parent}", "-lgamut", "-lm", f"-Wl,-rpath,{library.parent}",
                     "-o", str(program)], check=True, capture_output=True)
     result = subprocess.run([str(program)], cwd=tmp_path, capture_output=True, text=True,
                             timeout=120)

@@ -1,6 +1,6 @@
 # Contributing
 
-The [specification](SPEC.md) and the [corpus](corpus) define mestra. The
+The [specification](SPEC.md) and the [corpus](corpus) define gamut. The
 C++ core in `src/` implements them once; Python, MATLAB and Julia are thin
 layers over its C interface. A change of behaviour starts from the
 specification and the corpus, never from one language.
@@ -8,7 +8,7 @@ specification and the corpus, never from one language.
 ## A bug
 
 Describe what happened and what you expected, with the smallest file or
-script that shows it, and the output of `mestra --version`. A fix comes
+script that shows it, and the output of `gamut --version`. A fix comes
 with a test at the layer that owns the problem: the core's tests for the
 core, the language's tests for its layer, the corpus for anything every
 language must agree on.
@@ -29,7 +29,7 @@ The specification, the corpus and the core change together.
 ## Building and running the checks
 
 The core needs CMake 3.16 or later, a C++17 compiler and HDF5 1.12 or
-later (or `tools/build_deps.sh` and `-DMESTRA_STATIC_HDF5=ON`, as in
+later (or `tools/build_deps.sh` and `-DGAMUT_STATIC_HDF5=ON`, as in
 [installing](docs/install.md)). From the top of a checkout:
 
 ```bash
@@ -56,8 +56,8 @@ the JSON package in its environment):
 ```bash
 julia --project=julia -e 'include("julia/test/runtests.jl")'
 python corpus/generate.py /tmp/corpus
-MESTRA_LIBRARY=build/libmestra.so python corpus/check.py /tmp/corpus
-julia --project=<an environment with JSON and Mestra> julia/test/check_corpus.jl /tmp/corpus
+GAMUT_LIBRARY=build/libgamut.so python corpus/check.py /tmp/corpus
+julia --project=<an environment with JSON and Gamut> julia/test/check_corpus.jl /tmp/corpus
 ```
 
 In MATLAB, from `matlab/`: `build_mex`, then `run_tests`, then

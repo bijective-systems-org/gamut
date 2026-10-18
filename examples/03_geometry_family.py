@@ -8,13 +8,13 @@ nodes, comparable node by node across the whole family.
 """
 import numpy as np
 
-import mestra
+import gamut
 from _cylinder import pressure, ring
 
 _, cells, _, _ = ring()
 members = {"slim": 0.8, "base": 1.0, "wide": 1.2}
 
-with mestra.create("family.mes", writer="example family", mesh="shared", per="group:member",
+with gamut.create("family.gamut", writer="example family", mesh="shared", per="group:member",
                    coordinates={"units": "m", "axes": 2},
                    labels={"member": {"role": "group", "categories": list(members)}},
                    generalisation_group="member",
@@ -27,7 +27,7 @@ with mestra.create("family.mes", writer="example family", mesh="shared", per="gr
             study.add_run({"member": name, "gamma": gamma},
                           fields={"cp": pressure(t, r, radius, gamma)}, points=points)
 
-with mestra.open("family.mes") as study:
+with gamut.open("family.gamut") as study:
     print(study.row_count, "runs on", len(members), "members of one topology")
     for row in (0, 3, 6):
         member = study.get_label("member", rows=row)

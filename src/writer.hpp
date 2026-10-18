@@ -1,7 +1,7 @@
 // Writing data files (spec sections 3 to 5, 10, 11): create, declare,
 // then add runs, which go to disk in whole chunks as they arrive.
-#ifndef MESTRA_CORE_WRITER_HPP
-#define MESTRA_CORE_WRITER_HPP
+#ifndef GAMUT_CORE_WRITER_HPP
+#define GAMUT_CORE_WRITER_HPP
 
 #include <cstdint>
 #include <map>
@@ -15,7 +15,7 @@
 #include "types.hpp"
 #include "value.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 // A typed column of values: `count` elements of `dtype`, packed.
@@ -185,6 +185,6 @@ std::string new_uuid();
 std::string utc_now();
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_WRITER_HPP
+#endif  // GAMUT_CORE_WRITER_HPP

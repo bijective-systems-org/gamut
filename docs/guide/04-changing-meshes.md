@@ -11,7 +11,7 @@ with the pressure stored per cell as a finite-volume solver reports it.
 ## Writing
 
 ```python
-with mestra.create("refinement.mes", writer="example refinement", mesh="changing", per="run",
+with gamut.create("refinement.gamut", writer="example refinement", mesh="changing", per="run",
                    coordinates={"units": "m", "axes": 2},
                    parameters={"cells_round": {"units": "1", "role": "design"}},
                    scalars={"cp_min": "1"},
@@ -32,7 +32,7 @@ with mestra.create("refinement.mes", writer="example refinement", mesh="changing
 ## Reading
 
 ```python
-with mestra.open("refinement.mes") as study:
+with gamut.open("refinement.gamut") as study:
     for row in range(study.row_count):
         types, offsets, connectivity = study.get_cells(row=row)
         cp = study.get_field("cp", rows=row)

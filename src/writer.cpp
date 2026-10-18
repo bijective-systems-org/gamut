@@ -18,7 +18,7 @@
 #include "sha256.hpp"
 #include "units.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 namespace {
@@ -383,7 +383,7 @@ std::unique_ptr<Writer> Writer::create(const std::string& path,
   s.mesh.kind = mesh_kind;
   s.mesh.per = mesh_kind.empty() ? "fixed" : per;
   File& f = *w->file_;
-  f.write_attr("/", "format", AttrValue::text("mestra/1"));
+  f.write_attr("/", "format", AttrValue::text("gamut/1"));
   f.write_attr("/", "kind", AttrValue::text("data"));
   f.write_attr("/", "writer", AttrValue::text(writer_name));
   f.write_attr("/", "created", AttrValue::text(s.created));
@@ -496,7 +496,7 @@ void Writer::check_new_root_name(const std::string& name) const {
   need(legal_netcdf_name(name), "E8",
        "\"" + name + "\" is not a legal name (spec section 9.3)", name);
   need(!reserved_name(name), "E8",
-       "\"" + name + "\" takes the reserved prefix mestra_", name);
+       "\"" + name + "\" takes the reserved prefix gamut_", name);
   need(kReserved.count(name) == 0 && name.compare(0, 9, "category_") != 0, "E8",
        "\"" + name + "\" is a reserved name (spec section 9.3)", name);
   need(!schema_.name_taken(name), "E8",
@@ -1701,7 +1701,7 @@ void Writer::add_model(const std::string& id, const std::string& type,
                        const std::vector<std::string>& inputs, const Dict& numbers,
                        const std::string& repr) {
   need_open();
-  need(model_, "E16", "models belong to model files (mestra.create_model)");
+  need(model_, "E16", "models belong to model files (gamut.create_model)");
   need(legal_netcdf_name(id) && !reserved_name(id), "E8", "\"" + id + "\" is not a legal model id");
   for (const auto& m : schema_.models) {
     need(m.id != id, "E8", "a model called \"" + id + "\" already exists");
@@ -1857,4 +1857,4 @@ void Writer::close() {
 }
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut

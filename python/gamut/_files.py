@@ -21,7 +21,7 @@ def append(dst: str, src: str) -> int:
     files need the same declarations (bounds may differ), the same mesh,
     and one geometry for a group member found in both."""
     n = ctypes.c_int64()
-    call("mes_append", _path(dst), _path(src), ctypes.byref(n))
+    call("gamut_append", _path(dst), _path(src), ctypes.byref(n))
     return n.value
 
 
@@ -34,11 +34,11 @@ def extract(src: str, dst: str, rows: Any) -> None:
         from ._study import open as _open
         with _open(os.fspath(src)) as f:
             sel.resolve(f.row_count)
-    call("mes_extract", _path(src), _path(dst), sel.pointer())
+    call("gamut_extract", _path(src), _path(dst), sel.pointer())
 
 
 def write_copy(src: str, dst: str) -> None:
     """Rewrites `src` as `dst` with the default layout (chunks and
     compression), as for a file another writer chunked finely; the copy
     keeps the file's identity (file_id, created)."""
-    call("mes_write_copy", _path(src), _path(dst))
+    call("gamut_write_copy", _path(src), _path(dst))

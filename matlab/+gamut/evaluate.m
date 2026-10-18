@@ -1,8 +1,8 @@
 function out = evaluate(modelPath, inputs, varargin)
 %EVALUATE Evaluates a model file on a table of inputs (spec section 7.4).
-%   out = mestra.evaluate(modelPath, inputs)
-%   out = mestra.evaluate(modelPath, inputs, 'path', p)
-%   out = mestra.evaluate(modelPath, inputs, 'coordinates', C)
+%   out = gamut.evaluate(modelPath, inputs)
+%   out = gamut.evaluate(modelPath, inputs, 'path', p)
+%   out = gamut.evaluate(modelPath, inputs, 'coordinates', C)
 %   inputs maps each parameter to values and each label to names (a cell
 %   array) from the model file's table, all of one length n.  C (n x nodes
 %   x axes) is needed when a model reads geometry the file does not store.
@@ -13,25 +13,25 @@ p.addParameter('path', '');
 p.addParameter('coordinates', []);
 p.parse(varargin{:});
 coordinates = p.Results.coordinates;
-m = mestra.open(modelPath);
+m = gamut.open(modelPath);
 closeModel = onCleanup(@() m.close());
 if ~strcmp(m.kind(), 'model')
-    error('mestra:E16', '%s is not a model file', modelPath);
+    error('gamut:E16', '%s is not a model file', modelPath);
 end
 params = m.names('parameters'); params = params(:)';
 labels = m.names('labels'); labels = labels(:)';
 given = fieldnames(inputs)';
 if isempty(given)
-    error('mestra:E2', 'give the model''s inputs');
+    error('gamut:E2', 'give the model''s inputs');
 end
 lengths = cellfun(@(k) numel(inputs.(k)), given);
 if any(lengths ~= lengths(1))
-    error('mestra:E5', 'every input needs the same number of rows');
+    error('gamut:E5', 'every input needs the same number of rows');
 end
 n = lengths(1);
 unknown = setdiff(given, [params labels]);
 if ~isempty(unknown)
-    error('mestra:E2', '%s is not an input of this model', unknown{1});
+    error('gamut:E2', '%s is not an input of this model', unknown{1});
 end
 
 % The table each model reads: parameters as values, labels as codes.
@@ -40,10 +40,10 @@ labelNames = struct();
 for k = 1:numel(params)
     name = params{k};
     if ~isfield(inputs, name)
-        error('mestra:E2', 'the input %s is missing', name);
+        error('gamut:E2', 'the input %s is missing', name);
     end
     d = m.describe(name);
-    if strcmp(mestra.internal.field(d, 'dtype', ''), 'int64')
+    if strcmp(gamut.internal.field(d, 'dtype', ''), 'int64')
         col = int64(inputs.(name)(:));
     else
         col = double(inputs.(name)(:));
@@ -51,7 +51,7 @@ for k = 1:numel(params)
     lo = str2double(d.lower); hi = str2double(d.upper);
     outside = find(col < lo | col > hi, 1);
     if ~isempty(outside)
-        warning('mestra:W4', '%s is outside the model''s domain [%g, %g] at row %d', ...
+        warning('gamut:W4', '%s is outside the model''s domain [%g, %g] at row %d', ...
             name, lo, hi, outside);
     end
     tbl.(name) = col;
@@ -59,15 +59,15 @@ end
 for k = 1:numel(labels)
     name = labels{k};
     if ~isfield(inputs, name)
-        error('mestra:E2', 'the input %s is missing', name);
+        error('gamut:E2', 'the input %s is missing', name);
     end
     d = m.describe(name);
-    entries = mestra_mex('table', m.Handle, d.category);
+    entries = gamut_mex('table', m.Handle, d.category);
     names = cellstr(inputs.(name));
     [known, at] = ismember(names(:), entries(:));
     if ~all(known)
         bad = names(~known);
-        error('mestra:E9', '%s: ''%s'' is not in the model''s table', name, bad{1});
+        error('gamut:E9', '%s: ''%s'' is not in the model''s table', name, bad{1});
     end
     tbl.(name) = int64(at(:) - 1);
     labelNames.(name) = names(:);
@@ -89,8 +89,8 @@ requests = cell(0, 4);
 for k = 1:numel(results)
     name = results{k};
     d = m.describe(name);
-    statistic = mestra.internal.field(d, 'statistic', '');
-    wrt = mestra.internal.field(d, 'with_respect_to', '');
+    statistic = gamut.internal.field(d, 'statistic', '');
+    wrt = gamut.internal.field(d, 'with_respect_to', '');
     if strcmp(statistic, 'std')
         req = {d.output, 'std'};
     elseif strcmp(statistic, 'quantile')
@@ -106,7 +106,7 @@ end
 coordinate = struct();
 if ~isempty(m.MeshKind)
     coordinate = m.describe('coordinates');
-    if ~isempty(mestra.internal.field(coordinate, 'model', ''))
+    if ~isempty(gamut.internal.field(coordinate, 'model', ''))
         wanted = ask(wanted, coordinate.model, {coordinate.output, 'values'});
     end
 end
@@ -117,18 +117,18 @@ ids = keys(wanted);
 for k = 1:numel(ids)
     id = ids{k};
     dm = m.describe(['models/' id]);
-    cls = mestra.internal.registry(dm.type);
+    cls = gamut.internal.registry(dm.type);
     if isempty(cls)
-        error('mestra:error', ['the model %s is of type ''%s'', whose software is not ' ...
-            'registered here (mestra.registerModelType)'], id, dm.type);
+        error('gamut:error', ['the model %s is of type ''%s'', whose software is not ' ...
+            'registered here (gamut.registerModelType)'], id, dm.type);
     end
-    numbers = mestra_mex('model_numbers', m.Handle, id);
+    numbers = gamut_mex('model_numbers', m.Handle, id);
     model = feval([cls '.load'], numbers);
     reads = strsplit(strtrim(dm.inputs), ' ');
     in = struct();
     for j = 1:numel(reads)
         if ~isfield(tbl, reads{j})
-            error('mestra:E2', 'the model %s reads %s, which was not given', id, reads{j});
+            error('gamut:E2', 'the model %s reads %s, which was not given', id, reads{j});
         end
         in.(reads{j}) = tbl.(reads{j});
     end
@@ -139,9 +139,9 @@ end
 outPath = p.Results.path;
 temporary = isempty(outPath);
 if temporary
-    outPath = [tempname '.mes'];
+    outPath = [tempname '.gamut'];
 end
-w = mestra.Study(mestra_mex('evaluate_begin', m.Handle, outPath), outPath, true, ...
+w = gamut.Study(gamut_mex('evaluate_begin', m.Handle, outPath), outPath, true, ...
     m.MeshKind, m.Per);
 try
     write(w, m, n, params, labels, tbl, labelNames, scalars, requests, outputs, coordinate, ...
@@ -152,7 +152,7 @@ catch err
     rethrow(err);
 end
 w.close();
-out = mestra.open(outPath);
+out = gamut.open(outPath);
 out.RemoveOnClose = temporary;
 end
 
@@ -166,24 +166,24 @@ for k = 1:size(requests, 1)
     [name, id, output, req] = requests{k, :};
     got = outputs(id);
     if ~isfield(got, output)
-        error('mestra:error', 'the model %s gave no output %s', id, output);
+        error('gamut:error', 'the model %s gave no output %s', id, output);
     end
     record = got.(output);
     values = [];
     switch req{2}
         case 'values'
-            values = mestra.internal.field(record, 'values', []);
+            values = gamut.internal.field(record, 'values', []);
         case 'std'
-            values = mestra.internal.field(record, 'std', []);
+            values = gamut.internal.field(record, 'std', []);
         case 'quantile'
-            q = mestra.internal.field(record, 'quantiles', []);
+            q = gamut.internal.field(record, 'quantiles', []);
             if isa(q, 'containers.Map') && isKey(q, req{3}), values = q(req{3}); end
         case 'derivative'
-            dv = mestra.internal.field(record, 'derivatives', struct());
-            values = mestra.internal.field(dv, req{3}, []);
+            dv = gamut.internal.field(record, 'derivatives', struct());
+            values = gamut.internal.field(dv, req{3}, []);
     end
     if isempty(values)
-        error('mestra:error', 'the model %s gave no %s for %s', id, req{2}, output);
+        error('gamut:error', 'the model %s gave no %s for %s', id, req{2}, output);
     end
     if any(strcmp(scalars, name))
         columns.(name) = double(values(:));
@@ -193,13 +193,13 @@ for k = 1:size(requests, 1)
 end
 points = {};
 if ~isempty(m.MeshKind) && strcmp(m.Per, 'run')
-    if ~isempty(mestra.internal.field(coordinate, 'model', ''))
+    if ~isempty(gamut.internal.field(coordinate, 'model', ''))
         got = outputs(coordinate.model);
         pts = got.(coordinate.output).values;
     elseif ~isempty(coordinates)
         pts = double(coordinates);
     else
-        error('mestra:E2', 'this model file''s geometry changes per run; give coordinates');
+        error('gamut:E2', 'this model file''s geometry changes per run; give coordinates');
     end
     points = cell(1, n);
     for i = 1:n

@@ -1,7 +1,7 @@
 // The `where` selector (docs/reference/selecting.md): rows whose parameters,
 // scalars and labels satisfy an expression.
-#ifndef MESTRA_CORE_SELECT_HPP
-#define MESTRA_CORE_SELECT_HPP
+#ifndef GAMUT_CORE_SELECT_HPP
+#define GAMUT_CORE_SELECT_HPP
 
 #include <cstdint>
 #include <string>
@@ -9,7 +9,7 @@
 
 #include "reader.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 // The positions (0-based, increasing) of the rows `where` selects.  A
@@ -18,6 +18,6 @@ namespace internal {
 std::vector<std::int64_t> select_rows(const Reader& reader, const std::string& where);
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_SELECT_HPP
+#endif  // GAMUT_CORE_SELECT_HPP

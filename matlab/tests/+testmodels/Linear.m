@@ -24,7 +24,7 @@ classdef Linear
                 switch w{2}
                     case 'values', out.(w{1}).values = m.A + m.B * x;
                     case 'std', out.(w{1}).std = repmat(m.Std, size(x));
-                    otherwise, error('mestra:error', 'test_linear gives values and std only');
+                    otherwise, error('gamut:error', 'test_linear gives values and std only');
                 end
             end
         end

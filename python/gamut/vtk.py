@@ -1,11 +1,11 @@
-"""VTK in and out of mestra files, on PyVista and pandas (the `vtk` extra:
-`pip install mestra[vtk]`).
+"""VTK in and out of Gamut files, on PyVista and pandas (the `vtk` extra:
+`pip install "gamut-format[vtk]"`).
 
-    mestra-vtk import RUNS_DIR [-o study.mes] [--parameters CSV]
+    gamut-vtk import RUNS_DIR [-o study.gamut] [--parameters CSV]
                       [--fields CSV] [--skip a,b] [--round-bits N] [--json]
-    mestra-vtk export study.mes OUT_DIR [--json]
+    gamut-vtk export study.gamut OUT_DIR [--json]
 
-(or `python -m mestra.vtk ...`).
+(or `python -m gamut.vtk ...`).
 
 `import` turns a folder of VTK runs (one .vtu, .vtp or legacy .vtk file per
 run) into one study file. It needs two small tables beside
@@ -57,7 +57,7 @@ import numpy as np
 import pandas as pd
 import pyvista as pv
 
-import mestra
+import gamut
 
 VTK_SUFFIXES = (".vtu", ".vtp", ".vtk")
 PARAMETER_ROLES = {"design", "condition", "time"}
@@ -106,7 +106,7 @@ def from_pyvista(mesh: Any) -> dict[str, Any]:
             "cell_data": {k: np.asarray(grid.cell_data[k]) for k in grid.cell_data.keys()}}
 
 
-def to_pyvista(study: mestra.Study, row: int) -> pv.UnstructuredGrid:
+def to_pyvista(study: gamut.Study, row: int) -> pv.UnstructuredGrid:
     """One row of a study file as a PyVista grid: its geometry, every field
     (vector components joined back into one array) and the mesh labels."""
     fixed = study.describe("coordinates").get("per", "fixed") == "fixed"
@@ -386,7 +386,7 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
         for t in times:
             param_spec[t]["run_group"] = groups[0]
     try:
-        with mestra.create(out, writer="mestra-vtk", parameters=param_spec, labels=label_spec,
+        with gamut.create(out, writer="gamut-vtk", parameters=param_spec, labels=label_spec,
                            fields=field_decl, mesh_labels=mesh_labels,
                            mesh="shared" if one_mesh else "changing",
                            per="fixed" if fixed_geometry else "run",
@@ -423,7 +423,7 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
         if os.path.exists(out):
             os.remove(out)
         raise
-    report = mestra.validate(out)
+    report = gamut.validate(out)
     return {"ok": not report.errors, "file": out, "rows": len(files),
             "geometry": "fixed" if fixed_geometry else "per run" if one_mesh else "a mesh per run",
             "fields": sorted(field_decl), "mesh_labels": sorted(mesh_labels),
@@ -439,7 +439,7 @@ def export_study(path: str, folder: str) -> dict[str, Any]:
     reads the folder back."""
     os.makedirs(folder, exist_ok=True)
     written = []
-    with mestra.open(path) as study:
+    with gamut.open(path) as study:
         if study.type == "table":
             raise Problems([f"{path} has no mesh; there is nothing to write as VTK"])
         params = study.names("parameters")
@@ -496,7 +496,7 @@ def _counted(n: int, noun: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="mestra-vtk", description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(prog="gamut-vtk", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="command", required=True)
     imp = sub.add_parser("import", help="a folder of VTK runs to one study file")
     imp.add_argument("folder")
@@ -513,12 +513,12 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     try:
         if a.command == "import":
-            out = a.output or os.path.normpath(a.folder) + ".mes"
+            out = a.output or os.path.normpath(a.folder) + ".gamut"
             report = import_folder(a.folder, out, a.parameters, a.fields,
                                    tuple(s for s in a.skip.split(",") if s), a.round_bits)
         else:
             report = export_study(a.study, a.folder)
-    except (Problems, mestra.MestraError) as exc:
+    except (Problems, gamut.GamutError) as exc:
         problems = exc.problems if isinstance(exc, Problems) else [str(exc)]
         if a.json:
             print(json.dumps({"ok": False, "problems": problems}, indent=1))

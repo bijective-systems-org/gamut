@@ -2,7 +2,7 @@
 # Whether the core works beside another HDF5 in one Linux process, where
 # shared libraries share one symbol namespace. HDF5 1.14.6 is built from
 # source, shared and static, and the core twice: linked to the shared
-# HDF5, and with HDF5 linked in (MESTRA_STATIC_HDF5, only mes_* exported).
+# HDF5, and with HDF5 linked in (GAMUT_STATIC_HDF5, only gamut_* exported).
 # Each runs the Python suite with h5py's own HDF5 loaded, and with a foreign
 # HDF5 preloaded into the global namespace, as a host program such as
 # MATLAB holds one: h5py's (2.x) and the system's (1.10).
@@ -43,7 +43,7 @@ row "h5py's HDF5" "$h5py_version, \`$(basename "$h5py_lib")\`"
 row "system HDF5" "$system_version, \`$(basename "$system_lib")\`"
 
 # The system's HDF5 is older than the core needs: refused at configure.
-if cmake -S "$core" -B "$work/system" -G Ninja -DMESTRA_BUILD_TESTS=OFF \
+if cmake -S "$core" -B "$work/system" -G Ninja -DGAMUT_BUILD_TESTS=OFF \
      > "$work/system-configure.log" 2>&1; then
   row "core against the system HDF5" "configured"
 else
@@ -51,7 +51,7 @@ else
 fi
 
 # HDF5 1.14.6 from source, built twice: static and position independent
-# (for MESTRA_STATIC_HDF5), and shared (the baseline).
+# (for GAMUT_STATIC_HDF5), and shared (the baseline).
 tarball="$work/hdf5-1.14.6.tar.gz"
 if [ ! -d "$work/hdf5-static" ]; then
   curl -sSfL -o "$tarball" \
@@ -72,26 +72,26 @@ if [ ! -d "$work/hdf5-static" ]; then
 fi
 # The core linked to the shared HDF5 1.14.6.
 cmake -S "$core" -B "$work/shared" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-      -DMESTRA_BUILD_TESTS=OFF -DHDF5_ROOT="$work/hdf5-shared" > "$work/shared-configure.log" 2>&1 &&
+      -DGAMUT_BUILD_TESTS=OFF -DHDF5_ROOT="$work/hdf5-shared" > "$work/shared-configure.log" 2>&1 &&
   cmake --build "$work/shared" -j2 > "$work/shared-build.log" 2>&1 ||
   row "shared build" "FAIL (see shared-build.log)"
 cmake -S "$core" -B "$work/static" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-      -DMESTRA_BUILD_TESTS=OFF -DMESTRA_STATIC_HDF5=ON -DHDF5_ROOT="$work/hdf5-static" \
+      -DGAMUT_BUILD_TESTS=OFF -DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT="$work/hdf5-static" \
       > "$work/static-configure.log" 2>&1 &&
   cmake --build "$work/static" -j2 > "$work/static-build.log" 2>&1 ||
   row "static build" "FAIL (see static-build.log)"
 
-shared_core="$work/shared/libmestra.so"
-static_core="$work/static/libmestra.so"
+shared_core="$work/shared/libgamut.so"
+static_core="$work/static/libgamut.so"
 status=0
 # The claim itself: no HDF5 symbol leaves the static core, and it needs no
 # shared HDF5.
 if [ -f "$static_core" ]; then
   h5=$(nm -D --defined-only "$static_core" | awk '{print $3}' | grep -c '^H5')
-  others=$(nm -D --defined-only "$static_core" | awk '{print $3}' | grep -cv '^mes_')
+  others=$(nm -D --defined-only "$static_core" | awk '{print $3}' | grep -cv '^gamut_')
   linked=$(ldd "$static_core" | grep -c hdf5)
   if [ "$h5" = 0 ] && [ "$linked" = 0 ]; then
-    row "static core exports" "$(nm -D --defined-only "$static_core" | grep -c ' mes_') mes_* symbols, $h5 H5 symbols, $others others; $linked shared HDF5 dependencies"
+    row "static core exports" "$(nm -D --defined-only "$static_core" | grep -c ' gamut_') gamut_* symbols, $h5 H5 symbols, $others others; $linked shared HDF5 dependencies"
   else
     row "static core exports" "FAIL: $h5 H5 symbols exported, $linked shared HDF5 dependencies"
     status=1
@@ -115,7 +115,7 @@ run() {   # name, core, preload ("none" or a library), required
       return
     fi
   fi
-  env ${env[@]+"${env[@]}"} PYTHONPATH="$core/python" MESTRA_LIBRARY="$lib" \
+  env ${env[@]+"${env[@]}"} PYTHONPATH="$core/python" GAMUT_LIBRARY="$lib" \
     $py -m pytest -q -rs -p no:cacheprovider "$core/python/tests" > "$work/$name.log" 2>&1
   local code=$?
   local last
@@ -143,7 +143,7 @@ corpus() {   # name, core, preload, required
   local name=$1 lib=$2 pre=$3 required=$4
   [ -f "$lib" ] || { fail "$name" "$required" "not built"; return; }
   [ -f "$pre" ] || { fail "$name" "$required" "the library to preload is missing"; return; }
-  if env LD_PRELOAD="$pre" MESTRA_LIBRARY="$lib" $py "$core/corpus/check.py" "$work/corpus" \
+  if env LD_PRELOAD="$pre" GAMUT_LIBRARY="$lib" $py "$core/corpus/check.py" "$work/corpus" \
        > "$work/$name.log" 2>&1; then
     row "$name" "pass: $(grep -m1 cases "$work/$name.log")"
   else

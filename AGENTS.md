@@ -1,9 +1,9 @@
 # Reading map
 
-For an engineer or agent opening mestra cold. It points into the documents
+For an engineer or agent opening Gamut cold. It points into the documents
 that own each subject and repeats none of them.
 
-## What mestra is
+## What Gamut is
 
 An open file format, HDF5 laid out as valid netCDF-4, for the results of a
 parametric simulation study and the models fitted to it; one C++ core that
@@ -16,10 +16,10 @@ that interface; a validator; a command line; VTK conversion.
 |---|---|
 | `SPEC.md` | the format: meaning, layout, validation rules (E1-E24, W1-W10), versions |
 | `corpus/` | valid, rule-breaking and hostile files (`generate.py`) and their expected outcomes, checked from every language (`check.py`, `julia/test/check_corpus.jl`, `matlab/tests/check_corpus.m`) |
-| `include/mestra/mestra.h` | the C interface, the only surface any language uses |
+| `include/gamut/gamut.h` | the C interface, the only surface any language uses |
 | `src/` | the core: writer, reader, validator, selector, copies, units grammar |
 | `tests/` | the core's C++ tests; `two_hdf5_linux.sh`, two HDF5 copies in one process |
-| `python/mestra/` | the Python layer (ctypes), the command line (`cli.py`), VTK conversion (`vtk.py`) |
+| `python/gamut/` | the Python layer (ctypes), the command line (`cli.py`), VTK conversion (`vtk.py`) |
 | `matlab/`, `julia/` | the MATLAB and Julia layers and their tests |
 | `examples/` | runnable examples; each guide page quotes one |
 | `docs/` | install, start-here, the guide, reference, security, comparison, benchmarks |
@@ -34,7 +34,7 @@ that interface; a validator; a command line; VTK conversion.
 | The expected outcome of a case, in every language | the corpus |
 | Behaviour | the core; a language layer converts types and positions, nothing more |
 | Names and argument order across languages | the guide pages 12-14 and each layer's docstrings, which follow the Python names |
-| Which rows train a model, how a model computes, file lineage | the producing or consuming tool, never mestra |
+| Which rows train a model, how a model computes, file lineage | the producing or consuming tool, never Gamut |
 
 ## Boundaries worth knowing before an edit
 
@@ -51,10 +51,10 @@ that interface; a validator; a command line; VTK conversion.
   HDF5 plugins. HDF5 itself can hang on a damaged file: the defence is a
   process boundary (`docs/security.md`).
 - **HDF5 linked in.** Packages link HDF5 statically and export only the
-  `mes_*` symbols: on Linux a core linked to a shared HDF5 crashes beside a
+  `gamut_*` symbols: on Linux a core linked to a shared HDF5 crashes beside a
   second HDF5 in the process (h5py's, MATLAB's).
 - **Versions.** The package version (`1.0.0`) is not the format version
-  (`mestra/1`); a reader refuses another major format version.
+  (`gamut/1`); a reader refuses another major format version.
 - **Documentation is tested.** Guide code blocks are lines of the examples
   and output blocks what they print; benchmark numbers come from
   `bench/results/`.

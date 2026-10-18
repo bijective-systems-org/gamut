@@ -9,7 +9,7 @@
 #include "names.hpp"
 #include "parallel.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 namespace {
@@ -272,11 +272,11 @@ std::unique_ptr<Reader> Reader::open(const std::string& path) {
   r->file_.reset(new File(File::open_read(path)));
   const Attrs root{r->file_->attributes("/")};
   const std::string format = root.text("format");
-  need(format == "mestra/1", "E1",
+  need(format == "gamut/1", "E1",
        format.empty() ? "\"" + path + "\" has no format attribute; it is not a "
                                       "file of this format"
                       : "\"" + path + "\" is " + format +
-                            ", and this library reads mestra/1");
+                            ", and this library reads gamut/1");
   r->schema_ = load_schema(*r->file_);
   need(r->schema_.kind == "data" || r->schema_.kind == "model", "E1",
        "kind must be data or model");
@@ -721,4 +721,4 @@ std::vector<std::string> Reader::label_names(const std::string& name,
 }
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut

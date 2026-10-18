@@ -11,7 +11,7 @@ a working folder, with `examples/matlab` on the path, run `one_mesh`.
 ## Writing
 
 ```matlab
-study = mestra.create('cylinder.mes', 'writer', 'example sweep', 'mesh', 'shared', 'per', 'fixed', ...
+study = gamut.create('cylinder.gamut', 'writer', 'example sweep', 'mesh', 'shared', 'per', 'fixed', ...
     'coordinates', struct('units', 'm', 'axes', 2), ...
     'parameters', struct('gamma', struct('units', 'm2 s-1', 'role', 'design')), ...
     'meshLabels', struct('surface', struct('at', 'node', 'categories', {{'field', 'wall'}})), ...
@@ -32,7 +32,7 @@ count from 0.
 ## Reading
 
 ```matlab
-study = mestra.open('cylinder.mes');
+study = gamut.open('cylinder.gamut');
 fprintf('%s mesh, %d runs, %d nodes\n', study.type(), study.rowCount(), size(study.getPoints(), 1));
 cp = study.getField('cp');                                       % runs x nodes
 fprintf('cp block: %d x %d\n', size(cp));
@@ -53,16 +53,16 @@ is why `wall` subtracts one from its place in the table.
 
 | Python | MATLAB |
 |---|---|
-| `mestra.create(path, writer=w, fields={...})` | `mestra.create(path, 'writer', w, 'fields', struct(...))` |
+| `gamut.create(path, writer=w, fields={...})` | `gamut.create(path, 'writer', w, 'fields', struct(...))` |
 | `study.add_run(values, fields=...)` | `study.addRun(values, 'fields', ...)` |
 | `study.get_field("p", rows=r, nodes=n)` | `study.getField('p', 'rows', r, 'nodes', n)` |
 | `study.select("mach > 0.7")` | `study.select('mach > 0.7')`, positions from 1 |
 | `study.row_count` | `study.rowCount()` |
 | `study.table()` | `study.table()`: a MATLAB `table`, labels as `categorical` |
-| `mestra.register_model_type(cls)` | `mestra.registerModelType(className)` |
-| `mestra.append`, `extract`, `write_copy`, `validate` | `mestra.append`, `extract`, `writeCopy`, `validate` |
+| `gamut.register_model_type(cls)` | `gamut.registerModelType(className)` |
+| `gamut.append`, `extract`, `write_copy`, `validate` | `gamut.append`, `extract`, `writeCopy`, `validate` |
 
-`help mestra.Study` describes the study object, and `methods(study)` lists
+`help gamut.Study` describes the study object, and `methods(study)` lists
 what it can do.
 
 ## Worth knowing

@@ -2,7 +2,9 @@
 
 ## 1.0.0 (unreleased)
 
-Version 1 of the format, `mestra/1`, and a new implementation.
+Version 1 of the format, `gamut/1`, and a new implementation. Before
+version 1 the format and its libraries were called mestra (the 0.1 series
+on PyPI).
 
 - **The format** ([SPEC.md](SPEC.md)) is redesigned around the study: a run
   table with roles, statuses and splits; a shared mesh whose geometry is
@@ -15,8 +17,8 @@ Version 1 of the format, `mestra/1`, and a new implementation.
   same answers. Packages link HDF5 statically, so the core never meets
   another HDF5 in the same process.
 - **Python**: `create`, `open`, `append`, `extract`, `write_copy`,
-  `validate`, `create_model`, `evaluate`; the `mestra` command line
-  (`info`, `validate`, `build`, `append`, `get`); `mestra-vtk` to turn a
+  `validate`, `create_model`, `evaluate`; the `gamut` command line
+  (`info`, `validate`, `build`, `append`, `get`); `gamut-vtk` to turn a
   folder of VTK runs into a study and back.
 - **MATLAB and Julia**: the same calls in each language's spelling.
 - **Untrusted files**: sizes checked before memory is used, links never

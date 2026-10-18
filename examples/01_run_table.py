@@ -6,9 +6,9 @@ force coefficients (scalars), every one with its units.
 """
 import numpy as np
 
-import mestra
+import gamut
 
-with mestra.create("polar.mes", writer="example sweep",
+with gamut.create("polar.gamut", writer="example sweep",
                    parameters={"mach": {"units": "1", "role": "condition"},
                                "alpha": {"units": "degree", "role": "condition"}},
                    labels={"status": {"role": "status", "categories": ["converged", "failed"]}},
@@ -24,7 +24,7 @@ with mestra.create("polar.mes", writer="example sweep",
                            "status": "failed" if failed else "converged",
                            "cl": np.nan if failed else cl, "cd": np.nan if failed else cd})
 
-with mestra.open("polar.mes") as study:
+with gamut.open("polar.gamut") as study:
     print(study.row_count, "runs;", study.describe()["title"])
     print("lift at Mach 0.7:", study.get_scalar("cl", rows=study.select("mach == 0.7")).round(3))
     print("runs that failed:", study.select("status == failed"))

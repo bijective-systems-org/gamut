@@ -1,8 +1,8 @@
 // The built-in model `nearest` (spec section 7.5): for each input row, the
 // outputs of the closest stored point.  Done once, here, so every language
 // gets bit-identical answers.
-#ifndef MESTRA_CORE_NEAREST_HPP
-#define MESTRA_CORE_NEAREST_HPP
+#ifndef GAMUT_CORE_NEAREST_HPP
+#define GAMUT_CORE_NEAREST_HPP
 
 #include <cstdint>
 #include <map>
@@ -11,7 +11,7 @@
 
 #include "value.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 struct Nearest {
@@ -44,6 +44,6 @@ std::vector<double> nearest_values(const Nearest& m, const std::string& output,
 std::int64_t nearest_output_size(const Nearest& m, const std::string& output);
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_NEAREST_HPP
+#endif  // GAMUT_CORE_NEAREST_HPP

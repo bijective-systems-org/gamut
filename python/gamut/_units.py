@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from ._lib import MestraError, units_parse
+from ._lib import GamutError, units_parse
 
 _TOKEN = re.compile(r"(\s+|\*\*|\*|/|\^|\(|\)|(?<![0-9])\.(?![0-9]))")
 _POWER = re.compile(r"^([A-Za-z_%'\"][A-Za-z0-9_%'\"]*?[A-Za-z_%'\"]|[A-Za-z_%'\"])(-?[0-9]+)$")
@@ -23,7 +23,7 @@ _POWER = re.compile(r"^([A-Za-z_%'\"][A-Za-z0-9_%'\"]*?[A-Za-z_%'\"]|[A-Za-z_%'\
 def translate(units: str) -> str:
     """The pint spelling of a UDUNITS string."""
     if not units_parse(units):
-        raise MestraError("E7", f"the units \"{units}\" do not parse (spec section 13)")
+        raise GamutError("E7", f"the units \"{units}\" do not parse (spec section 13)")
     if units.strip() == "1":
         return "dimensionless"
     parts = [p for p in _TOKEN.split(units.strip()) if p != ""]
@@ -45,8 +45,8 @@ def _registry() -> Any:
     try:
         import pint
     except ImportError:
-        raise MestraError("", "unit conversion needs pint: pip install pint "
-                              "(or mestra[units])") from None
+        raise GamutError("", "unit conversion needs pint: pip install pint "
+                              "(or gamut-format[units])") from None
     return pint.UnitRegistry()
 
 
@@ -58,7 +58,7 @@ def convert(values: Any, from_units: str, to_units: str) -> np.ndarray:
     try:
         q = ureg.Quantity(np.asarray(values, dtype=np.float64), translate(from_units))
         return np.asarray(q.to(translate(to_units)).magnitude)
-    except MestraError:
+    except GamutError:
         raise
     except Exception as e:   # pint's own errors: dimensionality, unknown names
-        raise MestraError("", f"cannot convert {from_units} to {to_units}: {e}") from None
+        raise GamutError("", f"cannot convert {from_units} to {to_units}: {e}") from None

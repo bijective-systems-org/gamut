@@ -1,6 +1,6 @@
-// The C interface: every mes_* function, each catching every exception at
-// the boundary and turning it into a mes_error.
-#include "mestra/mestra.h"
+// The C interface: every gamut_* function, each catching every exception at
+// the boundary and turning it into a gamut_error.
+#include "gamut/gamut.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -23,17 +23,17 @@
 #include "validate.hpp"
 #include "writer.hpp"
 
-using mestra::DType;
-using mestra::Error;
-using mestra::Selection;
-using mestra::internal::Batch;
-using mestra::internal::Column;
-using mestra::internal::Geometry;
-using mestra::internal::Reader;
-using mestra::internal::Schema;
-using mestra::internal::Writer;
+using gamut::DType;
+using gamut::Error;
+using gamut::Selection;
+using gamut::internal::Batch;
+using gamut::internal::Column;
+using gamut::internal::Geometry;
+using gamut::internal::Reader;
+using gamut::internal::Schema;
+using gamut::internal::Writer;
 
-struct mes_file {
+struct gamut_file {
   std::unique_ptr<Writer> writer;
   std::unique_ptr<Reader> reader;
   Geometry geometry;
@@ -42,22 +42,22 @@ struct mes_file {
   bool batch_open = false;
 };
 
-struct mes_strings {
+struct gamut_strings {
   std::vector<std::string> items;
 };
 
-struct mes_report {
-  mestra::internal::Report report;
+struct gamut_report {
+  gamut::internal::Report report;
 };
 
-struct mes_tree {
-  mestra::internal::Dict root;
+struct gamut_tree {
+  gamut::internal::Dict root;
 };
 
 namespace {
 
 const char kVersion[] = "1.0.0.dev0";
-const char kFormat[] = "mestra/1";
+const char kFormat[] = "gamut/1";
 
 void copy_into(char* dst, std::size_t size, const std::string& src) {
   if (size == 0) return;
@@ -66,7 +66,7 @@ void copy_into(char* dst, std::size_t size, const std::string& src) {
   dst[n] = '\0';
 }
 
-int fail(mes_error* err) {
+int fail(gamut_error* err) {
   if (err == nullptr) return 1;
   std::memset(err, 0, sizeof *err);
   try {
@@ -85,7 +85,7 @@ int fail(mes_error* err) {
   return 1;
 }
 
-void clear(mes_error* err) {
+void clear(gamut_error* err) {
   if (err != nullptr) std::memset(err, 0, sizeof *err);
 }
 
@@ -97,25 +97,25 @@ void need(bool ok, const std::string& message) {
 
 DType dtype(int code) {
   DType t;
-  need(mestra::dtype_from_int(code, &t) && t != DType::String,
-       "dtype " + std::to_string(code) + " is not one of the MES_* codes");
+  need(gamut::dtype_from_int(code, &t) && t != DType::String,
+       "dtype " + std::to_string(code) + " is not one of the GAMUT_* codes");
   return t;
 }
 
-// MES_AS_GIVEN (0) in a declaration: the dtype of the first values.
+// GAMUT_AS_GIVEN (0) in a declaration: the dtype of the first values.
 bool as_given(int code) { return code == 0; }
 
-Writer& writer_of(mes_file* f) {
+Writer& writer_of(gamut_file* f) {
   need(f != nullptr, "the handle is NULL");
-  need(f->writer != nullptr, "this handle was opened for reading; writing needs mes_create "
-                             "or mes_open_append");
+  need(f->writer != nullptr, "this handle was opened for reading; writing needs gamut_create "
+                             "or gamut_open_append");
   return *f->writer;
 }
 
-const Reader& reader_of(const mes_file* f) {
+const Reader& reader_of(const gamut_file* f) {
   need(f != nullptr, "the handle is NULL");
   need(f->reader != nullptr, "this handle was opened for writing; close it and open it with "
-                             "mes_open to read");
+                             "gamut_open to read");
   return *f->reader;
 }
 
@@ -130,12 +130,12 @@ std::vector<std::string> list(const char* const* items, int64_t n) {
   return out;
 }
 
-Selection selection(const mes_sel* s) {
+Selection selection(const gamut_sel* s) {
   if (s == nullptr) return Selection::all();
   switch (s->kind) {
-    case MES_SEL_ALL: return Selection::all();
-    case MES_SEL_RANGE: return Selection::range(s->start, s->stop);
-    case MES_SEL_INDEX: {
+    case GAMUT_SEL_ALL: return Selection::all();
+    case GAMUT_SEL_RANGE: return Selection::range(s->start, s->stop);
+    case GAMUT_SEL_INDEX: {
       need(s->count >= 0 && (s->count == 0 || s->index != nullptr), "an index selection "
                                                                     "needs its indices");
       return Selection::list(std::vector<int64_t>(s->index, s->index + s->count));
@@ -149,12 +149,12 @@ Column column(int code, const void* values, int64_t count) {
   const DType t = dtype(code);
   need(count >= 0, "a negative count");
   need(count == 0 || values != nullptr, "the values pointer is NULL");
-  need(static_cast<uint64_t>(count) <= SIZE_MAX / mestra::dtype_size(t), "the count is too large");
+  need(static_cast<uint64_t>(count) <= SIZE_MAX / gamut::dtype_size(t), "the count is too large");
   Column c;
   c.dtype = t;
   c.count = count;
   const auto* p = static_cast<const unsigned char*>(values);
-  c.bytes.assign(p, p + static_cast<std::size_t>(count) * mestra::dtype_size(t));
+  c.bytes.assign(p, p + static_cast<std::size_t>(count) * gamut::dtype_size(t));
   return c;
 }
 
@@ -162,32 +162,32 @@ Column column(int code, const void* values, int64_t count) {
 std::string path_of(const Schema& s, const std::string& name) {
   if (name == "row" || name == "coordinates" || name.compare(0, 6, "cells/") == 0) return name;
   for (const auto& r : s.results) {
-    if (r.name == name) return mestra::internal::result_path(r);
+    if (r.name == name) return gamut::internal::result_path(r);
   }
   for (const auto& m : s.mesh.labels) {
-    if (m.name == name) return mestra::internal::mesh_label_path(m);
+    if (m.name == name) return gamut::internal::mesh_label_path(m);
   }
   return name;
 }
 
-mes_strings* strings(std::vector<std::string> items) {
-  auto* s = new mes_strings;
+gamut_strings* strings(std::vector<std::string> items) {
+  auto* s = new gamut_strings;
   s->items = std::move(items);
   return s;
 }
 
-mestra::internal::Dict& tree_of(mes_tree* t) {
+gamut::internal::Dict& tree_of(gamut_tree* t) {
   need(t != nullptr, "the tree is NULL");
   return t->root;
 }
 
-const mestra::internal::Dict& tree_of(const mes_tree* t) {
+const gamut::internal::Dict& tree_of(const gamut_tree* t) {
   need(t != nullptr, "the tree is NULL");
   return t->root;
 }
 
-const mestra::internal::Value& value_at(const mes_tree* t, const char* key) {
-  const auto* v = mestra::internal::find_path(tree_of(t), str(key));
+const gamut::internal::Value& value_at(const gamut_tree* t, const char* key) {
+  const auto* v = gamut::internal::find_path(tree_of(t), str(key));
   need(v != nullptr, "the tree has no \"" + str(key) + "\"");
   return *v;
 }
@@ -197,23 +197,23 @@ const mestra::internal::Value& value_at(const mes_tree* t, const char* key) {
 
 extern "C" {
 
-const char* mes_version(void) { return kVersion; }
-const char* mes_format(void) { return kFormat; }
+const char* gamut_version(void) { return kVersion; }
+const char* gamut_format(void) { return kFormat; }
 
-int mes_units_parse(const char* units) {
+int gamut_units_parse(const char* units) {
   try {
-    return units != nullptr && mestra::units_parse(units) ? 1 : 0;
+    return units != nullptr && gamut::units_parse(units) ? 1 : 0;
   } catch (...) {
     return 0;
   }
 }
 
-int mes_create(const char* path, const char* writer, const char* mesh_kind, const char* per,
-               mes_file** out, mes_error* err) {
+int gamut_create(const char* path, const char* writer, const char* mesh_kind, const char* per,
+               gamut_file** out, gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
-    auto f = std::make_unique<mes_file>();
+    auto f = std::make_unique<gamut_file>();
     f->writer = Writer::create(str(path), str(writer), str(mesh_kind),
                                str(per).empty() ? std::string("fixed") : str(per));
     *out = f.release();
@@ -223,12 +223,12 @@ int mes_create(const char* path, const char* writer, const char* mesh_kind, cons
   }
 }
 
-int mes_create_model(const char* path, const char* writer, const char* mesh_kind, const char* per,
-                     mes_file** out, mes_error* err) {
+int gamut_create_model(const char* path, const char* writer, const char* mesh_kind, const char* per,
+                     gamut_file** out, gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
-    auto f = std::make_unique<mes_file>();
+    auto f = std::make_unique<gamut_file>();
     f->writer = Writer::create_model(str(path), str(writer), str(mesh_kind),
                                      str(per).empty() ? std::string("fixed") : str(per));
     *out = f.release();
@@ -238,11 +238,11 @@ int mes_create_model(const char* path, const char* writer, const char* mesh_kind
   }
 }
 
-int mes_open_append(const char* path, mes_file** out, mes_error* err) {
+int gamut_open_append(const char* path, gamut_file** out, gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
-    auto f = std::make_unique<mes_file>();
+    auto f = std::make_unique<gamut_file>();
     f->writer = Writer::open_append(str(path));
     *out = f.release();
     return 0;
@@ -251,7 +251,7 @@ int mes_open_append(const char* path, mes_file** out, mes_error* err) {
   }
 }
 
-int mes_set_attribute(mes_file* f, const char* name, const char* value, mes_error* err) {
+int gamut_set_attribute(gamut_file* f, const char* name, const char* value, gamut_error* err) {
   try {
     clear(err);
     writer_of(f).set_attribute(str(name), str(value));
@@ -261,12 +261,12 @@ int mes_set_attribute(mes_file* f, const char* name, const char* value, mes_erro
   }
 }
 
-int mes_declare_parameter(mes_file* f, const char* name, const char* role, const char* units,
+int gamut_declare_parameter(gamut_file* f, const char* name, const char* role, const char* units,
                           int dtype_code, int has_bounds, double lower, double upper,
-                          const char* run_group, mes_error* err) {
+                          const char* run_group, gamut_error* err) {
   try {
     clear(err);
-    mestra::internal::Parameter p;
+    gamut::internal::Parameter p;
     p.name = str(name);
     p.role = str(role).empty() ? std::string("design") : str(role);
     p.units = str(units);
@@ -284,8 +284,8 @@ int mes_declare_parameter(mes_file* f, const char* name, const char* role, const
   }
 }
 
-int mes_declare_label(mes_file* f, const char* name, const char* role,
-                      const char* const* categories, int64_t n, mes_error* err) {
+int gamut_declare_label(gamut_file* f, const char* name, const char* role,
+                      const char* const* categories, int64_t n, gamut_error* err) {
   try {
     clear(err);
     writer_of(f).declare_label(str(name), str(role), list(categories, n));
@@ -295,14 +295,14 @@ int mes_declare_label(mes_file* f, const char* name, const char* role,
   }
 }
 
-int mes_declare_result(mes_file* f, const char* name, const char* where, const char* units,
+int gamut_declare_result(gamut_file* f, const char* name, const char* where, const char* units,
                        int dtype_code, const char* of, const char* statistic, int has_q,
                        double q, const char* method, const char* with_respect_to,
                        const char* axis, const char* vector, int round_bits, const char* model,
-                       const char* output, mes_error* err) {
+                       const char* output, gamut_error* err) {
   try {
     clear(err);
-    mestra::internal::Result r;
+    gamut::internal::Result r;
     r.name = str(name);
     r.where = str(where);
     r.units = str(units);
@@ -329,11 +329,11 @@ int mes_declare_result(mes_file* f, const char* name, const char* where, const c
   }
 }
 
-int mes_declare_mesh_label(mes_file* f, const char* name, const char* where,
-                           const char* const* categories, int64_t n, mes_error* err) {
+int gamut_declare_mesh_label(gamut_file* f, const char* name, const char* where,
+                           const char* const* categories, int64_t n, gamut_error* err) {
   try {
     clear(err);
-    mestra::internal::MeshLabel m;
+    gamut::internal::MeshLabel m;
     m.name = str(name);
     m.where = str(where);
     writer_of(f).declare_mesh_label(m, list(categories, n));
@@ -343,8 +343,8 @@ int mes_declare_mesh_label(mes_file* f, const char* name, const char* where,
   }
 }
 
-int mes_declare_coordinates(mes_file* f, const char* units, int dtype_code, int axes,
-                            const char* model, const char* output, mes_error* err) {
+int gamut_declare_coordinates(gamut_file* f, const char* units, int dtype_code, int axes,
+                            const char* model, const char* output, gamut_error* err) {
   try {
     clear(err);
     writer_of(f).declare_coordinates(str(units),
@@ -356,11 +356,11 @@ int mes_declare_coordinates(mes_file* f, const char* units, int dtype_code, int 
   }
 }
 
-int mes_set_constant(mes_file* f, const char* name, const char* units, int dtype_code,
-                     double float_value, int64_t integer_value, mes_error* err) {
+int gamut_set_constant(gamut_file* f, const char* name, const char* units, int dtype_code,
+                     double float_value, int64_t integer_value, gamut_error* err) {
   try {
     clear(err);
-    mestra::internal::Constant c;
+    gamut::internal::Constant c;
     c.name = str(name);
     c.units = str(units);
     c.dtype = dtype(dtype_code);
@@ -373,7 +373,7 @@ int mes_set_constant(mes_file* f, const char* name, const char* units, int dtype
   }
 }
 
-int mes_set_generalisation_group(mes_file* f, const char* label, mes_error* err) {
+int gamut_set_generalisation_group(gamut_file* f, const char* label, gamut_error* err) {
   try {
     clear(err);
     writer_of(f).set_generalisation_group(str(label));
@@ -383,14 +383,14 @@ int mes_set_generalisation_group(mes_file* f, const char* label, mes_error* err)
   }
 }
 
-int mes_set_compression(mes_file* f, int gzip_level, int shuffle, mes_error* err) {
+int gamut_set_compression(gamut_file* f, int gzip_level, int shuffle, gamut_error* err) {
   try {
     clear(err);
     need(gzip_level >= 0 && gzip_level <= 9, "gzip_level is 0 (off) to 9");
-    mestra::FilterPipeline p;
+    gamut::FilterPipeline p;
     if (gzip_level > 0) {
-      if (shuffle) p.push_back(mestra::FilterStep::shuffle());
-      p.push_back(mestra::FilterStep::gzip(gzip_level));
+      if (shuffle) p.push_back(gamut::FilterStep::shuffle());
+      p.push_back(gamut::FilterStep::gzip(gzip_level));
     }
     writer_of(f).set_compression(p);
     return 0;
@@ -399,7 +399,7 @@ int mes_set_compression(mes_file* f, int gzip_level, int shuffle, mes_error* err
   }
 }
 
-int mes_geometry_begin(mes_file* f, mes_error* err) {
+int gamut_geometry_begin(gamut_file* f, gamut_error* err) {
   try {
     clear(err);
     writer_of(f);
@@ -411,12 +411,12 @@ int mes_geometry_begin(mes_file* f, mes_error* err) {
   }
 }
 
-int mes_geometry_points(mes_file* f, int dtype_code, const void* points, int64_t n_nodes,
-                        int axes, mes_error* err) {
+int gamut_geometry_points(gamut_file* f, int dtype_code, const void* points, int64_t n_nodes,
+                        int axes, gamut_error* err) {
   try {
     clear(err);
     writer_of(f);
-    need(f->geometry_open, "call mes_geometry_begin first");
+    need(f->geometry_open, "call gamut_geometry_begin first");
     need(n_nodes >= 0 && axes >= 1 && axes <= 3, "points are n_nodes x 1 to 3 axes");
     // NULL points give the node count alone: the cells of a shared mesh
     // whose coordinates come with the runs.
@@ -429,13 +429,13 @@ int mes_geometry_points(mes_file* f, int dtype_code, const void* points, int64_t
   }
 }
 
-int mes_geometry_cells(mes_file* f, const uint8_t* types, int64_t n_cells,
+int gamut_geometry_cells(gamut_file* f, const uint8_t* types, int64_t n_cells,
                        const int64_t* offsets, const int64_t* connectivity,
-                       int64_t n_connectivity, mes_error* err) {
+                       int64_t n_connectivity, gamut_error* err) {
   try {
     clear(err);
     writer_of(f);
-    need(f->geometry_open, "call mes_geometry_begin first");
+    need(f->geometry_open, "call gamut_geometry_begin first");
     need(n_cells >= 0 && n_connectivity >= 0, "a negative count");
     need(n_cells == 0 || (types != nullptr && offsets != nullptr), "cells need types and offsets");
     need(n_connectivity == 0 || connectivity != nullptr, "connectivity is NULL");
@@ -448,12 +448,12 @@ int mes_geometry_cells(mes_file* f, const uint8_t* types, int64_t n_cells,
   }
 }
 
-int mes_geometry_label(mes_file* f, const char* name, const int64_t* values, int64_t n,
-                       mes_error* err) {
+int gamut_geometry_label(gamut_file* f, const char* name, const int64_t* values, int64_t n,
+                       gamut_error* err) {
   try {
     clear(err);
     writer_of(f);
-    need(f->geometry_open, "call mes_geometry_begin first");
+    need(f->geometry_open, "call gamut_geometry_begin first");
     need(n >= 0 && (n == 0 || values != nullptr), "label values are missing");
     f->geometry.labels[str(name)] = std::vector<int64_t>(values, values + n);
     return 0;
@@ -462,11 +462,11 @@ int mes_geometry_label(mes_file* f, const char* name, const int64_t* values, int
   }
 }
 
-int mes_set_mesh(mes_file* f, mes_error* err) {
+int gamut_set_mesh(gamut_file* f, gamut_error* err) {
   try {
     clear(err);
     Writer& w = writer_of(f);
-    need(f->geometry_open, "stage the mesh with mes_geometry_begin first");
+    need(f->geometry_open, "stage the mesh with gamut_geometry_begin first");
     w.set_mesh(f->geometry);
     f->geometry_open = false;
     return 0;
@@ -475,7 +475,7 @@ int mes_set_mesh(mes_file* f, mes_error* err) {
   }
 }
 
-int mes_batch_begin(mes_file* f, int64_t n_rows, mes_error* err) {
+int gamut_batch_begin(gamut_file* f, int64_t n_rows, gamut_error* err) {
   try {
     clear(err);
     writer_of(f);
@@ -489,12 +489,12 @@ int mes_batch_begin(mes_file* f, int64_t n_rows, mes_error* err) {
   }
 }
 
-int mes_batch_values(mes_file* f, const char* name, int dtype_code, const void* values,
-                     int64_t count, mes_error* err) {
+int gamut_batch_values(gamut_file* f, const char* name, int dtype_code, const void* values,
+                     int64_t count, gamut_error* err) {
   try {
     clear(err);
     writer_of(f);
-    need(f->batch_open, "call mes_batch_begin first");
+    need(f->batch_open, "call gamut_batch_begin first");
     need(f->batch.values.count(str(name)) == 0, str(name) + " was given twice in this batch");
     f->batch.values[str(name)] = column(dtype_code, values, count);
     return 0;
@@ -503,12 +503,12 @@ int mes_batch_values(mes_file* f, const char* name, int dtype_code, const void* 
   }
 }
 
-int mes_batch_names(mes_file* f, const char* label, const char* const* names, int64_t count,
-                    mes_error* err) {
+int gamut_batch_names(gamut_file* f, const char* label, const char* const* names, int64_t count,
+                    gamut_error* err) {
   try {
     clear(err);
     writer_of(f);
-    need(f->batch_open, "call mes_batch_begin first");
+    need(f->batch_open, "call gamut_batch_begin first");
     need(f->batch.names.count(str(label)) == 0, str(label) + " was given twice in this batch");
     f->batch.names[str(label)] = list(names, count);
     return 0;
@@ -517,7 +517,7 @@ int mes_batch_names(mes_file* f, const char* label, const char* const* names, in
   }
 }
 
-int mes_batch_geometry_for_row(mes_file* f, mes_error* err) {
+int gamut_batch_geometry_for_row(gamut_file* f, gamut_error* err) {
   try {
     clear(err);
     writer_of(f);
@@ -530,7 +530,7 @@ int mes_batch_geometry_for_row(mes_file* f, mes_error* err) {
   }
 }
 
-int mes_batch_geometry_for_member(mes_file* f, const char* member, mes_error* err) {
+int gamut_batch_geometry_for_member(gamut_file* f, const char* member, gamut_error* err) {
   try {
     clear(err);
     writer_of(f);
@@ -545,11 +545,11 @@ int mes_batch_geometry_for_member(mes_file* f, const char* member, mes_error* er
   }
 }
 
-int mes_batch_commit(mes_file* f, int64_t* first_id, mes_error* err) {
+int gamut_batch_commit(gamut_file* f, int64_t* first_id, gamut_error* err) {
   try {
     clear(err);
     Writer& w = writer_of(f);
-    need(f->batch_open, "call mes_batch_begin first");
+    need(f->batch_open, "call gamut_batch_begin first");
     const int64_t id = w.add_runs(f->batch);
     f->batch = Batch();
     f->batch_open = false;
@@ -565,37 +565,37 @@ int mes_batch_commit(mes_file* f, int64_t* first_id, mes_error* err) {
   }
 }
 
-int mes_set_note_text(mes_file* f, const char* key, const char* value, mes_error* err) {
+int gamut_set_note_text(gamut_file* f, const char* key, const char* value, gamut_error* err) {
   try {
     clear(err);
-    writer_of(f).set_note(str(key), mestra::AttrValue::text(str(value)));
+    writer_of(f).set_note(str(key), gamut::AttrValue::text(str(value)));
     return 0;
   } catch (...) {
     return fail(err);
   }
 }
 
-int mes_set_note_int(mes_file* f, const char* key, int64_t value, mes_error* err) {
+int gamut_set_note_int(gamut_file* f, const char* key, int64_t value, gamut_error* err) {
   try {
     clear(err);
-    writer_of(f).set_note(str(key), mestra::AttrValue::integer(value));
+    writer_of(f).set_note(str(key), gamut::AttrValue::integer(value));
     return 0;
   } catch (...) {
     return fail(err);
   }
 }
 
-int mes_set_note_float(mes_file* f, const char* key, double value, mes_error* err) {
+int gamut_set_note_float(gamut_file* f, const char* key, double value, gamut_error* err) {
   try {
     clear(err);
-    writer_of(f).set_note(str(key), mestra::AttrValue::real(value));
+    writer_of(f).set_note(str(key), gamut::AttrValue::real(value));
     return 0;
   } catch (...) {
     return fail(err);
   }
 }
 
-int mes_set_private(mes_file* f, const char* name, const void* bytes, int64_t n, mes_error* err) {
+int gamut_set_private(gamut_file* f, const char* name, const void* bytes, int64_t n, gamut_error* err) {
   try {
     clear(err);
     need(n >= 0 && (n == 0 || bytes != nullptr), "the bytes are NULL");
@@ -607,7 +607,7 @@ int mes_set_private(mes_file* f, const char* name, const void* bytes, int64_t n,
   }
 }
 
-int mes_flush(mes_file* f, mes_error* err) {
+int gamut_flush(gamut_file* f, gamut_error* err) {
   try {
     clear(err);
     writer_of(f).flush();
@@ -617,25 +617,25 @@ int mes_flush(mes_file* f, mes_error* err) {
   }
 }
 
-int mes_close(mes_file* f, mes_error* err) {
+int gamut_close(gamut_file* f, gamut_error* err) {
   clear(err);
   if (f == nullptr) return 0;
   try {
     if (f->writer) f->writer->close();
   } catch (...) {
     // The handle stays open: fix what the error names and close again, or
-    // give up with mes_abandon.
+    // give up with gamut_abandon.
     return fail(err);
   }
   delete f;
   return 0;
 }
 
-int mes_append(const char* dst_path, const char* src_path, int64_t* rows_added,
-               mes_error* err) {
+int gamut_append(const char* dst_path, const char* src_path, int64_t* rows_added,
+               gamut_error* err) {
   try {
     clear(err);
-    const int64_t n = mestra::internal::append_file(str(dst_path), str(src_path));
+    const int64_t n = gamut::internal::append_file(str(dst_path), str(src_path));
     if (rows_added != nullptr) *rows_added = n;
     return 0;
   } catch (...) {
@@ -643,30 +643,30 @@ int mes_append(const char* dst_path, const char* src_path, int64_t* rows_added,
   }
 }
 
-int mes_extract(const char* src_path, const char* dst_path, const mes_sel* rows,
-                mes_error* err) {
+int gamut_extract(const char* src_path, const char* dst_path, const gamut_sel* rows,
+                gamut_error* err) {
   try {
     clear(err);
-    mestra::internal::extract_file(str(src_path), str(dst_path), selection(rows));
+    gamut::internal::extract_file(str(src_path), str(dst_path), selection(rows));
     return 0;
   } catch (...) {
     return fail(err);
   }
 }
 
-int mes_write_copy(const char* src_path, const char* dst_path, mes_error* err) {
+int gamut_write_copy(const char* src_path, const char* dst_path, gamut_error* err) {
   try {
     clear(err);
-    mestra::internal::write_copy_file(str(src_path), str(dst_path));
+    gamut::internal::write_copy_file(str(src_path), str(dst_path));
     return 0;
   } catch (...) {
     return fail(err);
   }
 }
 
-void mes_abandon(mes_file* f, int remove_file) {
+void gamut_abandon(gamut_file* f, int remove_file) {
   if (f == nullptr) return;
-  std::unique_ptr<mes_file> owned(f);
+  std::unique_ptr<gamut_file> owned(f);
   try {
     if (owned->writer) owned->writer->abandon(remove_file != 0);
   } catch (...) {
@@ -674,11 +674,11 @@ void mes_abandon(mes_file* f, int remove_file) {
   }
 }
 
-int mes_open(const char* path, mes_file** out, mes_error* err) {
+int gamut_open(const char* path, gamut_file** out, gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
-    auto f = std::make_unique<mes_file>();
+    auto f = std::make_unique<gamut_file>();
     f->reader = Reader::open(str(path));
     *out = f.release();
     return 0;
@@ -687,7 +687,7 @@ int mes_open(const char* path, mes_file** out, mes_error* err) {
   }
 }
 
-int mes_set_threads(mes_file* f, int threads, mes_error* err) {
+int gamut_set_threads(gamut_file* f, int threads, gamut_error* err) {
   try {
     clear(err);
     need(f != nullptr && f->reader != nullptr, "threads apply to a file open to read");
@@ -699,14 +699,14 @@ int mes_set_threads(mes_file* f, int threads, mes_error* err) {
   }
 }
 
-int mes_info(const mes_file* f, const char* key, mes_strings** out, mes_error* err) {
+int gamut_info(const gamut_file* f, const char* key, gamut_strings** out, gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
     const Schema& s = reader_of(f).schema();
     const std::string k = str(key);
     std::vector<std::string> v;
-    if (k == "format") v = {"mestra/1"};
+    if (k == "format") v = {"gamut/1"};
     else if (k == "kind") v = {s.kind};
     else if (k == "type") v = {s.type()};
     else if (k == "addons") v = s.addons();
@@ -732,7 +732,7 @@ int mes_info(const mes_file* f, const char* key, mes_strings** out, mes_error* e
   }
 }
 
-int mes_names(const mes_file* f, const char* group, mes_strings** out, mes_error* err) {
+int gamut_names(const gamut_file* f, const char* group, gamut_strings** out, gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
@@ -743,8 +743,8 @@ int mes_names(const mes_file* f, const char* group, mes_strings** out, mes_error
   }
 }
 
-int mes_describe(const mes_file* f, const char* name, mes_strings** keys, mes_strings** values,
-                 mes_error* err) {
+int gamut_describe(const gamut_file* f, const char* name, gamut_strings** keys, gamut_strings** values,
+                 gamut_error* err) {
   try {
     clear(err);
     need(keys != nullptr && values != nullptr, "keys or values is NULL");
@@ -754,7 +754,7 @@ int mes_describe(const mes_file* f, const char* name, mes_strings** keys, mes_st
       // The file itself.
       const Schema& s = r.schema();
       const std::pair<const char*, std::string> all[] = {
-          {"format", "mestra/1"}, {"kind", s.kind}, {"type", s.type()},
+          {"format", "gamut/1"}, {"kind", s.kind}, {"type", s.type()},
           {"row_count", std::to_string(s.rows)}, {"writer", s.writer},
           {"created", s.created}, {"file_id", s.file_id}, {"title", s.title},
           {"license", s.license}, {"references", s.references}, {"source", s.source},
@@ -781,8 +781,8 @@ int mes_describe(const mes_file* f, const char* name, mes_strings** keys, mes_st
   }
 }
 
-int mes_shape(const mes_file* f, const char* name, const mes_sel* rows, const mes_sel* sites,
-              int64_t* shape, int* rank, mes_error* err) {
+int gamut_shape(const gamut_file* f, const char* name, const gamut_sel* rows, const gamut_sel* sites,
+              int64_t* shape, int* rank, gamut_error* err) {
   try {
     clear(err);
     need(shape != nullptr && rank != nullptr, "shape or rank is NULL");
@@ -797,8 +797,8 @@ int mes_shape(const mes_file* f, const char* name, const mes_sel* rows, const me
   }
 }
 
-int mes_read(const mes_file* f, const char* name, const mes_sel* rows, const mes_sel* sites,
-             int dtype_code, void* out, int64_t out_bytes, mes_error* err) {
+int gamut_read(const gamut_file* f, const char* name, const gamut_sel* rows, const gamut_sel* sites,
+             int dtype_code, void* out, int64_t out_bytes, gamut_error* err) {
   try {
     clear(err);
     need(out_bytes >= 0 && (out_bytes == 0 || out != nullptr), "the output buffer is NULL");
@@ -811,8 +811,8 @@ int mes_read(const mes_file* f, const char* name, const mes_sel* rows, const mes
   }
 }
 
-int mes_label_names(const mes_file* f, const char* label, const mes_sel* rows, mes_strings** out,
-                    mes_error* err) {
+int gamut_label_names(const gamut_file* f, const char* label, const gamut_sel* rows, gamut_strings** out,
+                    gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
@@ -823,12 +823,12 @@ int mes_label_names(const mes_file* f, const char* label, const mes_sel* rows, m
   }
 }
 
-int mes_select(const mes_file* f, const char* where, int64_t* out, int64_t capacity, int64_t* n,
-               mes_error* err) {
+int gamut_select(const gamut_file* f, const char* where, int64_t* out, int64_t capacity, int64_t* n,
+               gamut_error* err) {
   try {
     clear(err);
     need(n != nullptr, "n is NULL");
-    const auto rows = mestra::internal::select_rows(reader_of(f), str(where));
+    const auto rows = gamut::internal::select_rows(reader_of(f), str(where));
     need(static_cast<int64_t>(rows.size()) <= capacity && (rows.empty() || out != nullptr),
          "the output buffer holds " + std::to_string(capacity) + " positions and " +
              std::to_string(rows.size()) + " rows are selected");
@@ -840,8 +840,8 @@ int mes_select(const mes_file* f, const char* where, int64_t* out, int64_t capac
   }
 }
 
-int mes_notes(const mes_file* f, mes_strings** keys, mes_strings** kinds, mes_strings** values,
-              mes_error* err) {
+int gamut_notes(const gamut_file* f, gamut_strings** keys, gamut_strings** kinds, gamut_strings** values,
+              gamut_error* err) {
   try {
     clear(err);
     need(keys != nullptr && kinds != nullptr && values != nullptr, "an output is NULL");
@@ -849,10 +849,10 @@ int mes_notes(const mes_file* f, mes_strings** keys, mes_strings** kinds, mes_st
     for (const auto& kv : reader_of(f).notes()) {
       k.push_back(kv.first);
       switch (kv.second.kind()) {
-        case mestra::AttrValue::Kind::Str: t.push_back("text"); v.push_back(kv.second.as_text()); break;
-        case mestra::AttrValue::Kind::Int: t.push_back("int"); v.push_back(std::to_string(kv.second.as_int())); break;
-        case mestra::AttrValue::Kind::Bool: t.push_back("bool"); v.push_back(kv.second.as_bool() ? "1" : "0"); break;
-        case mestra::AttrValue::Kind::Float: {
+        case gamut::AttrValue::Kind::Str: t.push_back("text"); v.push_back(kv.second.as_text()); break;
+        case gamut::AttrValue::Kind::Int: t.push_back("int"); v.push_back(std::to_string(kv.second.as_int())); break;
+        case gamut::AttrValue::Kind::Bool: t.push_back("bool"); v.push_back(kv.second.as_bool() ? "1" : "0"); break;
+        case gamut::AttrValue::Kind::Float: {
           char buf[40];
           std::snprintf(buf, sizeof buf, "%.17g", kv.second.as_float());
           t.push_back("float");
@@ -870,7 +870,7 @@ int mes_notes(const mes_file* f, mes_strings** keys, mes_strings** kinds, mes_st
   }
 }
 
-int mes_private_names(const mes_file* f, mes_strings** out, mes_error* err) {
+int gamut_private_names(const gamut_file* f, gamut_strings** out, gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
@@ -881,8 +881,8 @@ int mes_private_names(const mes_file* f, mes_strings** out, mes_error* err) {
   }
 }
 
-int mes_get_private(const mes_file* f, const char* name, void* out, int64_t capacity, int64_t* n,
-                    mes_error* err) {
+int gamut_get_private(const gamut_file* f, const char* name, void* out, int64_t capacity, int64_t* n,
+                    gamut_error* err) {
   try {
     clear(err);
     need(n != nullptr, "n is NULL");
@@ -898,7 +898,7 @@ int mes_get_private(const mes_file* f, const char* name, void* out, int64_t capa
   }
 }
 
-int mes_table(const mes_file* f, const char* table, mes_strings** out, mes_error* err) {
+int gamut_table(const gamut_file* f, const char* table, gamut_strings** out, gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
@@ -909,49 +909,49 @@ int mes_table(const mes_file* f, const char* table, mes_strings** out, mes_error
   }
 }
 
-int mes_tree_new(mes_tree** out, mes_error* err) {
+int gamut_tree_new(gamut_tree** out, gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
-    *out = new mes_tree;
+    *out = new gamut_tree;
     return 0;
   } catch (...) {
     return fail(err);
   }
 }
 
-void mes_tree_free(mes_tree* t) { delete t; }
+void gamut_tree_free(gamut_tree* t) { delete t; }
 
-#define MES_TREE_SET(expr)                                              \
+#define GAMUT_TREE_SET(expr)                                              \
   try {                                                                 \
     clear(err);                                                         \
-    mestra::internal::set_path(tree_of(t), str(key), expr);             \
+    gamut::internal::set_path(tree_of(t), str(key), expr);             \
     return 0;                                                           \
   } catch (...) {                                                       \
     return fail(err);                                                   \
   }
 
-int mes_tree_set_null(mes_tree* t, const char* key, mes_error* err) {
-  MES_TREE_SET(mestra::internal::Value::null())
+int gamut_tree_set_null(gamut_tree* t, const char* key, gamut_error* err) {
+  GAMUT_TREE_SET(gamut::internal::Value::null())
 }
-int mes_tree_set_bool(mes_tree* t, const char* key, int value, mes_error* err) {
-  MES_TREE_SET(mestra::internal::Value::boolean(value != 0))
+int gamut_tree_set_bool(gamut_tree* t, const char* key, int value, gamut_error* err) {
+  GAMUT_TREE_SET(gamut::internal::Value::boolean(value != 0))
 }
-int mes_tree_set_int(mes_tree* t, const char* key, int64_t value, mes_error* err) {
-  MES_TREE_SET(mestra::internal::Value::integer(value))
+int gamut_tree_set_int(gamut_tree* t, const char* key, int64_t value, gamut_error* err) {
+  GAMUT_TREE_SET(gamut::internal::Value::integer(value))
 }
-int mes_tree_set_float(mes_tree* t, const char* key, double value, mes_error* err) {
-  MES_TREE_SET(mestra::internal::Value::real(value))
+int gamut_tree_set_float(gamut_tree* t, const char* key, double value, gamut_error* err) {
+  GAMUT_TREE_SET(gamut::internal::Value::real(value))
 }
-int mes_tree_set_string(mes_tree* t, const char* key, const char* value, mes_error* err) {
-  MES_TREE_SET(mestra::internal::Value::text(str(value)))
+int gamut_tree_set_string(gamut_tree* t, const char* key, const char* value, gamut_error* err) {
+  GAMUT_TREE_SET(gamut::internal::Value::text(str(value)))
 }
-int mes_tree_set_dict(mes_tree* t, const char* key, mes_error* err) {
-  MES_TREE_SET(mestra::internal::Value::dict(mestra::internal::Dict()))
+int gamut_tree_set_dict(gamut_tree* t, const char* key, gamut_error* err) {
+  GAMUT_TREE_SET(gamut::internal::Value::dict(gamut::internal::Dict()))
 }
 
-int mes_tree_set_array(mes_tree* t, const char* key, int dtype_code, const void* data, int rank,
-                       const int64_t* shape, mes_error* err) {
+int gamut_tree_set_array(gamut_tree* t, const char* key, int dtype_code, const void* data, int rank,
+                       const int64_t* shape, gamut_error* err) {
   try {
     clear(err);
     const DType d = dtype(dtype_code);
@@ -964,35 +964,35 @@ int mes_tree_set_array(mes_tree* t, const char* key, int dtype_code, const void*
     }
     need(n == 0 || data != nullptr, "the array's data is NULL");
     const auto* p = static_cast<const unsigned char*>(data);
-    std::vector<unsigned char> bytes(p, p + static_cast<std::size_t>(n) * mestra::dtype_size(d));
-    mestra::internal::set_path(tree_of(t), str(key),
-                               mestra::internal::Value::numbers(d, s, std::move(bytes)));
+    std::vector<unsigned char> bytes(p, p + static_cast<std::size_t>(n) * gamut::dtype_size(d));
+    gamut::internal::set_path(tree_of(t), str(key),
+                               gamut::internal::Value::numbers(d, s, std::move(bytes)));
     return 0;
   } catch (...) {
     return fail(err);
   }
 }
 
-int mes_tree_set_strings(mes_tree* t, const char* key, const char* const* items, int64_t n,
-                         mes_error* err) {
+int gamut_tree_set_strings(gamut_tree* t, const char* key, const char* const* items, int64_t n,
+                         gamut_error* err) {
   try {
     clear(err);
-    mestra::internal::set_path(tree_of(t), str(key),
-                               mestra::internal::Value::strings({n}, list(items, n)));
+    gamut::internal::set_path(tree_of(t), str(key),
+                               gamut::internal::Value::strings({n}, list(items, n)));
     return 0;
   } catch (...) {
     return fail(err);
   }
 }
 
-int mes_tree_keys(const mes_tree* t, const char* key, mes_strings** out, mes_error* err) {
+int gamut_tree_keys(const gamut_tree* t, const char* key, gamut_strings** out, gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
-    const mestra::internal::Dict* d = &tree_of(t);
+    const gamut::internal::Dict* d = &tree_of(t);
     if (!str(key).empty()) {
       const auto& v = value_at(t, key);
-      need(v.kind() == mestra::internal::Value::Kind::Dict, "\"" + str(key) + "\" is not a dictionary");
+      need(v.kind() == gamut::internal::Value::Kind::Dict, "\"" + str(key) + "\" is not a dictionary");
       d = &v.as_dict();
     }
     std::vector<std::string> keys;
@@ -1004,29 +1004,29 @@ int mes_tree_keys(const mes_tree* t, const char* key, mes_strings** out, mes_err
   }
 }
 
-int mes_tree_kind(const mes_tree* t, const char* key, int* kind, mes_error* err) {
+int gamut_tree_kind(const gamut_tree* t, const char* key, int* kind, gamut_error* err) {
   try {
     clear(err);
     need(kind != nullptr, "kind is NULL");
     if (str(key).empty()) {
       tree_of(t);
-      *kind = MES_TREE_DICT;
+      *kind = GAMUT_TREE_DICT;
       return 0;
     }
-    const auto* v = mestra::internal::find_path(tree_of(t), str(key));
-    *kind = v == nullptr ? MES_TREE_ABSENT : static_cast<int>(v->kind());
+    const auto* v = gamut::internal::find_path(tree_of(t), str(key));
+    *kind = v == nullptr ? GAMUT_TREE_ABSENT : static_cast<int>(v->kind());
     return 0;
   } catch (...) {
     return fail(err);
   }
 }
 
-int mes_tree_scalar(const mes_tree* t, const char* key, int64_t* integer, double* real,
-                    mes_error* err) {
+int gamut_tree_scalar(const gamut_tree* t, const char* key, int64_t* integer, double* real,
+                    gamut_error* err) {
   try {
     clear(err);
     const auto& v = value_at(t, key);
-    using K = mestra::internal::Value::Kind;
+    using K = gamut::internal::Value::Kind;
     need(v.kind() == K::Bool || v.kind() == K::Int || v.kind() == K::Float,
          "\"" + str(key) + "\" is not a number or a boolean");
     if (integer != nullptr) *integer = v.as_int();
@@ -1037,12 +1037,12 @@ int mes_tree_scalar(const mes_tree* t, const char* key, int64_t* integer, double
   }
 }
 
-int mes_tree_strings(const mes_tree* t, const char* key, mes_strings** out, mes_error* err) {
+int gamut_tree_strings(const gamut_tree* t, const char* key, gamut_strings** out, gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
     const auto& v = value_at(t, key);
-    using K = mestra::internal::Value::Kind;
+    using K = gamut::internal::Value::Kind;
     need(v.kind() == K::Str || v.kind() == K::Strings, "\"" + str(key) + "\" is not text");
     *out = strings(v.kind() == K::Str ? std::vector<std::string>{v.as_text()} : v.items());
     return 0;
@@ -1051,13 +1051,13 @@ int mes_tree_strings(const mes_tree* t, const char* key, mes_strings** out, mes_
   }
 }
 
-int mes_tree_array_info(const mes_tree* t, const char* key, int* dtype_out, int* rank,
-                        int64_t* shape, mes_error* err) {
+int gamut_tree_array_info(const gamut_tree* t, const char* key, int* dtype_out, int* rank,
+                        int64_t* shape, gamut_error* err) {
   try {
     clear(err);
     need(dtype_out != nullptr && rank != nullptr && shape != nullptr, "an output is NULL");
     const auto& v = value_at(t, key);
-    need(v.kind() == mestra::internal::Value::Kind::Numbers, "\"" + str(key) + "\" is not an array");
+    need(v.kind() == gamut::internal::Value::Kind::Numbers, "\"" + str(key) + "\" is not an array");
     need(v.shape().size() <= 8, "more than 8 axes");
     *dtype_out = static_cast<int>(v.dtype());
     *rank = static_cast<int>(v.shape().size());
@@ -1068,12 +1068,12 @@ int mes_tree_array_info(const mes_tree* t, const char* key, int* dtype_out, int*
   }
 }
 
-int mes_tree_array(const mes_tree* t, const char* key, void* out, int64_t out_bytes,
-                   mes_error* err) {
+int gamut_tree_array(const gamut_tree* t, const char* key, void* out, int64_t out_bytes,
+                   gamut_error* err) {
   try {
     clear(err);
     const auto& v = value_at(t, key);
-    need(v.kind() == mestra::internal::Value::Kind::Numbers, "\"" + str(key) + "\" is not an array");
+    need(v.kind() == gamut::internal::Value::Kind::Numbers, "\"" + str(key) + "\" is not an array");
     need(out_bytes >= static_cast<int64_t>(v.bytes().size()),
          "the buffer holds " + std::to_string(out_bytes) + " bytes and the array " +
              std::to_string(v.bytes().size()));
@@ -1084,8 +1084,8 @@ int mes_tree_array(const mes_tree* t, const char* key, void* out, int64_t out_by
   }
 }
 
-int mes_add_model(mes_file* f, const char* id, const char* type, const char* const* inputs,
-                  int64_t n_inputs, const mes_tree* numbers, const char* repr, mes_error* err) {
+int gamut_add_model(gamut_file* f, const char* id, const char* type, const char* const* inputs,
+                  int64_t n_inputs, const gamut_tree* numbers, const char* repr, gamut_error* err) {
   try {
     clear(err);
     writer_of(f).add_model(str(id), str(type), list(inputs, n_inputs), tree_of(numbers), str(repr));
@@ -1095,11 +1095,11 @@ int mes_add_model(mes_file* f, const char* id, const char* type, const char* con
   }
 }
 
-int mes_model_numbers(const mes_file* f, const char* id, mes_tree** out, mes_error* err) {
+int gamut_model_numbers(const gamut_file* f, const char* id, gamut_tree** out, gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
-    auto t = std::make_unique<mes_tree>();
+    auto t = std::make_unique<gamut_tree>();
     t->root = reader_of(f).model_numbers(str(id));
     *out = t.release();
     return 0;
@@ -1108,41 +1108,41 @@ int mes_model_numbers(const mes_file* f, const char* id, mes_tree** out, mes_err
   }
 }
 
-int mes_nearest_check(const mes_tree* numbers, mes_error* err) {
+int gamut_nearest_check(const gamut_tree* numbers, gamut_error* err) {
   try {
     clear(err);
-    mestra::internal::nearest_from(tree_of(numbers));
+    gamut::internal::nearest_from(tree_of(numbers));
     return 0;
   } catch (...) {
     return fail(err);
   }
 }
 
-int mes_nearest_output_size(const mes_tree* numbers, const char* output, int64_t* per_row,
-                            mes_error* err) {
+int gamut_nearest_output_size(const gamut_tree* numbers, const char* output, int64_t* per_row,
+                            gamut_error* err) {
   try {
     clear(err);
     need(per_row != nullptr, "per_row is NULL");
-    const auto m = mestra::internal::nearest_from(tree_of(numbers));
-    *per_row = mestra::internal::nearest_output_size(m, str(output));
+    const auto m = gamut::internal::nearest_from(tree_of(numbers));
+    *per_row = gamut::internal::nearest_output_size(m, str(output));
     return 0;
   } catch (...) {
     return fail(err);
   }
 }
 
-int mes_nearest_call(const mes_tree* numbers, const char* const* input_names,
+int gamut_nearest_call(const gamut_tree* numbers, const char* const* input_names,
                      const double* const* columns, int n_inputs, int64_t n_rows,
-                     const char* output, double* out, int64_t out_count, mes_error* err) {
+                     const char* output, double* out, int64_t out_count, gamut_error* err) {
   try {
     clear(err);
     need(n_inputs >= 0 && n_rows >= 0, "a negative count");
     need(n_inputs == 0 || (input_names != nullptr && columns != nullptr), "inputs are NULL");
-    const auto m = mestra::internal::nearest_from(tree_of(numbers));
+    const auto m = gamut::internal::nearest_from(tree_of(numbers));
     std::map<std::string, const double*> table;
     for (int j = 0; j < n_inputs; ++j) table[str(input_names[j])] = columns[j];
-    const auto idx = mestra::internal::nearest_indices(m, table, n_rows);
-    const auto values = mestra::internal::nearest_values(m, str(output), idx);
+    const auto idx = gamut::internal::nearest_indices(m, table, n_rows);
+    const auto values = gamut::internal::nearest_values(m, str(output), idx);
     need(out_count == static_cast<int64_t>(values.size()),
          "the output buffer holds " + std::to_string(out_count) + " values and the output needs " +
              std::to_string(values.size()));
@@ -1154,13 +1154,13 @@ int mes_nearest_call(const mes_tree* numbers, const char* const* input_names,
   }
 }
 
-int mes_evaluate_begin(const mes_file* model, const char* out_path, mes_file** out,
-                       mes_error* err) {
+int gamut_evaluate_begin(const gamut_file* model, const char* out_path, gamut_file** out,
+                       gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
-    auto f = std::make_unique<mes_file>();
-    f->writer = mestra::internal::begin_evaluation(reader_of(model), str(out_path));
+    auto f = std::make_unique<gamut_file>();
+    f->writer = gamut::internal::begin_evaluation(reader_of(model), str(out_path));
     *out = f.release();
     return 0;
   } catch (...) {
@@ -1168,13 +1168,13 @@ int mes_evaluate_begin(const mes_file* model, const char* out_path, mes_file** o
   }
 }
 
-int mes_validate(const char* path, mes_report** out, mes_error* err) {
+int gamut_validate(const char* path, gamut_report** out, gamut_error* err) {
   try {
     clear(err);
     need(out != nullptr, "out is NULL");
     need(path != nullptr, "path is NULL");
-    auto r = std::make_unique<mes_report>();
-    r->report = mestra::internal::validate_file(path);
+    auto r = std::make_unique<gamut_report>();
+    r->report = gamut::internal::validate_file(path);
     *out = r.release();
     return 0;
   } catch (...) {
@@ -1182,11 +1182,11 @@ int mes_validate(const char* path, mes_report** out, mes_error* err) {
   }
 }
 
-int64_t mes_report_count(const mes_report* r) {
+int64_t gamut_report_count(const gamut_report* r) {
   return r == nullptr ? 0 : static_cast<int64_t>(r->report.findings.size());
 }
 
-int mes_report_get(const mes_report* r, int64_t i, const char** rule, const char** severity,
+int gamut_report_get(const gamut_report* r, int64_t i, const char** rule, const char** severity,
                    const char** path, const char** message) {
   if (r == nullptr || i < 0 || i >= static_cast<int64_t>(r->report.findings.size())) return 1;
   const auto& f = r->report.findings[static_cast<std::size_t>(i)];
@@ -1197,17 +1197,17 @@ int mes_report_get(const mes_report* r, int64_t i, const char** rule, const char
   return 0;
 }
 
-void mes_report_free(mes_report* r) { delete r; }
+void gamut_report_free(gamut_report* r) { delete r; }
 
-int64_t mes_strings_count(const mes_strings* s) {
+int64_t gamut_strings_count(const gamut_strings* s) {
   return s == nullptr ? 0 : static_cast<int64_t>(s->items.size());
 }
 
-const char* mes_strings_get(const mes_strings* s, int64_t i) {
+const char* gamut_strings_get(const gamut_strings* s, int64_t i) {
   if (s == nullptr || i < 0 || i >= static_cast<int64_t>(s->items.size())) return nullptr;
   return s->items[static_cast<std::size_t>(i)].c_str();
 }
 
-void mes_strings_free(mes_strings* s) { delete s; }
+void gamut_strings_free(gamut_strings* s) { delete s; }
 
 }  // extern "C"

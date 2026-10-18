@@ -1,5 +1,5 @@
 classdef Study < handle
-    %STUDY A study file open to write (mestra.create) or to read (mestra.open).
+    %STUDY A study file open to write (gamut.create) or to read (gamut.open).
     %   Positions (rows, nodes, cells) are 1-based here, as MATLAB indexes;
     %   arrays come back with the logical axes (row, node) in that order.
 
@@ -39,7 +39,7 @@ classdef Study < handle
             %   set, a model file without a model) keeps it open to fix and
             %   close again.
             if ~isempty(s.Handle)
-                mestra_mex('close', s.Handle);
+                gamut_mex('close', s.Handle);
                 s.Handle = [];
                 if s.RemoveOnClose && isfile(s.Path)
                     delete(s.Path);
@@ -63,14 +63,14 @@ classdef Study < handle
             %   fixed mesh labels as a struct; nNodes when points come per run.
             if nargin < 3, cells = {}; end
             if nargin < 4, labels = struct(); end
-            mestra_mex('geometry_begin', s.Handle);
+            gamut_mex('geometry_begin', s.Handle);
             if isempty(points)
-                mestra_mex('geometry_points', s.Handle, [], nNodes, s.Axes);
+                gamut_mex('geometry_points', s.Handle, [], nNodes, s.Axes);
             else
-                mestra_mex('geometry_points', s.Handle, points);
+                gamut_mex('geometry_points', s.Handle, points);
             end
             s.stageCells(cells, labels);
-            mestra_mex('set_mesh', s.Handle);
+            gamut_mex('set_mesh', s.Handle);
         end
 
         function id = addRun(s, values, varargin)
@@ -119,33 +119,33 @@ classdef Study < handle
         end
 
         function setNote(s, key, value)
-            mestra_mex('set_note', s.Handle, key, value);
+            gamut_mex('set_note', s.Handle, key, value);
         end
 
         function addModel(s, id, model, inputs, repr)
             %ADDMODEL Adds a model to a model file: its id, the model (an
-            %   object of a registered type, or mestra.Nearest) and the
+            %   object of a registered type, or gamut.Nearest) and the
             %   inputs it reads (parameters, labels, 'coordinates').
             if nargin < 5, repr = ''; end
-            mestra_mex('add_model', s.Handle, id, model.Type, cellstr(inputs), model.save(), repr);
+            gamut_mex('add_model', s.Handle, id, model.Type, cellstr(inputs), model.save(), repr);
         end
 
         % --- reading -------------------------------------------------------
 
         function v = kind(s), v = s.info1('kind'); end
         function v = type(s), v = s.info1('type'); end
-        function v = addons(s), v = mestra_mex('info', s.Handle, 'addons'); end
+        function v = addons(s), v = gamut_mex('info', s.Handle, 'addons'); end
         function v = rowCount(s), v = str2double(s.info1('row_count')); end
 
         function v = names(s, group)
-            v = mestra_mex('names', s.Handle, group);
+            v = gamut_mex('names', s.Handle, group);
         end
 
         function d = describe(s, name)
             %DESCRIBE A concept's attributes as a struct of text; with no name
             %   the file's own (writer, created, file_id, title, ...).
             if nargin < 2, name = ''; end
-            [k, v] = mestra_mex('describe', s.Handle, name);
+            [k, v] = gamut_mex('describe', s.Handle, name);
             d = struct();
             for i = 1:numel(k)
                 d.(k{i}) = v{i};
@@ -154,32 +154,32 @@ classdef Study < handle
 
         function v = getRowIds(s, rows)
             if nargin < 2, rows = []; end
-            v = mestra_mex('read', s.Handle, 'row', s.pos(rows), [], 4);
+            v = gamut_mex('read', s.Handle, 'row', s.pos(rows), [], 4);
         end
 
         function v = getParameter(s, name, varargin)
             o = s.opts(varargin);
             code = 6;
-            if strcmp(mestra.internal.field(s.describe(name), 'dtype', ''), 'int64'), code = 4; end
-            v = mestra_mex('read', s.Handle, name, s.pos(o.rows), [], code);
+            if strcmp(gamut.internal.field(s.describe(name), 'dtype', ''), 'int64'), code = 4; end
+            v = gamut_mex('read', s.Handle, name, s.pos(o.rows), [], code);
         end
 
         function v = getLabel(s, name, varargin)
             o = s.opts(varargin);
-            v = mestra_mex('label_names', s.Handle, name, s.pos(o.rows));
+            v = gamut_mex('label_names', s.Handle, name, s.pos(o.rows));
         end
 
         function v = getScalar(s, name, varargin)
             o = s.opts(varargin);
-            v = mestra_mex('read', s.Handle, name, s.pos(o.rows), [], s.resultCode(name));
+            v = gamut_mex('read', s.Handle, name, s.pos(o.rows), [], s.resultCode(name));
         end
 
         function v = getConstant(s, name)
             d = s.describe(name);
             if strcmp(d.dtype, 'int64')
-                v = mestra_mex('read', s.Handle, name, [], [], 4);
+                v = gamut_mex('read', s.Handle, name, [], [], 4);
             else
-                v = mestra_mex('read', s.Handle, name, [], [], 6);
+                v = gamut_mex('read', s.Handle, name, [], [], 6);
             end
         end
 
@@ -190,21 +190,21 @@ classdef Study < handle
             sites = o.nodes;
             if isempty(sites), sites = o.cells; end
             if strcmp(s.MeshKind, 'changing') && numel(o.rows) ~= 1
-                error('mestra:usage', ['%s: a changing mesh is read one row at a time; ' ...
+                error('gamut:usage', ['%s: a changing mesh is read one row at a time; ' ...
                     'reads across rows need a shared mesh'], name);
             end
-            v = mestra_mex('read', s.Handle, name, s.pos(o.rows), s.pos(sites), s.resultCode(name));
+            v = gamut_mex('read', s.Handle, name, s.pos(o.rows), s.pos(sites), s.resultCode(name));
             if strcmp(s.MeshKind, 'changing'), v = v(:); end
         end
 
         function v = getPoints(s, row)
             if nargin < 2, row = []; end
             if isempty(row) && ~strcmp(s.Per, 'fixed')
-                error('mestra:usage', 'this mesh''s geometry changes; give the row');
+                error('gamut:usage', 'this mesh''s geometry changes; give the row');
             end
             code = 6;
-            if strcmp(mestra.internal.field(s.describe('coordinates'), 'dtype', ''), 'float32'), code = 5; end
-            v = mestra_mex('read', s.Handle, 'coordinates', s.pos(row), [], code);
+            if strcmp(gamut.internal.field(s.describe('coordinates'), 'dtype', ''), 'float32'), code = 5; end
+            v = gamut_mex('read', s.Handle, 'coordinates', s.pos(row), [], code);
             if ~isempty(row) && strcmp(s.MeshKind, 'shared')
                 v = reshape(v(1, :, :), size(v, 2), size(v, 3));
             end
@@ -212,24 +212,24 @@ classdef Study < handle
 
         function [types, offsets, connectivity] = getCells(s, row)
             if nargin < 2, row = []; end
-            types = mestra_mex('read', s.Handle, 'cells/types', s.pos(row), [], 1);
-            offsets = mestra_mex('read', s.Handle, 'cells/offsets', s.pos(row), [], 4);
-            connectivity = mestra_mex('read', s.Handle, 'cells/connectivity', s.pos(row), [], 4);
+            types = gamut_mex('read', s.Handle, 'cells/types', s.pos(row), [], 1);
+            offsets = gamut_mex('read', s.Handle, 'cells/offsets', s.pos(row), [], 4);
+            connectivity = gamut_mex('read', s.Handle, 'cells/connectivity', s.pos(row), [], 4);
         end
 
         function v = getMeshLabel(s, name, row)
             if nargin < 3, row = []; end
-            v = mestra_mex('read', s.Handle, name, s.pos(row), [], 4);
+            v = gamut_mex('read', s.Handle, name, s.pos(row), [], 4);
         end
 
         function v = categories(s, name)
             %CATEGORIES The category table of a label or mesh label, a cell
             %   array of names: code c names entry c + 1.
-            t = mestra.internal.field(s.describe(name), 'category', '');
+            t = gamut.internal.field(s.describe(name), 'category', '');
             if isempty(t)
-                error('mestra:usage', '%s has no category table; its codes are its values', name);
+                error('gamut:usage', '%s has no category table; its codes are its values', name);
             end
-            v = mestra_mex('table', s.Handle, t);
+            v = gamut_mex('table', s.Handle, t);
         end
 
         function t = table(s)
@@ -248,7 +248,7 @@ classdef Study < handle
 
         function rows = select(s, where)
             %SELECT The (1-based) rows `where` selects.
-            rows = double(mestra_mex('select', s.Handle, where)) + 1;
+            rows = double(gamut_mex('select', s.Handle, where)) + 1;
         end
     end
 
@@ -260,18 +260,18 @@ classdef Study < handle
             if ~isempty(s.Handle)
                 h = s.Handle;
                 s.Handle = [];
-                mestra_mex('abandon', h, logical(remove));
+                gamut_mex('abandon', h, logical(remove));
             end
         end
 
         function v = info1(s, key)
-            c = mestra_mex('info', s.Handle, key);
+            c = gamut_mex('info', s.Handle, key);
             if isempty(c), v = ''; else, v = c{1}; end
         end
 
         function code = resultCode(s, name)
             code = 6;
-            if strcmp(mestra.internal.field(s.describe(name), 'dtype', ''), 'float32'), code = 5; end
+            if strcmp(gamut.internal.field(s.describe(name), 'dtype', ''), 'float32'), code = 5; end
         end
 
         function o = opts(~, args)
@@ -290,7 +290,7 @@ classdef Study < handle
                 p = [];
             else
                 if islogical(x) || ~isnumeric(x) || any(x(:) ~= fix(x(:)))
-                    error('mestra:usage', 'positions are whole numbers (for a mask, use find)');
+                    error('gamut:usage', 'positions are whole numbers (for a mask, use find)');
                 end
                 p = double(x(:)) - 1;
             end
@@ -298,37 +298,37 @@ classdef Study < handle
 
         function stageCells(s, cells, labels)
             if ~isempty(cells)
-                mestra_mex('geometry_cells', s.Handle, double(cells{1}), double(cells{2}), double(cells{3}));
+                gamut_mex('geometry_cells', s.Handle, double(cells{1}), double(cells{2}), double(cells{3}));
             end
             if isstruct(labels)
                 ln = fieldnames(labels);
                 for k = 1:numel(ln)
-                    mestra_mex('geometry_label', s.Handle, ln{k}, double(labels.(ln{k})));
+                    gamut_mex('geometry_label', s.Handle, ln{k}, double(labels.(ln{k})));
                 end
             end
         end
 
         function ids = commit(s, n, columns, fields, points, cells, meshLabels)
             h = s.Handle;
-            mestra_mex('batch_begin', h, n);
+            gamut_mex('batch_begin', h, n);
             names = fieldnames(columns);
             groupNames = {};
             for k = 1:numel(names)
                 v = columns.(names{k});
                 if iscell(v) || isstring(v)
                     v = cellstr(v);
-                    mestra_mex('batch_names', h, names{k}, v);
+                    gamut_mex('batch_names', h, names{k}, v);
                     if strcmp(names{k}, s.Group), groupNames = v; end
                 elseif islogical(v)
                     words = {'false', 'true'};
-                    mestra_mex('batch_names', h, names{k}, words(double(v) + 1));
+                    gamut_mex('batch_names', h, names{k}, words(double(v) + 1));
                 else
-                    mestra_mex('batch_values', h, names{k}, v(:));
+                    gamut_mex('batch_values', h, names{k}, v(:));
                 end
             end
             fn = fieldnames(fields);
             for k = 1:numel(fn)
-                mestra_mex('batch_values', h, fn{k}, fields.(fn{k}));
+                gamut_mex('batch_values', h, fn{k}, fields.(fn{k}));
             end
             if ~isempty(points)
                 if ~isempty(s.Group)
@@ -336,21 +336,21 @@ classdef Study < handle
                     for i = 1:numel(groupNames)
                         if isempty(points{i}) || any(strcmp(seen, groupNames{i})), continue; end
                         seen{end + 1} = groupNames{i}; %#ok<AGROW>
-                        mestra_mex('geometry_begin', h);
-                        mestra_mex('geometry_points', h, points{i});
+                        gamut_mex('geometry_begin', h);
+                        gamut_mex('geometry_points', h, points{i});
                         s.stageCells(cellAt(cells, i), labelsAt(meshLabels, i));
-                        mestra_mex('batch_geometry_for_member', h, groupNames{i});
+                        gamut_mex('batch_geometry_for_member', h, groupNames{i});
                     end
                 else
                     for i = 1:numel(points)
-                        mestra_mex('geometry_begin', h);
-                        mestra_mex('geometry_points', h, points{i});
+                        gamut_mex('geometry_begin', h);
+                        gamut_mex('geometry_points', h, points{i});
                         s.stageCells(cellAt(cells, i), labelsAt(meshLabels, i));
-                        mestra_mex('batch_geometry_for_row', h);
+                        gamut_mex('batch_geometry_for_row', h);
                     end
                 end
             end
-            first = mestra_mex('batch_commit', h);
+            first = gamut_mex('batch_commit', h);
             ids = first + (0:n - 1);
         end
     end

@@ -10,8 +10,8 @@ import numpy as np
 import pytest
 
 pv = pytest.importorskip("pyvista")
-import mestra  # noqa: E402
-from mestra import vtk as mestra_vtk  # noqa: E402
+import gamut  # noqa: E402
+from gamut import vtk as gamut_vtk  # noqa: E402
 
 
 def plate(scale=1.0):
@@ -54,46 +54,46 @@ def test_first_call_writes_templates(tmp_path):
     files = write_runs(folder)
     with open(os.path.join(folder, "._run_000.vtu"), "wb") as fh:     # macOS metadata
         fh.write(b"\0\5\26\7")
-    report = mestra_vtk.import_folder(folder, str(tmp_path / "s.mes"))
+    report = gamut_vtk.import_folder(folder, str(tmp_path / "s.gamut"))
     assert not report["ok"] and len(report["templates"]) == 2
     lines = open(os.path.join(folder, "parameters.csv")).read().splitlines()
     assert lines[:2] == ["file", "units"] and lines[2:] == files
     fields = open(os.path.join(folder, "fields.csv")).read().splitlines()
     assert fields == ["name,units", "coordinates,", "U,", "p,"]    # zone: a mesh label
-    assert not os.path.exists(tmp_path / "s.mes")
+    assert not os.path.exists(tmp_path / "s.gamut")
 
 
 def test_import_reads_back_and_round_trips(tmp_path):
     folder = str(tmp_path / "runs")
     files = write_runs(folder)
     fill_tables(folder, files)
-    out = str(tmp_path / "s.mes")
-    report = mestra_vtk.import_folder(folder, out)
+    out = str(tmp_path / "s.gamut")
+    report = gamut_vtk.import_folder(folder, out)
     assert report["ok"], report
     assert report["geometry"] == "fixed" and report["mesh_labels"] == ["zone"]
     assert report["fields"] == ["U_x", "U_y", "U_z", "p"]
     assert report["notes"] == ["voxels stored as hexahedra"]
-    with mestra.open(out) as s:
+    with gamut.open(out) as s:
         assert s.row_count == 3 and s.type == "shared"
         assert s.get_label("file").tolist() == files
         assert s.get_label("config").tolist() == ["flap", "clean", "clean"]
         np.testing.assert_allclose(s.get_parameter("mach"), [0.6, 0.7, 0.8])
         assert s.describe("U_y")["vector"] == "U" and s.describe("U_y")["axis"] == "y"
         assert s.get_field("U_x").dtype == np.float32      # precision kept
-        first = mestra_vtk.from_pyvista(pv.read(os.path.join(folder, files[1])))
+        first = gamut_vtk.from_pyvista(pv.read(os.path.join(folder, files[1])))
         np.testing.assert_array_equal(s.get_field("p", rows=1), first["point_data"]["p"])
         np.testing.assert_array_equal(s.get_field("U_z", rows=1), first["cell_data"]["U"][:, 2])
-        grid = mestra_vtk.to_pyvista(s, 2)
+        grid = gamut_vtk.to_pyvista(s, 2)
         original = pv.read(os.path.join(folder, files[2]))
         np.testing.assert_array_equal(grid.points, original.points)
         np.testing.assert_array_equal(grid.cell_data["U"], original.cell_data["U"])
         np.testing.assert_array_equal(grid.cell_data["zone"], original.cell_data["zone"])
     # Export and import again: the same study.
     back = str(tmp_path / "back")
-    assert mestra_vtk.export_study(out, back)["ok"]
-    again = str(tmp_path / "again.mes")
-    assert mestra_vtk.import_folder(back, again)["ok"]
-    with mestra.open(out) as a, mestra.open(again) as b:
+    assert gamut_vtk.export_study(out, back)["ok"]
+    again = str(tmp_path / "again.gamut")
+    assert gamut_vtk.import_folder(back, again)["ok"]
+    with gamut.open(out) as a, gamut.open(again) as b:
         for name in ("p", "U_x", "U_y", "U_z"):
             np.testing.assert_array_equal(a.get_field(name), b.get_field(name))
         np.testing.assert_array_equal(a.get_parameter("mach"), b.get_parameter("mach"))
@@ -107,9 +107,9 @@ def test_morphing_geometry_is_stored_per_run(tmp_path):
     folder = str(tmp_path / "runs")
     files = write_runs(folder, morph=True)
     fill_tables(folder, files)
-    out = str(tmp_path / "s.mes")
-    assert mestra_vtk.import_folder(folder, out)["geometry"] == "per run"
-    with mestra.open(out) as s:
+    out = str(tmp_path / "s.gamut")
+    assert gamut_vtk.import_folder(folder, out)["geometry"] == "per run"
+    with gamut.open(out) as s:
         np.testing.assert_array_equal(s.get_points(row=2),
                                       pv.read(os.path.join(folder, files[2])).points)
 
@@ -126,10 +126,10 @@ def test_runs_on_different_meshes_are_a_changing_mesh(tmp_path):
         files.append(f"run_{i:03d}.vtu")
         g.save(os.path.join(folder, files[-1]))
     fill_tables(folder, files)
-    out = str(tmp_path / "s.mes")
-    report = mestra_vtk.import_folder(folder, out)
+    out = str(tmp_path / "s.gamut")
+    report = gamut_vtk.import_folder(folder, out)
     assert report["ok"] and report["geometry"] == "a mesh per run", report
-    with mestra.open(out) as s:
+    with gamut.open(out) as s:
         assert s.type == "changing"
         for row, f in enumerate(files):
             g = pv.read(os.path.join(folder, f))
@@ -138,7 +138,7 @@ def test_runs_on_different_meshes_are_a_changing_mesh(tmp_path):
             np.testing.assert_array_equal(s.get_mesh_label("zone", row=row), g.cell_data["zone"])
             assert len(s.get_cells(row=row)[0]) == g.n_cells
     back = str(tmp_path / "back")
-    mestra_vtk.export_study(out, back)
+    gamut_vtk.export_study(out, back)
     assert pv.read(os.path.join(back, files[2])).n_points == pv.read(os.path.join(folder, files[2])).n_points
 
 
@@ -146,9 +146,9 @@ def test_transients_get_their_run_group(tmp_path):
     folder = str(tmp_path / "runs")
     files = write_runs(folder)
     fill_tables(folder, files, time=True)
-    out = str(tmp_path / "s.mes")
-    assert mestra_vtk.import_folder(folder, out)["ok"]
-    with mestra.open(out) as s:
+    out = str(tmp_path / "s.gamut")
+    assert gamut_vtk.import_folder(folder, out)["ok"]
+    with gamut.open(out) as s:
         assert s.describe("t")["run_group"] == "case" and s.addons == ["time"]
 
 
@@ -164,19 +164,19 @@ def test_problems_are_reported_together(tmp_path):
         fh.write(f"{files[0]},0.6,a\n{files[1]},,b\n{files[2]},0.8,c\n")
     with open(os.path.join(folder, "fields.csv"), "w") as fh:
         fh.write("name,units\ncoordinates,m\np,Pa\n")
-    with pytest.raises(mestra_vtk.Problems) as e:
-        mestra_vtk.import_folder(folder, str(tmp_path / "s.mes"))
+    with pytest.raises(gamut_vtk.Problems) as e:
+        gamut_vtk.import_folder(folder, str(tmp_path / "s.gamut"))
     text = "\n".join(e.value.problems)
     assert "line 4, column mach: blank" in text
     assert "column mach needs units" in text
     # The CSV problems stop the import before any VTK file is compared.
     with open(os.path.join(folder, "parameters.csv"), "w") as fh:
         fh.write("file,mach\nunits,1\n" + "".join(f"{f},0.5\n" for f in files))
-    with pytest.raises(mestra_vtk.Problems) as e:
-        mestra_vtk.import_folder(folder, str(tmp_path / "s.mes"))
+    with pytest.raises(gamut_vtk.Problems) as e:
+        gamut_vtk.import_folder(folder, str(tmp_path / "s.gamut"))
     text = "\n".join(e.value.problems)
     assert f"{files[1]}: its arrays" in text
-    assert not os.path.exists(tmp_path / "s.mes")
+    assert not os.path.exists(tmp_path / "s.gamut")
 
 
 def test_bad_units_are_the_librarys_refusal(tmp_path):
@@ -185,9 +185,9 @@ def test_bad_units_are_the_librarys_refusal(tmp_path):
     fill_tables(folder, files)
     with open(os.path.join(folder, "fields.csv"), "w") as fh:
         fh.write("name,units\ncoordinates,m\np,Pa//s\nU,m s-1\n")
-    out = str(tmp_path / "s.mes")
-    with pytest.raises(mestra.MestraError) as e:
-        mestra_vtk.import_folder(folder, out)
+    out = str(tmp_path / "s.gamut")
+    with pytest.raises(gamut.GamutError) as e:
+        gamut_vtk.import_folder(folder, out)
     assert e.value.rule == "E7" and "p" in e.value.path
     assert not os.path.exists(out)
 
@@ -195,14 +195,14 @@ def test_bad_units_are_the_librarys_refusal(tmp_path):
 def test_command_line_json(tmp_path, capsys):
     folder = str(tmp_path / "runs")
     files = write_runs(folder, n=2)
-    assert mestra_vtk.main(["import", folder, "--json"]) == 2     # templates to fill in
+    assert gamut_vtk.main(["import", folder, "--json"]) == 2     # templates to fill in
     assert len(json.loads(capsys.readouterr().out)["templates"]) == 2
     fill_tables(folder, files)
-    out = str(tmp_path / "s.mes")
-    assert mestra_vtk.main(["import", folder, "-o", out, "--json"]) == 0
+    out = str(tmp_path / "s.gamut")
+    assert gamut_vtk.main(["import", folder, "-o", out, "--json"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["ok"] and report["rows"] == 2
-    assert mestra_vtk.main(["export", out, str(tmp_path / "out"), "--json"]) == 0
+    assert gamut_vtk.main(["export", out, str(tmp_path / "out"), "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["files"] == ["run_000.vtu", "run_001.vtu"]
 
 
@@ -214,11 +214,11 @@ def test_point_and_cell_arrays_sharing_a_name_are_both_kept(tmp_path):
         g.cell_data["p"] = np.arange(g.n_cells, dtype=np.float64) + 0.5
         g.save(os.path.join(folder, f))
     fill_tables(folder, files)
-    out = str(tmp_path / "s.mes")
-    report = mestra_vtk.import_folder(folder, out)
+    out = str(tmp_path / "s.gamut")
+    report = gamut_vtk.import_folder(folder, out)
     assert "p" in report["fields"] and "p_cell" in report["fields"]
     assert any("p_cell" in n for n in report["notes"])
-    with mestra.open(out) as s:
+    with gamut.open(out) as s:
         assert s.describe("p_cell")["location"] == "cell"
         np.testing.assert_array_equal(s.get_field("p_cell", rows=0), np.arange(6) + 0.5)
 
@@ -233,8 +233,8 @@ def test_a_name_two_arrays_give_is_refused(tmp_path):
     fill_tables(folder, files)
     with open(os.path.join(folder, "fields.csv"), "a") as fh:
         fh.write("U_x,m s-1\n")
-    with pytest.raises(mestra_vtk.Problems) as e:
-        mestra_vtk.import_folder(folder, str(tmp_path / "s.mes"))
+    with pytest.raises(gamut_vtk.Problems) as e:
+        gamut_vtk.import_folder(folder, str(tmp_path / "s.gamut"))
     assert "both give the name U_x" in "\n".join(e.value.problems)
 
 
@@ -245,15 +245,15 @@ def test_export_names_stay_apart_and_csv_is_quoted(tmp_path):
         fill_tables(folder, files)
     with open(os.path.join(a, "parameters.csv"), "w") as fh:
         fh.write('file,mach,config\nunits,1,\nrun_000.vtu,0.6,"flaps, down"\nrun_001.vtu,0.7,clean\n')
-    sa, sb = str(tmp_path / "a.mes"), str(tmp_path / "b.mes")
-    assert mestra_vtk.import_folder(a, sa)["ok"] and mestra_vtk.import_folder(b, sb)["ok"]
-    mestra.append(sa, sb)
+    sa, sb = str(tmp_path / "a.gamut"), str(tmp_path / "b.gamut")
+    assert gamut_vtk.import_folder(a, sa)["ok"] and gamut_vtk.import_folder(b, sb)["ok"]
+    gamut.append(sa, sb)
     back = str(tmp_path / "back")
-    files = mestra_vtk.export_study(sa, back)["files"]
+    files = gamut_vtk.export_study(sa, back)["files"]
     assert len(set(files)) == 4                            # none written twice
-    again = str(tmp_path / "again.mes")
-    assert mestra_vtk.import_folder(back, again)["ok"]
-    with mestra.open(sa) as x, mestra.open(again) as y:
+    again = str(tmp_path / "again.gamut")
+    assert gamut_vtk.import_folder(back, again)["ok"]
+    with gamut.open(sa) as x, gamut.open(again) as y:
         assert x.get_label("config").tolist() == y.get_label("config").tolist()
         assert y.get_label("config")[0] == "flaps, down"
         np.testing.assert_array_equal(x.get_field("p"), y.get_field("p"))

@@ -7,10 +7,10 @@ the exact -3 as the cells next to the wall shrink.
 """
 import numpy as np
 
-import mestra
+import gamut
 from _cylinder import pressure, ring
 
-with mestra.create("refinement.mes", writer="example refinement", mesh="changing", per="run",
+with gamut.create("refinement.gamut", writer="example refinement", mesh="changing", per="run",
                    coordinates={"units": "m", "axes": 2},
                    parameters={"cells_round": {"units": "1", "role": "design"}},
                    scalars={"cp_min": "1"},
@@ -22,7 +22,7 @@ with mestra.create("refinement.mes", writer="example refinement", mesh="changing
         study.add_run({"cells_round": n, "cp_min": cp.min()}, fields={"cp": cp},
                       points=points, cells=cells)
 
-with mestra.open("refinement.mes") as study:
+with gamut.open("refinement.gamut") as study:
     for row in range(study.row_count):
         types, offsets, connectivity = study.get_cells(row=row)
         cp = study.get_field("cp", rows=row)

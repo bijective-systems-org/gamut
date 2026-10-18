@@ -1,6 +1,6 @@
 #include "chunk.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 namespace {
@@ -55,4 +55,4 @@ bool chunk_larger_than_default(const std::vector<hsize_t>& chunk,
 }
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut

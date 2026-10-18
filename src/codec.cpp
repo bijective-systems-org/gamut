@@ -6,7 +6,7 @@
 
 #include "names.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 namespace {
@@ -22,7 +22,7 @@ const std::set<std::string> kTopLevel = {"type", "inputs", "repr"};
 std::string scale_name(const std::string& dataset, std::size_t axis) {
   char buffer[32];
   std::snprintf(buffer, sizeof buffer, "_d%zu", axis);
-  return "mestra_" + dataset + buffer;
+  return "gamut_" + dataset + buffer;
 }
 
 }  // namespace
@@ -210,4 +210,4 @@ void write_dict_group(File& f, const std::string& path, const Dict& d, bool top_
 }
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut

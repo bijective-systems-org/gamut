@@ -16,7 +16,7 @@
 <text class="soft" x="343.7" y="148" text-anchor="middle">50 ms</text>
 <line class="grid" x1="497.5" y1="46" x2="497.5" y2="130"/>
 <text class="soft" x="497.5" y="148" text-anchor="middle">100 ms</text>
-<text class="ink" x="180" y="67" text-anchor="end">mestra</text>
+<text class="ink" x="180" y="67" text-anchor="end">Gamut</text>
 <rect class="ours" x="190" y="56" width="47.1" height="16" rx="2"/>
 <text class="soft" x="243.1" y="68">15.3 ms</text>
 <text class="ink" x="180" y="93" text-anchor="end">HDF5, a group per run</text>

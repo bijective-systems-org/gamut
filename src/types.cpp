@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-namespace mestra {
+namespace gamut {
 
 bool bytes_less(const std::string& a, const std::string& b) {
   const std::size_t n = a.size() < b.size() ? a.size() : b.size();
@@ -149,4 +149,4 @@ std::vector<std::pair<std::int64_t, std::int64_t>> Selection::runs(
   return out;
 }
 
-}  // namespace mestra
+}  // namespace gamut

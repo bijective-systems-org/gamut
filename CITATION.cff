@@ -1,17 +1,17 @@
 cff-version: 1.2.0
 message: >-
-  If you use mestra in published work, please cite it as below, and
+  If you use Gamut in published work, please cite it as below, and
   name the format version your files declare (the root attribute
-  `format`, for example "mestra/1").
-title: "mestra: an open file format for simulation studies"
+  `format`, for example "gamut/1").
+title: "Gamut: an open file format for simulation studies"
 type: software
 authors:
   - name: "Bijective Systems"
-repository-code: "https://github.com/bijective-systems-org/mestra"
-url: "https://github.com/bijective-systems-org/mestra"
+repository-code: "https://github.com/bijective-systems-org/gamut"
+url: "https://github.com/bijective-systems-org/gamut"
 license: Apache-2.0
 abstract: >-
-  mestra is an open file format for the results of a parametric
+  Gamut is an open file format for the results of a parametric
   simulation study and the models fitted to it. One HDF5 file, laid
   out as a valid netCDF-4 file, holds the run table (parameters with
   roles, labels, statuses, splits and scalar results, every number with

@@ -6,10 +6,10 @@ tools keep a run's steps together.
 """
 import numpy as np
 
-import mestra
+import gamut
 
 steps = np.linspace(0.0, 10.0, 101)
-with mestra.create("transient.mes", writer="example transient",
+with gamut.create("transient.gamut", writer="example transient",
                    labels={"run": {"role": "group"}},
                    parameters={"t": {"units": "s", "role": "time", "run_group": "run"},
                                "speed": {"units": "m s-1", "role": "condition"}},
@@ -20,7 +20,7 @@ with mestra.create("transient.mes", writer="example transient",
         study.add_runs({"run": [name] * len(steps), "t": steps,
                         "speed": np.full(len(steps), speed), "cl": cl})
 
-with mestra.open("transient.mes") as study:
+with gamut.open("transient.gamut") as study:
     print(study.row_count, "rows; add-ons:", study.addons)
     fast = study.select("run == fast")
     t, cl = study.get_parameter("t", rows=fast), study.get_scalar("cl", rows=fast)

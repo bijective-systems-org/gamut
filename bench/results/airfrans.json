@@ -7,7 +7,7 @@
   "memory_bytes": "8589934592",
   "cores": "8",
   "packages": {
-   "mestra": "1.0.0.dev0",
+   "gamut": "1.0.0.dev0",
    "numpy": "2.4.6",
    "h5py": "3.16.0",
    "netCDF4": "1.7.5",
@@ -60,8 +60,8 @@
    "write_s": 42.37196300004143,
    "bytes": 975513683
   },
-  "mestra": {
-   "format": "mestra",
+  "gamut": {
+   "format": "gamut",
    "write_s": 54.95249112509191,
    "bytes": 709575325,
    "open": {

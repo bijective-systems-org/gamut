@@ -17,17 +17,17 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
-import mestra  # noqa: E402
-from mestra import _lib  # noqa: E402
+import gamut  # noqa: E402
+from gamut import _lib  # noqa: E402
 
 
 def probe(path: str, p: dict) -> str | None:
     """None when the probe holds, else what differed."""
     if "evaluate" in p:
-        with mestra.evaluate(path, p["evaluate"]) as out:
+        with gamut.evaluate(path, p["evaluate"]) as out:
             got = out.get_scalar(p["scalar"]).tolist()
         return None if got == p["values"] else f"evaluate {p['scalar']}: {got} != {p['values']}"
-    with mestra.open(path) as f:
+    with gamut.open(path) as f:
         if "info" in p:
             got = getattr(f, p["info"])
             return None if got == p["value"] else f"{p['info']}: {got!r} != {p['value']!r}"
@@ -51,7 +51,7 @@ def probe(path: str, p: dict) -> str | None:
 
 
 def hostile_read(path: str, f, r: dict) -> None:
-    """One read of a hostile file; a refusal is a MestraError."""
+    """One read of a hostile file; a refusal is a GamutError."""
     if "label" in r:
         f.get_label(r["label"])
     elif "cells" in r:
@@ -61,7 +61,7 @@ def hostile_read(path: str, f, r: dict) -> None:
     elif "scalar" in r:
         f.get_scalar(r["scalar"])
     elif "evaluate" in r:
-        with mestra.evaluate(path, r["evaluate"]):
+        with gamut.evaluate(path, r["evaluate"]):
             pass
 
 
@@ -72,10 +72,10 @@ def main() -> int:
     failures = []
     counts = {"valid": 0, "rules": 0, "hostile": 0}
     for name, e in sorted(expected.items()):
-        path = os.path.join(corpus, f"{name}.mes")
+        path = os.path.join(corpus, f"{name}.gamut")
         counts[e["group"]] += 1
         try:
-            report = mestra.validate(path)
+            report = gamut.validate(path)
         except Exception as exc:   # a binding error, not a finding
             failures.append(f"{name}: validate raised {type(exc).__name__}: {exc}")
             continue
@@ -97,19 +97,19 @@ def main() -> int:
                 failures.append(f"{name}: expected {missing}, found {sorted(found)}: " + "; ".join(
                     f"{f.rule} {f.path}: {f.message}" for f in report.findings))
             if e["group"] == "hostile":
-                # Opened and read without a crash: a refusal is a MestraError,
+                # Opened and read without a crash: a refusal is a GamutError,
                 # with the expected rule when the case names one.
                 try:
-                    with mestra.open(path) as f:
+                    with gamut.open(path) as f:
                         f.names("parameters")
                         for r in e.get("reads", []):
                             try:
                                 hostile_read(path, f, r)
-                            except mestra.MestraError:
+                            except gamut.GamutError:
                                 pass
                     if "refused" in e:
                         failures.append(f"{name}: opened; expected refusal {e['refused']}")
-                except mestra.MestraError as exc:
+                except gamut.GamutError as exc:
                     if "refused" in e and exc.rule != e["refused"]:
                         failures.append(f"{name}: refused with {exc.rule!r}, expected "
                                         f"{e['refused']}: {exc}")

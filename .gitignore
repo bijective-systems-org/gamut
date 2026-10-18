@@ -11,18 +11,18 @@ wheelhouse/
 # Build trees and built libraries
 build/
 build-*/
-python/mestra/_native/
+python/gamut/_native/
 matlab/*.mex*
 
 # Julia
 julia/Manifest.toml
 
 # Files the tests and benchmarks write
-*.mes
-!docs/**/*.mes
+*.gamut
+!docs/**/*.gamut
 bench/results/raw/
 
 .DS_Store
-matlab/libmestra.*
-matlab/mestra.dll
-matlab/mestra.lib
+matlab/libgamut.*
+matlab/gamut.dll
+matlab/gamut.lib

@@ -1,7 +1,7 @@
 // The core's internal vocabulary: errors, dtypes, attribute values,
 // filter pipelines.  Internal; nothing here crosses the C interface.
-#ifndef MESTRA_CORE_TYPES_HPP
-#define MESTRA_CORE_TYPES_HPP
+#ifndef GAMUT_CORE_TYPES_HPP
+#define GAMUT_CORE_TYPES_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace mestra {
+namespace gamut {
 
 // Every failure the core raises.  `rule` is the identifier of SPEC.md
 // section 16 when one applies (E1 ... E24, W1 ... W10) and empty when no
@@ -34,7 +34,7 @@ class Error : public std::runtime_error {
 bool bytes_less(const std::string& a, const std::string& b);
 
 // The element types the format stores.  The numeric codes are the C
-// interface's `mes_dtype`, so a binding passes them straight through.
+// interface's `gamut_dtype`, so a binding passes them straight through.
 enum class DType : int {
   UInt8 = 1,    // cell_types
   Int8 = 2,     // a boolean inside model data
@@ -128,6 +128,6 @@ struct Selection {
       std::int64_t length, const std::string& what) const;
 };
 
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_TYPES_HPP
+#endif  // GAMUT_CORE_TYPES_HPP

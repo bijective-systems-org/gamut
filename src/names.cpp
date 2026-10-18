@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <cstring>
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 bool legal_netcdf_name(const std::string& name) {
@@ -30,7 +30,7 @@ bool legal_netcdf_name(const std::string& name) {
 }
 
 bool reserved_name(const std::string& name) {
-  return name.compare(0, 7, "mestra_") == 0;
+  return name.rfind("gamut_", 0) == 0;
 }
 
 bool valid_utf8(const std::string& s) {
@@ -149,4 +149,4 @@ std::vector<std::string> split_spaces(const std::string& s) {
 }
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut

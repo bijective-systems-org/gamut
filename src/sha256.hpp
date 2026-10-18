@@ -1,20 +1,20 @@
 // SHA-256, written out rather than depended on, because the only use
 // this library has for a hash is the support_id of spec section 14
 // and a crypto library would be a dependency the format does not need.
-#ifndef MESTRA_CORE_SHA256_HPP
-#define MESTRA_CORE_SHA256_HPP
+#ifndef GAMUT_CORE_SHA256_HPP
+#define GAMUT_CORE_SHA256_HPP
 
 #include <cstddef>
 #include <cstdint>
 #include <string>
 
 
-namespace mestra {
+namespace gamut {
 
 class Sha256 {
  public:
   Sha256();
-  // Adds to the message.  Throws mestra::Error once `hex` has been
+  // Adds to the message.  Throws gamut::Error once `hex` has been
   // called, because the state is final by then.
   void update(const void* data, std::size_t length);
   // The digest in lower-case hexadecimal, 64 characters.  Calling it
@@ -35,6 +35,6 @@ class Sha256 {
 std::string sha256_hex(const void* data, std::size_t length);
 std::string sha256_hex(const std::string& data);
 
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_SHA256_HPP
+#endif  // GAMUT_CORE_SHA256_HPP

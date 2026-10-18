@@ -1,12 +1,12 @@
 """Field reads with 1, 2, 4 and 8 decompression threads on a file written
 by read_speed.py --keep.  Warm reads, best of three.
 
-    MESTRA_LIBRARY=build-release/libmestra.dylib python bench/threads.py FILE
+    GAMUT_LIBRARY=build-release/libgamut.dylib python bench/threads.py FILE
 """
 import json, os, sys, time
 import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
-import mestra
+import gamut
 
 def best(fn, n=3):
     b = float("inf")
@@ -18,7 +18,7 @@ path = sys.argv[1]
 fields = ("p", "t", "u", "v", "w")
 rows = []
 for threads in (1, 2, 4, 8):
-    with mestra.open(path, threads=threads) as f:
+    with gamut.open(path, threads=threads) as f:
         full, arr = best(lambda: f.get_field("p"))
         allf, _ = best(lambda: [f.get_field(n) for n in fields], 2)
         reg, _ = best(lambda: [f.get_field(n, nodes=slice(100_000, 102_621)) for n in fields])

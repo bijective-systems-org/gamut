@@ -7,7 +7,7 @@
 #include <map>
 #include <memory>
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 namespace {
@@ -250,4 +250,4 @@ std::vector<std::int64_t> select_rows(const Reader& reader, const std::string& w
 }
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut

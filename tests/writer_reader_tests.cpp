@@ -33,15 +33,15 @@ template <class F>
 std::string rule_of(F f) {
   try {
     f();
-  } catch (const mestra::Error& e) {
+  } catch (const gamut::Error& e) {
     return e.rule().empty() ? std::string("error") : e.rule();
   }
   return std::string();
 }
 
-using mestra::DType;
-using mestra::Selection;
-using namespace mestra::internal;
+using gamut::DType;
+using gamut::Selection;
+using namespace gamut::internal;
 
 Column f64(const std::vector<double>& v) {
   return Column::of(DType::Float64, v.data(), static_cast<std::int64_t>(v.size()));
@@ -126,7 +126,7 @@ Geometry grid(int nx, int ny, double scale = 1.0, bool with_cells = true) {
 }
 
 void test_table_run_at_a_time() {
-  const std::string path = "wr_table.mes";
+  const std::string path = "wr_table.gamut";
   {
     auto w = Writer::create(path, "tests", "", "fixed");
     w->set_attribute("title", "polar");
@@ -135,7 +135,7 @@ void test_table_run_at_a_time() {
     w->declare_label("status", "status", {"converged", "failed"});
     w->declare_result(scalar("cl", "1"));
     w->declare_result(scalar("cd", "1", DType::Float32));
-    mestra::internal::Constant c;
+    gamut::internal::Constant c;
     c.name = "s_ref";
     c.units = "m2";
     c.f = 12.5;
@@ -204,11 +204,11 @@ void test_table_run_at_a_time() {
     std::printf("table file after 1000 + 50 reopened appends: %ld bytes\n", size);
     CHECK(size < 200000);
   }
-  if (!std::getenv("MESTRA_KEEP")) std::remove(path.c_str());
+  if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
 }
 
 void test_shared_fixed() {
-  const std::string path = "wr_shared.mes";
+  const std::string path = "wr_shared.gamut";
   {
     auto w = Writer::create(path, "tests", "shared", "fixed");
     w->declare_parameter(param("mach", "condition", "1"));
@@ -264,12 +264,12 @@ void test_shared_fixed() {
   const auto types = read_i64(*r, "cells/types");
   CHECK(types.size() == 6 && types[0] == 9);
   CHECK(r->schema().mesh.support_id.size() == 64);
-  if (!std::getenv("MESTRA_KEEP")) std::remove(path.c_str());
+  if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
 }
 
 void test_shared_per_group_out_of_order() {
   // R5-1: categories declared up front, runs arriving out of code order.
-  const std::string path = "wr_group.mes";
+  const std::string path = "wr_group.gamut";
   {
     auto w = Writer::create(path, "tests", "shared", "group:member");
     w->declare_label("member", "group", {"a", "b", "c"});
@@ -314,11 +314,11 @@ void test_shared_per_group_out_of_order() {
   CHECK(both.size() == 36 && both[2] == 3.0 && both[18 + 2] == 1.0);
   const auto p = read_f64(*r, "node_fields/p", Selection::list({4}));
   CHECK(std::isnan(p[0]));
-  if (!std::getenv("MESTRA_KEEP")) std::remove(path.c_str());
+  if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
 }
 
 void test_changing_per_run_and_group() {
-  const std::string path = "wr_changing.mes";
+  const std::string path = "wr_changing.gamut";
   {
     auto w = Writer::create(path, "tests", "changing", "group:member");
     w->declare_label("member", "group", {});
@@ -363,11 +363,11 @@ void test_changing_per_run_and_group() {
   CHECK(patch.size() == 1 && patch[0] == 3);
   // Across runs is a shared-mesh operation.
   CHECK(!rule_of([&] { read_f64(*r, "node_fields/p"); }).empty());
-  if (!std::getenv("MESTRA_KEEP")) std::remove(path.c_str());
+  if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
 }
 
 void test_refusals() {
-  const std::string path = "wr_refuse.mes";
+  const std::string path = "wr_refuse.gamut";
   auto w = Writer::create(path, "tests", "shared", "fixed");
   w->declare_parameter(param("mach", "condition", "1"));
   CHECK(rule_of([&] { w->declare_parameter(param("bad name", "design", "1")); }) == "E8");
@@ -379,10 +379,10 @@ void test_refusals() {
   q.relation.statistic = "quantile";
   q.relation.of = "p_field";
   CHECK(rule_of([&] { w->declare_result(q); }) == "E12");   // no q
-  CHECK(rule_of([] { Writer::create("wr_bad.mes", "t", "changing", "fixed"); }) == "E6");
+  CHECK(rule_of([] { Writer::create("wr_bad.gamut", "t", "changing", "fixed"); }) == "E6");
   w.reset();
-  if (!std::getenv("MESTRA_KEEP")) std::remove(path.c_str());
-  std::remove("wr_bad.mes");
+  if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
+  std::remove("wr_bad.gamut");
 }
 
 }  // namespace
@@ -398,7 +398,7 @@ int main() {
   for (const auto& t : tests) {
     try {
       t.second();
-    } catch (const mestra::Error& e) {
+    } catch (const gamut::Error& e) {
       ++g_failures;
       std::fprintf(stderr, "%s: unexpected error %s: %s\n", t.first, e.rule().c_str(), e.what());
     } catch (const std::exception& e) {

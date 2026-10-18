@@ -11,7 +11,7 @@
 <text class="ink h" x="0" y="18">Size on disk</text>
 <text class="soft" x="0" y="36">each study against the folder of VTK files it came as; shorter is smaller</text>
 <text class="ink h" x="0" y="68">The capsule family</text>
-<text class="ink" x="180" y="93" text-anchor="end">mestra</text>
+<text class="ink" x="180" y="93" text-anchor="end">Gamut</text>
 <rect class="ours" x="190" y="82" width="60.0" height="16" rx="2"/>
 <text class="soft" x="256.0" y="94">66 MB</text>
 <text class="ink" x="180" y="119" text-anchor="end">VTK folder</text>
@@ -30,7 +30,7 @@
 <rect class="bar" x="190" y="212" width="61.3" height="16" rx="2"/>
 <text class="soft" x="257.3" y="224">67.5 MB</text>
 <text class="ink h" x="0" y="250">AirfRANS</text>
-<text class="ink" x="180" y="275" text-anchor="end">mestra</text>
+<text class="ink" x="180" y="275" text-anchor="end">Gamut</text>
 <rect class="ours" x="190" y="264" width="184.8" height="16" rx="2"/>
 <text class="soft" x="380.8" y="276">710 MB</text>
 <text class="ink" x="180" y="301" text-anchor="end">VTK folder</text>

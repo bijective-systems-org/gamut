@@ -24,8 +24,8 @@ def test_example_runs(script, tmp_path):
         pytest.importorskip(NEEDS[script.name])
     env = dict(os.environ)
     package = pathlib.Path(__file__).resolve().parents[1]
-    import mestra
-    if pathlib.Path(mestra.__file__).resolve().is_relative_to(package):
+    import gamut
+    if pathlib.Path(gamut.__file__).resolve().is_relative_to(package):
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(package), env.get("PYTHONPATH")]))
     result = subprocess.run([sys.executable, str(script)], cwd=tmp_path, env=env,
                             capture_output=True, text=True, timeout=300)

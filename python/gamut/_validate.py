@@ -51,13 +51,13 @@ class Report:
 def validate(path: str) -> Report:
     """Checks the file at `path` against every rule it can decide."""
     handle = ctypes.c_void_p()
-    call("mes_validate", b(path), ctypes.byref(handle))
+    call("gamut_validate", b(path), ctypes.byref(handle))
     try:
         out = []
-        for i in range(_lib._lib.mes_report_count(handle)):
+        for i in range(_lib._lib.gamut_report_count(handle)):
             parts = [ctypes.c_char_p() for _ in range(4)]
-            _lib._lib.mes_report_get(handle, i, *[ctypes.byref(p) for p in parts])
+            _lib._lib.gamut_report_get(handle, i, *[ctypes.byref(p) for p in parts])
             out.append(Finding(*[(p.value or b"").decode("utf-8", "replace") for p in parts]))
         return Report(tuple(out))
     finally:
-        _lib._lib.mes_report_free(handle)
+        _lib._lib.gamut_report_free(handle)

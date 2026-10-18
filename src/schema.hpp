@@ -1,8 +1,8 @@
 // The in-memory description of a file: what spec section 10 lays out,
 // without any values.  Built from declarations by the writer and from
 // metadata alone by the reader, so both see one model of the file.
-#ifndef MESTRA_CORE_SCHEMA_HPP
-#define MESTRA_CORE_SCHEMA_HPP
+#ifndef GAMUT_CORE_SCHEMA_HPP
+#define GAMUT_CORE_SCHEMA_HPP
 
 #include <cstdint>
 #include <map>
@@ -12,7 +12,7 @@
 
 #include "types.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 // The relation attributes of spec section 6.
@@ -139,6 +139,6 @@ std::string result_path(const Result& r);
 std::string mesh_label_path(const MeshLabel& m);
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_SCHEMA_HPP
+#endif  // GAMUT_CORE_SCHEMA_HPP

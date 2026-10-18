@@ -46,10 +46,11 @@ def machine() -> dict[str, Any]:
             out = subprocess.run(["sysctl", "-n", key], capture_output=True, text=True).stdout
             info[name] = out.strip()
     packages = {}
-    for name in ("mestra", "numpy", "h5py", "netCDF4", "xarray", "zarr", "pyarrow", "pandas",
+    # Recorded under the import name; gamut's distribution is gamut-format.
+    for name in ("gamut", "numpy", "h5py", "netCDF4", "xarray", "zarr", "pyarrow", "pandas",
                  "pyvista", "vtk"):
         try:
-            packages[name] = metadata.version(name)
+            packages[name] = metadata.version("gamut-format" if name == "gamut" else name)
         except metadata.PackageNotFoundError:
             pass
     info["packages"] = packages
@@ -57,7 +58,7 @@ def machine() -> dict[str, Any]:
     commit = subprocess.run(["git", "-C", here, "rev-parse", "--short", "HEAD"],
                             capture_output=True, text=True).stdout.strip()
     dirty = subprocess.run(["git", "-C", here, "status", "--porcelain", "--", "src", "include",
-                            "python/mestra"], capture_output=True, text=True).stdout.strip()
+                            "python/gamut"], capture_output=True, text=True).stdout.strip()
     info["source"] = commit + (" (modified)" if dirty else "")
     return info
 

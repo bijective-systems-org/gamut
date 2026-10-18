@@ -3,7 +3,7 @@ function out = registry(type, className)
 persistent map
 if isempty(map)
     map = containers.Map('KeyType', 'char', 'ValueType', 'char');
-    map('nearest') = 'mestra.Nearest';
+    map('nearest') = 'gamut.Nearest';
 end
 if nargin == 2
     map(type) = className;

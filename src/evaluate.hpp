@@ -1,8 +1,8 @@
 // Evaluation (spec section 7.4), driven by the binding: the core makes a
 // data file with a model file's declarations; the binding calls its models
 // and adds the rows.  No callbacks cross the C interface.
-#ifndef MESTRA_CORE_EVALUATE_HPP
-#define MESTRA_CORE_EVALUATE_HPP
+#ifndef GAMUT_CORE_EVALUATE_HPP
+#define GAMUT_CORE_EVALUATE_HPP
 
 #include <memory>
 #include <string>
@@ -10,7 +10,7 @@
 #include "reader.hpp"
 #include "writer.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 // A new data file at `out_path` declaring what the model file declares:
@@ -22,6 +22,6 @@ namespace internal {
 std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string& out_path);
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_EVALUATE_HPP
+#endif  // GAMUT_CORE_EVALUATE_HPP

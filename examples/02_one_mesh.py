@@ -7,7 +7,7 @@ without touching the rest.
 """
 import numpy as np
 
-import mestra
+import gamut
 
 # A ring of quadrilaterals around a unit cylinder: 48 points round, 12 out.
 n_theta, n_r = 48, 12
@@ -23,7 +23,7 @@ cells = (np.full(len(quads), 9, np.uint8),                # VTK quadrilateral
          np.array(quads).ravel())
 surface = np.r_[np.ones(n_theta, int), np.zeros(n_theta * (n_r - 1), int)]   # wall: the first ring
 
-with mestra.create("cylinder.mes", writer="example sweep", mesh="shared", per="fixed",
+with gamut.create("cylinder.gamut", writer="example sweep", mesh="shared", per="fixed",
                    coordinates={"units": "m", "axes": 2},
                    parameters={"gamma": {"units": "m2 s-1", "role": "design"}},
                    mesh_labels={"surface": {"at": "node", "categories": ["field", "wall"]}},
@@ -35,7 +35,7 @@ with mestra.create("cylinder.mes", writer="example sweep", mesh="shared", per="f
         cp = 1 - (u_r**2 + u_theta**2)                     # free stream speed 1
         study.add_run({"gamma": gamma}, fields={"cp": cp.ravel()})
 
-with mestra.open("cylinder.mes") as study:
+with gamut.open("cylinder.gamut") as study:
     print(study.type, "mesh,", study.row_count, "runs,", len(study.get_points()), "nodes")
     cp = study.get_field("cp")                             # runs x nodes
     print("cp block:", cp.shape)

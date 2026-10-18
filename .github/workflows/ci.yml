@@ -58,7 +58,7 @@ jobs:
 
       - name: The core and its tests
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMESTRA_STATIC_HDF5=ON \
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DGAMUT_STATIC_HDF5=ON \
                 -DHDF5_ROOT="$RUNNER_TEMP/deps" -DZLIB_ROOT="$RUNNER_TEMP/deps"
           cmake --build build -j2
           ./build/core_unit_tests
@@ -66,26 +66,26 @@ jobs:
 
       - name: Only the C interface leaves the library
         run: |
-          others=$(nm -D --defined-only build/libmestra.so | awk '{print $3}' | grep -v '^mes_' || true)
+          others=$(nm -D --defined-only build/libgamut.so | awk '{print $3}' | grep -v '^gamut_' || true)
           test -z "$others" || { echo "also exported: $others"; exit 1; }
-          if ldd build/libmestra.so | grep hdf5; then echo "links a shared HDF5"; exit 1; fi
+          if ldd build/libgamut.so | grep hdf5; then echo "links a shared HDF5"; exit 1; fi
 
       - name: The core under the address and undefined-behaviour sanitizers
         run: |
           sudo sysctl -w vm.mmap_rnd_bits=28        # the runner kernel's default breaks ASan
-          cmake -S . -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMESTRA_SANITIZE=ON \
-                -DMESTRA_STATIC_HDF5=ON -DHDF5_ROOT="$RUNNER_TEMP/deps" -DZLIB_ROOT="$RUNNER_TEMP/deps"
+          cmake -S . -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DGAMUT_SANITIZE=ON \
+                -DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT="$RUNNER_TEMP/deps" -DZLIB_ROOT="$RUNNER_TEMP/deps"
           cmake --build build-asan -j2
           ./build-asan/core_unit_tests
           ./build-asan/core_writer_reader_tests
 
       - name: The wheel
         run: |
-          CMAKE_ARGS="-DMESTRA_STATIC_HDF5=ON -DHDF5_ROOT=$RUNNER_TEMP/deps -DZLIB_ROOT=$RUNNER_TEMP/deps" \
+          CMAKE_ARGS="-DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT=$RUNNER_TEMP/deps -DZLIB_ROOT=$RUNNER_TEMP/deps" \
             python -m build --outdir dist .
 
       - name: The Python suite on the installed wheel (3.12 with every extra; 3.10, 3.13)
-        # From a directory outside the checkout, so `import mestra` is the
+        # From a directory outside the checkout, so `import gamut` is the
         # wheel; the tests reach the examples and docs by their own path.
         run: |
           wheel=$(ls dist/*.whl)
@@ -101,7 +101,7 @@ jobs:
       - name: The corpus from Python
         run: |
           python corpus/generate.py "$RUNNER_TEMP/corpus"
-          MESTRA_LIBRARY="$PWD/build/libmestra.so" python corpus/check.py "$RUNNER_TEMP/corpus" | tee "$RUNNER_TEMP/corpus.txt"
+          GAMUT_LIBRARY="$PWD/build/libgamut.so" python corpus/check.py "$RUNNER_TEMP/corpus" | tee "$RUNNER_TEMP/corpus.txt"
           grep -qE '^[1-9][0-9]* cases' "$RUNNER_TEMP/corpus.txt"
 
       - uses: julia-actions/setup-julia@fa02766e078afaaf09b14210362cee14137e6a32 # v3.0.2
@@ -110,7 +110,7 @@ jobs:
 
       - name: Julia, its example, and the corpus from Julia
         env:
-          MESTRA_LIBRARY: ${{ github.workspace }}/build/libmestra.so
+          GAMUT_LIBRARY: ${{ github.workspace }}/build/libgamut.so
         run: |
           julia --project=julia -e 'using Pkg; Pkg.instantiate()'
           julia --project=julia -e 'include("julia/test/runtests.jl")'
@@ -150,8 +150,8 @@ jobs:
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q ninja-build
           bash tools/build_deps.sh "$RUNNER_TEMP/deps" > "$RUNNER_TEMP/deps.log" 2>&1 || { tail -50 "$RUNNER_TEMP/deps.log"; exit 1; }
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMESTRA_BUILD_TESTS=OFF \
-                -DMESTRA_STATIC_HDF5=ON -DHDF5_ROOT="$RUNNER_TEMP/deps" -DZLIB_ROOT="$RUNNER_TEMP/deps"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGAMUT_BUILD_TESTS=OFF \
+                -DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT="$RUNNER_TEMP/deps" -DZLIB_ROOT="$RUNNER_TEMP/deps"
           cmake --build build -j2
 
       - name: The corpus
@@ -188,7 +188,7 @@ jobs:
 
       - name: The core and its tests
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMESTRA_STATIC_HDF5=ON \
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGAMUT_STATIC_HDF5=ON \
                 -DHDF5_ROOT="$RUNNER_TEMP/deps" -DZLIB_ROOT="$RUNNER_TEMP/deps"
           cmake --build build -j3
           ./build/core_unit_tests
@@ -197,7 +197,7 @@ jobs:
       - name: The wheel and the Python suite on it
         run: |
           python -m pip install -q build
-          CMAKE_ARGS="-DMESTRA_STATIC_HDF5=ON -DHDF5_ROOT=$RUNNER_TEMP/deps -DZLIB_ROOT=$RUNNER_TEMP/deps" \
+          CMAKE_ARGS="-DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT=$RUNNER_TEMP/deps -DZLIB_ROOT=$RUNNER_TEMP/deps" \
             python -m build --wheel --outdir dist .
           python -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/python" -m pip install -q "$(ls dist/*.whl)[test]"
@@ -224,7 +224,7 @@ jobs:
 
       - name: The core and its tests (Release, with the static C runtime it ships with)
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMESTRA_STATIC_HDF5=ON \
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGAMUT_STATIC_HDF5=ON \
                 -DHDF5_ROOT="$DEPS" -DZLIB_ROOT="$DEPS"
           cmake --build build --config Release --parallel 2
           build/Release/core_unit_tests
@@ -233,7 +233,7 @@ jobs:
       - name: The wheel and the Python suite on it
         run: |
           python -m pip install -q build
-          CMAKE_ARGS="-DMESTRA_STATIC_HDF5=ON -DHDF5_ROOT=$DEPS -DZLIB_ROOT=$DEPS" \
+          CMAKE_ARGS="-DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT=$DEPS -DZLIB_ROOT=$DEPS" \
             python -m build --wheel --outdir dist .
           python -m venv "$RUNNER_TEMP/venv"
           py="$RUNNER_TEMP/venv/Scripts/python"

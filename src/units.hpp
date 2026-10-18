@@ -1,14 +1,14 @@
 // The units grammar of spec section 13: whether a string parses,
 // whatever names it uses.  A grammar, deliberately not a units database.
-#ifndef MESTRA_CORE_UNITS_HPP
-#define MESTRA_CORE_UNITS_HPP
+#ifndef GAMUT_CORE_UNITS_HPP
+#define GAMUT_CORE_UNITS_HPP
 
 #include <string>
 
-namespace mestra {
+namespace gamut {
 
 bool units_parse(const std::string& units);
 
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_UNITS_HPP
+#endif  // GAMUT_CORE_UNITS_HPP

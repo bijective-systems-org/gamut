@@ -1,5 +1,5 @@
-name = "Mestra"
-uuid = "1389509a-6ddf-435b-8396-102a7721e4aa"
+name = "Gamut"
+uuid = "881430a9-b256-471a-abd1-503ac8aceb2f"
 version = "1.0.0"
 
 [deps]

@@ -2,16 +2,16 @@
 
 Runs are chosen with a small expression language; nodes by a mesh label;
 values arrive in the units asked for (unit conversion needs the `units`
-extra: pip install mestra[units]).
+extra: pip install "gamut-format[units]").
 """
 import numpy as np
 
-import mestra
+import gamut
 from _cylinder import pressure, ring
 
 points, cells, t, r = ring()
 surface = (r == r.min()).astype(int)                     # 1 on the wall
-with mestra.create("parts.mes", writer="example parts", mesh="shared", per="fixed",
+with gamut.create("parts.gamut", writer="example parts", mesh="shared", per="fixed",
                    coordinates={"units": "m", "axes": 2},
                    parameters={"gamma": {"units": "m2 s-1"}, "speed": {"units": "m s-1"}},
                    labels={"status": {"role": "status", "categories": ["converged", "failed"]}},
@@ -24,7 +24,7 @@ with mestra.create("parts.mes", writer="example parts", mesh="shared", per="fixe
             study.add_run({"gamma": gamma, "speed": speed, "status": "converged"},
                           fields={"p": q * pressure(t, r, gamma=gamma)})
 
-with mestra.open("parts.mes") as study:
+with gamut.open("parts.gamut") as study:
     rows = study.select("speed >= 20 and gamma > 1 and status == converged")
     print("chosen rows:", rows)
     wall = study.categories("surface").index("wall")

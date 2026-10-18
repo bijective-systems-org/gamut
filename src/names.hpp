@@ -1,12 +1,12 @@
 // Internal helpers for names, strings and formatting.
-#ifndef MESTRA_CORE_NAMES_HPP
-#define MESTRA_CORE_NAMES_HPP
+#ifndef GAMUT_CORE_NAMES_HPP
+#define GAMUT_CORE_NAMES_HPP
 
 #include <cstdint>
 #include <string>
 #include <vector>
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 // Spec section 9.3: not empty, no "/" or NUL, no leading or trailing
@@ -14,7 +14,7 @@ namespace internal {
 // character a letter, digit or underscore.
 bool legal_netcdf_name(const std::string& name);
 
-// The reserved prefix `mestra_`.
+// The reserved prefix `gamut_`.
 bool reserved_name(const std::string& name);
 
 // Valid UTF-8 with no NUL anywhere.
@@ -39,6 +39,6 @@ std::string basename(const std::string& path);
 std::vector<std::string> split_spaces(const std::string& s);
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_NAMES_HPP
+#endif  // GAMUT_CORE_NAMES_HPP

@@ -1,12 +1,12 @@
 #include "evaluate.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string& out_path) {
   const Schema& s = model.schema();
   if (s.kind != "model") throw Error("E16", "only a model file is evaluated");
-  auto w = Writer::create(out_path, "mestra evaluate", s.mesh.kind,
+  auto w = Writer::create(out_path, "gamut evaluate", s.mesh.kind,
                           s.mesh.kind.empty() ? "fixed" : s.mesh.per);
   for (const auto& kv : {std::make_pair("title", s.title), std::make_pair("license", s.license),
                          std::make_pair("references", s.references),
@@ -66,4 +66,4 @@ std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string&
 }
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut

@@ -9,7 +9,7 @@ import os
 
 import numpy as np
 
-from mestra import cli
+from gamut import cli
 
 
 def run(capsys, *argv):
@@ -42,7 +42,7 @@ def test_build_info_validate_get(tmp_path, capsys):
     assert "runs.csv" in doc["runs"] and "mesh.npz" in err
     make_inputs(tmp_path)
     (tmp_path / "doc.json").write_text(json.dumps(doc))
-    target = str(tmp_path / "study.mes")
+    target = str(tmp_path / "study.gamut")
     code, out, _ = run(capsys, "build", str(tmp_path / "doc.json"), "-o", target, "--json")
     assert code == 0, out
     assert json.loads(out) == {"wrote": target, "rows": 4, "problems": []}

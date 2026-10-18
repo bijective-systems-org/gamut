@@ -8,23 +8,23 @@ small class registered by the software that fits it (here, a linear fit).
 """
 import numpy as np
 
-import mestra
+import gamut
 
 # Training points: lift against angle of attack.
 alpha = np.linspace(0.0, 10.0, 11)
 cl = 0.11 * alpha - 0.002 * alpha**2
 
-with mestra.create_model("lift_nearest.mes", writer="example fit",
+with gamut.create_model("lift_nearest.gamut", writer="example fit",
                          parameters={"alpha": {"units": "degree", "lower": 0.0, "upper": 10.0}},
                          scalars={"cl": {"units": "1", "model": "fit", "output": "cl"}}) as model:
-    model.add_model("fit", mestra.Nearest(["alpha"], [0.0], [10.0], alpha[:, None], {"cl": cl}),
+    model.add_model("fit", gamut.Nearest(["alpha"], [0.0], [10.0], alpha[:, None], {"cl": cl}),
                     inputs=["alpha"])
 
-with mestra.evaluate("lift_nearest.mes", {"alpha": [2.2, 7.9]}) as answer:
+with gamut.evaluate("lift_nearest.gamut", {"alpha": [2.2, 7.9]}) as answer:
     print("nearest:", answer.get_scalar("cl").round(4))
 
 
-@mestra.register_model_type
+@gamut.register_model_type
 class Linear:
     """cl = a + b alpha, with a standard deviation: the plug-in interface is
     a type name and three methods."""
@@ -51,12 +51,12 @@ class Linear:
 
 b, a = np.polyfit(alpha, cl, 1)
 spread = float(np.std(cl - (a + b * alpha)))
-with mestra.create_model("lift_linear.mes", writer="example fit",
+with gamut.create_model("lift_linear.gamut", writer="example fit",
                          parameters={"alpha": {"units": "degree", "lower": 0.0, "upper": 10.0}},
                          scalars={"cl": {"units": "1", "model": "line", "output": "cl"},
                                   "cl_std": {"units": "1", "model": "line", "output": "cl",
                                              "of": "cl", "statistic": "std"}}) as model:
     model.add_model("line", Linear(a, b, spread), inputs=["alpha"])
 
-with mestra.evaluate("lift_linear.mes", {"alpha": [2.2, 7.9]}) as answer:
+with gamut.evaluate("lift_linear.gamut", {"alpha": [2.2, 7.9]}) as answer:
     print("linear:", answer.get_scalar("cl").round(4), "+/-", answer.get_scalar("cl_std").round(4))

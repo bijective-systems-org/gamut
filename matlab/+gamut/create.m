@@ -1,6 +1,6 @@
 function s = create(path, varargin)
 %CREATE Creates a data file and returns it open to add runs.
-%   s = mestra.create(path, 'writer', name, 'parameters', P, 'labels', L, ...
+%   s = gamut.create(path, 'writer', name, 'parameters', P, 'labels', L, ...
 %       'scalars', S, 'fields', F, 'meshLabels', M, 'constants', C, ...
 %       'mesh', 'shared'|'changing', 'per', 'fixed'|'run'|'group:<label>', ...
 %       'coordinates', struct('units', 'm', 'axes', 3), 'precision', struct(...), ...
@@ -27,20 +27,20 @@ p.addParameter('compression', true);
 p.parse(varargin{:});
 o = p.Results;
 if isempty(o.writer)
-    error('mestra:usage', 'name the program writing the file: ''writer''');
+    error('gamut:usage', 'name the program writing the file: ''writer''');
 end
 if ~isempty(o.mesh) && isempty(o.per)
-    error('mestra:E6', 'a mesh needs per: fixed, run or group:<label>');
+    error('gamut:E6', 'a mesh needs per: fixed, run or group:<label>');
 end
 per = o.per;
 if isempty(per), per = 'fixed'; end
-h = mestra_mex('create', path, o.writer, o.mesh, per);
-s = mestra.Study(h, path, true, o.mesh, o.per);
+h = gamut_mex('create', path, o.writer, o.mesh, per);
+s = gamut.Study(h, path, true, o.mesh, o.per);
 if ~isempty(o.coordinates)
-    s.Axes = mestra.internal.field(o.coordinates, 'axes', 3);
+    s.Axes = gamut.internal.field(o.coordinates, 'axes', 3);
 end
 try
-    mestra.internal.declare(h, o);
+    gamut.internal.declare(h, o);
 catch err
     % A half-declared file is not wanted; the declaration error stands.
     s.abandon(true);

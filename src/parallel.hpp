@@ -2,8 +2,8 @@
 // library serialises its calls) and decompressed in worker threads outside
 // it.  Possible because the format allows only gzip and shuffle (spec
 // section 11.2), which this code undoes itself with zlib.
-#ifndef MESTRA_CORE_PARALLEL_HPP
-#define MESTRA_CORE_PARALLEL_HPP
+#ifndef GAMUT_CORE_PARALLEL_HPP
+#define GAMUT_CORE_PARALLEL_HPP
 
 #include <cstddef>
 #include <string>
@@ -12,7 +12,7 @@
 #include "h5.hpp"
 #include "types.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 // Reads `sel` (ranges or everything per axis) of a chunked dataset into
@@ -25,6 +25,6 @@ bool read_parallel(const File& f, const std::string& path, DType mem,
                    std::size_t out_bytes, int threads);
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_PARALLEL_HPP
+#endif  // GAMUT_CORE_PARALLEL_HPP

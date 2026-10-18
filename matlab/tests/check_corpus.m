@@ -9,10 +9,10 @@ counts = struct('valid', 0, 'rules', 0, 'hostile', 0);
 for k = 1:numel(names)
     name = names{k};
     e = expected.(name);
-    path = fullfile(corpus, [name '.mes']);
+    path = fullfile(corpus, [name '.gamut']);
     counts.(e.group) = counts.(e.group) + 1;
     try
-        f = mestra.validate(path);
+        f = gamut.validate(path);
     catch err
         fails{end + 1} = sprintf('%s: validate raised %s', name, err.message); %#ok<SAGROW>
         continue
@@ -49,14 +49,14 @@ total = counts.valid + counts.rules + counts.hostile;
 fprintf('%d cases (%d valid, %d rule, %d hostile): %d hold\n', total, counts.valid, ...
     counts.rules, counts.hostile, total - numel(fails));
 for k = 1:numel(fails), fprintf('  FAIL %s\n', fails{k}); end
-if ~isempty(fails), error('mestra:corpus', '%d failures', numel(fails)); end
+if ~isempty(fails), error('gamut:corpus', '%d failures', numel(fails)); end
 
 function why = hostile(path, e)
-% Opened and read without a crash: a refusal is a mestra error, with the
+% Opened and read without a crash: a refusal is a Gamut error, with the
 % expected rule when the case names one.
 why = '';
 try
-    r = mestra.open(path);
+    r = gamut.open(path);
     c = onCleanup(@() r.close());
     r.names('parameters');
     if isfield(e, 'reads')
@@ -70,11 +70,11 @@ try
                 elseif isfield(q, 'select'), r.select(q.select);
                 elseif isfield(q, 'scalar'), r.getScalar(q.scalar);
                 elseif isfield(q, 'evaluate')
-                    out = mestra.evaluate(path, q.evaluate);
+                    out = gamut.evaluate(path, q.evaluate);
                     out.close();
                 end
             catch err
-                if ~startsWith(err.identifier, 'mestra:'), rethrow(err); end
+                if ~startsWith(err.identifier, 'gamut:'), rethrow(err); end
             end
         end
     end
@@ -82,9 +82,9 @@ try
         why = sprintf('opened; expected refusal %s', e.refused);
     end
 catch err
-    if ~startsWith(err.identifier, 'mestra:')
+    if ~startsWith(err.identifier, 'gamut:')
         why = sprintf('raised %s: %s', err.identifier, err.message);
-    elseif isfield(e, 'refused') && ~strcmp(err.identifier, ['mestra:' e.refused])
+    elseif isfield(e, 'refused') && ~strcmp(err.identifier, ['gamut:' e.refused])
         why = sprintf('refused with %s, expected %s', err.identifier, e.refused);
     end
 end
@@ -93,7 +93,7 @@ end
 function why = probe(path, p)
 why = '';
 if isfield(p, 'evaluate')
-    out = mestra.evaluate(path, p.evaluate);
+    out = gamut.evaluate(path, p.evaluate);
     c = onCleanup(@() out.close());
     got = out.getScalar(p.scalar);
     want = p.values(:);
@@ -102,7 +102,7 @@ if isfield(p, 'evaluate')
     end
     return
 end
-r = mestra.open(path);
+r = gamut.open(path);
 c = onCleanup(@() r.close());
 if isfield(p, 'info')
     switch p.info
@@ -129,7 +129,7 @@ codes = struct('float64', 6, 'float32', 5, 'int64', 4);
 rows = []; sites = [];
 if isfield(p, 'rows') && ~isempty(p.rows), rows = double(p.rows(:)); end
 if isfield(p, 'sites') && ~isempty(p.sites), sites = double(p.sites(:)); end
-got = mestra_mex('read', r.Handle, p.read, rows, sites, codes.(p.dtype));
+got = gamut_mex('read', r.Handle, p.read, rows, sites, codes.(p.dtype));
 want = p.values;
 if strcmp(p.dtype, 'float32'), want = single(want); end
 if strcmp(p.dtype, 'int64'), want = int64(want); end

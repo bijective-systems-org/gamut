@@ -1,9 +1,9 @@
 """A study on one mesh, written as each format and read back the same ways.
 
-    python bench/shared_mesh.py run STUDY.mes WORK_DIR RESULT.json [--field F]
+    python bench/shared_mesh.py run STUDY.gamut WORK_DIR RESULT.json [--field F]
         [--node N] [--region A:B] [--where EXPR] [--scalar S]
 
-STUDY.mes is a mestra file with a shared mesh (geometry fixed or per group).
+STUDY.gamut is a Gamut file with a shared mesh (geometry fixed or per group).
 Every format is written from the same arrays in memory, then each is
 measured in a fresh process: reading one run's field, one node across every
 run, a region of nodes across every run, a run-table query, and opening.
@@ -27,7 +27,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import machine, run_child, size_of, timed  # noqa: E402
 
-FORMATS = ("mestra", "mestra_threads", "vtk_folder", "vtk_zip", "hdf5_per_run", "netcdf", "zarr",
+FORMATS = ("gamut", "gamut_threads", "vtk_folder", "vtk_zip", "hdf5_per_run", "netcdf", "zarr",
            "parquet")
 
 
@@ -35,8 +35,8 @@ FORMATS = ("mestra", "mestra_threads", "vtk_folder", "vtk_zip", "hdf5_per_run", 
 
 
 def load(path: str) -> dict:
-    import mestra
-    with mestra.open(path) as s:
+    import gamut
+    with gamut.open(path) as s:
         group = s.describe("coordinates").get("per", "fixed")
         table = s.table()
         fields = {n: s.get_field(n) for n in s.names("node_fields")}
@@ -58,8 +58,8 @@ def load(path: str) -> dict:
 # --- writers -------------------------------------------------------------------------------
 
 
-def write_mestra(d: dict, out: str) -> None:
-    import mestra
+def write_gamut(d: dict, out: str) -> None:
+    import gamut
     labels = {n: {"role": d["declared"][n]["role"]} for n in d["table"]
               if d["declared"][n]["kind"] == "label"}
     parameters = {n: {"units": d["declared"][n]["units"], "role": d["declared"][n]["role"]}
@@ -68,7 +68,7 @@ def write_mestra(d: dict, out: str) -> None:
                if d["declared"][n]["kind"] == "scalar"}
     fields = {n: {"units": d["declared"][n]["units"], "at": "node"} for n in d["fields"]}
     fixed = d["per"] == "fixed"
-    with mestra.create(out, writer="benchmark", mesh="shared", per=d["per"],
+    with gamut.create(out, writer="benchmark", mesh="shared", per=d["per"],
                        coordinates={"units": d["declared"]["coordinates"]["units"], "axes": 3},
                        parameters=parameters,
                        labels=labels, scalars=scalars, fields=fields) as study:
@@ -163,29 +163,29 @@ def readers(fmt: str, path: str, field: str, where: dict, scalar: str):
             m &= ops[op](np.asarray(columns[c], dtype=float), v)
         return m
 
-    if fmt in ("mestra", "mestra_threads"):
-        import mestra
+    if fmt in ("gamut", "gamut_threads"):
+        import gamut
         expr = " and ".join(f"{c} {op} {v}" for c, op, v in cond)
-        threads = 4 if fmt == "mestra_threads" else 1
+        threads = 4 if fmt == "gamut_threads" else 1
 
         def opened():
-            with mestra.open(path, threads=threads) as s:
+            with gamut.open(path, threads=threads) as s:
                 return len(s.names("node_fields")) + s.row_count
 
         def one_run():
-            with mestra.open(path, threads=threads) as s:
+            with gamut.open(path, threads=threads) as s:
                 return float(s.get_field(field, rows=row).sum())
 
         def one_node():
-            with mestra.open(path, threads=threads) as s:
+            with gamut.open(path, threads=threads) as s:
                 return float(s.get_field(field, nodes=[node]).sum())
 
         def region():
-            with mestra.open(path, threads=threads) as s:
+            with gamut.open(path, threads=threads) as s:
                 return float(s.get_field(field, nodes=slice(lo, hi)).sum())
 
         def query():
-            with mestra.open(path, threads=threads) as s:
+            with gamut.open(path, threads=threads) as s:
                 return float(np.nansum(s.get_scalar(scalar, rows=s.select(expr))))
         return opened, one_run, one_node, region, query
 
@@ -290,7 +290,7 @@ def parse_where(text: str) -> list[tuple[str, str, float]]:
 
 
 def path_of(work: str, fmt: str) -> str:
-    return os.path.join(work, {"mestra": "study.mes", "mestra_threads": "study.mes",
+    return os.path.join(work, {"gamut": "study.gamut", "gamut_threads": "study.gamut",
                                "vtk_folder": "vtk", "vtk_zip": "vtk.zip",
                                "hdf5_per_run": "per_run.h5", "netcdf": "study.nc",
                                "zarr": "study.zarr", "parquet": "table.parquet"}[fmt])
@@ -298,20 +298,20 @@ def path_of(work: str, fmt: str) -> str:
 
 def cmd_write(args) -> dict:
     out = path_of(args.work, args.format)
-    if args.format == "mestra_threads":
-        # The same file as "mestra", read with four decompression threads.
+    if args.format == "gamut_threads":
+        # The same file as "gamut", read with four decompression threads.
         return {"format": args.format, "write_s": None, "bytes": size_of(out)}
     d = load(args.study)
     if os.path.isdir(out):
         shutil.rmtree(out)
     elif os.path.exists(out):
         os.remove(out)
-    writers = {"mestra": write_mestra, "vtk_folder": write_vtk_folder, "hdf5_per_run":
+    writers = {"gamut": write_gamut, "vtk_folder": write_vtk_folder, "hdf5_per_run":
                write_hdf5_per_run, "netcdf": write_netcdf, "zarr": write_zarr,
                "parquet": write_parquet}
     # Libraries are imported before the clock starts: a write is timed, not
     # an import.
-    for module in {"mestra": ["mestra"], "vtk_folder": ["pyvista"], "hdf5_per_run": ["h5py"],
+    for module in {"gamut": ["gamut"], "vtk_folder": ["pyvista"], "hdf5_per_run": ["h5py"],
                    "netcdf": ["xarray", "netCDF4"], "zarr": ["xarray", "zarr"],
                    "parquet": ["pandas", "pyarrow"]}.get(args.format, []):
         __import__(module)

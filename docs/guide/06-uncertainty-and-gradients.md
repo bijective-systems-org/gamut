@@ -33,7 +33,7 @@ scalars={"cl": "1",
 ## Reading
 
 ```python
-with mestra.open("uncertain.mes") as study:
+with gamut.open("uncertain.gamut") as study:
     related = study.related("cl")
     print("what describes cl:", related)
     low = study.get_scalar(related["quantiles"][0.05])

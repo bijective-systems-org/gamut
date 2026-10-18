@@ -13,7 +13,7 @@ circulations.
 ## Writing
 
 ```python
-with mestra.create("family.mes", writer="example family", mesh="shared", per="group:member",
+with gamut.create("family.gamut", writer="example family", mesh="shared", per="group:member",
                    coordinates={"units": "m", "axes": 2},
                    labels={"member": {"role": "group", "categories": list(members)}},
                    generalisation_group="member",
@@ -42,7 +42,7 @@ with mestra.create("family.mes", writer="example family", mesh="shared", per="gr
 ## Reading
 
 ```python
-with mestra.open("family.mes") as study:
+with gamut.open("family.gamut") as study:
     print(study.row_count, "runs on", len(members), "members of one topology")
     for row in (0, 3, 6):
         member = study.get_label("member", rows=row)

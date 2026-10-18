@@ -13,7 +13,7 @@ would make it.
 ## Writing
 
 ```python
-with mestra.create("transient.mes", writer="example transient",
+with gamut.create("transient.gamut", writer="example transient",
                    labels={"run": {"role": "group"}},
                    parameters={"t": {"units": "s", "role": "time", "run_group": "run"},
                                "speed": {"units": "m s-1", "role": "condition"}},
@@ -35,7 +35,7 @@ study.add_runs({"run": [name] * len(steps), "t": steps,
 ## Reading
 
 ```python
-with mestra.open("transient.mes") as study:
+with gamut.open("transient.gamut") as study:
     print(study.row_count, "rows; add-ons:", study.addons)
     fast = study.select("run == fast")
     t, cl = study.get_parameter("t", rows=fast), study.get_scalar("cl", rows=fast)

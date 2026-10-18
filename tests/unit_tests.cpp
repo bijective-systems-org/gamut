@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "h5.hpp"
-#include "mestra/mestra.h"
+#include "gamut/gamut.h"
 #include "names.hpp"
 #include "sha256.hpp"
 #include "types.hpp"
@@ -34,15 +34,15 @@ template <class F>
 std::string raises(F f) {
   try {
     f();
-  } catch (const mestra::Error& e) {
+  } catch (const gamut::Error& e) {
     return e.rule().empty() ? std::string("error") : e.rule();
   }
   return std::string();
 }
 
-using mestra::DType;
-using mestra::Selection;
-using mestra::internal::File;
+using gamut::DType;
+using gamut::Selection;
+using gamut::internal::File;
 
 void test_selection() {
   CHECK(Selection::all().count(5, "x") == 5);
@@ -63,10 +63,10 @@ void test_selection() {
 void test_units() {
   for (const char* ok : {"Pa", "m s-1", "W m-2", "1", "kg m-3", "degree",
                          "m2", "s^0.5", "(m s-1)2", "days since 2000-01-01"}) {
-    CHECK(mestra::units_parse(ok));
+    CHECK(gamut::units_parse(ok));
   }
   for (const char* bad : {"", " ", "m//s", "m+s", "m\ts"}) {
-    CHECK(!mestra::units_parse(bad));
+    CHECK(!gamut::units_parse(bad));
   }
 }
 
@@ -82,35 +82,35 @@ void test_sha256_support_id_example() {
   const std::int64_t conn[] = {0, 1, 4, 3, 1, 2, 5, 4};
   bytes.append(reinterpret_cast<const char*>(conn), sizeof conn);
   CHECK(bytes.size() == 98);
-  CHECK(mestra::sha256_hex(bytes) ==
+  CHECK(gamut::sha256_hex(bytes) ==
         "96df395d80ef548444562292de441525ba0b5c8ad00a8dadff19a19c943936c7");
 }
 
 void test_names() {
-  using mestra::internal::legal_netcdf_name;
+  using gamut::internal::legal_netcdf_name;
   CHECK(legal_netcdf_name("mach"));
   CHECK(legal_netcdf_name("velocity_x"));
   CHECK(legal_netcdf_name("_hidden"));
   CHECK(!legal_netcdf_name(""));
   CHECK(!legal_netcdf_name("a/b"));
   CHECK(!legal_netcdf_name(" a"));
-  CHECK(mestra::internal::reserved_name("mestra_x"));
-  CHECK(mestra::internal::iso8601_utc("2026-10-17T00:00:00Z"));
+  CHECK(gamut::internal::reserved_name("gamut_x"));
+  CHECK(gamut::internal::iso8601_utc("2026-10-17T00:00:00Z"));
 }
 
 void test_capi_basics() {
-  CHECK(std::strcmp(mes_format(), "mestra/1") == 0);
-  CHECK(std::strlen(mes_version()) > 0);
+  CHECK(std::strcmp(gamut_format(), "gamut/1") == 0);
+  CHECK(std::strlen(gamut_version()) > 0);
 }
 
 void test_h5_roundtrip() {
-  const std::string path = "core_unit_h5.mes";
+  const std::string path = "core_unit_h5.gamut";
   {
     File f = File::create(path);
     f.make_scale("/row_scale", 0, true);
     // A float32 block of 4 rows x 5 nodes, chunked and compressed.
     f.create_dataset("/g/p", DType::Float32, 0, {4, 5},
-                     {H5S_UNLIMITED, 5}, {2, 5}, mestra::default_pipeline());
+                     {H5S_UNLIMITED, 5}, {2, 5}, gamut::default_pipeline());
     std::vector<float> p(20);
     for (int i = 0; i < 20; ++i) p[static_cast<std::size_t>(i)] = static_cast<float>(i) * 0.5f;
     f.write("/g/p", DType::Float32, {0, 0}, {4, 5}, p.data());
@@ -127,9 +127,9 @@ void test_h5_roundtrip() {
     const double mach[] = {0.5, 0.6, 0.7};
     f.write("/mach", DType::Float64, {0}, {3}, mach);
     f.attach_scale("/mach", "/row", 0);
-    f.write_attr("/mach", "units", mestra::AttrValue::text("1"));
-    f.write_attr("/mach", "lower", mestra::AttrValue::real(0.5));
-    f.write_attr("/", "n", mestra::AttrValue::integer(7));
+    f.write_attr("/mach", "units", gamut::AttrValue::text("1"));
+    f.write_attr("/mach", "lower", gamut::AttrValue::real(0.5));
+    f.write_attr("/", "n", gamut::AttrValue::integer(7));
     f.create_dataset("/categories/status", DType::String, 9, {2}, {H5S_UNLIMITED},
                      {64}, {});
     f.write_strings("/categories/status", 0, {"converged", "failed"});
@@ -161,7 +161,7 @@ void test_h5_roundtrip() {
         info.scales[0][0] == "row");
   const auto pinfo = f.dataset_info("/g/p");
   CHECK(pinfo.chunked && pinfo.chunk[0] == 2);
-  CHECK(mestra::internal::pipeline_of(pinfo) == mestra::default_pipeline());
+  CHECK(gamut::internal::pipeline_of(pinfo) == gamut::default_pipeline());
   CHECK(pinfo.scales[1].size() == 1 && pinfo.scales[1][0] == "node_scale");
   CHECK(f.dataset_info("/row").is_scale);
   const auto sinfo = f.dataset_info("/node_scale");
@@ -169,11 +169,11 @@ void test_h5_roundtrip() {
   bool saw_units = false;
   for (const auto& a : f.attributes("/mach")) {
     if (a.name == "units") saw_units = a.value.as_text() == "1" &&
-                                       mestra::internal::is_spec_string(a.type);
+                                       gamut::internal::is_spec_string(a.type);
   }
   CHECK(saw_units);
   std::remove(path.c_str());
-#ifdef MESTRA_OWN_HDF5
+#ifdef GAMUT_OWN_HDF5
   // The core's own HDF5 loads no filter plugin (src/h5.cpp).
   unsigned int plugins = 1;
   CHECK(H5PLget_loading_state(&plugins) >= 0 && plugins == 0);

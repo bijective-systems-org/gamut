@@ -1,7 +1,7 @@
 // A model's numbers (spec section 12): a nested dictionary of numbers,
 // booleans, strings, numeric arrays, lists of strings and nulls.
-#ifndef MESTRA_CORE_VALUE_HPP
-#define MESTRA_CORE_VALUE_HPP
+#ifndef GAMUT_CORE_VALUE_HPP
+#define GAMUT_CORE_VALUE_HPP
 
 #include <cstdint>
 #include <map>
@@ -11,7 +11,7 @@
 
 #include "types.hpp"
 
-namespace mestra {
+namespace gamut {
 namespace internal {
 
 struct BytesOrder {
@@ -73,6 +73,6 @@ const Value* find_path(const Dict& root, const std::string& path);
 void set_path(Dict& root, const std::string& path, Value v);
 
 }  // namespace internal
-}  // namespace mestra
+}  // namespace gamut
 
-#endif  // MESTRA_CORE_VALUE_HPP
+#endif  // GAMUT_CORE_VALUE_HPP

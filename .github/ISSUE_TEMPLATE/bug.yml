@@ -21,7 +21,7 @@ body:
     attributes:
       label: Version
       description: >-
-        `mestra --version` in Python, or the release or commit you
+        `gamut --version` in Python, or the release or commit you
         built from, and your operating system.
     validations:
       required: true
@@ -31,7 +31,7 @@ body:
       label: What happened
       description: >-
         The exact message or output. For a file, the output of
-        `mestra validate FILE` helps too.
+        `gamut validate FILE` helps too.
       render: text
     validations:
       required: true

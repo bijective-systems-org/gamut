@@ -9,7 +9,7 @@ name: publish
 # builds on each platform's own runner with cibuildwheel (the settings are
 # in pyproject.toml), which installs each wheel in a fresh environment and
 # runs the test suite against it; the suite checks that the package
-# metadata, `mestra.__version__` and the core's own version agree. `sdist`
+# metadata, `gamut.__version__` and the core's own version agree. `sdist`
 # builds the source distribution and checks the tag against
 # pyproject.toml. Only `publish` holds a credential: an OpenID Connect
 # token minted for the `pypi` environment, which PyPI trusts for this
@@ -106,7 +106,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: pypi
-      url: https://pypi.org/project/mestra/
+      url: https://pypi.org/project/gamut-format/
     permissions:
       # The OpenID Connect token is the credential; nothing else is granted.
       id-token: write

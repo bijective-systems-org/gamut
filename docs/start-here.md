@@ -1,6 +1,6 @@
 # Start here
 
-mestra turns a simulation study into one file: the runs, what went into
+Gamut turns a simulation study into one file: the runs, what went into
 each, what came out, and the mesh the fields live on. This page is the road
 through it, from installing to using it on your own studies. Each step
 names the page that goes deeper, and none of them needs more than the
@@ -8,11 +8,11 @@ step before.
 
 ## The first ten minutes
 
-1. **Install.** `pip install mestra` in a Python 3.10 or later environment
+1. **Install.** `pip install gamut-format` in a Python 3.10 or later environment
    (other languages: [installing](install.md)). Check it with
-   `mestra --version`, which should name `mestra/1` files. Until version 1
-   is released on PyPI, `pip install mestra` brings the earlier 0.1 series;
-   install from a checkout instead, with `pip install .` at its top.
+   `gamut --version`, which should name `gamut/1` files. Until version 1
+   is released on PyPI, install from a checkout instead, with
+   `pip install .` at its top.
 2. **Run the first two examples.** From a checkout of this repository:
 
    ```bash
@@ -28,8 +28,8 @@ step before.
 3. **Look inside a file without Python.**
 
    ```bash
-   mestra info cylinder.mes
-   mestra validate cylinder.mes
+   gamut info cylinder.gamut
+   gamut validate cylinder.gamut
    ```
 
    `info` says what the file holds and in which units; `validate` checks it
@@ -58,7 +58,7 @@ example. By the end of it you will have written:
 ## The first week: your own studies
 
 - **From VTK files.** If your runs are a folder of `.vtu` or `.vtk` files,
-  `mestra-vtk import runs/` writes the two small tables it needs (the inputs
+  `gamut-vtk import runs/` writes the two small tables it needs (the inputs
   of each run, the units of each array) and, once they are filled in,
   turns the folder into one study ([VTK](guide/10-vtk.md)).
 - **From your solver's own output.** Write runs as they finish with

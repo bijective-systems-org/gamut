@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-5 0 261 53" width="261" height="53"
-     role="img" aria-labelledby="mestra-logo" fill="none" stroke-width="5.0"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-5 0 246 62" width="246" height="62"
+     role="img" aria-labelledby="gamut-logo" fill="none" stroke-width="5.0"
      stroke-linecap="round" stroke-linejoin="round">
-  <title id="mestra-logo">mestra</title>
+  <title id="gamut-logo">Gamut</title>
   <!-- The mark: one closed outline on four nodes, two of its edges on the
        square through them and two on the circle through the same four: one
        shape becoming another without moving a node, as a family of meshes
@@ -22,11 +22,10 @@
   <circle class="node" cx="21.5" cy="45.5" r="4"/>
   <circle class="node" cx="2.5" cy="26.5" r="4"/>
   <g class="word">
-    <path d="M58.50 46.00L58.50 31.00A11.00 15.00 0 0 1 80.50 31.00L80.50 46.00M80.50 31.00A11.00 15.00 0 0 1 102.50 31.00L102.50 46.00"/>
-    <path d="M110.00 31.00L140.00 31.00M140.00 31.00A15.00 15.00 0 1 0 134.23 42.82"/>
-    <path d="M166.22 20.45A9.00 7.50 0 1 0 158.00 31.00A9.00 7.50 0 1 1 149.78 41.55"/>
-    <path d="M181.00 7.00L181.00 46.00M175.00 16.00L192.00 16.00"/>
-    <path d="M198.50 46.00L198.50 31.00A12.00 15.00 0 0 1 210.50 16.00"/>
-    <path d="M218.50 31.00A15.00 15.00 0 1 1 248.50 31.00A15.00 15.00 0 1 1 218.50 31.00M248.50 16.00L248.50 46.00"/>
+    <path d="M58.50 31.00A15.00 15.00 0 1 1 88.50 31.00A15.00 15.00 0 1 1 58.50 31.00M88.50 16.00L88.50 46.00A15.00 13.00 0 0 1 61.50 53.00"/>
+    <path d="M96.50 31.00A15.00 15.00 0 1 1 126.50 31.00A15.00 15.00 0 1 1 96.50 31.00M126.50 16.00L126.50 46.00"/>
+    <path d="M134.50 46.00L134.50 31.00A11.00 15.00 0 0 1 156.50 31.00L156.50 46.00M156.50 31.00A11.00 15.00 0 0 1 178.50 31.00L178.50 46.00"/>
+    <path d="M186.50 16.00L186.50 31.00A11.00 15.00 0 0 0 208.50 31.00M208.50 16.00L208.50 46.00"/>
+    <path d="M224.50 7.00L224.50 46.00M218.50 16.00L235.50 16.00"/>
   </g>
 </svg>

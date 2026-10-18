@@ -21,7 +21,7 @@ RESULTS = os.path.join(HERE, "results")
 PAGE = os.path.join(ROOT, "docs", "benchmarks.md")
 ASSETS = os.path.join(ROOT, "docs", "assets")
 
-NAMES = {"mestra": "mestra", "mestra_threads": "mestra, 4 threads", "vtk_folder": "VTK folder", "vtk_zip": "VTK folder, zipped",
+NAMES = {"gamut": "Gamut", "gamut_threads": "Gamut, 4 threads", "vtk_folder": "VTK folder", "vtk_zip": "VTK folder, zipped",
          "hdf5_per_run": "HDF5, a group per run", "netcdf": "netCDF-4 (xarray)",
          "zarr": "Zarr (xarray)", "parquet": "Parquet, run table only"}
 READS = {"open": "Open", "one_run": "One run", "one_node": "One node, every run",
@@ -109,17 +109,17 @@ def size_figure(cases: list[tuple[str, dict]]) -> str:
     for label, r in cases:
         base = r["formats"]["vtk_folder"]["bytes"]
         items.append((label, None, "", False))
-        for fmt in ("mestra", "vtk_folder", "vtk_zip", "hdf5_per_run", "netcdf", "zarr"):
+        for fmt in ("gamut", "vtk_folder", "vtk_zip", "hdf5_per_run", "netcdf", "zarr"):
             if fmt in r["formats"]:
                 f = r["formats"][fmt]
                 items.append((NAMES[fmt], f["bytes"] / base, megabytes(f["bytes"]),
-                              fmt == "mestra"))
+                              fmt == "gamut"))
     return bars("Size on disk", "each study against the folder of VTK files it came as; shorter "
                 "is smaller", items, time_axis=False)
 
 
 def read_figure(r: dict, read: str, title: str, subtitle: str) -> str:
-    items = [(NAMES[fmt], f[read]["median_s"], seconds(f[read]["median_s"]), fmt.startswith("mestra"))
+    items = [(NAMES[fmt], f[read]["median_s"], seconds(f[read]["median_s"]), fmt.startswith("gamut"))
              for fmt, f in r["formats"].items() if read in f]
     items.sort(key=lambda x: x[1])
     return bars(title, subtitle, items, time_axis=True)
@@ -130,7 +130,7 @@ def table(r: dict, reads: list[str]) -> str:
     rule = "|---|---:|---:|" + "---:|" * len(reads)
     rows = [head, rule]
     for fmt, f in r["formats"].items():
-        cells = [f"**{NAMES[fmt]}**" if fmt.startswith("mestra") else NAMES[fmt], megabytes(f["bytes"]),
+        cells = [f"**{NAMES[fmt]}**" if fmt.startswith("gamut") else NAMES[fmt], megabytes(f["bytes"]),
                  seconds(f["write_s"]) if f.get("write_s") else "—"]
         cells += [seconds(f[x]["median_s"]) if x in f else "—" for x in reads]
         rows.append("| " + " | ".join(cells) + " |")
@@ -143,7 +143,7 @@ def machine_line(r: dict) -> str:
     memory = f"{int(m['memory_bytes']) / 2**30:.0f} GB" if m.get("memory_bytes") else ""
     versions = ", ".join(f"{k} {v}" for k, v in p.items())
     return (f"{m.get('cpu', '')}, {memory}, {m.get('system', '')}; Python {m['python']}; "
-            f"{versions}; mestra built from {m.get('source', 'an unrecorded commit')}.")
+            f"{versions}; Gamut built from {m.get('source', 'an unrecorded commit')}.")
 
 
 def generated() -> tuple[dict[str, str], dict[str, str]]:

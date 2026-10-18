@@ -1,9 +1,9 @@
 """The cross-language corpus: files written from the specification with h5py
-alone (no mestra code), and what every binding must find in them.
+alone (no Gamut code), and what every binding must find in them.
 
     python corpus/generate.py OUTDIR
 
-writes OUTDIR/<case>.mes and OUTDIR/expected.json.  `check.py` holds a
+writes OUTDIR/<case>.gamut and OUTDIR/expected.json.  `check.py` holds a
 binding to it.  Three groups of cases:
 
   valid/   each file type and feature; expected: no finding, and probe
@@ -82,7 +82,7 @@ class Study:
     def __init__(self, path: str, kind: str = "data") -> None:
         self.f = h5py.File(path, "w", libver=("earliest", "v110"), track_order=False)
         f = self.f
-        sattr(f, "format", "mestra/1")
+        sattr(f, "format", "gamut/1")
         sattr(f, "kind", kind)
         sattr(f, "writer", "corpus generator")
         sattr(f, "created", "2026-10-18T00:00:00Z")
@@ -404,12 +404,12 @@ def case_model_nearest(path):
     out = g.create_group("outputs")
     y = out.create_dataset("cl", data=np.array([0.0, 0.5, 0.4]))
     for parent, name, ds in ((g, "columns", cols), (g, "lower", lo), (g, "upper", hi), (out, "cl", y)):
-        dim(s.f, f"{parent.name}/mestra_{name}_d0", ds.shape[0], False)
-        ds.dims[0].attach_scale(s.f[f"{parent.name}/mestra_{name}_d0"])
-    dim(s.f, "models/fit/mestra_x_d0", 3, False)
-    dim(s.f, "models/fit/mestra_x_d1", 2, False)
-    x.dims[0].attach_scale(s.f["models/fit/mestra_x_d0"])
-    x.dims[1].attach_scale(s.f["models/fit/mestra_x_d1"])
+        dim(s.f, f"{parent.name}/gamut_{name}_d0", ds.shape[0], False)
+        ds.dims[0].attach_scale(s.f[f"{parent.name}/gamut_{name}_d0"])
+    dim(s.f, "models/fit/gamut_x_d0", 3, False)
+    dim(s.f, "models/fit/gamut_x_d1", 2, False)
+    x.dims[0].attach_scale(s.f["models/fit/gamut_x_d0"])
+    x.dims[1].attach_scale(s.f["models/fit/gamut_x_d1"])
     g.attrs.create("note", np.array(NULL, dtype=h5py.string_dtype("utf-8", 5)))
     s.finish()
     return {"probes": [
@@ -529,11 +529,11 @@ def _widen_table(f, name):
 
 def hostile_cases(out):
     cases = {}
-    p = os.path.join(out, "hostile_not_hdf5.mes")
+    p = os.path.join(out, "hostile_not_hdf5.gamut")
     open(p, "wb").write(b"\x89HDF not really" * 10)
     cases["hostile_not_hdf5"] = {"rules": ["E1"]}
-    p = os.path.join(out, "hostile_deep.mes")
-    shutil.copy(os.path.join(out, "table.mes"), p)
+    p = os.path.join(out, "hostile_deep.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
     with h5py.File(p, "r+") as f:
         g = f.create_group("notes")
         path = "notes"
@@ -541,8 +541,8 @@ def hostile_cases(out):
             path += f"/g{i}"
             f.create_group(path)
     cases["hostile_deep"] = {"rules": ["E23"]}
-    p = os.path.join(out, "hostile_big_attr.mes")
-    shutil.copy(os.path.join(out, "table.mes"), p)
+    p = os.path.join(out, "hostile_big_attr.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
     with h5py.File(p, "r+") as f:
         # A dataset with a version 2 object header can hold an attribute this
         # large; the attribute is one the spec names, as a huge array.
@@ -554,15 +554,15 @@ def hostile_cases(out):
         sattr(d, "units", "1")
         d.attrs.create("of", np.zeros(2_000_000, dtype="S1"))
     cases["hostile_big_attr"] = {"rules": ["E3"]}
-    p = os.path.join(out, "hostile_huge_dataset.mes")
-    shutil.copy(os.path.join(out, "table.mes"), p)
+    p = os.path.join(out, "hostile_huge_dataset.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
     with h5py.File(p, "r+") as f:
         f.create_dataset("notes_huge", shape=(1 << 40,), dtype="<f8", chunks=(1 << 16,))
     cases["hostile_huge_dataset"] = {"rules": []}   # must not allocate; finding optional
     # A category table that declares 2**28 entries and stores none: read at
     # open, so it must be refused before its buffer is allocated.
-    p = os.path.join(out, "hostile_table_huge.mes")
-    shutil.copy(os.path.join(out, "table.mes"), p)
+    p = os.path.join(out, "hostile_table_huge.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
     with h5py.File(p, "r+") as f:
         n = 1 << 28
         dim(f, "category_huge", n, True)
@@ -573,24 +573,24 @@ def hostile_cases(out):
     cases["hostile_table_huge"] = {"rules": ["E23"]}
     # 2**33 rows declared, none stored: reading a label's names must not
     # allocate for them.
-    p = os.path.join(out, "hostile_rows_huge.mes")
-    shutil.copy(os.path.join(out, "table.mes"), p)
+    p = os.path.join(out, "hostile_rows_huge.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
     with h5py.File(p, "r+") as f:
         for name in ("row", "run"):
             f[name].resize((1 << 33,))
     cases["hostile_rows_huge"] = {"rules": [], "reads": [{"label": "run"}]}
     # /row as a soft link to the real ids: links are never followed, and a
     # reader refuses rather than read the file as having no rows.
-    p = os.path.join(out, "hostile_soft_row.mes")
-    shutil.copy(os.path.join(out, "table.mes"), p)
+    p = os.path.join(out, "hostile_soft_row.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
     with h5py.File(p, "r+") as f:
         f.move("row", "row_real")
         f["row"] = h5py.SoftLink("/row_real")
     cases["hostile_soft_row"] = {"rules": ["E22"], "refused": "E22"}
     # A model whose arrays declare (2**62, 4) elements, none stored: the
     # element count overflows 64 bits once multiplied by the item size.
-    p = os.path.join(out, "hostile_model_wrap.mes")
-    shutil.copy(os.path.join(out, "model_nearest.mes"), p)
+    p = os.path.join(out, "hostile_model_wrap.gamut")
+    shutil.copy(os.path.join(out, "model_nearest.gamut"), p)
     with h5py.File(p, "r+") as f:
         g = f["models/fit"]
         for path in ("x", "outputs/cl"):
@@ -601,22 +601,22 @@ def hostile_cases(out):
                                    "reads": [{"evaluate": {"mach": [0.4], "alpha": [1.0]}}]}
     # A changing mesh whose first instance claims 2**30 cells while
     # cell_offsets holds a handful.
-    p = os.path.join(out, "hostile_cells_huge.mes")
-    shutil.copy(os.path.join(out, "changing.mes"), p)
+    p = os.path.join(out, "hostile_cells_huge.gamut")
+    shutil.copy(os.path.join(out, "changing.gamut"), p)
     with h5py.File(p, "r+") as f:
         f["mesh/instance_cells"][1] = 1 << 30
     cases["hostile_cells_huge"] = {"rules": ["E21"], "reads": [{"cells": 0}]}
     # 2**30 rows declared, one stored: the where selector reads every row.
-    p = os.path.join(out, "hostile_where_huge.mes")
-    shutil.copy(os.path.join(out, "table.mes"), p)
+    p = os.path.join(out, "hostile_where_huge.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
     with h5py.File(p, "r+") as f:
         for name in ("row", "mach"):
             f[name].resize((1 << 30,))
     cases["hostile_where_huge"] = {"rules": [], "reads": [{"select": "mach > 0.5"}]}
     # A scalar column of 2**21 one-element chunks, none written: HDF5 keeps
     # state per chunk touched, so reading it whole would take gigabytes.
-    p = os.path.join(out, "hostile_tiny_chunks.mes")
-    shutil.copy(os.path.join(out, "table.mes"), p)
+    p = os.path.join(out, "hostile_tiny_chunks.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
     with h5py.File(p, "r+") as f:
         n = 1 << 21
         f["row"].resize((n,))
@@ -630,8 +630,8 @@ def hostile_cases(out):
     cases["hostile_tiny_chunks"] = {"rules": [], "reads": [{"scalar": "cl"}]}
     # A point cloud whose fixed coordinates claim 2**40 nodes, none written:
     # the support id hashes them, so a checker must refuse before reading.
-    p = os.path.join(out, "hostile_points_huge.mes")
-    shutil.copy(os.path.join(out, "point_cloud.mes"), p)
+    p = os.path.join(out, "hostile_points_huge.gamut")
+    shutil.copy(os.path.join(out, "point_cloud.gamut"), p)
     with h5py.File(p, "r+") as f:
         old = f["mesh/coordinates"]
         attrs = {k: old.attrs[k] for k in old.attrs if k != "DIMENSION_LIST"}
@@ -654,13 +654,13 @@ def main() -> None:
     os.makedirs(out, exist_ok=True)
     expected: dict[str, dict] = {}
     for name, make in VALID.items():
-        e = make(os.path.join(out, f"{name}.mes"))
+        e = make(os.path.join(out, f"{name}.gamut"))
         e["rules"] = []
         e["group"] = "valid"
         expected[name] = e
     for name, (base, rule, edit) in RULES.items():
-        p = os.path.join(out, f"{name}.mes")
-        shutil.copy(os.path.join(out, f"{base}.mes"), p)
+        p = os.path.join(out, f"{name}.gamut")
+        shutil.copy(os.path.join(out, f"{base}.gamut"), p)
         with h5py.File(p, "r+") as f:
             edit(f)
         expected[name] = {"group": "rules", "rules": [rule]}

@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"
-     role="img" aria-labelledby="mestra-mark"
+     role="img" aria-labelledby="gamut-mark"
      fill="none" stroke="currentColor" stroke-width="6.0"
      stroke-linecap="round" stroke-linejoin="miter" stroke-miterlimit="10">
-  <title id="mestra-mark">mestra</title>
+  <title id="gamut-mark">Gamut</title>
   <!-- One closed outline on four nodes: two of its edges are the square through
        them, two are the circle through the same four, so one shape is caught in
        the act of becoming another without moving a node. That is the format in a
