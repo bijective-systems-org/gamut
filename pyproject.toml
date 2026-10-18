@@ -32,7 +32,7 @@ test = ["pytest>=7", "h5py>=3.10", "pint>=0.23", "xarray>=2023.1", "netCDF4>=1.6
 
 [project.scripts]
 gamut = "gamut.cli:main"
-gamut-vtk = "gamut.vtk:main"
+gamut-vtk = "gamut.cli:vtk_main"
 
 [project.urls]
 Homepage = "https://github.com/bijective-systems-org/gamut"

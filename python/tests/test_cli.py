@@ -6,6 +6,8 @@ from __future__ import annotations
 import csv
 import json
 import os
+import subprocess
+import sys
 
 import numpy as np
 
@@ -75,3 +77,13 @@ def test_build_info_validate_get(tmp_path, capsys):
     # A zone of cells cannot select the nodes of a node field.
     code, out, _ = run(capsys, "get", target, "p", "--zone", "zone=inlet", "-o", npz, "--json")
     assert code == 1 and "at nodes" in json.loads(out)["error"]["message"]
+
+
+def test_vtk_command_without_its_extra_says_what_to_install():
+    # A fresh interpreter, so no other test has imported pandas already.
+    code = ("import sys; sys.modules['pandas'] = None; from gamut.cli import vtk_main; "
+            "raise SystemExit(vtk_main(['--help']))")
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert result.returncode == 2, result.stderr
+    assert 'pip install "gamut-format[vtk]"' in result.stderr
+    assert "Traceback" not in result.stderr

@@ -648,5 +648,18 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
 
+def vtk_main(argv: list[str] | None = None) -> int:
+    """The gamut-vtk command. Without the vtk extra it says what to install."""
+    try:
+        from .vtk import main as vtk
+    except ImportError as e:
+        if e.name not in ("pandas", "pyvista", "vtk"):
+            raise
+        print(f'gamut-vtk needs the vtk extra, without which {e.name} is missing: '
+              f'pip install "gamut-format[vtk]"', file=sys.stderr)
+        return 2
+    return vtk(argv)
+
+
 if __name__ == "__main__":
     sys.exit(main())
