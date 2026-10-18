@@ -39,3 +39,10 @@ lowest = min(study.getField('cp', 'nodes', onWall), [], 2);
 fprintf('lowest cp on the wall, by run: %s\n', mat2str(round(lowest', 2)));
 fprintf('one node across every run: %s\n', mat2str(round(study.getField('cp', 'nodes', 13)', 2)));
 study.close();
+
+% The question the README asks in every language, with the same answer.
+study = gamut.open('cylinder.gamut');
+rows = study.select('gamma > 2');
+cp = study.getField('cp', 'rows', rows, 'nodes', 13);           % runs x nodes, from 1
+fprintf('cp on top of the cylinder where gamma > 2:%s\n', sprintf(' %.2f', cp));
+study.close();

@@ -80,7 +80,7 @@ int main(void) {
   const gamut_sel one_node = {GAMUT_SEL_INDEX, 0, 0, &node, 1};
   double values[9];
   CHECK(gamut_read(f, "cp", &chosen, &one_node, GAMUT_FLOAT64, values, sizeof values, &err));
-  printf("cp at node %lld where gamma > 2:", (long long)node);
+  printf("cp on top of the cylinder where gamma > 2:");
   for (int64_t i = 0; i < n; ++i) printf(" %.2f", values[i]);
   printf("\n");
   CHECK(gamut_close(f, &err));

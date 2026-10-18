@@ -5,6 +5,7 @@
 # (runs, nodes, cells) are 1-based; the node numbers inside cells stay
 # 0-based, as in VTK and every other language.
 using Gamut
+using Printf
 
 n_theta, n_r = 48, 12
 theta = range(0, 2π; length=n_theta + 1)[1:end-1]
@@ -43,3 +44,10 @@ Gamut.open("cylinder.gamut") do study
     println("lowest cp on the wall, by run: ", round.(vec(lowest); digits=2))
     println("one node across every run: ", round.(vec(Gamut.get_field(study, "cp"; nodes=[13])); digits=2))
 end
+
+# The question the README asks in every language, with the same answer.
+study = Gamut.open("cylinder.gamut")
+rows = Gamut.select(study, "gamma > 2")
+cp = Gamut.get_field(study, "cp"; rows, nodes=[13])        # runs × nodes, from 1
+println("cp on top of the cylinder where gamma > 2: ", join((@sprintf("%.2f", v) for v in cp), " "))
+close(study)

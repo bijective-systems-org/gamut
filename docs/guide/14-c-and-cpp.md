@@ -82,7 +82,7 @@ the start. It prints the same values Python reads for those runs and that
 node:
 
 ```text
-cp at node 12 where gamma > 2: -1.57 -1.32 -1.08 -0.86
+cp on top of the cylinder where gamma > 2: -1.57 -1.32 -1.08 -0.86
 ```
 
 ## Worth knowing

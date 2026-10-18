@@ -21,7 +21,7 @@ that interface; a validator; a command line; VTK conversion.
 | `tests/` | the core's C++ tests; `two_hdf5_linux.sh`, two HDF5 copies in one process |
 | `python/gamut/` | the Python layer (ctypes), the command line (`cli.py`), VTK conversion (`vtk.py`) |
 | `matlab/`, `julia/` | the MATLAB and Julia layers and their tests |
-| `examples/` | runnable examples; each guide page quotes one |
+| `examples/` | runnable examples; each guide page quotes one, and the README quotes `00_readme.py` and the MATLAB, Julia and C examples |
 | `docs/` | install, start-here, the guide, reference, security, comparison, benchmarks |
 | `bench/` | benchmark scripts and results; `bench/figures.py` writes the page's tables and figures |
 | `tools/` | `build_deps.sh` (static zlib and HDF5), `damaged_files.py` |
@@ -55,8 +55,8 @@ that interface; a validator; a command line; VTK conversion.
   second HDF5 in the process (h5py's, MATLAB's).
 - **Versions.** The package version (`1.0.0`) is not the format version
   (`gamut/1`); a reader refuses another major format version.
-- **Documentation is tested.** Guide code blocks are lines of the examples
-  and output blocks what they print; benchmark numbers come from
+- **Documentation is tested.** Guide and README code blocks are lines of the
+  examples and output blocks what they print; benchmark numbers come from
   `bench/results/`.
 
 ## Build and test
