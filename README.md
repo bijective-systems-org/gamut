@@ -21,14 +21,18 @@ Gamut is a file format for parametric simulation studies: the hundreds or
 thousands of CFD or FEA runs behind a design sweep, an aerodynamic
 database or a surrogate model. One file holds every run's inputs, results,
 status, mesh and fields, with units, and Python, MATLAB, Julia and C query
-it with the same calls.
+it with the same calls. Files are HDF5 laid out as netCDF-4, so h5py,
+xarray and the netCDF tools open them too, and a published specification
+says what every array in them means.
 
 ## Example
 
 Nine runs of potential flow past a cylinder on one mesh: eight written as
 a sweep, a ninth added later, then read back by condition. `points`,
-`cells` and `solve` stand for your mesh and your solver; each file in
-[`examples/`](https://github.com/bijective-systems-org/gamut/blob/main/examples) is the complete program.
+`cells` and `solve` stand for your mesh and your solver, and each block
+assumes the library is loaded (`import gamut`, `using Gamut`,
+`#include <gamut/gamut.h>`; in C, `CHECK` stops at an error). The complete
+programs are in [`examples/`](https://github.com/bijective-systems-org/gamut/blob/main/examples).
 
 ### Read
 
@@ -71,6 +75,7 @@ const gamut_sel chosen = {GAMUT_SEL_INDEX, 0, 0, rows, n};
 const gamut_sel one_node = {GAMUT_SEL_INDEX, 0, 0, &node, 1};
 double values[9];
 CHECK(gamut_read(f, "cp", &chosen, &one_node, GAMUT_FLOAT64, values, sizeof values, &err));
+CHECK(gamut_close(f, &err));
 ```
 
 All four print the same values:
@@ -193,12 +198,12 @@ CHECK(gamut_close(f, &err));
 
 | | |
 |---|---|
-| Use one file everywhere | Python, MATLAB, Julia and C call one C++ core, so a query returns the same values in each, and each reads what another wrote. h5py, xarray and the netCDF tools open the files without Gamut. |
-| Read only what you need | Choose runs by condition (`mach > 0.7 and status == converged`), nodes by zone, and values in the units you ask for. On a shared mesh, one region of every run or one node across thousands of runs is a single read ([reading parts](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/08-reading-parts.md)). |
-| Train models on it directly | Each field on a shared mesh is one block of runs × nodes. Labels record status, fidelity or solver, a split says which rows are for training and which for testing, and a file can name the group a fair test must hold out whole. Standard deviations, quantiles and derivatives are stored beside the results they describe ([run tables](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/01-run-tables.md), [uncertainty](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/06-uncertainty-and-gradients.md)). |
-| Keep the model with the data | A fitted model is a file of the same shape with no runs and no code inside; evaluating it on new inputs gives an ordinary study ([models](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/07-models.md)). |
-| Store any study | A table of runs with no mesh, one mesh for every run, one geometry per member of a family of shapes on one topology, a mesh per run, or transient runs with a row per saved step ([families](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/03-geometry-families.md), [time series](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/05-time-series.md)). |
-| Rely on what you open | Every number has units, refused when missing; Python converts them on read and write. `gamut validate` checks the 34 numbered rules of the [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md). A corpus of 64 valid, broken and hostile files runs in CI through the Python, MATLAB and Julia libraries and the C interface under them, and readers check sizes before allocating memory and never follow links ([files from outside](https://github.com/bijective-systems-org/gamut/blob/main/docs/security.md)). |
+| Use one file everywhere | Python, MATLAB, Julia and C call one C++ core, so a query returns the same values in each, and each reads what another wrote. |
+| Read only what you need | Choose runs by condition (`mach > 0.7 and status == converged`) and nodes by zone. On a shared mesh, one region of every run or one node across thousands of runs is a single read, and Python can convert values to the units you ask for ([reading parts](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/08-reading-parts.md)). |
+| Train models on it | Each field on a shared mesh is one block of runs × nodes (or cells). Labels record status, fidelity or solver, a split says which rows are for training and which for testing, and a file can name the group a fair test must hold out whole. Standard deviations, quantiles and derivatives are stored beside the results they describe ([run tables](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/01-run-tables.md), [uncertainty](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/06-uncertainty-and-gradients.md)). |
+| Share fitted models | A model is a file in the same format with no runs and no code inside. Evaluating it on new inputs gives an ordinary study; a model type of your own is registered by the software that defines it ([models](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/07-models.md)). |
+| Hold tables, families and time series | A table of runs with no mesh, one mesh for every run, one geometry per member of a family of shapes on one topology, a mesh per run, or transient runs with a row per saved step ([families](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/03-geometry-families.md), [time series](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/05-time-series.md)). |
+| Check what you receive | Writers require units on parameters, results, constants and coordinates, and `gamut validate` checks the 34 numbered rules of the [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md). A corpus of 64 valid, broken and hostile files runs in CI through the Python, MATLAB and Julia libraries and the C interface under them, and readers check sizes before allocating memory and never follow links ([files from outside](https://github.com/bijective-systems-org/gamut/blob/main/docs/security.md)). |
 
 ## Performance
 
@@ -206,12 +211,14 @@ CHECK(gamut_close(f, &err));
   <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/bench-summary.svg" alt="Size on disk and three read times for one study stored as Gamut, HDF5 with a group per run, netCDF-4, Zarr and VTK files." width="760">
 </p>
 
-Gamut is about the size of netCDF-4 and Zarr, a sixth of the VTK files,
-and in this study the fastest at choosing runs by condition. Its chunks are laid out for
-reading whole runs, so one node across every run is slower than in
-netCDF-4 or Zarr; four threads bring it from 124 ms to 38 ms. HDF5 itself
-decompresses on one core, so Gamut fetches the compressed chunks through
-HDF5 and decompresses them in its own threads. On a second study, with
+Gamut is about the size of netCDF-4 and Zarr and a sixth of the VTK files.
+Choosing runs by condition and reading a result of each takes about a
+millisecond, about as fast as a Parquet file of the run table alone. Gamut's
+chunks are laid out for reading whole runs, so one node across every run
+is slower than in netCDF-4 or Zarr. HDF5 decompresses on one core, so with
+threads turned on, Gamut fetches the compressed chunks of a whole-run or
+contiguous read through HDF5 and decompresses them in parallel: four
+threads bring that read from 124 ms to 38 ms. On a second study, with
 177,000-node meshes, one run reads in 15 ms against 124 ms from its VTK
 file.
 
