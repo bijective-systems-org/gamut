@@ -288,3 +288,12 @@ def test_notes_private_and_units(tmp_path):
         with pytest.raises(mestra.MestraError, match="convert"):
             f.get_scalar("q", units="m")
     assert mestra.validate(p).findings == ()
+
+
+def test_package_and_core_versions_agree():
+    from importlib import metadata
+    try:
+        installed = metadata.version("mestra")
+    except metadata.PackageNotFoundError:
+        pytest.skip("run from a source tree, not an installed package")
+    assert installed == mestra.__version__ == mestra._lib.version()

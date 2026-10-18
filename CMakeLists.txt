@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(mestra_core VERSION 1.0.0 LANGUAGES C CXX)
+project(mestra VERSION 1.0.0 LANGUAGES C CXX)
 
 # The shared core of spec version 1: one C++ library behind a plain C
 # interface (include/mestra/mestra.h).  Python, MATLAB and Julia bind to
@@ -23,6 +23,7 @@ option(MESTRA_SANITIZE "Build with the address and undefined sanitizers" OFF)
 option(MESTRA_STATIC_HDF5 "Link HDF5 statically into the core" OFF)
 if(MESTRA_STATIC_HDF5)
   set(HDF5_USE_STATIC_LIBRARIES ON)
+  set(ZLIB_USE_STATIC_LIBS ON)
 endif()
 
 # No multiply and add may fuse into one rounding step: the built-in
@@ -85,7 +86,7 @@ target_compile_options(mestra_core_objects PRIVATE ${MESTRA_WARNINGS}
                        ${MESTRA_FP_FLAGS} ${MESTRA_SANITIZER_FLAGS})
 
 add_library(mestra SHARED $<TARGET_OBJECTS:mestra_core_objects>)
-target_include_directories(mestra PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(mestra PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 target_link_libraries(mestra PRIVATE ${HDF5_HL_LIBRARIES} ${HDF5_C_LIBRARIES} ZLIB::ZLIB
                       Threads::Threads ${CMAKE_DL_LIBS})
 # Nothing but the C interface leaves the library, whatever is linked into it.
@@ -123,4 +124,34 @@ if(MESTRA_BUILD_TESTS)
                         ZLIB::ZLIB Threads::Threads)
   add_test(NAME core_writer_reader_tests COMMAND core_writer_reader_tests
            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+endif()
+
+# Installing.  A Python wheel (scikit-build-core) takes the library alone,
+# beside the package; otherwise the header, the library and a CMake package
+# (find_package(mestra) gives mestra::mestra).  Linked to a shared HDF5
+# outside the install (a source build), the library keeps the path to it.
+set_target_properties(mestra PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+if(SKBUILD)
+  install(TARGETS mestra LIBRARY DESTINATION mestra/_native RUNTIME DESTINATION mestra/_native)
+else()
+  include(GNUInstallDirs)
+  include(CMakePackageConfigHelpers)
+  target_include_directories(mestra INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+  install(TARGETS mestra EXPORT mestraTargets
+          LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+          ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+          RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  install(FILES include/mestra/mestra.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/mestra)
+  install(EXPORT mestraTargets NAMESPACE mestra::
+          DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/mestra)
+  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/mestraConfig.cmake.in
+       "@PACKAGE_INIT@\ninclude(\"\${CMAKE_CURRENT_LIST_DIR}/mestraTargets.cmake\")\n")
+  configure_package_config_file(${CMAKE_CURRENT_BINARY_DIR}/mestraConfig.cmake.in
+                                ${CMAKE_CURRENT_BINARY_DIR}/mestraConfig.cmake
+                                INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/mestra)
+  write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/mestraConfigVersion.cmake
+                                   COMPATIBILITY SameMajorVersion)
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/mestraConfig.cmake
+                ${CMAKE_CURRENT_BINARY_DIR}/mestraConfigVersion.cmake
+          DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/mestra)
 endif()
