@@ -20,15 +20,15 @@ with gamut.create("cylinder.gamut", writer="example sweep", mesh="shared", per="
 - `mesh="shared", per="fixed"`: one mesh, and one geometry, for every run.
   ([Families](03-geometry-families.md) keep the mesh and change the
   geometry; [changing meshes](04-changing-meshes.md) change both.)
-- **Coordinates** have units and one to three axes.
-- **Cells** are three arrays in VTK's convention: a cell type per cell
+- Coordinates have units and one to three axes.
+- Cells are three arrays in VTK's convention: a cell type per cell
   (9 is a quadrilateral, 5 a triangle, 12 a hexahedron), offsets where each
   cell's nodes start in the third array (one more entry than there are
   cells, starting at 0), and the node numbers, counted from 0. A mesh
   without cells is a point cloud: pressure taps, probes.
-- **Mesh labels** describe the mesh: zones, boundary patches, materials.
+- Mesh labels describe the mesh: zones, boundary patches, materials.
   This one marks the nodes on the cylinder's wall.
-- **Fields** live at nodes or at cells; `at` says which, and the length of
+- Fields live at nodes or at cells; `at` says which, and the length of
   every run's values is checked against it.
 
 Each run then brings its parameters and its fields:
@@ -62,7 +62,7 @@ positions, a slice, or nothing for all. A read decompresses only the
 stored chunks that hold what it asks for. A mesh label is stored as a code
 per node, and `categories` says which name each code stands for.
 
-## Worth knowing
+## Notes
 
 - The first run without circulation gives the textbook minimum of −3 at
   the top and bottom of the cylinder; circulation deepens one side.

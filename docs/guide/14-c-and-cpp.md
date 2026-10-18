@@ -85,7 +85,7 @@ node:
 cp on top of the cylinder where gamma > 2: -1.57 -1.32 -1.08 -0.86
 ```
 
-## Worth knowing
+## Notes
 
 - `gamut_close` finishes a file. If it refuses (a shared mesh never set),
   the handle stays open to fix and close again; `gamut_abandon` gives up,

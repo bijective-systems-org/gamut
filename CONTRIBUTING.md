@@ -1,6 +1,6 @@
 # Contributing
 
-The [specification](SPEC.md) and the [corpus](corpus) define gamut. The
+The [specification](SPEC.md) and the [corpus](corpus) define Gamut. The
 C++ core in `src/` implements them once; Python, MATLAB and Julia are thin
 layers over its C interface. A change of behaviour starts from the
 specification and the corpus, never from one language.
@@ -41,7 +41,7 @@ cmake --build build -j2
 Python finds the core in `build/` when run from the checkout:
 
 ```bash
-pip install numpy pytest h5py pint pyvista pandas
+pip install numpy pytest h5py pint xarray netCDF4 pyvista pandas
 cd python && python -m pytest -q tests
 ```
 

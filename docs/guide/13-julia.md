@@ -62,7 +62,7 @@ back with the axes in their logical order, `cp[run, node]`.
 | `study.row_count`, `study.type` | `study.row_count`, `study.type` |
 | `gamut.append`, `extract`, `write_copy`, `validate` | `Gamut.append!`, `extract`, `write_copy`, `validate` |
 
-## Worth knowing
+## Notes
 
 - Values arrive in the units they were stored in, which
   `Gamut.describe(study, name)["units"]` names. Converting them is left

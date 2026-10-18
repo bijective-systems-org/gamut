@@ -87,7 +87,7 @@ a mesh file (`.npz`), and each run's line names a `.npy` of its values;
 `gamut build --example` prints a complete document with the layout of
 both explained.
 
-## For scripts and agents
+## For scripts
 
 - `--json` makes any command print one JSON document instead, of a shape
   that stays the same across versions; `gamut get` still writes its data

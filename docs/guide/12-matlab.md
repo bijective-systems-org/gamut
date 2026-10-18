@@ -65,7 +65,7 @@ is why `wall` subtracts one from its place in the table.
 `help gamut.Study` describes the study object, and `methods(study)` lists
 what it can do.
 
-## Worth knowing
+## Notes
 
 - A file written by MATLAB is the same file Python, Julia and C read: the
   library underneath is one and the same.

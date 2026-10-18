@@ -67,7 +67,8 @@ s.rowCount()
 
 `build_mex` needs a C++ compiler MATLAB accepts (`mex -setup C++`). It
 copies the core beside the gateway, so the `matlab` folder is all MATLAB
-needs on its path. Tested with MATLAB R2026a on macOS.
+needs on its path. Tested with MATLAB R2026a on macOS, and with the
+latest release on Linux.
 
 ## Julia
 

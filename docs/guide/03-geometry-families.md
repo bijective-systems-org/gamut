@@ -63,7 +63,7 @@ Node 0 sits on each cylinder's wall where the flow stops when there is no
 circulation, so its pressure coefficient is 1 there on every member, and
 falls by less on the larger cylinders as circulation grows.
 
-## Worth knowing
+## Notes
 
 - `per="run"` is the same idea with a geometry per run: a mesh that
   deforms with every run, such as an aeroelastic or optimisation history.

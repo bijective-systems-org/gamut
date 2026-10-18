@@ -50,7 +50,7 @@ fast run: 101 steps, peak |cl| 0.80 after t = 7.5 s
 A file reports what it holds beyond its type as *add-ons*: `time` here;
 `uncertainty` and `gradients` on the [next page](06-uncertainty-and-gradients.md).
 
-## Worth knowing
+## Notes
 
 - Runs may differ in length and in their save times, and their rows need
   not be contiguous. Two rows of one run at the same time are reported.

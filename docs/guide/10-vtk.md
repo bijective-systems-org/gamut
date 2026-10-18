@@ -2,7 +2,7 @@
 
 Many studies today are a folder of VTK files, one per run. `gamut-vtk`
 turns such a folder into one study file, and a study file back into a
-folder of `.vtu` files, so nothing is locked in. It needs the `vtk` extra:
+folder of `.vtu` files. It needs the `vtk` extra:
 `pip install "gamut-format[vtk]"`.
 
 ## From the command line
@@ -63,7 +63,7 @@ written back: ['run_000.vtu', 'run_001.vtu', 'run_002.vtu']
 - Runs with different cells, each meshed on its own, keep a mesh each: a
   [changing mesh](04-changing-meshes.md), read one run at a time.
 
-## Worth knowing
+## Notes
 
 - `--skip a,b` leaves arrays out; `--round-bits N` keeps N significant
   bits of each value, so the file compresses further (the bits kept are

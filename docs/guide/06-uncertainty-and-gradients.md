@@ -50,7 +50,7 @@ what describes cl: {'std': 'cl_std', 'quantiles': {0.05: 'cl_p05', 0.95: 'cl_p95
 draws error bars, and a training script collects gradients, without knowing
 the names the producer chose.
 
-## Worth knowing
+## Notes
 
 - Fields take the same declarations: a field can have a `std` field, and a
   scalar can have a derivative field with respect to node position.

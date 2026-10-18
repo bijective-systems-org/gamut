@@ -20,15 +20,14 @@ with gamut.create("polar.gamut", writer="example sweep",
                    title="Wing A polar") as study:
 ```
 
-- **Parameters** place a run in the study. Their role is `condition` (how
-  it is operated: Mach, incidence, altitude), `design` (the shape: a
-  geometry or design variable) or `time`. Tools use the role: a geometry
-  model takes the design parameters, a viewer animates time.
-- **Labels** name rather than measure. A label with the role `status` says
-  which runs can be trusted; tools that train on the data skip the rest
-  unless told otherwise.
-- **Scalars** are results with one value per run.
-- **Constants** hold one value for the whole study.
+Parameters place a run in the study. Their role is `condition` (how it is
+operated: Mach, incidence, altitude), `design` (the shape: a geometry or
+design variable) or `time`. Tools use the role: a geometry model takes the
+design parameters, a viewer animates time. Labels name rather than
+measure; a label with the role `status` says which runs can be trusted,
+and tools that train on the data skip the rest unless told otherwise.
+Scalars are results with one value per run, and constants hold one value
+for the whole study.
 
 Units are required on every number. They use the grammar of UDUNITS, as
 netCDF and CF do: `1` for dimensionless, `degree`, `m s-1`, `W m-2`.
@@ -73,7 +72,7 @@ parameters, scalars and labels, joined by `and`, `or` and `not`
 ([selecting runs](../reference/selecting.md)). `describe` returns what the
 file says about a name, or about the file itself.
 
-## Worth knowing
+## Notes
 
 - Every row gets an id when it is written, unique in the file and never
   reused. A run keeps its id when it is copied to another file

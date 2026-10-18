@@ -100,7 +100,7 @@ with gamut.evaluate("lift_linear.gamut", {"alpha": [2.2, 7.9]}) as answer:
 linear: [0.228 0.741] +/- [0.0177 0.0177]
 ```
 
-## Worth knowing
+## Notes
 
 - `save` may return nested dictionaries of numbers, text, booleans and
   NumPy arrays. Anything else is refused when the file is written, not
