@@ -195,6 +195,16 @@ def test_a_model_computes_the_coordinates(tmp_path):
     with gamut.open(mp) as f:
         d = f.describe("coordinates")
         assert (d["model"], d["output"]) == ("shape", "coordinates")
+    # The validator holds the coordinates' model to the rules a result's is.
+    import shutil
+    import h5py
+    for edit in (lambda a: a.modify("model", np.bytes_(b"nothing")),
+                 lambda a: a.__delitem__("output")):
+        bad = str(tmp_path / "bad.gamut")
+        shutil.copy(mp, bad)
+        with h5py.File(bad, "r+") as h:
+            edit(h["mesh/coordinates"].attrs)
+        assert "E17" in {f.rule for f in gamut.validate(bad).errors}
     # A copy keeps which model computes the coordinates.
     cp = str(tmp_path / "copy.gamut")
     gamut.write_copy(mp, cp)

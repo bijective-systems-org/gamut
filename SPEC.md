@@ -796,8 +796,8 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 | E13 | a vector inconsistent: two fields with one `vector` and `axis`; one vector across locations or units; `axis` without `vector` on a field that is not a derivative; an axis the coordinates do not have |
 | E14 | repeated row ids |
 | E15 | `generalisation_group` or `run_group` naming anything but a group label; `run_group` on a parameter whose role is not `time`; two `status` labels |
-| E16 | a data file with a result naming a `model`, or with `/models`; a model file with rows, a result without `model`, no model, or a parameter without bounds; in any file, bounds that are not finite or have `lower` > `upper`, or bounds on a label |
-| E17 | a result naming a model that does not exist, or without `output`; a model without `type` or `inputs`; an `inputs` entry naming anything but a parameter, a label or `coordinates`; a `nearest` model breaking §7.5 (columns, bounds, no points) |
+| E16 | a data file with a result naming a `model`, or with `/models`; coordinates naming a `model` or `output` outside a model file whose mesh is per run; a model file with rows, a result without `model`, no model, or a parameter without bounds; in any file, bounds that are not finite or have `lower` > `upper`, or bounds on a label |
+| E17 | a result or computed coordinates naming a model that does not exist, or without `output`; a model without `type` or `inputs`; an `inputs` entry naming anything but a parameter, a label or `coordinates`; a `nearest` model breaking §7.5 (columns, bounds, no points) |
 | E18 | model data that §12 cannot represent, or whose top level uses `type`, `inputs` or `repr` |
 | E19 | an axis of a dataset that is not itself a scale with no dimension scale, more than one, or one not named as §10 gives; a scale without attribute creation order tracked and indexed; a scale whose extent differs from an axis attached to it; an unlimited dimension §10 does not let grow (a zero-extent axis inside model data excepted, §12) |
 | E20 | a dataset with a growable dimension that is not chunked; a filter other than gzip 1–9 and shuffle; a user-defined fill value or a `_FillValue` attribute |
@@ -820,6 +820,7 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 | W8 | `created` not an ISO 8601 UTC timestamp |
 | W9 | two rows of one run at the same time (decidable with `run_group`) |
 | W10 | a negative `std` |
+| W11 | an array whose values were not checked because it holds more than 2²⁶ (67,108,864) values, the reference validator's limit |
 
 ## 17. Versions and additions
 

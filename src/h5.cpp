@@ -416,16 +416,17 @@ std::vector<Member> File::members(const std::string& path) const {
   return out;
 }
 
-std::vector<RawAttr> File::attributes(const std::string& path) const {
+namespace {
+
+// Every attribute of an open object (see File::attributes).
+std::vector<RawAttr> attributes_of(hid_t object_id) {
   std::vector<RawAttr> out;
-  if (link_kind(path) != LinkKind::Hard) return out;
-  Id object = open_object(id_.get(), path);
   std::vector<std::string> names;
   hsize_t at = 0;
-  H5Aiterate2(object.get(), H5_INDEX_NAME, H5_ITER_INC, &at, collect_attr_name,
+  H5Aiterate2(object_id, H5_INDEX_NAME, H5_ITER_INC, &at, collect_attr_name,
               &names);
   for (const std::string& attr_name : names) {
-    Id attr(H5Aopen(object.get(), attr_name.c_str(), H5P_DEFAULT));
+    Id attr(H5Aopen(object_id, attr_name.c_str(), H5P_DEFAULT));
     if (!attr.valid()) continue;
     RawAttr a;
     a.name = attr_name;
@@ -480,22 +481,60 @@ std::vector<RawAttr> File::attributes(const std::string& path) const {
   return out;
 }
 
+}  // namespace
+
+std::vector<RawAttr> File::attributes(const std::string& path) const {
+  if (link_kind(path) != LinkKind::Hard) return {};
+  return attributes_of(open_object(id_.get(), path).get());
+}
+
+
+namespace {
+
+// A dataset's type and its shape with maxshape.
+DsetInfo& with_shape(hid_t dset, DsetInfo& info) {
+  Id type(H5Dget_type(dset));
+  Id space(H5Dget_space(dset));
+  info.type = type_of(type.get(), space.get());
+  const int rank = H5Sget_simple_extent_ndims(space.get());
+  if (rank > 0) {
+    info.shape.resize(static_cast<std::size_t>(rank));
+    info.maxshape.resize(static_cast<std::size_t>(rank));
+    H5Sget_simple_extent_dims(space.get(), info.shape.data(), info.maxshape.data());
+  }
+  return info;
+}
+
+}  // namespace
+
+DsetInfo File::dataset_shape(const std::string& path) const {
+  DsetInfo info;
+  if (!is_dataset(path)) return info;
+  info.is_dataset = true;
+  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
+  need(dset.valid(), "cannot open the dataset \"" + path + "\"");
+  return with_shape(dset.get(), info);
+}
+
+std::pair<std::vector<RawAttr>, DsetInfo> File::inspect(const std::string& path) const {
+  if (link_kind(path) != LinkKind::Hard) return {};
+  Id object = open_object(id_.get(), path);
+  DsetInfo info;
+  if (H5Iget_type(object.get()) == H5I_DATASET) {
+    info.is_dataset = true;
+    with_shape(object.get(), info);
+  }
+  return {attributes_of(object.get()), info};
+}
+
 DsetInfo File::dataset_info(const std::string& path, bool scales) const {
   DsetInfo info;
   if (!is_dataset(path)) return info;
   info.is_dataset = true;
   Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
   need(dset.valid(), "cannot open the dataset \"" + path + "\"");
-  Id type(H5Dget_type(dset.get()));
-  Id space(H5Dget_space(dset.get()));
-  info.type = type_of(type.get(), space.get());
-  const int rank = H5Sget_simple_extent_ndims(space.get());
-  if (rank > 0) {
-    info.shape.resize(static_cast<std::size_t>(rank));
-    info.maxshape.resize(static_cast<std::size_t>(rank));
-    H5Sget_simple_extent_dims(space.get(), info.shape.data(),
-                              info.maxshape.data());
-  }
+  with_shape(dset.get(), info);
+  const int rank = static_cast<int>(info.shape.size());
   Id dcpl(H5Dget_create_plist(dset.get()));
   info.chunked = H5Pget_layout(dcpl.get()) == H5D_CHUNKED;
   if (info.chunked && rank > 0) {

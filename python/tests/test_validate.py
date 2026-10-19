@@ -138,9 +138,22 @@ def test_rules_fire_on_a_broken_table(table, tmp_path, rule, edit):
     ("E13", lambda f: f["mesh/cell_fields/v"].attrs.modify("axis", np.bytes_(b"x"))),
     ("E13", lambda f: f["mesh/cell_fields/v"].attrs.modify("axis", np.bytes_(b"z"))),
     ("E9", lambda f: f["mesh/cell_labels/zone"].__setitem__(0, 7)),
+    ("E16", lambda f: f["mesh/coordinates"].attrs.create("model", np.bytes_(b"shape"))),
 ])
 def test_rules_fire_on_a_broken_mesh(shared, tmp_path, rule, edit):
     fires(broken(shared, tmp_path, edit), rule)
+
+
+def test_values_past_the_validators_limit_are_reported_unchecked(table, tmp_path):
+    # Every row-long dataset grown past 2**26 rows without writing: the
+    # file stays small, and the checks that read values say they did not.
+    def grow(f):
+        n = (1 << 26) + 1
+        for name, obj in f.items():
+            if isinstance(obj, h5py.Dataset) and obj.maxshape[:1] == (None,):
+                obj.resize((n,) + obj.shape[1:])
+    warned = {f.path for f in broken(table, tmp_path, grow).warnings if f.rule == "W11"}
+    assert {"row", "mach", "cl"} <= warned
 
 
 def test_missing_values_are_located(tmp_path):

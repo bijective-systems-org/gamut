@@ -158,9 +158,12 @@ class Validator {
   void check_units(const Object& o, bool required);
   std::vector<std::int64_t> ints(const Object& o);
   std::vector<double> floats(const Object& o);
+  // W11, once per object: it holds more than kMaxCheckElements values, so
+  // the checks that read its values do not run.
+  void unchecked(const std::string& concept);
   // Every element of `o` in blocks along its first axis, with its flat
   // index: memory stays bounded whatever the file declares. Skipped above
-  // the checker's element cap, as ints() and floats().
+  // the checker's element cap, as ints() and floats(), and reported (W11).
   template <class T, class F>
   void each(const Object& o, F f);
   bool check_cells(const Object& t, const Object& o, const Object& c,
@@ -189,6 +192,8 @@ class Validator {
   std::map<std::string, Object> mesh_labels_;
   std::set<std::string> used_names_;
   std::string mesh_kind_, per_;
+  std::string coordinate_model_, coordinate_output_;   // coordinates a model computes
+  std::set<std::string> unchecked_;
   std::int64_t n_nodes_ = 0, n_cells_ = 0, instances_ = 0;
   int axes_ = 0;
   std::set<std::string> model_ids_;
@@ -357,9 +362,16 @@ std::size_t elements(const std::vector<hsize_t>& shape, std::size_t cap) {
 
 }  // namespace
 
+void Validator::unchecked(const std::string& concept) {
+  if (!unchecked_.insert(concept).second) return;
+  add("W11", concept, "holds more than " + std::to_string(kMaxCheckElements) +
+                          " values, the validator's limit, so its values were not checked");
+}
+
 template <class T, class F>
 void Validator::each(const Object& o, F f) {
   const std::size_t n = elements(o.info.shape, kMaxCheckElements);
+  if (n > kMaxCheckElements) unchecked(o.concept.empty() ? o.h5 : o.concept);
   if (n > kMaxCheckElements || n == 0 || o.info.shape.empty()) return;
   const std::size_t stride = n / static_cast<std::size_t>(o.info.shape[0]);
   // Small blocks also bound what HDF5 keeps per chunk touched.
@@ -380,7 +392,10 @@ void Validator::each(const Object& o, F f) {
 
 std::vector<std::int64_t> Validator::ints(const Object& o) {
   const std::size_t n = elements(o.info.shape, kMaxCheckElements);
-  if (n > kMaxCheckElements) return {};
+  if (n > kMaxCheckElements) {
+    unchecked(o.concept.empty() ? o.h5 : o.concept);
+    return {};
+  }
   std::vector<std::int64_t> out(n);
   if (n) file_->read(o.h5, DType::Int64, {}, out.data(), n * 8);
   return out;
@@ -388,7 +403,10 @@ std::vector<std::int64_t> Validator::ints(const Object& o) {
 
 std::vector<double> Validator::floats(const Object& o) {
   const std::size_t n = elements(o.info.shape, kMaxCheckElements);
-  if (n > kMaxCheckElements) return {};
+  if (n > kMaxCheckElements) {
+    unchecked(o.concept.empty() ? o.h5 : o.concept);
+    return {};
+  }
   std::vector<double> out(n);
   if (n) file_->read(o.h5, DType::Float64, {}, out.data(), n * 8);
   return out;
@@ -812,6 +830,8 @@ void Validator::mesh() {
   coords = object("/mesh/coordinates", "coordinates", "coordinates");
   check_attrs(coords, kCoordinateAttrs);
   check_units(coords, true);
+  coordinate_model_ = coords.text("model");
+  coordinate_output_ = coords.text("output");
   DType ct;
   if (!dtype_of(coords.info.type, &ct) || (ct != DType::Float32 && ct != DType::Float64)) {
     add("E4", "coordinates", "coordinates are float32 or float64");
@@ -1027,7 +1047,10 @@ void Validator::mesh() {
         check_cells(*cell_types, *cell_offsets, *cell_connectivity, cn, cc, nullptr);
       }
       // Row starts: checked while the rows fit the checker's cap, as ints().
-      if (static_cast<std::uint64_t>(rows_) > kMaxCheckElements) return;
+      if (static_cast<std::uint64_t>(rows_) > kMaxCheckElements) {
+        unchecked("mesh/row_instance");
+        return;
+      }
       std::vector<std::int64_t> inst(static_cast<std::size_t>(rows_));
       if (group) {
         if (!file_->is_dataset("/mesh/row_instance")) {
@@ -1114,6 +1137,11 @@ void Validator::mesh() {
 
 void Validator::models() {
   const bool has = file_->is_group("/models");
+  const bool computed = !coordinate_model_.empty() || !coordinate_output_.empty();
+  if (computed && !(kind_ == "model" && per_ == "run")) {
+    add("E16", "coordinates", "coordinates computed by a model belong to a model file whose mesh "
+                              "is per run");
+  }
   if (kind_ == "data") {
     if (has) add("E16", "models", "a data file holds no models");
     for (const auto* group : {&scalars_, &fields_}) {
@@ -1178,6 +1206,13 @@ void Validator::models() {
     });
   }
   if (model_ids_.empty()) add("E16", "models", "a model file holds at least one model");
+  if (computed && per_ == "run") {
+    if (!model_ids_.count(coordinate_model_)) {
+      add("E17", "coordinates", "names the model \"" + coordinate_model_ + "\", which does not exist");
+    } else if (coordinate_output_.empty()) {
+      add("E17", "coordinates", "coordinates a model computes name its output");
+    }
+  }
   for (const auto* group : {&scalars_, &fields_}) {
     for (const auto& kv : *group) {
       const Object& o = kv.second;
