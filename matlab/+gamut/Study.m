@@ -152,6 +152,12 @@ classdef Study < handle
             end
         end
 
+        function v = modelNumbers(s, id)
+            %MODELNUMBERS A model's stored numbers (spec section 12) as a
+            %   struct, as its save gave them; its type need not be registered.
+            v = gamut_mex('model_numbers', s.Handle, id);
+        end
+
         function v = getRowIds(s, rows)
             if nargin < 2, rows = []; end
             v = gamut_mex('read', s.Handle, 'row', s.pos(rows), [], 4);

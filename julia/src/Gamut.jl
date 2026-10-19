@@ -629,6 +629,18 @@ function describe(s::Study, name=nothing)
     end |> copy
 end
 
+"""    model_numbers(study, id)    A model's stored numbers (spec section 12) as a Dict; its type need not be registered."""
+function model_numbers(s::Study, id)
+    need_reader(s)
+    out = Ref{Ptr{Cvoid}}(C_NULL)
+    @mes gamut_model_numbers (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(s) cs(id) out
+    try
+        return from_tree(out[])
+    finally
+        ccall(sym(:gamut_tree_free), Cvoid, (Ptr{Cvoid},), out[])
+    end
+end
+
 function read(s::Study, name, rows, sites, ::Type{T}; squeeze=true) where {T}
     need_reader(s)
     r, x = selection(rows, "rows"), selection(sites, "sites")
@@ -1065,14 +1077,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
             loader = get(LOADERS, d["type"], nothing)
             loader === nothing && throw(GamutError("", "the model $id is of type $(repr(d["type"])), " *
                                                         "whose software is not registered here"))
-            out = Ref{Ptr{Cvoid}}(C_NULL)
-            @mes gamut_model_numbers (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(m) cs(id) out
-            numbers = try
-                from_tree(out[])
-            finally
-                ccall(sym(:gamut_tree_free), Cvoid, (Ptr{Cvoid},), out[])
-            end
-            model = loader(numbers)
+            model = loader(model_numbers(m, id))
             reads = split(d["inputs"])
             missing_ = [k for k in reads if !haskey(tbl, k)]
             isempty(missing_) || throw(GamutError("E2", "the model $id reads $(missing_[1]), which was not given"))

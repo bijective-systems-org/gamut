@@ -195,15 +195,20 @@ Schema load_schema(const File& f) {
       return i.is_dataset && i.shape.size() == 1 ? static_cast<std::int64_t>(i.shape[0]) : 0;
     };
     const DsetInfo coords = f.dataset_info("/mesh/coordinates", false);
+    const bool coords_group = !coords.is_dataset && f.is_group("/mesh/coordinates");
     if (coords.is_dataset) {
       DType t;
       if (dtype_of(coords.type, &t)) mesh.coordinate_dtype = t;
       if (!coords.shape.empty()) mesh.axes = static_cast<int>(coords.shape.back());
-    } else if (f.is_group("/mesh/coordinates")) {
+    }
+    if (coords.is_dataset || coords_group) {
+      // Coordinates a model computes (section 10.3) name it on the
+      // zero-length dataset that stands for them.
       const Attrs ca{f.attributes("/mesh/coordinates")};
       mesh.coordinate_model = ca.text("model");
       mesh.coordinate_output = ca.text("output");
-      if (const auto ax = ca.integer("axes")) mesh.axes = static_cast<int>(*ax);
+      if (coords_group)
+        if (const auto ax = ca.integer("axes")) mesh.axes = static_cast<int>(*ax);
     }
     mesh.coordinate_units = Attrs{f.attributes("/mesh/coordinates")}.text("units");
     if (mesh.kind == "shared") {

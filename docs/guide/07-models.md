@@ -108,6 +108,9 @@ linear: [0.228 0.741] +/- [0.0177 0.0177]
 - A file whose model type is not registered still opens, reads and
   copies; only evaluating it needs the owning software, and the refusal
   says which type is missing.
+- `study.model_numbers("fit")` gives a model's numbers back as its `save`
+  returned them, registered or not, for software that rebuilds the model
+  itself.
 - A model may read the mesh's coordinates as an input, to predict on new
   geometries, or compute them, as a model of the geometry itself.
 - `create_model(..., trained_on=[...])` records the `file_id` of each

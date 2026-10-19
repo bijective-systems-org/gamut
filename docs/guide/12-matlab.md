@@ -61,6 +61,7 @@ every language, so a zone's code is its place in `categories` minus one.
 | `study.row_count` | `study.rowCount()` |
 | `study.table()` | `study.table()`: a MATLAB `table`, labels as `categorical` |
 | `gamut.register_model_type(cls)` | `gamut.registerModelType(className)` |
+| `study.model_numbers("fit")` | `study.modelNumbers('fit')`: a struct |
 | `gamut.append`, `extract`, `write_copy`, `validate` | `gamut.append`, `extract`, `writeCopy`, `validate` |
 
 `help gamut.Study` describes the study object, and `methods(study)` lists

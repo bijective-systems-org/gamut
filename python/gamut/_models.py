@@ -361,13 +361,7 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
             if cls is None:
                 raise GamutError("", f"the model {model_id} is of type {d['type']!r}, whose "
                                       "software is not registered here (register_model_type)")
-            handle = ctypes.c_void_p()
-            call("gamut_model_numbers", m._handle(), b(model_id), ctypes.byref(handle))
-            try:
-                numbers = _from_tree(handle)
-            finally:
-                _lib._lib.gamut_tree_free(handle)
-            model = cls.load(numbers)
+            model = cls.load(m.model_numbers(model_id))
             reads = d["inputs"].split()
             given = {k: table[k] for k in reads if k in table}
             missing = [k for k in reads if k not in given]

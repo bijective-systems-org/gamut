@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.0 (2026-10-19)
+
+A model file whose coordinates are computed by a model now evaluates. The
+reader looked for the model's name only where coordinates are a group,
+and section 10.3 stores them as a zero-length dataset, so evaluation asked
+the caller for coordinates instead, and a copy of the file lost which
+model computes them. The format is unchanged.
+
+`study.model_numbers(id)` reads a model's stored numbers back as the
+dictionary its `save` gave, whether or not its type is registered:
+`modelNumbers` in MATLAB and `Gamut.model_numbers` in Julia. C programs
+already had `gamut_model_numbers`.
+
 ## 1.0.0 (2026-10-18)
 
 Version 1 of the format, `gamut/1`, and a new implementation. Before
