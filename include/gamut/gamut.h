@@ -56,7 +56,7 @@ typedef struct {
   int64_t count;
 } gamut_sel;
 
-/* The library's version ("1.0.0.dev0") and the format string it writes
+/* The library's version ("1.0.0") and the format string it writes
  * ("gamut/1").  Static strings; never freed. */
 GAMUT_API const char* gamut_version(void);
 GAMUT_API const char* gamut_format(void);

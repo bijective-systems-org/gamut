@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 (unreleased)
+## 1.0.0 (2026-10-18)
 
 Version 1 of the format, `gamut/1`, and a new implementation. Before
 version 1 the format and its libraries were called mestra (the 0.1 series
