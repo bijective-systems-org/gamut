@@ -28,8 +28,8 @@ struct Report {
 Report validate_file(const std::string& path);
 
 // The most elements the validator reads to decide a rule that needs values;
-// a dataset above it is left unchecked for that rule, which is reported as
-// a warning-free note in the message of nothing (it is simply skipped).
+// a dataset above it is left unchecked for that rule, which is reported
+// once per object as W11.
 const std::size_t kMaxCheckElements = std::size_t(1) << 26;
 
 }  // namespace internal

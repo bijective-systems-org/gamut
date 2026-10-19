@@ -198,13 +198,19 @@ def test_a_model_computes_the_coordinates(tmp_path):
     # The validator holds the coordinates' model to the rules a result's is.
     import shutil
     import h5py
-    for edit in (lambda a: a.modify("model", np.bytes_(b"nothing")),
-                 lambda a: a.__delitem__("output")):
+    for rule, edit in (("E17", lambda a: a.modify("model", np.bytes_(b"nothing"))),
+                       ("E17", lambda a: a.__delitem__("output")),
+                       ("E16", lambda a: (a.__delitem__("model"), a.__delitem__("output")))):
         bad = str(tmp_path / "bad.gamut")
         shutil.copy(mp, bad)
         with h5py.File(bad, "r+") as h:
             edit(h["mesh/coordinates"].attrs)
-        assert "E17" in {f.rule for f in gamut.validate(bad).errors}
+        assert rule in {f.rule for f in gamut.validate(bad).errors}
+    # The writer refuses a computing model without its output.
+    with pytest.raises(gamut.GamutError, match="E17"):
+        gamut.create_model(str(tmp_path / "no_output.gamut"), writer="tests", mesh="shared",
+                           per="run", coordinates={"units": "m", "axes": 3, "model": "shape"},
+                           parameters={"s": {"units": "1", "lower": 1.0, "upper": 3.0}})
     # A copy keeps which model computes the coordinates.
     cp = str(tmp_path / "copy.gamut")
     gamut.write_copy(mp, cp)

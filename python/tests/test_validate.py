@@ -153,7 +153,7 @@ def test_values_past_the_validators_limit_are_reported_unchecked(table, tmp_path
             if isinstance(obj, h5py.Dataset) and obj.maxshape[:1] == (None,):
                 obj.resize((n,) + obj.shape[1:])
     warned = {f.path for f in broken(table, tmp_path, grow).warnings if f.rule == "W11"}
-    assert {"row", "mach", "cl"} <= warned
+    assert {"row", "mach", "cl", "split", "t"} <= warned
 
 
 def test_missing_values_are_located(tmp_path):

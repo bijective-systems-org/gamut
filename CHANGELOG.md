@@ -2,9 +2,10 @@
 
 ## Unreleased
 
-The validator reports coordinates that name a computing model outside a
-model file whose mesh is per run (E16), and a computing model that does not
-exist or has no output (E17); the writers never produce either. An array
+The validator holds a mesh's computed coordinates to the writer's rules: a
+computing model only in a model file whose mesh is per run, which must
+name one (E16), and that model existing with its output named (E17). The
+writer now also refuses a computing model without an output. An array
 holding more values than the validator reads, 2²⁶, is now reported as
 unchecked (W11) rather than passed over in silence.
 

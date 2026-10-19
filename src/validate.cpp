@@ -1048,7 +1048,7 @@ void Validator::mesh() {
       }
       // Row starts: checked while the rows fit the checker's cap, as ints().
       if (static_cast<std::uint64_t>(rows_) > kMaxCheckElements) {
-        unchecked("mesh/row_instance");
+        unchecked(group ? "mesh/row_instance" : "mesh/row_node_start");
         return;
       }
       std::vector<std::int64_t> inst(static_cast<std::size_t>(rows_));
@@ -1206,6 +1206,10 @@ void Validator::models() {
     });
   }
   if (model_ids_.empty()) add("E16", "models", "a model file holds at least one model");
+  if (!computed && per_ == "run" && !mesh_kind_.empty()) {
+    add("E16", "coordinates", "a model file's coordinates per run are computed by a model; "
+                              "name it");
+  }
   if (computed && per_ == "run") {
     if (!model_ids_.count(coordinate_model_)) {
       add("E17", "coordinates", "names the model \"" + coordinate_model_ + "\", which does not exist");
