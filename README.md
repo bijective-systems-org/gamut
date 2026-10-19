@@ -27,7 +27,7 @@ xarray and the netCDF tools open them too, and a published specification
 says what every array in them means.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/hero.svg" alt="Three rows of a capsule study file: each run's number, shape, Mach number, angles, axial force coefficient and train or test split, beside renders of its surface pressure and heat flux." width="760">
+  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/hero.svg" alt="Flow speed around four airfoils from one study file of 100 RANS runs, each labelled with its run number, angle of attack, inflow speed, thickness and train or test split." width="760">
 </p>
 
 ## Example
@@ -203,8 +203,8 @@ so one node across every run takes 127 ms, slower than Zarr or netCDF-4.
 HDF5 decompresses on one core; with threads turned on, Gamut fetches the
 compressed chunks of a whole-run or contiguous read through HDF5 and
 decompresses them in parallel, and four threads bring that read to 39 ms.
-On a second study, with 177,000-node meshes, one run reads in 15 ms
-against 124 ms from its VTK file.
+On the AirfRANS study in the picture at the top, with meshes of about
+176,000 nodes, one run reads in 15 ms against 124 ms from its VTK file.
 
 <sub>Apple M3, 8 GB, macOS 27, files in the operating system's cache; medians of five reads, each opening the file. The [benchmarks page](https://github.com/bijective-systems-org/gamut/blob/main/docs/benchmarks.md) has every number, the method and the scripts to repeat it.</sub>
 

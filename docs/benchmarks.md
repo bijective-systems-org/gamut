@@ -55,7 +55,7 @@ It is not public.
 
 AirfRANS is public: 100 runs of the AirfRANS dataset (Bonnet et al.,
 NeurIPS 2022; ODbL), two-dimensional RANS solutions around NACA 4-digit
-airfoils from OpenFOAM, each on its own mesh of about 177,000 nodes, with
+airfoils from OpenFOAM, each on its own mesh of about 176,000 nodes, with
 pressure, velocity and turbulent viscosity at nodes and cells. It has few
 runs, large meshes, and a mesh per run. `bench/airfrans.py` fetches the
 same subset.
