@@ -49,7 +49,7 @@ silently. `abandon()` gives up on a file on purpose.
 ### Adding runs
 
 ```cpp
-auto study = gamut::open("cylinder.gamut", "a");
+study = gamut::open("cylinder.gamut", "a");
 study.add_run({{"gamma", 4.0}}, {{"cp", solve(4.0)}});
 study.close();
 ```
@@ -57,7 +57,7 @@ study.close();
 ### Reading
 
 ```cpp
-auto study = gamut::open("cylinder.gamut");
+study = gamut::open("cylinder.gamut");
 auto cp = study.get_field("cp", gamut::all, {12});    // runs x nodes
 ```
 

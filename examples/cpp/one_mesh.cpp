@@ -42,24 +42,20 @@ int main() {
     cells.offsets.push_back(4 * (c + 1));
   }
 
-  {
-    auto study = gamut::create("cylinder.gamut", "example sweep", "shared", "fixed");
-    study.declare_coordinates("m", 2);
-    study.declare_parameter("gamma", "design", "m2 s-1");
-    study.declare_field("cp", "node", "1");
-    study.set_mesh(points, cells);
-    for (double gamma = 0.0; gamma < 3.75; gamma += 0.5)
-      study.add_run({{"gamma", gamma}}, {{"cp", solve(gamma)}});
-    study.close();
-  }
+  auto study = gamut::create("cylinder.gamut", "example sweep", "shared", "fixed");
+  study.declare_coordinates("m", 2);
+  study.declare_parameter("gamma", "design", "m2 s-1");
+  study.declare_field("cp", "node", "1");
+  study.set_mesh(points, cells);
+  for (double gamma = 0.0; gamma < 3.75; gamma += 0.5)
+    study.add_run({{"gamma", gamma}}, {{"cp", solve(gamma)}});
+  study.close();
 
-  {
-    auto study = gamut::open("cylinder.gamut", "a");
-    study.add_run({{"gamma", 4.0}}, {{"cp", solve(4.0)}});
-    study.close();
-  }
+  study = gamut::open("cylinder.gamut", "a");
+  study.add_run({{"gamma", 4.0}}, {{"cp", solve(4.0)}});
+  study.close();
 
-  auto study = gamut::open("cylinder.gamut");
+  study = gamut::open("cylinder.gamut");
   auto cp = study.get_field("cp", gamut::all, {12});    // runs x nodes
   std::printf("cp at the top of the cylinder, run by run:");
   for (double v : cp) std::printf(" %.2f", v);

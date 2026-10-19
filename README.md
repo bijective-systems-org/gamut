@@ -33,59 +33,10 @@ says what every array in them means.
 ## Example
 
 Nine runs of potential flow past a cylinder on one mesh: eight written as
-a sweep, a ninth added later, then read back. `points`,
-`cells` and `solve` stand for your mesh and your solver, and each block
-assumes the library is loaded (`import gamut`, `using Gamut`,
-`#include <gamut/gamut.hpp>`). The complete
-programs are in [`examples/`](https://github.com/bijective-systems-org/gamut/blob/main/examples).
-
-### Read
-
-The pressure coefficient at the top of the cylinder, in every run:
-
-Python
-
-```python
-with gamut.open("cylinder.gamut") as study:
-    cp = study.get_field("cp", nodes=[12])                 # runs x nodes
-```
-
-MATLAB
-
-```matlab
-study = gamut.open('cylinder.gamut');
-cp = study.getField('cp', 'nodes', 13);                         % runs x nodes, from 1
-study.close();
-```
-
-Julia
-
-```julia
-cp = Gamut.open("cylinder.gamut") do study
-    Gamut.get_field(study, "cp"; nodes=[13])                 # runs × nodes, from 1
-end
-```
-
-C++
-
-```cpp
-auto study = gamut::open("cylinder.gamut");
-auto cp = study.get_field("cp", gamut::all, {12});    // runs x nodes
-```
-
-All four read the same values, which each complete example prints:
-
-```text
-cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
-```
-
-MATLAB and Julia count positions from 1, so node 12 in Python and C++ is
-node 13 in MATLAB and Julia.
-
-### Write
-
-Declare each name with its units and role, give the mesh once, then add
-runs as the solver finishes them:
+a sweep, a ninth added after reopening the file, then the pressure at one
+node read back from every run. `points`, `cells` and `solve` stand for
+your mesh and your solver, and the complete programs are in
+[`examples/`](https://github.com/bijective-systems-org/gamut/blob/main/examples).
 
 Python
 
@@ -97,6 +48,12 @@ with gamut.create("cylinder.gamut", writer="example sweep", mesh="shared", per="
     study.set_mesh(points, cells)
     for gamma in np.linspace(0.0, 3.5, 8):
         study.add_run({"gamma": gamma}, fields={"cp": solve(gamma)})
+
+with gamut.open("cylinder.gamut", mode="a") as study:
+    study.add_run({"gamma": 4.0}, fields={"cp": solve(4.0)})
+
+with gamut.open("cylinder.gamut") as study:
+    cp = study.get_field("cp", nodes=[12])                 # runs x nodes
 ```
 
 MATLAB
@@ -110,6 +67,14 @@ study.setMesh(points, cells);
 for gamma = linspace(0, 3.5, 8)
     study.addRun(struct('gamma', gamma), 'fields', struct('cp', solve(gamma)));
 end
+study.close();
+
+study = gamut.open('cylinder.gamut', 'mode', 'a');
+study.addRun(struct('gamma', 4), 'fields', struct('cp', solve(4)));
+study.close();
+
+study = gamut.open('cylinder.gamut');
+cp = study.getField('cp', 'nodes', 13);                         % runs x nodes, from 1
 study.close();
 ```
 
@@ -125,6 +90,14 @@ Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed
         Gamut.add_run!(study, Dict("gamma" => gamma); fields=Dict("cp" => solve(gamma)))
     end
 end
+
+Gamut.open("cylinder.gamut"; mode="a") do study
+    Gamut.add_run!(study, Dict("gamma" => 4.0); fields=Dict("cp" => solve(4.0)))
+end
+
+cp = Gamut.open("cylinder.gamut") do study
+    Gamut.get_field(study, "cp"; nodes=[13])                 # runs × nodes, from 1
+end
 ```
 
 C++
@@ -138,42 +111,23 @@ study.set_mesh(points, cells);
 for (double gamma = 0.0; gamma < 3.75; gamma += 0.5)
   study.add_run({{"gamma", gamma}}, {{"cp", solve(gamma)}});
 study.close();
-```
 
-### Add runs
-
-Reopen the file and add to it, from any of the four:
-
-Python
-
-```python
-with gamut.open("cylinder.gamut", mode="a") as study:
-    study.add_run({"gamma": 4.0}, fields={"cp": solve(4.0)})
-```
-
-MATLAB
-
-```matlab
-study = gamut.open('cylinder.gamut', 'mode', 'a');
-study.addRun(struct('gamma', 4), 'fields', struct('cp', solve(4)));
-study.close();
-```
-
-Julia
-
-```julia
-Gamut.open("cylinder.gamut"; mode="a") do study
-    Gamut.add_run!(study, Dict("gamma" => 4.0); fields=Dict("cp" => solve(4.0)))
-end
-```
-
-C++
-
-```cpp
-auto study = gamut::open("cylinder.gamut", "a");
+study = gamut::open("cylinder.gamut", "a");
 study.add_run({{"gamma", 4.0}}, {{"cp", solve(4.0)}});
 study.close();
+
+study = gamut::open("cylinder.gamut");
+auto cp = study.get_field("cp", gamut::all, {12});    // runs x nodes
 ```
+
+All four print the same values:
+
+```text
+cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
+```
+
+MATLAB and Julia count positions from 1, so node 12 in Python and C++ is
+node 13 in MATLAB and Julia.
 
 ## What you can do with it
 
