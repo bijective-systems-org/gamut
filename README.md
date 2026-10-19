@@ -33,47 +33,91 @@ says what every array in them means.
 ## Example
 
 Nine runs of potential flow past a cylinder on one mesh: eight written as
-a sweep, a ninth added later, then read back. Here is the program call by
-call in each language; `points`, `cells` and `solve` stand for your mesh
-and your solver, and the complete programs are in
+a sweep, a ninth added after reopening the file, then the pressure at one
+node read back from every run. `points`, `cells` and `solve` stand for
+your mesh and your solver, and the complete programs are in
 [`examples/`](https://github.com/bijective-systems-org/gamut/blob/main/examples).
 
+Python
+
+```python
+with gamut.create("cylinder.gamut", writer="example sweep", mesh="shared", per="fixed",
+                   coordinates={"units": "m", "axes": 2},
+                   parameters={"gamma": {"units": "m2 s-1", "role": "design"}},
+                   fields={"cp": {"units": "1", "at": "node"}}) as study:
+    study.set_mesh(points, cells)
+    for gamma in np.linspace(0.0, 3.5, 8):
+        study.add_run({"gamma": gamma}, fields={"cp": solve(gamma)})
+
+with gamut.open("cylinder.gamut", mode="a") as study:
+    study.add_run({"gamma": 4.0}, fields={"cp": solve(4.0)})
+
+with gamut.open("cylinder.gamut") as study:
+    cp = study.get_field("cp", nodes=[12])                 # runs x nodes
 ```
-Create a file with one mesh for every run
-  Python   gamut.create("cylinder.gamut", writer="example sweep", mesh="shared", per="fixed", …
-  MATLAB   gamut.create('cylinder.gamut', 'writer', 'example sweep', 'mesh', 'shared', 'per', 'fixed', …
-  Julia    Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed", …
-  C++      gamut::create("cylinder.gamut", "example sweep", "shared", "fixed")
 
-Declare a field and its units
-  Python   fields={"cp": {"units": "1", "at": "node"}}
-  MATLAB   'fields', struct('cp', struct('units', '1', 'at', 'node'))
-  Julia    fields=Dict("cp" => (units="1", at="node"))
-  C++      study.declare_field("cp", "node", "1")
+MATLAB
 
-Give the mesh once
-  Python   study.set_mesh(points, cells)
-  MATLAB   study.setMesh(points, cells)
-  Julia    Gamut.set_mesh!(study; points, cells)
-  C++      study.set_mesh(points, cells)
+```matlab
+study = gamut.create('cylinder.gamut', 'writer', 'example sweep', 'mesh', 'shared', 'per', 'fixed', ...
+    'coordinates', struct('units', 'm', 'axes', 2), ...
+    'parameters', struct('gamma', struct('units', 'm2 s-1', 'role', 'design')), ...
+    'fields', struct('cp', struct('units', '1', 'at', 'node')));
+study.setMesh(points, cells);
+for gamma = linspace(0, 3.5, 8)
+    study.addRun(struct('gamma', gamma), 'fields', struct('cp', solve(gamma)));
+end
+study.close();
 
-Add a run as the solver finishes it
-  Python   study.add_run({"gamma": gamma}, fields={"cp": solve(gamma)})
-  MATLAB   study.addRun(struct('gamma', gamma), 'fields', struct('cp', solve(gamma)))
-  Julia    Gamut.add_run!(study, Dict("gamma" => gamma); fields=Dict("cp" => solve(gamma)))
-  C++      study.add_run({{"gamma", gamma}}, {{"cp", solve(gamma)}})
+study = gamut.open('cylinder.gamut', 'mode', 'a');
+study.addRun(struct('gamma', 4), 'fields', struct('cp', solve(4)));
+study.close();
 
-Reopen the file to add more runs
-  Python   gamut.open("cylinder.gamut", mode="a")
-  MATLAB   gamut.open('cylinder.gamut', 'mode', 'a')
-  Julia    Gamut.open("cylinder.gamut"; mode="a")
-  C++      gamut::open("cylinder.gamut", "a")
+study = gamut.open('cylinder.gamut');
+cp = study.getField('cp', 'nodes', 13);                         % runs x nodes, from 1
+study.close();
+```
 
-Read the pressure at one node in every run
-  Python   study.get_field("cp", nodes=[12])
-  MATLAB   study.getField('cp', 'nodes', 13)
-  Julia    Gamut.get_field(study, "cp"; nodes=[13])
-  C++      study.get_field("cp", gamut::all, {12})
+Julia
+
+```julia
+Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed",
+              coordinates=(units="m", axes=2),
+              parameters=Dict("gamma" => (units="m2 s-1", role="design")),
+              fields=Dict("cp" => (units="1", at="node"))) do study
+    Gamut.set_mesh!(study; points, cells)
+    for gamma in range(0, 3.5; length=8)
+        Gamut.add_run!(study, Dict("gamma" => gamma); fields=Dict("cp" => solve(gamma)))
+    end
+end
+
+Gamut.open("cylinder.gamut"; mode="a") do study
+    Gamut.add_run!(study, Dict("gamma" => 4.0); fields=Dict("cp" => solve(4.0)))
+end
+
+cp = Gamut.open("cylinder.gamut") do study
+    Gamut.get_field(study, "cp"; nodes=[13])                 # runs × nodes, from 1
+end
+```
+
+C++
+
+```cpp
+auto study = gamut::create("cylinder.gamut", "example sweep", "shared", "fixed");
+study.declare_coordinates("m", 2);
+study.declare_parameter("gamma", "design", "m2 s-1");
+study.declare_field("cp", "node", "1");
+study.set_mesh(points, cells);
+for (double gamma = 0.0; gamma < 3.75; gamma += 0.5)
+  study.add_run({{"gamma", gamma}}, {{"cp", solve(gamma)}});
+study.close();
+
+study = gamut::open("cylinder.gamut", "a");
+study.add_run({{"gamma", 4.0}}, {{"cp", solve(4.0)}});
+study.close();
+
+study = gamut::open("cylinder.gamut");
+auto cp = study.get_field("cp", gamut::all, {12});    // runs x nodes
 ```
 
 All four print the same values:

@@ -1,13 +1,11 @@
-"""The README quotes the examples exactly: its code blocks are lines of the
-example scripts, each line of its side-by-side comparison is code from the
-example in that language, and its output block is what the README's own
-example prints."""
+"""The README quotes the examples exactly: its Python blocks are lines of the
+example scripts, its MATLAB, Julia and C++ blocks lines of the language
+examples, and its output block what the README's own example prints."""
 
 from __future__ import annotations
 
 import os
 import pathlib
-import re
 import subprocess
 import sys
 
@@ -28,31 +26,11 @@ pytestmark = pytest.mark.skipif(not (README.is_file() and EXAMPLES.is_dir()),
 @pytest.mark.parametrize("language", sorted(SOURCES))
 def test_readme_quotes_the_examples(language):
     text = README.read_text(encoding="utf-8")
+    shown = blocks(text, language)
+    assert shown, f"the README shows {language} code"
     sources = [p.read_text(encoding="utf-8") for p in SOURCES[language]]
-    for block in blocks(text, language):
+    for block in shown:
         assert any(contiguous(block, s) for s in sources), f"the README quotes {language} code no example has:\n{block}"
-
-
-LABELS = {"Python": "python", "MATLAB": "matlab", "Julia": "julia", "C++": "cpp"}
-
-
-def test_comparison_lines_are_code_from_the_examples():
-    """Each "  Language   code" line of the comparison is code from that
-    language's example; an ellipsis marks a shortened call, and the parts
-    around it appear in order."""
-    text = README.read_text(encoding="utf-8")
-    lines = [m.groups() for block in blocks(text, "")
-             for m in re.finditer(r"^  (Python|MATLAB|Julia|C\+\+) +(.+)$", block, re.M)]
-    assert {label for label, _ in lines} == set(LABELS), "the comparison shows every language"
-    for label, code in lines:
-        source = "\n".join(p.read_text(encoding="utf-8") for p in SOURCES[LABELS[label]])
-        at = 0
-        for part in (piece.strip() for piece in code.split("…")):
-            if not part:
-                continue
-            found = source.find(part, at)
-            assert found >= 0, f"the comparison shows {label} code its example does not have: {part}"
-            at = found + len(part)
 
 
 def test_readme_output_is_what_its_example_prints(tmp_path):
