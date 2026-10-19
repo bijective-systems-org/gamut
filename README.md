@@ -1,5 +1,11 @@
 # mestra
 
+> **mestra is now [Gamut](https://github.com/bijective-systems-org/gamut)**,
+> version 1 of the format, with a new implementation:
+> `pip install gamut-format`. This is the last release of mestra. It still
+> reads and writes `mestra/0` files; Gamut refuses them, naming their
+> version.
+
 [![PyPI](https://img.shields.io/pypi/v/mestra)](https://pypi.org/project/mestra/)
 [![Licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
 
