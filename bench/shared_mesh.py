@@ -27,8 +27,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import machine, run_child, size_of, timed  # noqa: E402
 
-FORMATS = ("gamut", "gamut_threads", "vtk_folder", "vtk_zip", "hdf5_per_run", "netcdf", "zarr",
-           "parquet")
+FORMATS = ("gamut", "gamut_threads", "vtk_folder", "vtk_zip", "vtkhdf", "hdf5_per_run", "netcdf",
+           "zarr", "npz_per_run", "npy", "parquet")
 
 
 # --- the study in memory -------------------------------------------------------------------
@@ -123,6 +123,82 @@ def write_hdf5_per_run(d: dict, out: str) -> None:
             g.attrs["member"] = int(m)
 
 
+def write_vtkhdf(d: dict, out: str) -> None:
+    """VTKHDF 2.2, an UnstructuredGrid with one time step per run: each shape's
+    points stored once, and step offsets pointing every run at its shape's
+    points and at its own slice of each field. Fields are chunked a step at a
+    time and compressed as the other HDF5 copies are; the run table's number
+    columns are FieldData, one value per step; geometry is stored plain."""
+    import h5py
+    types, offsets, conn = d["cells"]
+    n_runs, n_nodes, n_shapes = len(d["member"]), len(d["points"][0]), len(d["points"])
+    with h5py.File(out, "w") as f:
+        g = f.create_group("VTKHDF")
+        g.attrs["Version"] = np.array([2, 2], dtype="i8")
+        kind = "UnstructuredGrid".encode("ascii")
+        g.attrs.create("Type", kind, dtype=h5py.string_dtype("ascii", len(kind)))
+        g["NumberOfPoints"] = np.full(n_shapes, n_nodes, dtype="i8")
+        g["NumberOfCells"] = np.full(n_shapes, len(types), dtype="i8")
+        g["NumberOfConnectivityIds"] = np.full(n_shapes, len(conn), dtype="i8")
+        g["Points"] = np.concatenate(d["points"])
+        g["Types"] = np.tile(types, n_shapes)
+        g["Offsets"] = np.tile(offsets, n_shapes)
+        g["Connectivity"] = np.tile(conn, n_shapes)
+        pd_ = g.create_group("PointData")
+        for name, values in d["fields"].items():
+            pd_.create_dataset(name, data=values.reshape(-1), chunks=(n_nodes,),
+                               compression="gzip", compression_opts=4, shuffle=True)
+        fd = g.create_group("FieldData")
+        for name, column in d["table"].items():
+            if column.dtype.kind == "f":
+                fd.create_dataset(name, data=column.reshape(-1, 1))
+        s = g.create_group("Steps")
+        s.attrs["NSteps"] = n_runs
+        s["Values"] = np.arange(n_runs, dtype="f8")
+        s["PartOffsets"] = d["member"].astype("i8")
+        s["NumberOfParts"] = np.ones(n_runs, dtype="i8")
+        s["PointOffsets"] = d["member"].astype("i8") * n_nodes
+        s["CellOffsets"] = d["member"].astype("i8")[:, None] * len(types)
+        s["ConnectivityIdOffsets"] = d["member"].astype("i8")[:, None] * len(conn)
+        po = s.create_group("PointDataOffsets")
+        for name in d["fields"]:
+            po[name] = np.arange(n_runs, dtype="i8") * n_nodes
+        fo = s.create_group("FieldDataOffsets")
+        for name in fd:
+            fo[name] = np.arange(n_runs, dtype="i8")
+
+
+def write_npz_per_run(d: dict, out: str) -> None:
+    """A compressed NumPy file per run, its fields and points, beside a CSV of
+    the run table: the layout many training pipelines start from."""
+    os.makedirs(out)
+    for k, m in enumerate(d["member"]):
+        np.savez_compressed(os.path.join(out, f"run_{k:05d}.npz"), points=d["points"][m],
+                            **{name: values[k] for name, values in d["fields"].items()})
+    with open(os.path.join(out, "parameters.csv"), "w", newline="") as fh:
+        w = csv.writer(fh)
+        names = list(d["table"])
+        w.writerow(["file"] + names)
+        for k in range(len(d["member"])):
+            w.writerow([f"run_{k:05d}.npz"] + [d["table"][n][k] for n in names])
+
+
+def write_npy(d: dict, out: str) -> None:
+    """One uncompressed .npy per field (runs x nodes), read memory-mapped, and
+    the run table as CSV: no compression, units or mesh, as fast as a disk read."""
+    os.makedirs(out)
+    for name, values in d["fields"].items():
+        np.save(os.path.join(out, f"{name}.npy"), np.ascontiguousarray(values))
+    np.save(os.path.join(out, "points.npy"), np.stack(d["points"]))
+    np.save(os.path.join(out, "member.npy"), d["member"])
+    with open(os.path.join(out, "parameters.csv"), "w", newline="") as fh:
+        w = csv.writer(fh)
+        names = list(d["table"])
+        w.writerow(names)
+        for k in range(len(d["member"])):
+            w.writerow([d["table"][n][k] for n in names])
+
+
 def dataset(d: dict):
     import xarray as xr
     variables = {n: (("run", "node"), v) for n, v in d["fields"].items()}
@@ -212,6 +288,86 @@ def readers(fmt: str, path: str, field: str, where: dict, scalar: str):
             return float(np.nansum(t[scalar].to_numpy()[mask(t)]))
         return opened, one_run, one_node, region, query
 
+    if fmt == "vtkhdf":
+        import h5py
+
+        def opened():
+            with h5py.File(path, "r") as f:
+                return int(f["VTKHDF/Steps"].attrs["NSteps"]) + len(f["VTKHDF/PointData"])
+
+        def one_run():
+            with h5py.File(path, "r") as f:
+                start = int(f["VTKHDF/Steps/PointDataOffsets"][field][row])
+                n = int(f["VTKHDF/NumberOfPoints"][0])
+                return float(f["VTKHDF/PointData"][field][start:start + n].sum())
+
+        # Every step's slice is the same length here, so a node across steps is
+        # one strided read; each chunk holds one step, so either read touches
+        # every chunk once.
+        def one_node():
+            with h5py.File(path, "r") as f:
+                n = int(f["VTKHDF/NumberOfPoints"][0])
+                return float(f["VTKHDF/PointData"][field][node::n].sum())
+
+        def region():
+            with h5py.File(path, "r") as f:
+                n = int(f["VTKHDF/NumberOfPoints"][0])
+                return float(f["VTKHDF/PointData"][field][()].reshape(-1, n)[:, lo:hi].sum())
+
+        def query():
+            with h5py.File(path, "r") as f:
+                fd = f["VTKHDF/FieldData"]
+                columns = {c: fd[c][:, 0] for c, _, _ in cond}
+                return float(np.nansum(fd[scalar][:, 0][mask(columns)]))
+        return opened, one_run, one_node, region, query
+
+    if fmt in ("npz_per_run", "npy"):
+        import pandas as pd
+        def runs():
+            return sorted(f for f in os.listdir(path) if f.endswith(".npz")) if fmt == "npz_per_run" else []
+
+        def table():
+            return pd.read_csv(os.path.join(path, "parameters.csv"))
+
+        def block():
+            return np.load(os.path.join(path, f"{field}.npy"), mmap_mode="r")
+
+        def opened():
+            files = runs()
+            return len(table()) + (len(files) if files else block().shape[0])
+
+        def one_run():
+            files = runs()
+            if files:
+                with np.load(os.path.join(path, files[row])) as z:
+                    return float(z[field].sum())
+            return float(np.asarray(block()[row]).sum())
+
+        def one_node():
+            files = runs()
+            if files:
+                total = 0.0
+                for name in files:
+                    with np.load(os.path.join(path, name)) as z:
+                        total += float(z[field][node])
+                return total
+            return float(np.asarray(block()[:, node]).sum())
+
+        def region():
+            files = runs()
+            if files:
+                total = 0.0
+                for name in files:
+                    with np.load(os.path.join(path, name)) as z:
+                        total += float(z[field][lo:hi].sum())
+                return total
+            return float(np.asarray(block()[:, lo:hi]).sum())
+
+        def query():
+            t = table()
+            return float(np.nansum(t[scalar].to_numpy()[mask(t)]))
+        return opened, one_run, one_node, region, query
+
     if fmt == "hdf5_per_run":
         import h5py
 
@@ -291,7 +447,8 @@ def parse_where(text: str) -> list[tuple[str, str, float]]:
 
 def path_of(work: str, fmt: str) -> str:
     return os.path.join(work, {"gamut": "study.gamut", "gamut_threads": "study.gamut",
-                               "vtk_folder": "vtk", "vtk_zip": "vtk.zip",
+                               "vtk_folder": "vtk", "vtk_zip": "vtk.zip", "vtkhdf": "study.vtkhdf",
+                               "npz_per_run": "npz", "npy": "npy",
                                "hdf5_per_run": "per_run.h5", "netcdf": "study.nc",
                                "zarr": "study.zarr", "parquet": "table.parquet"}[fmt])
 
@@ -308,10 +465,12 @@ def cmd_write(args) -> dict:
         os.remove(out)
     writers = {"gamut": write_gamut, "vtk_folder": write_vtk_folder, "hdf5_per_run":
                write_hdf5_per_run, "netcdf": write_netcdf, "zarr": write_zarr,
-               "parquet": write_parquet}
+               "parquet": write_parquet, "vtkhdf": write_vtkhdf, "npz_per_run": write_npz_per_run,
+               "npy": write_npy}
     # Libraries are imported before the clock starts: a write is timed, not
     # an import.
     for module in {"gamut": ["gamut"], "vtk_folder": ["pyvista"], "hdf5_per_run": ["h5py"],
+                   "vtkhdf": ["h5py"],
                    "netcdf": ["xarray", "netCDF4"], "zarr": ["xarray", "zarr"],
                    "parquet": ["pandas", "pyarrow"]}.get(args.format, []):
         __import__(module)

@@ -814,7 +814,7 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 | W2 | rows whose status is not `converged`, by row |
 | W3 | NaN or infinite values in a result, by row and name |
 | W4 | a parameter value outside its bounds (and, on evaluation, an input outside a model's domain) |
-| W5 | something this version does not define — an attribute, group, role or statistic word — reported and ignored, or read as a plain object (§17) |
+| W5 | something this version does not define (an attribute, group, role or statistic word), reported and ignored, or read as a plain object (§17) |
 | W6 | a chunk larger than §11.4's default |
 | W7 | a fixed-length string dataset wider than its longest element |
 | W8 | `created` not an ISO 8601 UTC timestamp |

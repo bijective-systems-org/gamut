@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 std::string result_path(const Result& r) {
@@ -83,4 +83,4 @@ std::vector<std::string> Schema::addons() const {
 }
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core

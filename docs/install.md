@@ -3,7 +3,7 @@
 Every language uses the same core library, written in C++. The Python
 wheels include it, with HDF5 linked inside, so it never meets another HDF5
 in the same process: h5py's, MATLAB's or a solver's. MATLAB and Julia can
-use the wheel's copy; C and C++ programs build the core from source.
+use the wheel's copy; C++ and C programs build the core from source.
 
 ## Python
 
@@ -67,22 +67,29 @@ s.rowCount()
 
 `build_mex` needs a C++ compiler MATLAB accepts (`mex -setup C++`). It
 copies the core beside the gateway, so the `matlab` folder is all MATLAB
-needs on its path. Tested with MATLAB R2026a on macOS.
+needs on its path. Tested with MATLAB R2026a on macOS, and with the
+latest release on Linux.
 
 ## Julia
 
-Julia 1.9 or later. The package is in `julia/`, and needs the core library:
+Julia 1.9 or later. Add the package from this repository, and point it at
+a core library:
 
-```bash
-export GAMUT_LIBRARY=/path/to/libgamut.so      # .dylib on macOS, gamut.dll on Windows
-julia --project=julia -e 'using Gamut; println(Gamut.version())'
+```julia
+using Pkg
+Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia")
+ENV["GAMUT_LIBRARY"] = "/path/to/libgamut.dylib"   # .so on Linux, gamut.dll on Windows
+using Gamut
+Gamut.version()
 ```
 
-Without `GAMUT_LIBRARY`, it looks in `build/` at the top of the checkout.
 As for MATLAB, the Python wheel's core serves: set `GAMUT_LIBRARY` to the
-path `gamut.library_path()` prints.
+path `gamut.library_path()` prints, in the environment or in `ENV` before
+the first call. From a checkout, `julia --project=julia` uses the package in
+place, and without `GAMUT_LIBRARY` it looks in `build/` at the top of the
+checkout.
 
-## C and C++
+## C++ and C
 
 With CMake 3.16 or later, a C++17 compiler and HDF5 1.12 or later:
 
@@ -92,12 +99,16 @@ cmake --build build
 cmake --install build --prefix /usr/local
 ```
 
-This installs `include/gamut/gamut.h`, the library and a CMake package:
+This installs the library, the C++ header `include/gamut/gamut.hpp` (C++17)
+and the C header `include/gamut/gamut.h` beside it, and a CMake package:
 
 ```cmake
 find_package(gamut 1.0 REQUIRED)
 target_link_libraries(my_tool PRIVATE gamut::gamut)
 ```
 
-Add `-DGAMUT_STATIC_HDF5=ON` (with `tools/build_deps.sh` as above) to link
-HDF5 into the library.
+On Linux, a core linked to a shared HDF5 can bind to another copy of HDF5
+in the same process (h5py's, MATLAB's, a solver's) and crash. If your
+program may load one, link HDF5 into the library with
+`-DGAMUT_STATIC_HDF5=ON` and `tools/build_deps.sh`, as above; the Python
+wheels are built that way.

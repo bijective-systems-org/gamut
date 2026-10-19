@@ -1,6 +1,7 @@
-%ONE_MESH Fields on one mesh shared by every run, from MATLAB.
-%   The study of examples/02_one_mesh.py: potential flow past a cylinder at
-%   nine values of circulation, on one ring of quadrilaterals. Positions
+%ONE_MESH A sweep on one mesh: eight runs written, a ninth added, then read.
+%   Potential flow past a cylinder at nine values of circulation, on one
+%   ring of quadrilaterals. examples/00_readme.py and the Julia and C
+%   examples are the same program and print the same line. Positions
 %   (runs, nodes, cells) are 1-based; the node numbers inside cells stay
 %   0-based, as in VTK and every other language.
 
@@ -14,28 +15,24 @@ i = i(:); j = j(:);
 quads = [j * nTheta + i, j * nTheta + mod(i + 1, nTheta), ...
          (j + 1) * nTheta + mod(i + 1, nTheta), (j + 1) * nTheta + i]';
 cells = {repmat(uint8(9), 1, numel(i)), 0:4:4 * numel(i), quads(:)'};   % VTK quadrilaterals
-surface = [ones(1, nTheta), zeros(1, nTheta * (nR - 1))];                % wall: the first ring
+solve = @(gamma) 1 - ((cos(t) .* (1 - 1 ./ r.^2)).^2 ...                 % stands for the solver
+                     + (-sin(t) .* (1 + 1 ./ r.^2) + gamma ./ (2 * pi * r)).^2);
 
 study = gamut.create('cylinder.gamut', 'writer', 'example sweep', 'mesh', 'shared', 'per', 'fixed', ...
     'coordinates', struct('units', 'm', 'axes', 2), ...
     'parameters', struct('gamma', struct('units', 'm2 s-1', 'role', 'design')), ...
-    'meshLabels', struct('surface', struct('at', 'node', 'categories', {{'field', 'wall'}})), ...
     'fields', struct('cp', struct('units', '1', 'at', 'node')));
-study.setMesh(points, cells, struct('surface', surface));
-for gamma = linspace(0, 4, 9)
-    uTheta = -sin(t) .* (1 + 1 ./ r.^2) + gamma ./ (2 * pi * r);
-    uR = cos(t) .* (1 - 1 ./ r.^2);
-    study.addRun(struct('gamma', gamma), 'fields', struct('cp', 1 - (uR.^2 + uTheta.^2)));
+study.setMesh(points, cells);
+for gamma = linspace(0, 3.5, 8)
+    study.addRun(struct('gamma', gamma), 'fields', struct('cp', solve(gamma)));
 end
 study.close();
 
-study = gamut.open('cylinder.gamut');
-fprintf('%s mesh, %d runs, %d nodes\n', study.type(), study.rowCount(), size(study.getPoints(), 1));
-cp = study.getField('cp');                                       % runs x nodes
-fprintf('cp block: %d x %d\n', size(cp));
-wall = find(strcmp(study.categories('surface'), 'wall')) - 1;   % the code that means "wall"
-onWall = find(study.getMeshLabel('surface') == wall);
-lowest = min(study.getField('cp', 'nodes', onWall), [], 2);
-fprintf('lowest cp on the wall, by run: %s\n', mat2str(round(lowest', 2)));
-fprintf('one node across every run: %s\n', mat2str(round(study.getField('cp', 'nodes', 13)', 2)));
+study = gamut.open('cylinder.gamut', 'mode', 'a');
+study.addRun(struct('gamma', 4), 'fields', struct('cp', solve(4)));
 study.close();
+
+study = gamut.open('cylinder.gamut');
+cp = study.getField('cp', 'nodes', 13);                         % runs x nodes, from 1
+study.close();
+fprintf('cp at the top of the cylinder, run by run:%s\n', sprintf(' %.2f', cp));

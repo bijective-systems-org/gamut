@@ -4,6 +4,11 @@ Each page takes one idea, shows the script in [`examples/`](../../examples)
 that uses it, and what the script prints. Read the first two pages first;
 after that, take the pages in any order.
 
+The scripts run from a checkout with the Python package installed
+([installing](../install.md)); each writes its file in the current
+folder. `gamut info FILE` lists what a file holds and `gamut validate FILE`
+checks it, from any shell.
+
 | | Page | The example writes |
 |---|---|---|
 | 1 | [Run tables](01-run-tables.md) | a wing's polar: inputs, results and status, with units |
@@ -24,7 +29,7 @@ The same files from other places:
 | 11 | [Command line](11-command-line.md) | inspect, check, build and extract without writing code |
 | 12 | [MATLAB](12-matlab.md) | the same calls, in MATLAB's spelling |
 | 13 | [Julia](13-julia.md) | the same calls, in Julia's spelling |
-| 14 | [C and C++](14-c-and-cpp.md) | the core library itself |
+| 14 | [C++ and C](14-c-and-cpp.md) | the same calls in C++, and the C interface under every language |
 
 ## Words used throughout
 

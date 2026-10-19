@@ -19,7 +19,7 @@
 
 #include "types.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 // An HDF5 identifier that closes itself.
@@ -239,6 +239,6 @@ bool is_spec_float64(const AttrType& t);
 bool dtype_of(const AttrType& t, DType* out);
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_H5_HPP

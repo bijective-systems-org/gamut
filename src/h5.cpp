@@ -9,12 +9,12 @@
 #include "chunk.hpp"
 #include "names.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 namespace {
 
 // HDF5 prints its own error stack on any failure; the core reports
-// failures through gamut::Error instead.  With its own copy of HDF5 the
+// failures through gamut_core::Error instead.  With its own copy of HDF5 the
 // core also loads no filter plugin: the format allows only gzip and
 // shuffle, which HDF5 has built in, so a file naming another filter is
 // refused rather than loading code from HDF5_PLUGIN_PATH.  A core sharing
@@ -1150,4 +1150,4 @@ void File::copy_from(const File& src, const std::string& src_path,
 }
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core

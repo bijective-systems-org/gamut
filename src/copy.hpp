@@ -8,7 +8,7 @@
 
 #include "types.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 // The rows of `src` added to `dst` in place, with new ids continuing
@@ -27,6 +27,6 @@ void extract_file(const std::string& src, const std::string& dst, const Selectio
 void write_copy_file(const std::string& src, const std::string& dst);
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_COPY_HPP

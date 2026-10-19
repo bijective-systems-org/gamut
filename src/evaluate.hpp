@@ -10,7 +10,7 @@
 #include "reader.hpp"
 #include "writer.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 // A new data file at `out_path` declaring what the model file declares:
@@ -22,6 +22,6 @@ namespace internal {
 std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string& out_path);
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_EVALUATE_HPP

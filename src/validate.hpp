@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 struct Finding {
@@ -33,6 +33,6 @@ Report validate_file(const std::string& path);
 const std::size_t kMaxCheckElements = std::size_t(1) << 26;
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_VALIDATE_HPP

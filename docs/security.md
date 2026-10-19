@@ -7,24 +7,22 @@ about the rest.
 
 ## What a reader does
 
-- **Opening reads structure only.** Opening a file reads its groups and
-  attributes, never field values or model data. Values are read when asked
-  for.
-- **Sizes are checked before memory is used.** Every count taken from a
-  file is checked against a limit before a buffer is sized, so a file that
-  claims a billion rows cannot make a reader allocate for them.
-- **Links are never followed.** A soft or external link in a file is an
-  error (E22) and is never opened, so a file cannot make a reader open
-  another file or path.
-- **No code runs.** A file holds no executable code: a model's numbers are
-  plain data, read by software the reader has installed and registered. The
-  packaged core loads no HDF5 filter plugins; the format allows only gzip
-  and shuffle, which HDF5 has built in, and a file naming another filter
-  is refused.
-- **Everything is reported, nothing is assumed.** `gamut validate` reports
-  every rule a file breaks, with where and why. A read a reader cannot
-  carry out safely is refused with the rule and the path of what it
-  concerns, never answered with a guess.
+Opening a file reads its groups and attributes, never field values or
+model data; values are read when asked for. Every count taken from a file
+is checked against a limit before a buffer is sized, so a file that claims
+a billion rows cannot make a reader allocate for them. A soft or external
+link in a file is an error (E22) and is never followed, so a file cannot
+make a reader open another file or path.
+
+A file holds no executable code. A model's numbers are plain data, read by
+software the reader has installed and registered. The packaged core loads
+no HDF5 filter plugins: the format allows only gzip and shuffle, which
+HDF5 has built in, and a file naming another filter is refused.
+
+`gamut validate` reports the rules a file breaks, with where and why,
+within the limits below. A
+read that cannot be carried out safely is refused with the rule and the
+path of what it concerns.
 
 ## The limits
 
@@ -44,7 +42,10 @@ which any of the reads in the [guide](guide/08-reading-parts.md) does. The
 every language is tested against them. Below the limits, validating takes
 time in proportion to what a file declares: a small file that declares two
 billion cells keeps `gamut validate` busy for about a minute before it
-reports what is wrong.
+reports what is wrong. To check label codes and missing results,
+`gamut validate` reads every value of an array of up to 2²⁶ values (about
+67 million); in a larger array it checks the structure only, and does not
+yet say that it skipped those checks.
 
 ## What it does not protect against
 
@@ -56,15 +57,14 @@ or with runs of bytes zeroed, each in a child process.
 
 Measured on 17 October 2026 with the packaged core (HDF5 1.14.6 linked in):
 419 copies were answered by rule, none crashed, and one hung inside HDF5
-itself, which every HDF5 reader, netCDF's included, would do on that file.
-It has been reported to the HDF Group.
+itself, while reading the file's dimension-scale attributes. It has been
+reported to the HDF Group.
 
-So for a file nobody vouches for, the process boundary is the defence:
-
-- check it with `gamut validate FILE` (or `gamut info`) in a child
-  process with a time limit, before opening it in a long-running program;
-- in a service that opens files from users, read in a worker process it
-  can kill.
+So for a file nobody vouches for, a separate process is the protection.
+Check it with `gamut validate FILE` (or `gamut info`) in a child process
+with a time limit before opening it in a long-running program, and in a
+service that opens files from users, read them in a worker process it can
+kill.
 
 ## Reporting a problem
 

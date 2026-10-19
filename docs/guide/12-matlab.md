@@ -5,8 +5,10 @@ spelling: methods on a study object in camelCase, options as name–value
 pairs, declarations as structs, and positions counted from 1. Installing
 the package takes one build step ([installing](../install.md#matlab)).
 
-The example writes and reads the study of [page 2](02-one-mesh.md). From
-a working folder, with `examples/matlab` on the path, run `one_mesh`.
+The example writes eight runs of flow past a cylinder on one mesh, reopens
+the file to add a ninth, then reads one node in every run: the program of the
+[README](../../README.md#example). From a working folder, with
+`examples/matlab` on the path, run `one_mesh`.
 
 ## Writing
 
@@ -14,40 +16,39 @@ a working folder, with `examples/matlab` on the path, run `one_mesh`.
 study = gamut.create('cylinder.gamut', 'writer', 'example sweep', 'mesh', 'shared', 'per', 'fixed', ...
     'coordinates', struct('units', 'm', 'axes', 2), ...
     'parameters', struct('gamma', struct('units', 'm2 s-1', 'role', 'design')), ...
-    'meshLabels', struct('surface', struct('at', 'node', 'categories', {{'field', 'wall'}})), ...
     'fields', struct('cp', struct('units', '1', 'at', 'node')));
-study.setMesh(points, cells, struct('surface', surface));
-for gamma = linspace(0, 4, 9)
-    uTheta = -sin(t) .* (1 + 1 ./ r.^2) + gamma ./ (2 * pi * r);
-    uR = cos(t) .* (1 - 1 ./ r.^2);
-    study.addRun(struct('gamma', gamma), 'fields', struct('cp', 1 - (uR.^2 + uTheta.^2)));
+study.setMesh(points, cells);
+for gamma = linspace(0, 3.5, 8)
+    study.addRun(struct('gamma', gamma), 'fields', struct('cp', solve(gamma)));
 end
+study.close();
+
+study = gamut.open('cylinder.gamut', 'mode', 'a');
+study.addRun(struct('gamma', 4), 'fields', struct('cp', solve(4)));
 study.close();
 ```
 
-Cells are a cell array `{types, offsets, connectivity}`, in VTK's
-convention as in every language: the node numbers inside `connectivity`
-count from 0.
+Declarations are structs, one field per name. Cells are a cell array
+`{types, offsets, connectivity}`, in VTK's convention as in every
+language: the node numbers inside `connectivity` count from 0. `solve`
+stands for the solver and returns `cp` at every node. `gamut.open(path,
+'mode', 'a')` reopens a file to add runs.
 
 ## Reading
 
 ```matlab
 study = gamut.open('cylinder.gamut');
-fprintf('%s mesh, %d runs, %d nodes\n', study.type(), study.rowCount(), size(study.getPoints(), 1));
-cp = study.getField('cp');                                       % runs x nodes
-fprintf('cp block: %d x %d\n', size(cp));
-wall = find(strcmp(study.categories('surface'), 'wall')) - 1;   % the code that means "wall"
-onWall = find(study.getMeshLabel('surface') == wall);
-lowest = min(study.getField('cp', 'nodes', onWall), [], 2);
-fprintf('lowest cp on the wall, by run: %s\n', mat2str(round(lowest', 2)));
-fprintf('one node across every run: %s\n', mat2str(round(study.getField('cp', 'nodes', 13)', 2)));
+cp = study.getField('cp', 'nodes', 13);                         % runs x nodes, from 1
 study.close();
 ```
 
-It prints the numbers [page 2](02-one-mesh.md) shows. Node 13 here is
-node 12 there: positions count from 1 in MATLAB and from 0 in Python. A
-label or mesh label's stored codes count from 0 in every language, which
-is why `wall` subtracts one from its place in the table.
+```text
+cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
+```
+
+Node 13 here is node 12 in Python: positions count from 1 in MATLAB and
+from 0 in Python. A label or mesh label's stored codes count from 0 in
+every language, so a zone's code is its place in `categories` minus one.
 
 ## The same calls
 
@@ -65,7 +66,7 @@ is why `wall` subtracts one from its place in the table.
 `help gamut.Study` describes the study object, and `methods(study)` lists
 what it can do.
 
-## Worth knowing
+## Notes
 
 - A file written by MATLAB is the same file Python, Julia and C read: the
   library underneath is one and the same.

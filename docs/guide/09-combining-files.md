@@ -37,26 +37,32 @@ same file id after the rewrite: True
 valid: True
 ```
 
-**Append.** Both files need the same declarations (bounds may differ) and
+### Append
+
+Both files need the same declarations (bounds may differ) and
 the same mesh. Appended runs get new ids that continue the destination's.
 Category tables merge by name, so a status `failed` in one file is
 `failed` in the other whatever its code. A group member found in both
 files must have the same geometry in both.
 
-**Extract.** The chosen runs keep their ids, so a run can be traced back
+### Extract
+
+The chosen runs keep their ids, so a run can be traced back
 to the study it came from. Tables are kept whole; a changing mesh keeps
 only the meshes the chosen runs use.
 
-**Write copy.** The copy has the default chunk shapes and compression, as
+### Write copy
+
+The copy has the default chunk shapes and compression, as
 for a file another writer chunked finely, and keeps the original's
 identity: its `file_id` and creation time.
 
-## Worth knowing
+## Notes
 
 - To add runs as they finish, open the file to append instead:
   `gamut.open(path, mode="a")` takes `add_run` and `add_runs` as `create`
   does, without copying the file.
-- `validate` checks a file against every rule of the specification and
+- `validate` checks a file against the rules of the specification and
   returns a report: `ok`, then `errors` and `warnings`, each finding with
   its rule, the path of what it concerns, and a message.
 

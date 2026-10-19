@@ -23,7 +23,8 @@ ASSETS = os.path.join(ROOT, "docs", "assets")
 
 NAMES = {"gamut": "Gamut", "gamut_threads": "Gamut, 4 threads", "vtk_folder": "VTK folder", "vtk_zip": "VTK folder, zipped",
          "hdf5_per_run": "HDF5, a group per run", "netcdf": "netCDF-4 (xarray)",
-         "zarr": "Zarr (xarray)", "parquet": "Parquet, run table only"}
+         "zarr": "Zarr (xarray)", "parquet": "Parquet, run table only", "vtkhdf": "VTKHDF, a step per run",
+         "npz_per_run": "NumPy, a file per run", "npy": "NumPy arrays, uncompressed"}
 READS = {"open": "Open", "one_run": "One run", "one_node": "One node, every run",
          "region": "A region, every run", "query": "Runs by condition"}
 
@@ -110,7 +111,8 @@ def size_figure(cases: list[tuple[str, dict]]) -> str:
     for label, r in cases:
         base = r["formats"]["vtk_folder"]["bytes"]
         items.append((label, None, "", False))
-        for fmt in ("gamut", "vtk_folder", "vtk_zip", "hdf5_per_run", "netcdf", "zarr"):
+        for fmt in ("gamut", "vtk_folder", "vtk_zip", "vtkhdf", "hdf5_per_run", "netcdf", "zarr",
+                    "npz_per_run", "npy"):
             if fmt in r["formats"]:
                 f = r["formats"][fmt]
                 items.append((NAMES[fmt], f["bytes"] / base, megabytes(f["bytes"]),
@@ -124,6 +126,54 @@ def read_figure(r: dict, read: str, title: str, subtitle: str) -> str:
              for fmt, f in r["formats"].items() if read in f]
     items.sort(key=lambda x: x[1])
     return bars(title, subtitle, items, time_axis=True)
+
+
+WORDS = {5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine"}
+
+
+def summary_figure(r: dict) -> str:
+    """The README's figure: one study, four measures, the same formats in
+    the same order in every panel, each panel on its own linear scale."""
+    formats = [f for f in ("gamut", "hdf5_per_run", "netcdf", "vtkhdf", "zarr", "npz_per_run", "npy",
+                           "vtk_folder") if f in r["formats"]]
+    labels = {"gamut": "Gamut", "hdf5_per_run": "HDF5, a group per run", "netcdf": "netCDF-4",
+              "vtkhdf": "VTKHDF", "zarr": "Zarr", "npz_per_run": "NumPy, a file per run",
+              "npy": "NumPy, uncompressed", "vtk_folder": "VTK files"}
+    panels = [[("Size on disk", lambda f: f["bytes"], lambda f: megabytes(f["bytes"])),
+               ("Read one run", lambda f: f["one_run"]["median_s"], lambda f: seconds(f["one_run"]["median_s"]))],
+              [("Choose runs by condition, read a result of each", lambda f: f["query"]["median_s"],
+                lambda f: seconds(f["query"]["median_s"])),
+               ("Read one node in every run", lambda f: f["one_node"]["median_s"],
+                lambda f: seconds(f["one_node"]["median_s"]))]]
+    width, left, gap, row, label_room = 760, 150, 28, 22, 64
+    panel = (width - left - gap) / 2
+    band = 30 + row * len(formats) + 18
+    top = 54
+    height = top + band * len(panels)
+    shape = r["shape"]
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
+           f'height="{height}" role="img" aria-label="Size and read times of one study in eight formats">', STYLE, '<rect class="page" width="100%" height="100%"/>',
+           f'<text class="ink h" x="0" y="18">One study in {WORDS[len(formats)]} formats</text>',
+           f'<text class="soft" x="0" y="36">{shape["runs"]:,} runs of a capsule family on one '
+           f'{shape["nodes"]:,}-node mesh; shorter is better</text>']
+    for b, pair in enumerate(panels):
+        y0 = top + b * band
+        for i, fmt in enumerate(formats):
+            out.append(f'<text class="ink" x="{left - 10}" y="{y0 + 30 + i * row + 14}" '
+                       f'text-anchor="end">{labels[fmt]}</text>')
+        for c, (title, value, text) in enumerate(pair):
+            x0 = left + c * (panel + gap)
+            out.append(f'<text class="ink h" x="{x0:.1f}" y="{y0 + 18}">{title}</text>')
+            hi = max(value(r["formats"][fmt]) for fmt in formats)
+            for i, fmt in enumerate(formats):
+                f = r["formats"][fmt]
+                w = (panel - label_room) * value(f) / hi
+                y = y0 + 30 + i * row
+                out.append(f'<rect class="{"ours" if fmt == "gamut" else "bar"}" x="{x0:.1f}" y="{y + 3}" '
+                           f'width="{w:.1f}" height="15" rx="2"/>')
+                out.append(f'<text class="soft" x="{x0 + w + 6:.1f}" y="{y + 15}">{text(f)}</text>')
+    out.append("</svg>")
+    return "\n".join(out) + "\n"
 
 
 def table(r: dict, reads: list[str]) -> str:
@@ -151,6 +201,7 @@ def generated() -> tuple[dict[str, str], dict[str, str]]:
     capsule = load("capsule_incidence")
     airfrans = load("airfrans")
     figures = {
+        "bench-summary.svg": summary_figure(capsule),
         "bench-size.svg": size_figure([("The capsule family", capsule), ("AirfRANS", airfrans)]),
         "bench-one-node.svg": read_figure(
             capsule, "one_node", "One node across every run",

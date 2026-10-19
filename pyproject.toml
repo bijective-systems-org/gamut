@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "gamut-format"
 version = "1.0.0.dev0"
-description = "An open file format for simulation studies and the surrogate models fitted to them"
+description = "An open file format for parametric simulation studies and the models fitted to them"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]

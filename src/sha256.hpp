@@ -9,12 +9,12 @@
 #include <string>
 
 
-namespace gamut {
+namespace gamut_core {
 
 class Sha256 {
  public:
   Sha256();
-  // Adds to the message.  Throws gamut::Error once `hex` has been
+  // Adds to the message.  Throws gamut_core::Error once `hex` has been
   // called, because the state is final by then.
   void update(const void* data, std::size_t length);
   // The digest in lower-case hexadecimal, 64 characters.  Calling it
@@ -35,6 +35,6 @@ class Sha256 {
 std::string sha256_hex(const void* data, std::size_t length);
 std::string sha256_hex(const std::string& data);
 
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_SHA256_HPP

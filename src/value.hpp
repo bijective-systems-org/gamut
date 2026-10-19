@@ -11,7 +11,7 @@
 
 #include "types.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 struct BytesOrder {
@@ -73,6 +73,6 @@ const Value* find_path(const Dict& root, const std::string& path);
 void set_path(Dict& root, const std::string& path, Value v);
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_VALUE_HPP

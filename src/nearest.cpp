@@ -5,7 +5,7 @@
 #include <limits>
 #include <set>
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 namespace {
@@ -161,4 +161,4 @@ std::vector<double> nearest_values(const Nearest& m, const std::string& output,
 }
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core

@@ -27,24 +27,30 @@ wall pressure block: (4, 48) lowest -5.833 kPa
 speeds in km/h: [ 72.  72. 144. 144.]
 ```
 
-**Runs.** `select` compares parameters, scalars and labels with `==`, `!=`,
+### Runs
+
+`select` compares parameters, scalars and labels with `==`, `!=`,
 `<`, `<=`, `>`, `>=`, joined by `and`, `or`, `not` and parentheses. A
 label compares by name, with quotes when the name has spaces:
 `model == "k-omega SST"`. The [reference](../reference/selecting.md) has
 the whole grammar. Any list of positions works as `rows` too, so a
 selection can come from NumPy just as well.
 
-**Nodes and cells.** `nodes` and `cells` take a position, a list, or a
+### Nodes and cells
+
+`nodes` and `cells` take a position, a list, or a
 slice. A zone comes from a mesh label: `categories` gives its names, and
 the positions where the label holds a name's code are that zone.
 
-**Units.** Every read takes `units`, and converts from the stored units.
+### Units
+
+Every read takes `units`, and converts from the stored units.
 Conversion needs the `units` extra (`pip install "gamut-format[units]"`, which
 brings pint); without it, a read that asks for other units is refused.
 Leave `units` out to get values in the units they were stored in, which
 `describe(name)["units"]` names.
 
-## Worth knowing
+## Notes
 
 - Writing converts too: a value given as `(number, "units")` in `add_run`
   is converted to the declared units before it is stored.

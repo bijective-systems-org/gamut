@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace gamut {
+namespace gamut_core {
 
 // Every failure the core raises.  `rule` is the identifier of SPEC.md
 // section 16 when one applies (E1 ... E24, W1 ... W10) and empty when no
@@ -128,6 +128,6 @@ struct Selection {
       std::int64_t length, const std::string& what) const;
 };
 
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_TYPES_HPP

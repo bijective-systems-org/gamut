@@ -5,10 +5,10 @@
 
 #include <string>
 
-namespace gamut {
+namespace gamut_core {
 
 bool units_parse(const std::string& units);
 
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_UNITS_HPP

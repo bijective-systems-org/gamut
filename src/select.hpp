@@ -9,7 +9,7 @@
 
 #include "reader.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 // The positions (0-based, increasing) of the rows `where` selects.  A
@@ -18,6 +18,6 @@ namespace internal {
 std::vector<std::int64_t> select_rows(const Reader& reader, const std::string& where);
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_SELECT_HPP

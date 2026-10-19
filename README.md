@@ -1,97 +1,239 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/logo-dark.svg">
-    <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/logo.svg" alt="Gamut" width="240">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/logo.svg">
+    <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/logo-any.svg" alt="Gamut" width="240">
   </picture>
 </p>
 
 <p align="center">
-An open file format for simulation studies: every run, the mesh it ran on,<br>
-and what each number means, in one file that reads the same way from Python,
-MATLAB, Julia and C.
+An open file format for parametric simulation studies,<br>
+with libraries for Python, MATLAB, Julia, C++ and C.
+</p>
+
+<p align="center">
+  <a href="https://github.com/bijective-systems-org/gamut/actions/workflows/ci.yml"><img src="https://github.com/bijective-systems-org/gamut/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
 </p>
 
 ---
 
-A parametric study usually ends as a folder of solver outputs, a spreadsheet
-of inputs and a script that knows how to join them. Gamut keeps the runs,
-their inputs and results, the mesh and its fields in one compressed file,
-with units, roles and statuses written down, so the study can be shared,
-checked and used to train models without the script.
+Gamut is a file format for parametric simulation studies: the hundreds or
+thousands of CFD or FEA runs behind a design sweep, an aerodynamic
+database or a surrogate model. One file holds the run table, each run's
+inputs, results and status, and, when the runs have a mesh, the mesh and
+every field on it, all with units. Python, MATLAB, Julia and C++ read and
+write it with the same calls. Files are HDF5 laid out as netCDF-4, so h5py,
+xarray and the netCDF tools open them too, and a published specification
+says what every array in them means.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/one-study-one-file.svg" alt="A folder of VTK files, a parameters table and a joining script become one file holding the run table, the mesh, and every field as one block of runs by nodes." width="760">
+  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/hero.svg" alt="A select call on a study file and the four runs it returns, each with its values, units and split beside the pressure field read for that run." width="760">
 </p>
 
-## In a few lines
+## Example
+
+Nine runs of potential flow past a cylinder on one mesh: eight written as
+a sweep, a ninth added later, then read back. `points`,
+`cells` and `solve` stand for your mesh and your solver, and each block
+assumes the library is loaded (`import gamut`, `using Gamut`,
+`#include <gamut/gamut.hpp>`). The complete
+programs are in [`examples/`](https://github.com/bijective-systems-org/gamut/blob/main/examples).
+
+### Read
+
+The pressure coefficient at the top of the cylinder, in every run:
+
+Python
 
 ```python
-import gamut
-
-with gamut.create("sweep.gamut", writer="my solver", mesh="shared", per="fixed",
-                   coordinates={"units": "m", "axes": 3},
-                   parameters={"mach": "1", "alpha": "degree"},
-                   fields={"p": {"units": "Pa", "at": "node"}}) as study:
-    study.set_mesh(points, cells)                       # once: every run shares it
-    for mach, alpha, pressure in runs:                  # from your solver
-        study.add_run({"mach": mach, "alpha": alpha}, fields={"p": pressure})
-
-with gamut.open("sweep.gamut") as study:
-    fast = study.select("mach > 0.7")
-    p = study.get_field("p", rows=fast)                 # runs x nodes, in Pa
+with gamut.open("cylinder.gamut") as study:
+    cp = study.get_field("cp", nodes=[12])                 # runs x nodes
 ```
 
-## What it gives you
+MATLAB
 
-- **One file per study.** Runs, inputs, results, mesh and fields together,
-  compressed, appended to one run at a time as a study grows.
-- **Reads by part.** One run, a region of every run, or one node across
-  thousands of runs, each one call that returns only what was asked for.
-- **Meaning that travels with the numbers.** Units on every value, checked;
-  which runs failed; which rows share a geometry or belong to one transient
-  run; uncertainty and gradients beside the values they describe.
-- **Models in the same terms as the data.** A fitted surrogate is a file of
-  the same shape with no rows, and evaluating it gives an ordinary study.
-- **The same answers in every language.** One C++ core behind Python,
-  MATLAB, Julia and C, checked against the specification by a shared corpus
-  of valid, broken and hostile files.
-- **Nothing locked in.** Underneath it is HDF5 laid out as netCDF-4, so
-  h5py, xarray and the netCDF tools read it without this package, and one
-  command turns a study back into VTK files.
+```matlab
+study = gamut.open('cylinder.gamut');
+cp = study.getField('cp', 'nodes', 13);                         % runs x nodes, from 1
+study.close();
+```
 
-On two real studies, one Gamut file was six times and two times smaller
-than the folder of VTK files each came as, and read one run, or the runs
-meeting a condition, in milliseconds. The [benchmarks](https://github.com/bijective-systems-org/gamut/blob/main/docs/benchmarks.md)
-compare it with VTK, HDF5, netCDF and Zarr, including where it is slower.
+Julia
+
+```julia
+cp = Gamut.open("cylinder.gamut") do study
+    Gamut.get_field(study, "cp"; nodes=[13])                 # runs × nodes, from 1
+end
+```
+
+C++
+
+```cpp
+auto study = gamut::open("cylinder.gamut");
+auto cp = study.get_field("cp", gamut::all, {12});    // runs x nodes
+```
+
+All four read the same values, which each complete example prints:
+
+```text
+cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
+```
+
+MATLAB and Julia count positions from 1, so node 12 in Python and C++ is
+node 13 in MATLAB and Julia.
+
+### Write
+
+Declare each name with its units and role, give the mesh once, then add
+runs as the solver finishes them:
+
+Python
+
+```python
+with gamut.create("cylinder.gamut", writer="example sweep", mesh="shared", per="fixed",
+                   coordinates={"units": "m", "axes": 2},
+                   parameters={"gamma": {"units": "m2 s-1", "role": "design"}},
+                   fields={"cp": {"units": "1", "at": "node"}}) as study:
+    study.set_mesh(points, cells)
+    for gamma in np.linspace(0.0, 3.5, 8):
+        study.add_run({"gamma": gamma}, fields={"cp": solve(gamma)})
+```
+
+MATLAB
+
+```matlab
+study = gamut.create('cylinder.gamut', 'writer', 'example sweep', 'mesh', 'shared', 'per', 'fixed', ...
+    'coordinates', struct('units', 'm', 'axes', 2), ...
+    'parameters', struct('gamma', struct('units', 'm2 s-1', 'role', 'design')), ...
+    'fields', struct('cp', struct('units', '1', 'at', 'node')));
+study.setMesh(points, cells);
+for gamma = linspace(0, 3.5, 8)
+    study.addRun(struct('gamma', gamma), 'fields', struct('cp', solve(gamma)));
+end
+study.close();
+```
+
+Julia
+
+```julia
+Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed",
+              coordinates=(units="m", axes=2),
+              parameters=Dict("gamma" => (units="m2 s-1", role="design")),
+              fields=Dict("cp" => (units="1", at="node"))) do study
+    Gamut.set_mesh!(study; points, cells)
+    for gamma in range(0, 3.5; length=8)
+        Gamut.add_run!(study, Dict("gamma" => gamma); fields=Dict("cp" => solve(gamma)))
+    end
+end
+```
+
+C++
+
+```cpp
+auto study = gamut::create("cylinder.gamut", "example sweep", "shared", "fixed");
+study.declare_coordinates("m", 2);
+study.declare_parameter("gamma", "design", "m2 s-1");
+study.declare_field("cp", "node", "1");
+study.set_mesh(points, cells);
+for (double gamma = 0.0; gamma < 3.75; gamma += 0.5)
+  study.add_run({{"gamma", gamma}}, {{"cp", solve(gamma)}});
+study.close();
+```
+
+### Add runs
+
+Reopen the file and add to it, from any of the four:
+
+Python
+
+```python
+with gamut.open("cylinder.gamut", mode="a") as study:
+    study.add_run({"gamma": 4.0}, fields={"cp": solve(4.0)})
+```
+
+MATLAB
+
+```matlab
+study = gamut.open('cylinder.gamut', 'mode', 'a');
+study.addRun(struct('gamma', 4), 'fields', struct('cp', solve(4)));
+study.close();
+```
+
+Julia
+
+```julia
+Gamut.open("cylinder.gamut"; mode="a") do study
+    Gamut.add_run!(study, Dict("gamma" => 4.0); fields=Dict("cp" => solve(4.0)))
+end
+```
+
+C++
+
+```cpp
+auto study = gamut::open("cylinder.gamut", "a");
+study.add_run({{"gamma", 4.0}}, {{"cp", solve(4.0)}});
+study.close();
+```
+
+## What you can do with it
+
+| | |
+|---|---|
+| Use one file everywhere | Python, MATLAB, Julia, C++ and C call one core, so a query returns the same values in each, and each reads what another wrote. |
+| Read only what you need | Choose runs by condition (`mach > 0.7 and status == converged`) and nodes by zone. On a shared mesh, one region of every run or one node across thousands of runs is a single read, and Python can convert values to the units you ask for ([reading parts](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/08-reading-parts.md)). |
+| Train models on it | Each field on a shared mesh is one block of runs × nodes (or cells). Labels record status, fidelity or solver, a split says which rows are for training and which for testing, and a file can name the group a fair test must hold out whole. Standard deviations, quantiles and derivatives are stored beside the results they describe ([run tables](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/01-run-tables.md), [uncertainty](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/06-uncertainty-and-gradients.md)). |
+| Share fitted models | A model is a file in the same format with no runs and no code inside. Evaluating it on new inputs gives an ordinary study; a model type of your own is registered by the software that defines it ([models](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/07-models.md)). |
+| Hold tables, families and time series | A table of runs with no mesh, one mesh for every run, one geometry per member of a family of shapes on one topology, a mesh per run, or transient runs with a row per saved step ([families](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/03-geometry-families.md), [time series](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/05-time-series.md)). |
+| Check what you receive | Writers require units on parameters, results, constants and coordinates, and `gamut validate` checks the 34 numbered rules of the [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md). A corpus of 64 valid, broken and hostile files runs in CI through the Python, MATLAB and Julia libraries and the C interface under them, and readers check sizes before allocating memory and never follow links ([files from outside](https://github.com/bijective-systems-org/gamut/blob/main/docs/security.md)). |
+
+## Performance
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/bench-summary.svg" alt="Size on disk and three read times for one study stored as Gamut, HDF5 with a group per run, netCDF-4, VTKHDF, Zarr, a NumPy file per run, uncompressed NumPy arrays and VTK files." width="760">
+</p>
+
+Gamut is about the size of netCDF-4 and Zarr, a little smaller than VTKHDF
+and HDF5 written a run at a time, and a sixth of the VTK files. Choosing
+runs by condition and reading a result of each takes about a millisecond,
+as fast as a Parquet file of the run table alone. Opening a file costs
+Gamut about 0.9 ms, so HDF5 and VTKHDF read straight with h5py fetch one
+small run faster, and uncompressed NumPy arrays, at 2.3 times the size,
+read fastest of all. Gamut's chunks are laid out for reading whole runs,
+so one node across every run takes 127 ms, slower than Zarr or netCDF-4.
+HDF5 decompresses on one core; with threads turned on, Gamut fetches the
+compressed chunks of a whole-run or contiguous read through HDF5 and
+decompresses them in parallel, and four threads bring that read to 39 ms.
+On the AirfRANS study queried in the picture at the top, with meshes of
+about 176,000 nodes, one run reads in 15 ms against 124 ms from its VTK file.
+
+<sub>Apple M3, 8 GB, macOS 27, files in the operating system's cache; medians of five reads, each opening the file. The [benchmarks page](https://github.com/bijective-systems-org/gamut/blob/main/docs/benchmarks.md) has every number, the method and the scripts to repeat it.</sub>
 
 ## Install
 
-```bash
-pip install gamut-format            # Python 3.10 or later; wheels for macOS, Linux and Windows
-pip install "gamut-format[vtk]"     # with VTK import and export
-```
+| Language | Install |
+|---|---|
+| Python 3.10 or later | `pip install gamut-format` |
+| MATLAB | `build_mex(core)` once in the `matlab` folder of a checkout |
+| Julia 1.9 or later | `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia")` |
+| C++ and C | CMake build and install, then `find_package(gamut)`; include `gamut/gamut.hpp` (C++17) or `gamut/gamut.h` (C) |
 
-Until version 1 is on PyPI, install from a checkout with `pip install .`
-instead. MATLAB, Julia and C or C++: see
-[installing](https://github.com/bijective-systems-org/gamut/blob/main/docs/install.md).
+The Python wheels for macOS, Linux and Windows contain the core with HDF5
+linked in. MATLAB and Julia use the same core: the wheel's
+(`gamut.library_path()` prints where it is) or one built with CMake.
+Until version 1 is on PyPI, run `pip install .` in a checkout.
+[Installing](https://github.com/bijective-systems-org/gamut/blob/main/docs/install.md) has the details for each language.
 
-## Where next
+## Documentation
 
-- [**Start here**](https://github.com/bijective-systems-org/gamut/blob/main/docs/start-here.md): the first ten minutes, the first day,
-  the first week.
-- [**Guide**](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/README.md): one page per concept, each with a
-  script you can run.
-- [**Specification**](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md): the format itself, for anyone writing
-  another implementation.
-- [**How it compares**](https://github.com/bijective-systems-org/gamut/blob/main/docs/comparison.md) with VTK, CGNS, Exodus,
-  netCDF-CF and Zarr.
+The [guide](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/README.md) has one short page per concept, each
+running one script from `examples/`. The
+[specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md) defines the format for anyone writing another
+implementation, and [how it compares](https://github.com/bijective-systems-org/gamut/blob/main/docs/comparison.md) sets Gamut
+beside VTK, CGNS, Exodus, netCDF-CF and Zarr.
 
-## Status
-
-Version 1 of the format (`gamut/1`) is specified and implemented: the C++
-core, Python, MATLAB and Julia, the validator, the command line and VTK
-conversion. It is not yet released on PyPI; until it is, install from a
-checkout with `pip install .` (see [installing](https://github.com/bijective-systems-org/gamut/blob/main/docs/install.md)).
+Before version 1 the format was called mestra. Its files (`mestra/0`) are
+refused with their version named; its 0.1 releases stay on PyPI under that
+name.
 
 ## License
 

@@ -18,7 +18,7 @@
 #include "sha256.hpp"
 #include "units.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 namespace {
@@ -1857,4 +1857,4 @@ void Writer::close() {
 }
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core

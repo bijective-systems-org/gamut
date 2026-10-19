@@ -1,6 +1,6 @@
 #include "evaluate.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string& out_path) {
@@ -66,4 +66,4 @@ std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string&
 }
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core

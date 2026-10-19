@@ -34,15 +34,15 @@ template <class F>
 std::string raises(F f) {
   try {
     f();
-  } catch (const gamut::Error& e) {
+  } catch (const gamut_core::Error& e) {
     return e.rule().empty() ? std::string("error") : e.rule();
   }
   return std::string();
 }
 
-using gamut::DType;
-using gamut::Selection;
-using gamut::internal::File;
+using gamut_core::DType;
+using gamut_core::Selection;
+using gamut_core::internal::File;
 
 void test_selection() {
   CHECK(Selection::all().count(5, "x") == 5);
@@ -63,10 +63,10 @@ void test_selection() {
 void test_units() {
   for (const char* ok : {"Pa", "m s-1", "W m-2", "1", "kg m-3", "degree",
                          "m2", "s^0.5", "(m s-1)2", "days since 2000-01-01"}) {
-    CHECK(gamut::units_parse(ok));
+    CHECK(gamut_core::units_parse(ok));
   }
   for (const char* bad : {"", " ", "m//s", "m+s", "m\ts"}) {
-    CHECK(!gamut::units_parse(bad));
+    CHECK(!gamut_core::units_parse(bad));
   }
 }
 
@@ -82,20 +82,20 @@ void test_sha256_support_id_example() {
   const std::int64_t conn[] = {0, 1, 4, 3, 1, 2, 5, 4};
   bytes.append(reinterpret_cast<const char*>(conn), sizeof conn);
   CHECK(bytes.size() == 98);
-  CHECK(gamut::sha256_hex(bytes) ==
+  CHECK(gamut_core::sha256_hex(bytes) ==
         "96df395d80ef548444562292de441525ba0b5c8ad00a8dadff19a19c943936c7");
 }
 
 void test_names() {
-  using gamut::internal::legal_netcdf_name;
+  using gamut_core::internal::legal_netcdf_name;
   CHECK(legal_netcdf_name("mach"));
   CHECK(legal_netcdf_name("velocity_x"));
   CHECK(legal_netcdf_name("_hidden"));
   CHECK(!legal_netcdf_name(""));
   CHECK(!legal_netcdf_name("a/b"));
   CHECK(!legal_netcdf_name(" a"));
-  CHECK(gamut::internal::reserved_name("gamut_x"));
-  CHECK(gamut::internal::iso8601_utc("2026-10-17T00:00:00Z"));
+  CHECK(gamut_core::internal::reserved_name("gamut_x"));
+  CHECK(gamut_core::internal::iso8601_utc("2026-10-17T00:00:00Z"));
 }
 
 void test_capi_basics() {
@@ -110,7 +110,7 @@ void test_h5_roundtrip() {
     f.make_scale("/row_scale", 0, true);
     // A float32 block of 4 rows x 5 nodes, chunked and compressed.
     f.create_dataset("/g/p", DType::Float32, 0, {4, 5},
-                     {H5S_UNLIMITED, 5}, {2, 5}, gamut::default_pipeline());
+                     {H5S_UNLIMITED, 5}, {2, 5}, gamut_core::default_pipeline());
     std::vector<float> p(20);
     for (int i = 0; i < 20; ++i) p[static_cast<std::size_t>(i)] = static_cast<float>(i) * 0.5f;
     f.write("/g/p", DType::Float32, {0, 0}, {4, 5}, p.data());
@@ -127,9 +127,9 @@ void test_h5_roundtrip() {
     const double mach[] = {0.5, 0.6, 0.7};
     f.write("/mach", DType::Float64, {0}, {3}, mach);
     f.attach_scale("/mach", "/row", 0);
-    f.write_attr("/mach", "units", gamut::AttrValue::text("1"));
-    f.write_attr("/mach", "lower", gamut::AttrValue::real(0.5));
-    f.write_attr("/", "n", gamut::AttrValue::integer(7));
+    f.write_attr("/mach", "units", gamut_core::AttrValue::text("1"));
+    f.write_attr("/mach", "lower", gamut_core::AttrValue::real(0.5));
+    f.write_attr("/", "n", gamut_core::AttrValue::integer(7));
     f.create_dataset("/categories/status", DType::String, 9, {2}, {H5S_UNLIMITED},
                      {64}, {});
     f.write_strings("/categories/status", 0, {"converged", "failed"});
@@ -161,7 +161,7 @@ void test_h5_roundtrip() {
         info.scales[0][0] == "row");
   const auto pinfo = f.dataset_info("/g/p");
   CHECK(pinfo.chunked && pinfo.chunk[0] == 2);
-  CHECK(gamut::internal::pipeline_of(pinfo) == gamut::default_pipeline());
+  CHECK(gamut_core::internal::pipeline_of(pinfo) == gamut_core::default_pipeline());
   CHECK(pinfo.scales[1].size() == 1 && pinfo.scales[1][0] == "node_scale");
   CHECK(f.dataset_info("/row").is_scale);
   const auto sinfo = f.dataset_info("/node_scale");
@@ -169,7 +169,7 @@ void test_h5_roundtrip() {
   bool saw_units = false;
   for (const auto& a : f.attributes("/mach")) {
     if (a.name == "units") saw_units = a.value.as_text() == "1" &&
-                                       gamut::internal::is_spec_string(a.type);
+                                       gamut_core::internal::is_spec_string(a.type);
   }
   CHECK(saw_units);
   std::remove(path.c_str());

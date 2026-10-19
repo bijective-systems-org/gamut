@@ -15,7 +15,7 @@
 #include "types.hpp"
 #include "value.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 // A typed column of values: `count` elements of `dtype`, packed.
@@ -185,6 +185,6 @@ std::string new_uuid();
 std::string utc_now();
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_WRITER_HPP

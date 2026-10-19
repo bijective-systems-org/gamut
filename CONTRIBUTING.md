@@ -1,8 +1,8 @@
 # Contributing
 
-The [specification](SPEC.md) and the [corpus](corpus) define gamut. The
-C++ core in `src/` implements them once; Python, MATLAB and Julia are thin
-layers over its C interface. A change of behaviour starts from the
+The [specification](SPEC.md) and the [corpus](corpus) define Gamut. The
+C++ core in `src/` implements them once; Python, MATLAB, Julia and the C++
+header are thin layers over its C interface. A change of behaviour starts from the
 specification and the corpus, never from one language.
 
 ## A bug
@@ -36,12 +36,13 @@ later (or `tools/build_deps.sh` and `-DGAMUT_STATIC_HDF5=ON`, as in
 cmake -S . -B build -DHDF5_ROOT=/path/to/hdf5
 cmake --build build -j2
 ./build/core_unit_tests && ./build/core_writer_reader_tests
+(cd build && ./header_tests)
 ```
 
 Python finds the core in `build/` when run from the checkout:
 
 ```bash
-pip install numpy pytest h5py pint pyvista pandas
+pip install numpy pytest h5py pint xarray netCDF4 pyvista pandas
 cd python && python -m pytest -q tests
 ```
 

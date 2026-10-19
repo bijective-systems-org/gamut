@@ -1,4 +1,4 @@
-"""Draw Gamut's logo (logo.svg, and logo-dark.svg for dark pages) and mark (mark.svg).
+"""Draw Gamut's logo (logo.svg; logo-dark.svg for dark pages; logo-any.svg for both) and mark (mark.svg).
 
 The mark is two sheets of one mesh, one behind the other: every run of a
 study lies on the same mesh, so a study is a stack of the same meshed sheet.
@@ -25,6 +25,7 @@ from fontTools.ttLib import TTFont
 HERE = Path(__file__).resolve().parent
 FRONT, BACK = "#0070DC", "#74BFF8"
 INK, INK_DARK = "#1F2328", "#E6EDF3"
+INK_ANY = "#768390"         # 3.9:1 on white, 4.9:1 on GitHub's dark page
 STROKE, GAP = 3.4, 2.6        # line width, and the clearance around the front sheet
 STEPS = 48                    # points along each wavy edge
 
@@ -89,10 +90,11 @@ def main(inter: Path) -> int:
     rest, rest_width = outlines("AMUT", heavy, 36, x0 + g_width + 0.5, baseline, tracking=0.01)
     width = math.ceil(x0 + g_width + 0.5 + rest_width + 2)
     note = "<!-- Drawn by make_logo.py; see its docstring for what the mark means. -->"
-    # Two fixed colourings rather than one that follows the system's colour scheme:
+    # Fixed colourings rather than one that follows the system's colour scheme:
     # GitHub's theme can differ from the system's, and the README's <picture> follows
-    # GitHub's.
-    for name, ink in (("logo.svg", INK), ("logo-dark.svg", INK_DARK)):
+    # GitHub's. Where <picture> is ignored (PyPI, some apps) the README falls back to
+    # logo-any.svg, whose grey reads on light and dark pages alike.
+    for name, ink in (("logo.svg", INK), ("logo-dark.svg", INK_DARK), ("logo-any.svg", INK_ANY)):
         (HERE / name).write_text(
             f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {size:g}" '
             f'width="{width}" height="{size:g}" role="img" aria-labelledby="gamut-logo">\n'
@@ -102,7 +104,7 @@ def main(inter: Path) -> int:
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {size:g} {size:g}" '
         f'width="{size:g}" height="{size:g}" role="img" aria-labelledby="gamut-mark">\n'
         f'  <title id="gamut-mark">Gamut</title>\n  {note}\n  {mark(size, "gamut-mark")}\n</svg>\n')
-    print(f"wrote logo.svg and logo-dark.svg ({width} x {size:g}) and mark.svg in {HERE}")
+    print(f"wrote logo.svg, logo-dark.svg and logo-any.svg ({width} x {size:g}) and mark.svg in {HERE}")
     return 0
 
 

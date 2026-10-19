@@ -52,7 +52,11 @@ def machine() -> dict[str, Any]:
         try:
             packages[name] = metadata.version("gamut-format" if name == "gamut" else name)
         except metadata.PackageNotFoundError:
-            pass
+            if name == "gamut":                # run from a checkout, not installed
+                try:
+                    packages[name] = __import__("gamut").__version__
+                except ImportError:
+                    pass
     info["packages"] = packages
     here = os.path.dirname(os.path.abspath(__file__))
     commit = subprocess.run(["git", "-C", here, "rev-parse", "--short", "HEAD"],

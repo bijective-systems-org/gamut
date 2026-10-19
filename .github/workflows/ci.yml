@@ -1,12 +1,13 @@
 name: ci
 
 # What this repository keeps true, on every push to main and every pull
-# request: the core and its tests, also under the address and undefined-
-# behaviour sanitizers; only the C interface leaving the library; the wheel
-# and the Python suite on it (which runs the examples and holds the guide to
-# them); the corpus from Python, Julia and MATLAB; and the core and the
-# wheel on macOS and Windows. Packages link HDF5 statically, so every job
-# builds the core that way, with tools/build_deps.sh.
+# request: the core and its tests, the C++ interface's among them, also
+# under the address and undefined-behaviour sanitizers; only the C
+# interface leaving the library; the wheel and the Python suite on it
+# (which runs the examples and holds the guide to them); the corpus from
+# Python, Julia and MATLAB; and the core and the wheel on macOS and Windows.
+# Packages link HDF5 statically, so every job builds the core that way,
+# with tools/build_deps.sh.
 #
 # Every action is pinned to a full commit SHA with its tag beside it: a tag
 # can move and a SHA cannot. Nothing here uses a secret, and the only
@@ -63,6 +64,7 @@ jobs:
           cmake --build build -j2
           ./build/core_unit_tests
           ./build/core_writer_reader_tests
+          (cd build && ./header_tests)
 
       - name: Only the C interface leaves the library
         run: |
@@ -78,6 +80,7 @@ jobs:
           cmake --build build-asan -j2
           ./build-asan/core_unit_tests
           ./build-asan/core_writer_reader_tests
+          (cd build-asan && ./header_tests)
 
       - name: The wheel
         run: |
@@ -193,6 +196,7 @@ jobs:
           cmake --build build -j3
           ./build/core_unit_tests
           ./build/core_writer_reader_tests
+          (cd build && ./header_tests)
 
       - name: The wheel and the Python suite on it
         run: |
@@ -229,6 +233,7 @@ jobs:
           cmake --build build --config Release --parallel 2
           build/Release/core_unit_tests
           build/Release/core_writer_reader_tests
+          (cd build/Release && ./header_tests)
 
       - name: The wheel and the Python suite on it
         run: |

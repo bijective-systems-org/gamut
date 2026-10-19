@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <cstring>
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 bool legal_netcdf_name(const std::string& name) {
@@ -149,4 +149,4 @@ std::vector<std::string> split_spaces(const std::string& s) {
 }
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core

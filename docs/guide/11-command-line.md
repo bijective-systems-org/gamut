@@ -26,8 +26,9 @@ no errors, 3 warnings
   W3 cl: 1 value is missing or not finite, the first at row 17
 ```
 
-`validate` checks every rule of the [specification](../../SPEC.md) and
-names each one a file breaks. Errors make a file invalid; warnings say
+`validate` checks the rules of the [specification](../../SPEC.md) and
+names each one it finds broken, within the [limits](../security.md#the-limits)
+of what it reads. Errors make a file invalid; warnings say
 what a reader should know, such as runs that failed.
 
 ## Taking data out
@@ -87,7 +88,7 @@ a mesh file (`.npz`), and each run's line names a `.npy` of its values;
 `gamut build --example` prints a complete document with the layout of
 both explained.
 
-## For scripts and agents
+## For scripts
 
 - `--json` makes any command print one JSON document instead, of a shape
   that stays the same across versions; `gamut get` still writes its data

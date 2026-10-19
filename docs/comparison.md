@@ -1,10 +1,10 @@
 # How Gamut compares
 
-Gamut is for one thing: a parametric study, meaning many runs of one
-simulation over its inputs, and the models fitted to it. Most formats it
-meets were built for something else, and remain the right choice for it.
-This page says what each is for, when to keep it, and how a study moves
-between it and gamut.
+Gamut holds a parametric study, meaning many runs of one simulation over
+its inputs, and the models fitted to it. Most of the formats below were
+built for something else and remain the right choice for it. This page
+says what each is for, when to keep it, and how a study moves between it
+and Gamut.
 
 ## Beside each format
 
@@ -24,30 +24,29 @@ several of these on real studies.
 
 ## What Gamut adds
 
-- **One file per study**, holding the run table, the mesh and the fields,
-  with units, roles and statuses written down rather than kept in a script.
-- **Correspondence as structure.** On a shared mesh, node k is the same
-  point in every run, so a field is one block of runs × nodes and a model
-  can be trained on it directly.
-- **Reads across runs**: one run, one region of every run, or one node
-  across thousands of runs.
-- **A validator** that names every rule a file breaks, and a corpus of
-  valid, broken and hostile files that every implementation is held to.
-- **Models in the same terms as the data**, evaluated into an ordinary
-  study.
+A study is one file, holding the run table, the mesh and the fields, with
+units, roles and statuses written in the file rather than kept in a
+script. On a shared mesh, node k is the same point in every run, so a
+field is one block of runs × nodes: one run, one region of every run, or
+one node across thousands of runs is a single read, and a model can be
+trained on the block directly. A validator names the rules a file
+breaks, and a corpus of valid, broken and hostile files holds every
+implementation to the specification. A fitted model is stored in the same
+terms as the data, and evaluating it produces an ordinary study.
 
 ## What it does not do
 
-- **It is not a solver's file.** It holds results and the inputs that
-  produced them, not solver state; keep the solver's own files to restart.
-- **It is one file, read locally.** There is no object-store or server
-  access; very large studies are read a part at a time.
-- **Version 1 leaves out** polyhedral cells (export them decomposed),
-  declared tensors (store components), and fields as model inputs. The
-  [specification](../SPEC.md#18-additions-planned-within-version-1) lists
-  what is planned within version 1.
-- **Unit conversion on reads** is Python's alone, through pint; MATLAB,
-  Julia and C return values in the units they were stored in.
+Gamut is not a solver's file. It holds results and the inputs that
+produced them, not solver state, so keep the solver's own files for
+restarts. A study is one file read locally; there is no object-store or
+server access, and a very large study is read a part at a time.
+
+Version 1 leaves out polyhedral cells (export them decomposed), declared
+tensors (store their components) and fields as model inputs. The
+[specification](../SPEC.md#18-additions-planned-within-version-1) lists
+what is planned within version 1. Unit conversion on reads is Python's
+alone, through pint; MATLAB, Julia and C return values in the units they
+were stored in.
 
 ## Moving between them
 

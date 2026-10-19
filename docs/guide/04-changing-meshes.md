@@ -49,7 +49,7 @@ row 2: 2304 nodes, 2208 cells, lowest cell cp -2.700
 Reads take one run at a time. The lowest cell value approaches the exact
 −3 as the cells next to the wall shrink.
 
-## Worth knowing
+## Notes
 
 - Nothing in a changing-mesh file claims that node k of one run relates to
   node k of another, so reads across runs (one node in every run, a block

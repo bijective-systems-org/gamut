@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 // Spec section 9.3: not empty, no "/" or NUL, no leading or trailing
@@ -39,6 +39,6 @@ std::string basename(const std::string& path);
 std::vector<std::string> split_spaces(const std::string& s);
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_NAMES_HPP

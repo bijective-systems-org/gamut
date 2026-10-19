@@ -9,7 +9,7 @@
 #include "h5.hpp"
 #include "value.hpp"
 
-namespace gamut {
+namespace gamut_core {
 namespace internal {
 
 // Reads the dictionary on the group `path`.  At the top level the group's
@@ -28,6 +28,6 @@ void write_dict_group(File& f, const std::string& path, const Dict& d, bool top_
                       int depth = 0);
 
 }  // namespace internal
-}  // namespace gamut
+}  // namespace gamut_core
 
 #endif  // GAMUT_CORE_CODEC_HPP
