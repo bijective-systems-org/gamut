@@ -61,6 +61,7 @@ from 0 in Python. Arrays come back with the axes in their logical order,
 | `study.get_field("p", rows=r, nodes=n)` | `Gamut.get_field(study, "p"; rows=r, nodes=n)` |
 | `study.select("mach > 0.7")` | `Gamut.select(study, "mach > 0.7")`, positions from 1 |
 | `study.row_count`, `study.type` | `study.row_count`, `study.type` |
+| `study.model_numbers("fit")` | `Gamut.model_numbers(study, "fit")` |
 | `gamut.append`, `extract`, `write_copy`, `validate` | `Gamut.append!`, `extract`, `write_copy`, `validate` |
 
 ## Notes

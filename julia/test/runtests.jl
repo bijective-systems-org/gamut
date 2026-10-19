@@ -199,5 +199,7 @@ mktempdir() do tmp
         path = out.path
         close(out)
         @test !isfile(path)
+        numbers = Gamut.open(s -> Gamut.model_numbers(s, "fit"), mp)
+        @test numbers["lower"] == [0.0] && numbers["columns"] == ["alpha"]
     end
 end

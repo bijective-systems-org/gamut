@@ -56,7 +56,7 @@ struct gamut_tree {
 
 namespace {
 
-const char kVersion[] = "1.0.0";
+const char kVersion[] = "1.1.0";
 const char kFormat[] = "gamut/1";
 
 void copy_into(char* dst, std::size_t size, const std::string& src) {

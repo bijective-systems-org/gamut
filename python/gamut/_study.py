@@ -324,6 +324,18 @@ class Study:
             cached = self._described[key] = dict(zip(keys, values))
         return dict(cached)
 
+    def model_numbers(self, id: str) -> dict[str, Any]:
+        """A model's stored numbers (spec section 12), as the dictionary its
+        `save` gave; its type need not be registered."""
+        self._need_reader()
+        from ._models import _from_tree
+        handle = ctypes.c_void_p()
+        call("gamut_model_numbers", self._handle(), b(id), ctypes.byref(handle))
+        try:
+            return _from_tree(handle)
+        finally:
+            _lib._lib.gamut_tree_free(handle)
+
     def _get(self, name: str, rows: Any = None, sites: Any = None,
              dtype: Any = np.float64, squeeze_row: bool = True) -> np.ndarray:
         self._need_reader()

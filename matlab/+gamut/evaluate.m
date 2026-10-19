@@ -122,7 +122,7 @@ for k = 1:numel(ids)
         error('gamut:error', ['the model %s is of type ''%s'', whose software is not ' ...
             'registered here (gamut.registerModelType)'], id, dm.type);
     end
-    numbers = gamut_mex('model_numbers', m.Handle, id);
+    numbers = m.modelNumbers(id);
     model = feval([cls '.load'], numbers);
     reads = strsplit(strtrim(dm.inputs), ' ');
     in = struct();

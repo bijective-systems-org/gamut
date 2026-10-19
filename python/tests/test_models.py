@@ -157,3 +157,67 @@ def test_refusals(tmp_path):
                                  scalars={"y": {"units": "1", "model": "n", "output": "y"}}) as f:
             f.add_model("n", gamut.Nearest(["x"], [0.0], [2.0], [[0.0]], {"y": [1.0]}), inputs=["x"])
     assert e.value.rule == "E17"
+
+
+@gamut.register_model_type
+class Stretch:
+    """A model of the geometry itself: a triangle stretched along x by s."""
+
+    type = "tests.stretch"
+
+    def __init__(self, base):
+        self.base = np.asarray(base, dtype=float)
+
+    @classmethod
+    def load(cls, numbers):
+        return cls(numbers["base"])
+
+    def save(self):
+        return {"base": self.base}
+
+    def call(self, inputs, wanted):
+        s = np.asarray(inputs["s"], dtype=float)
+        pts = np.repeat(self.base[None], len(s), axis=0)
+        pts[:, :, 0] *= s[:, None]
+        return {"coordinates": {"values": pts}}
+
+
+def test_a_model_computes_the_coordinates(tmp_path):
+    mp = str(tmp_path / "shape.gamut")
+    base = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    with gamut.create_model(mp, writer="tests", mesh="shared", per="run",
+                             coordinates={"units": "m", "axes": 3, "model": "shape",
+                                          "output": "coordinates"},
+                             parameters={"s": {"units": "1", "lower": 1.0, "upper": 3.0}}) as f:
+        f.set_mesh(cells=([5], [0, 3], [0, 1, 2]), n_nodes=3)
+        f.add_model("shape", Stretch(base), inputs=["s"])
+    assert gamut.validate(mp).findings == ()
+    with gamut.open(mp) as f:
+        d = f.describe("coordinates")
+        assert (d["model"], d["output"]) == ("shape", "coordinates")
+    # A copy keeps which model computes the coordinates.
+    cp = str(tmp_path / "copy.gamut")
+    gamut.write_copy(mp, cp)
+    with gamut.open(cp) as f:
+        assert f.describe("coordinates")["model"] == "shape"
+    with gamut.evaluate(mp, {"s": [1.0, 2.5]}) as pred:
+        np.testing.assert_array_equal(pred.get_points(0), base)
+        np.testing.assert_array_equal(pred.get_points(1)[:, 0], [0.0, 2.5, 0.0])
+
+
+def test_model_numbers_read_back_without_the_type_registered(tmp_path):
+    mp = str(tmp_path / "line.gamut")
+    with gamut.create_model(mp, writer="tests",
+                             parameters={"x": {"units": "m", "lower": 0.0, "upper": 10.0}},
+                             scalars={"y": {"units": "1", "model": "line", "output": "y"}}) as f:
+        f.add_model("line", Line(2.0, 1.0, 0.1), inputs=["x"])
+    with gamut.open(mp) as f:
+        assert f.model_numbers("line") == Line(2.0, 1.0, 0.1).save()
+        with pytest.raises(gamut.GamutError):
+            f.model_numbers("missing")
+    registered = gamut._models._REGISTRY.pop("tests.line")
+    try:
+        with gamut.open(mp) as f:
+            assert f.model_numbers("line")["a"] == 2.0
+    finally:
+        gamut._models._REGISTRY["tests.line"] = registered

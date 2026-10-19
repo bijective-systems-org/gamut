@@ -57,7 +57,7 @@ over that interface; a validator; a command line; VTK conversion.
 - **HDF5 linked in.** Packages link HDF5 statically and export only the
   `gamut_*` symbols: on Linux a core linked to a shared HDF5 crashes beside a
   second HDF5 in the process (h5py's, MATLAB's).
-- **Versions.** The package version (`1.0.0`) is not the format version
+- **Versions.** The package version (`1.1.0`) is not the format version
   (`gamut/1`); a reader refuses another major format version.
 - **Documentation is tested.** Guide and README code blocks are lines of the
   examples and output blocks what they print; benchmark numbers come from

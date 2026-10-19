@@ -111,7 +111,7 @@ tmpPath = out.Path;
 out.close();
 ok(~isfile(tmpPath), 'temporary evaluated file removed on close');
 r = gamut.open(mp);
-numbers = gamut_mex('model_numbers', r.Handle, 'fit');
+numbers = r.modelNumbers('fit');
 r.close();
 back = gamut.Nearest.load(numbers);
 ok(isequal(back.X, [0; 5; 10]) && isequal(back.Lower, 0), 'nearest numbers read back');
