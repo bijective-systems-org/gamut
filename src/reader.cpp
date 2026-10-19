@@ -66,10 +66,9 @@ Relation relation_of(const Attrs& a) {
   return r;
 }
 
-Result result_from(const File& f, const std::string& h5path,
-                   const std::string& name, const std::string& where,
-                   bool is_group) {
-  const Attrs a{f.attributes(h5path)};
+// A result from its object's attributes and, for a dataset, its type.
+Result result_from(const Attrs& a, const DsetInfo& info, const std::string& name,
+                   const std::string& where) {
   Result r;
   r.name = name;
   r.where = where;
@@ -83,10 +82,8 @@ Result result_from(const File& f, const std::string& h5path,
   r.output = a.text("output");
   const auto bits = a.integer("_QuantizeBitRoundNumberOfSignificantBits");
   if (bits) r.round_bits = static_cast<int>(*bits);
-  if (!is_group) {
-    DType t;
-    if (dtype_of(f.dataset_info(h5path, false).type, &t)) r.dtype = t;
-  }
+  DType t;
+  if (info.is_dataset && dtype_of(info.type, &t)) r.dtype = t;
   return r;
 }
 
@@ -107,7 +104,7 @@ Schema load_schema(const File& f) {
   s.generalisation_group = root.text("generalisation_group");
   s.trained_on = root.text("trained_on");
   s.evaluated_from = root.text("evaluated_from");
-  const DsetInfo row = f.dataset_info("/row", false);
+  const DsetInfo row = f.dataset_shape("/row");
   s.rows = row.is_dataset && row.shape.size() == 1
                ? static_cast<std::int64_t>(row.shape[0])
                : 0;
@@ -131,14 +128,16 @@ Schema load_schema(const File& f) {
     if (m.kind != LinkKind::Hard) continue;
     const std::string h5 = "/" + m.name;
     if (m.name == "row") continue;
-    const Attrs a{f.attributes(h5)};
+    // One open of each object gives its attributes and, for a dataset, its
+    // type and shape.
+    auto [raw, info] = f.inspect(h5);
+    const Attrs a{std::move(raw)};
     const std::string role = a.text("role");
     if (role.empty()) continue;
     if (m.is_group) {
-      if (role == "scalar") s.results.push_back(result_from(f, h5, m.name, "scalar", true));
+      if (role == "scalar") s.results.push_back(result_from(a, info, m.name, "scalar"));
       continue;
     }
-    const DsetInfo info = f.dataset_info(h5, false);
     DType t = DType::Float64;
     const bool typed = dtype_of(info.type, &t);
     // An unknown role is ignored (spec section 17); the validator reports it.
@@ -160,7 +159,7 @@ Schema load_schema(const File& f) {
       if (typed) l.dtype = t;
       s.labels.push_back(l);
     } else if (role == "scalar") {
-      s.results.push_back(result_from(f, h5, m.name, "scalar", false));
+      s.results.push_back(result_from(a, info, m.name, "scalar"));
     } else if (role == "constant") {
       Constant c;
       c.name = m.name;
@@ -191,26 +190,23 @@ Schema load_schema(const File& f) {
     mesh.per = ma.text("per");
     mesh.support_id = ma.text("support_id");
     auto length = [&](const std::string& p) -> std::int64_t {
-      const DsetInfo i = f.dataset_info(p, false);
+      const DsetInfo i = f.dataset_shape(p);
       return i.is_dataset && i.shape.size() == 1 ? static_cast<std::int64_t>(i.shape[0]) : 0;
     };
-    const DsetInfo coords = f.dataset_info("/mesh/coordinates", false);
-    const bool coords_group = !coords.is_dataset && f.is_group("/mesh/coordinates");
+    auto [coord_attrs, coords] = f.inspect("/mesh/coordinates");
+    const Attrs ca{std::move(coord_attrs)};
     if (coords.is_dataset) {
       DType t;
       if (dtype_of(coords.type, &t)) mesh.coordinate_dtype = t;
       if (!coords.shape.empty()) mesh.axes = static_cast<int>(coords.shape.back());
+    } else if (const auto ax = ca.integer("axes")) {
+      mesh.axes = static_cast<int>(*ax);
     }
-    if (coords.is_dataset || coords_group) {
-      // Coordinates a model computes (section 10.3) name it on the
-      // zero-length dataset that stands for them.
-      const Attrs ca{f.attributes("/mesh/coordinates")};
-      mesh.coordinate_model = ca.text("model");
-      mesh.coordinate_output = ca.text("output");
-      if (coords_group)
-        if (const auto ax = ca.integer("axes")) mesh.axes = static_cast<int>(*ax);
-    }
-    mesh.coordinate_units = Attrs{f.attributes("/mesh/coordinates")}.text("units");
+    // Coordinates a model computes (section 10.3) name it on the
+    // zero-length dataset that stands for them.
+    mesh.coordinate_model = ca.text("model");
+    mesh.coordinate_output = ca.text("output");
+    mesh.coordinate_units = ca.text("units");
     if (mesh.kind == "shared") {
       mesh.n_nodes = length("/mesh/node");
       mesh.n_cells = length("/mesh/cell");
@@ -221,7 +217,7 @@ Schema load_schema(const File& f) {
       }
     } else {
       mesh.n_instances = std::max<std::int64_t>(0, length("/mesh/instance_nodes") - 1);
-      const DsetInfo types = f.dataset_info("/mesh/cell_types", false);
+      const DsetInfo types = f.dataset_shape("/mesh/cell_types");
       mesh.n_nodes = coords.is_dataset && !coords.shape.empty()
                          ? static_cast<std::int64_t>(coords.shape[0])
                          : 0;
@@ -230,7 +226,7 @@ Schema load_schema(const File& f) {
                          : 0;
       mesh.has_cells = types.is_dataset ? 1 : 0;
     }
-    const DsetInfo conn = f.dataset_info("/mesh/cell_connectivity", false);
+    const DsetInfo conn = f.dataset_shape("/mesh/cell_connectivity");
     mesh.n_conn = conn.is_dataset && !conn.shape.empty()
                       ? static_cast<std::int64_t>(conn.shape[0])
                       : 0;
@@ -242,16 +238,18 @@ Schema load_schema(const File& f) {
         MeshLabel ml;
         ml.name = m.name;
         ml.where = where;
-        ml.category = Attrs{f.attributes(lg + "/" + m.name)}.text("category");
+        auto [raw, info] = f.inspect(lg + "/" + m.name);
+        ml.category = Attrs{std::move(raw)}.text("category");
         DType t;
-        if (dtype_of(f.dataset_info(lg + "/" + m.name, false).type, &t)) ml.dtype = t;
+        if (dtype_of(info.type, &t)) ml.dtype = t;
         mesh.labels.push_back(ml);
       }
       const std::string fg = std::string("/mesh/") + where + "_fields";
       for (const Member& m : f.members(fg)) {
         hard(m, fg);
         if (!m.is_dataset && !m.is_group) continue;
-        s.results.push_back(result_from(f, fg + "/" + m.name, m.name, where, m.is_group));
+        auto [raw, info] = f.inspect(fg + "/" + m.name);
+        s.results.push_back(result_from(Attrs{std::move(raw)}, info, m.name, where));
       }
     }
   }

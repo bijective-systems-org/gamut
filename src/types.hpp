@@ -13,7 +13,7 @@
 namespace gamut_core {
 
 // Every failure the core raises.  `rule` is the identifier of SPEC.md
-// section 16 when one applies (E1 ... E24, W1 ... W10) and empty when no
+// section 16 when one applies (E1 ... E24, W1 ... W11) and empty when no
 // rule covers the failure (a missing file, a wrong argument).  `path` is
 // a concept path (`node_fields/p`), never an HDF5 path, or empty.
 class Error : public std::runtime_error {

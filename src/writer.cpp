@@ -680,6 +680,7 @@ void Writer::declare_coordinates(const std::string& units, DType dtype, int axes
        "coordinates computed by a model belong to a model file whose mesh is per run");
   need(!model_ || schema_.mesh.per == "fixed" || !model.empty(), "E16",
        "a model file's coordinates per run are computed by a model; name it");
+  need(model.empty() || !output.empty(), "E17", "coordinates a model computes name its output");
   need(!schema_.mesh.kind.empty(), "", "coordinates need a mesh");
   need(!schema_.mesh.set_done && !datasets_ready_, "",
        "the coordinates are declared before the mesh is set and before the "

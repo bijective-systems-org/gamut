@@ -458,6 +458,7 @@ RULES = {
     "E15_run_group": ("table", "E15", lambda f: sattr(f["t"], "run_group", "status")),
     "E16_bounds": ("table", "E16", lambda f: fattr(f["mach"], "lower", 2.0)),
     "E16_model_attr": ("table", "E16", lambda f: sattr(f["cl"], "model", "m")),
+    "E16_coordinate_model": ("shared_fixed", "E16", lambda f: sattr(f["mesh/coordinates"], "model", "m")),
     "E17_input": ("model_nearest", "E17", lambda f: sattr(f["models/fit"], "inputs", "alpha mach beta")),
     "E17_nearest_bounds": ("model_nearest", "E17", lambda f: f["models/fit/upper"].__setitem__(0, 9.0)),
     "E18_codec": ("model_nearest", "E18", lambda f: f["models/fit"].create_dataset("bad", data=np.zeros(2, "<f4"))),

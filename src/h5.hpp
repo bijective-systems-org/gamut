@@ -147,6 +147,11 @@ class File {
   std::vector<RawAttr> attributes(const std::string& path) const;
   // `scales = false` skips the dimension-scale lookups, for reads.
   DsetInfo dataset_info(const std::string& path, bool scales = true) const;
+  // Only the type and the shape (with maxshape): what opening a file needs,
+  // without the storage settings dataset_info reads for the validator.
+  DsetInfo dataset_shape(const std::string& path) const;
+  // The attributes and dataset_shape together, opening the object once.
+  std::pair<std::vector<RawAttr>, DsetInfo> inspect(const std::string& path) const;
 
   // Reads the selection into `out`, converting to `mem`.  `sel` gives
   // one selection per leading axis; axes beyond it are read whole.

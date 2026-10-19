@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+The validator holds a mesh's computed coordinates to the writer's rules: a
+computing model only in a model file whose mesh is per run, which must
+name one (E16), and that model existing with its output named (E17). The
+writer now also refuses a computing model without an output. An array
+holding more values than the validator reads, 2²⁶, is now reported as
+unchecked (W11) rather than passed over in silence.
+
+Opening a file takes about a third less time (0.81 to 0.51 ms on the
+benchmarks' capsule study): the reader opens each object once, for its
+attributes, type and shape together, and leaves the storage settings to the
+validator.
+
 ## 1.1.0 (2026-10-19)
 
 A model file whose coordinates are computed by a model now evaluates. The
