@@ -1,12 +1,12 @@
-"""Draws docs/assets/hero.svg, the README's picture, from the AirfRANS study.
+"""Draws docs/assets/hero.svg, the README's picture: a query and what it returns.
 
     python docs/assets/make_hero.py AIRFRANS.gamut
 
 AIRFRANS.gamut is the 100-run subset of AirfRANS (Bonnet et al., NeurIPS
 2022; ODbL) that bench/airfrans.py fetches, turned into one file by
-`gamut-vtk import`. Four runs, spread over angle of attack, are read from
-it with gamut and rendered with PyVista: the flow speed around each
-airfoil, relative to the inflow, under the run's values from the run table.
+`gamut-vtk import`. The picture is one select call, the rows it returns
+with their stored names and units, and for each row the pressure field
+gamut reads for that run, rendered with PyVista.
 """
 
 from __future__ import annotations
@@ -23,33 +23,49 @@ from PIL import Image
 import gamut
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SCALE = (0.4, 1.6)            # speed over inflow speed; white is the inflow
-VIEW = (0.55, 0.0, 0.32)      # centre x, centre y and half height, in chords
+QUERY = "angle_of_attack > 14"
+SCALE = (-3.0, 1.0)           # p / (0.5 inflow_speed^2)
+VIEW = (0.55, 0.0, 0.30)      # centre x, centre y and half height, in chords
 STYLE = """<style>
-    .ink { fill: #1F2328; } .soft { fill: #59636E; } .frame { fill: none; stroke: #D0D7DE; }
+    .ink { fill: #1F2328; } .soft { fill: #59636E; } .rule { stroke: #D0D7DE; } .str { fill: #0A3069; }
     .page { fill: #FFFFFF; }
     @media (prefers-color-scheme: dark) {
-      .page { fill: #0D1117; } .ink { fill: #E6EDF3; } .soft { fill: #9198A1; } .frame { stroke: #30363D; }
+      .page { fill: #0D1117; } .ink { fill: #E6EDF3; } .soft { fill: #9198A1; } .rule { stroke: #30363D; }
+      .str { fill: #A5D6FF; }
     }
     text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
     .h { font-weight: 600; }
   </style>"""
 
 
+def colour(v: np.ndarray) -> np.ndarray:
+    """RdBu_r split at 0: blue from SCALE[0] up to 0, red from 0 up to SCALE[1]."""
+    import matplotlib
+    lo, hi = SCALE
+    v = np.asarray(v, dtype=float)
+    position = np.where(v < 0, 0.5 * (v - lo) / -lo, 0.5 + 0.5 * v / hi)
+    return matplotlib.colormaps["RdBu_r"](np.clip(position, 0.0, 1.0))
+
+
+def colour_map():
+    from matplotlib.colors import ListedColormap
+    return ListedColormap(colour(np.linspace(SCALE[0], SCALE[1], 512)))
+
+
 def render(study, row: int, width: int, height: int) -> str:
-    """One run's speed field near the airfoil, as a JPEG data URI."""
+    """One run's pressure, over half the inflow speed squared, near the
+    airfoil, as a JPEG data URI."""
     points = study.get_points(row=row)
     types, offsets, connectivity = study.get_cells(row=row)
     cells = np.insert(connectivity, offsets[:-1], np.diff(offsets))
     xyz = points if points.shape[1] == 3 else np.c_[points, np.zeros(len(points))]
     grid = pv.UnstructuredGrid(cells, types, xyz)
     inflow = float(study.get_parameter("inflow_speed", rows=[row])[0])
-    speed = np.hypot(study.get_field("U_x", rows=[row]), study.get_field("U_y", rows=[row]))
-    grid.point_data["speed"] = speed.ravel() / inflow
+    grid.point_data["cp"] = study.get_field("p", rows=[row]).ravel() / (0.5 * inflow ** 2)
     plotter = pv.Plotter(off_screen=True, window_size=(width, height))
-    plotter.add_mesh(grid, scalars="speed", cmap="RdBu_r", clim=SCALE, lighting=False,
-                     show_scalar_bar=False)
+    plotter.add_mesh(grid, scalars="cp", cmap=colour_map(), clim=SCALE, lighting=False, show_scalar_bar=False)
     x, y, half = VIEW
     plotter.camera.position = (x, y, 5.0)
     plotter.camera.focal_point = (x, y, 0.0)
@@ -63,56 +79,56 @@ def render(study, row: int, width: int, height: int) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode()
 
 
-def colour_bar(x: float, y: float, width: float) -> list[str]:
-    import matplotlib
-    stops = "".join(f'<stop offset="{k / 10:.1f}" stop-color="{matplotlib.colors.to_hex(c)}"/>'
-                    for k, c in enumerate(matplotlib.colormaps["RdBu_r"](np.linspace(0, 1, 11))))
-    lo, hi = SCALE
-    return [f'<defs><linearGradient id="speed">{stops}</linearGradient></defs>',
-            f'<rect x="{x}" y="{y}" width="{width}" height="8" fill="url(#speed)"/>',
-            f'<text class="soft" x="{x}" y="{y + 22}">{lo}</text>',
-            f'<text class="soft" x="{x + width / 2}" y="{y + 22}" text-anchor="middle">1, the inflow</text>',
-            f'<text class="soft" x="{x + width}" y="{y + 22}" text-anchor="end">{hi}</text>',
-            f'<text class="soft" x="{x - 10}" y="{y + 8}" text-anchor="end">speed over inflow speed</text>']
-
-
 def main(path: str) -> None:
-    width, gap, top, caption = 760, 16, 52, 24
-    tile_w = (width - gap) / 2
-    tile_h = round(tile_w * VIEW[2] / (VIEW[2] * 2 * 1.136))   # the view's aspect, 2.27 : 1
+    import matplotlib
+    width, top, thumb_w = 760, 64, 250
+    thumb_h = round(thumb_w / 2.3)             # the view: 1.38 chords by 0.6
+    row_h = thumb_h + 12
+    columns = [("run", None, 0, "start"), ("angle_of_attack", "degree", 182, "end"),
+               ("inflow_speed", "m s-1", 300, "end"), ("naca_t", "1", 372, "end"), ("split", None, 400, "start")]
+    field_x = width - thumb_w
     with gamut.open(path) as study:
-        alpha = study.get_parameter("angle_of_attack")
-        order = np.argsort(alpha)
-        rows = [int(order[round(q * (len(order) - 1))]) for q in (0.03, 0.35, 0.65, 0.97)]
-        tiles = []
+        rows = [int(r) for r in study.select(QUERY)]
+        total = study.row_count
+        table = []
         for row in rows:
-            image = render(study, row, int(2 * tile_w), int(2 * tile_h))
-            values = (f"run {int(study.get_row_ids(rows=[row])[0])}",
-                      f"α {float(alpha[row]):.1f}°",
-                      f"{float(study.get_parameter('inflow_speed', rows=[row])[0]):.0f} m/s",
-                      f"{float(study.get_parameter('naca_t', rows=[row])[0]):.0f} % thick",
-                      str(study.get_label("split", rows=[row])[0]))
-            tiles.append((image, values))
-        runs = study.row_count
-        nodes = int(np.mean([len(study.get_points(row=r)) for r in range(runs)]))
-    size = os.path.getsize(path)
-    height = top + 2 * (tile_h + caption + gap) + 30
+            values = [f"{int(study.get_row_ids(rows=[row])[0])}"]
+            for name, units, _, _ in columns[1:4]:
+                values.append(f"{float(study.get_parameter(name, rows=[row])[0]):.2f}")
+            values.append(str(study.get_label("split", rows=[row])[0]))
+            table.append((values, render(study, row, 2 * thumb_w, 2 * thumb_h)))
+    height = top + 40 + row_h * len(table) + 40
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
-           f'height="{height}" role="img" aria-label="Flow speed around four airfoils from one study file, '
-           f'each with its angle of attack, inflow speed, thickness and split">', STYLE,
+           f'height="{height}" role="img" aria-label="A query on a study file and the rows it returns, each '
+           f'with its values and the pressure field read for that run">', STYLE,
            '<rect class="page" width="100%" height="100%"/>',
-           f'<text class="ink mono h" x="0" y="18">{os.path.basename(path)}</text>',
-           f'<text class="soft" x="0" y="38">{runs} RANS runs around NACA airfoils, each on its own mesh of '
-           f'about {round(nodes, -3):,} nodes; {size / 1e6:.0f} MB</text>']
-    for k, (image, values) in enumerate(tiles):
-        x = (k % 2) * (tile_w + gap)
-        y = top + (k // 2) * (tile_h + caption + gap)
-        out.append(f'<image href="{image}" x="{x:.1f}" y="{y}" width="{tile_w:.1f}" height="{tile_h}"/>')
-        out.append(f'<rect class="frame" x="{x + 0.5:.1f}" y="{y + 0.5}" width="{tile_w - 1:.1f}" '
-                   f'height="{tile_h - 1}"/>')
-        out.append(f'<text class="ink" x="{x:.1f}" y="{y + tile_h + 17}"><tspan class="mono">{values[0]}</tspan>'
-                   + "".join(f'<tspan class="soft">  ·  </tspan>{v}' for v in values[1:]) + '</text>')
-    out += colour_bar(width - 300, height - 30, 300)
+           f'<text class="ink mono" x="0" y="20">rows = study.select(<tspan class="str">"{QUERY}"</tspan>)'
+           f'</text>',
+           f'<text class="soft mono" x="0" y="42"># {len(rows)} of {total} runs in {os.path.basename(path)}</text>']
+    y = top + 14
+    for name, units, x, anchor in columns:
+        out.append(f'<text class="ink mono" x="{x}" y="{y}" text-anchor="{anchor}">{name}</text>')
+        if units:
+            out.append(f'<text class="soft" x="{x}" y="{y + 16}" text-anchor="{anchor}">{units}</text>')
+    out.append(f'<text class="ink mono" x="{field_x}" y="{y}">study.get_field("p", rows=r)</text>')
+    out.append(f'<text class="soft" x="{field_x}" y="{y + 16}">divided by 0.5 · inflow_speed²</text>')
+    out.append(f'<line class="rule" x1="0" y1="{y + 26}" x2="{width}" y2="{y + 26}"/>')
+    for k, (values, image) in enumerate(table):
+        y0 = top + 40 + k * row_h
+        mid = y0 + row_h / 2 + 4
+        for (name, _, x, anchor), text in zip(columns, values):
+            cls = "ink mono" if name in ("run", "split") else "ink num"
+            out.append(f'<text class="{cls}" x="{x}" y="{mid:.0f}" text-anchor="{anchor}">{text}</text>')
+        out.append(f'<image href="{image}" x="{field_x}" y="{y0 + 6}" width="{thumb_w}" height="{thumb_h}"/>')
+    bar_y = top + 40 + row_h * len(table) + 14
+    values = np.linspace(SCALE[0], SCALE[1], 17)
+    stops = "".join(f'<stop offset="{(v - SCALE[0]) / (SCALE[1] - SCALE[0]):.3f}" '
+                    f'stop-color="{matplotlib.colors.to_hex(c)}"/>' for v, c in zip(values, colour(values)))
+    out += [f'<defs><linearGradient id="cp">{stops}</linearGradient></defs>',
+            f'<rect x="{field_x}" y="{bar_y}" width="{thumb_w}" height="8" fill="url(#cp)"/>',
+            f'<text class="soft" x="{field_x}" y="{bar_y + 22}">≤ {SCALE[0]:g}</text>',
+            f'<text class="soft" x="{field_x + thumb_w * 0.75:.0f}" y="{bar_y + 22}" text-anchor="middle">0</text>',
+            f'<text class="soft" x="{field_x + thumb_w}" y="{bar_y + 22}" text-anchor="end">{SCALE[1]:g}</text>']
     out.append("</svg>")
     with open(os.path.join(HERE, "hero.svg"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(out) + "\n")
