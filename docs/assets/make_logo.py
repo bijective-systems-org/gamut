@@ -25,7 +25,7 @@ from fontTools.ttLib import TTFont
 HERE = Path(__file__).resolve().parent
 FRONT, BACK = "#0070DC", "#74BFF8"
 INK, INK_DARK = "#1F2328", "#E6EDF3"
-INK_ANY = "#768390"         # 3.9:1 on white, 4.9:1 on GitHub's dark page
+PLATE = 8.0                   # each logo sits on a plate of its page colour, this much larger
 STROKE, GAP = 3.4, 2.6        # line width, and the clearance around the front sheet
 STEPS = 48                    # points along each wavy edge
 
@@ -92,13 +92,21 @@ def main(inter: Path) -> int:
     note = "<!-- Drawn by make_logo.py; see its docstring for what the mark means. -->"
     # Fixed colourings rather than one that follows the system's colour scheme:
     # GitHub's theme can differ from the system's, and the README's <picture> follows
-    # GitHub's. Where <picture> is ignored (PyPI, some apps) the README falls back to
-    # logo-any.svg, whose grey reads on light and dark pages alike.
-    for name, ink in (("logo.svg", INK), ("logo-dark.svg", INK_DARK), ("logo-any.svg", INK_ANY)):
+    # GitHub's, but a browser can still pick by the system's, and where <picture> is
+    # ignored (PyPI, GitHub's mobile app) the README falls back to logo-any.svg. So each
+    # logo sits on a plate of the page colour it is drawn for: invisible on that page,
+    # and on the other the logo still has its own background. (No single grey wordmark
+    # reads well on both pages; the best is about 4.3:1 on each.)
+    plate = PLATE
+    for name, ink, ground in (("logo.svg", INK, "#FFFFFF"), ("logo-dark.svg", INK_DARK, "#0D1117"),
+                              ("logo-any.svg", INK, "#FFFFFF")):
+        box = f"{-plate:g} {-plate:g} {width + 2 * plate:g} {size + 2 * plate:g}"
+        back = (f'  <rect x="{-plate:g}" y="{-plate:g}" width="{width + 2 * plate:g}" '
+                f'height="{size + 2 * plate:g}" rx="{plate:g}" fill="{ground}"/>\n')
         (HERE / name).write_text(
-            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {size:g}" '
-            f'width="{width}" height="{size:g}" role="img" aria-labelledby="gamut-logo">\n'
-            f'  <title id="gamut-logo">Gamut</title>\n  {note}\n'
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{box}" '
+            f'width="{width + 2 * plate:g}" height="{size + 2 * plate:g}" role="img" aria-labelledby="gamut-logo">\n'
+            f'  <title id="gamut-logo">Gamut</title>\n  {note}\n{back}'
             f'  {mark(size, "gamut-logo")}\n  <path fill="{ink}" d="{g} {rest}"/>\n</svg>\n')
     (HERE / "mark.svg").write_text(
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {size:g} {size:g}" '
