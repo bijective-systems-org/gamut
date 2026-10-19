@@ -1,8 +1,22 @@
+mestra is now Gamut
+===================
+
+mestra continues as [Gamut](https://github.com/bijective-systems-org/gamut),
+version 1 of the format, with a new implementation:
+
+    pip install gamut-format
+
+This is the last release of mestra. It still reads and writes `mestra/0`
+files; Gamut refuses them, naming their version. The documentation for
+this release is the
+[v0.1.3 tree](https://github.com/bijective-systems-org/gamut/tree/v0.1.3).
+
+
 mestra for Python
 =================
 
 What the format is, and what it is for: the
-[project README](https://github.com/bijective-systems-org/mestra#readme).
+[project README](https://github.com/bijective-systems-org/gamut/tree/v0.1.3#readme).
 
 Install
 -------
@@ -19,7 +33,7 @@ installs:
     python -m pytest python/tests
 
 Three golden files are too large to commit. Write them once before
-the suite, as [`vectors/README.md`](https://github.com/bijective-systems-org/mestra/blob/main/vectors/README.md) says; a test that wants one
+the suite, as [`vectors/README.md`](https://github.com/bijective-systems-org/gamut/blob/v0.1.3/vectors/README.md) says; a test that wants one
 skips without it rather than failing.
 
     python vectors/generate.py --on-demand
@@ -42,8 +56,8 @@ The ten-line example
         print(p.values.at(row=1, node=2, component=0))    # 203.0
 
 It is the same data and the same value in all four languages.
-[`docs/examples/`](https://github.com/bijective-systems-org/mestra/tree/main/docs/examples) has seven worked examples, one per concept, each
-runnable and under thirty lines, and [`docs/guide.md`](https://github.com/bijective-systems-org/mestra/blob/main/docs/guide.md) says what the
+[`docs/examples/`](https://github.com/bijective-systems-org/gamut/tree/v0.1.3/docs/examples) has seven worked examples, one per concept, each
+runnable and under thirty lines, and [`docs/guide.md`](https://github.com/bijective-systems-org/gamut/blob/v0.1.3/docs/guide.md) says what the
 concepts mean. Every call has its own documentation where you meet
 it: `help(mestra)` and `help(mestra.Dataset)` for the library,
 `mestra --help` for the command line.
@@ -83,7 +97,7 @@ repeats them, and what could not be copied is in `dataset.lossy`.
 A refusal is what this package can promise. What it cannot promise is
 that libhdf5 returns control on a file whose bytes were damaged: a
 crafted single-byte change can fault or hang the library before any
-code here runs ([`docs/compatibility.md`](https://github.com/bijective-systems-org/mestra/blob/main/docs/compatibility.md#damaged-files), "Damaged files";
+code here runs ([`docs/compatibility.md`](https://github.com/bijective-systems-org/gamut/blob/v0.1.3/docs/compatibility.md#damaged-files), "Damaged files";
 `tests/test_mutation.py` measures it). Read a file nobody vouches for
 from a process you can kill, as `mestra validate` does.
 
@@ -91,9 +105,9 @@ from a process you can kill, as `mestra validate` does.
 Where to go next
 ----------------
 
-[`docs/guide.md`](https://github.com/bijective-systems-org/mestra/blob/main/docs/guide.md) is the format in plain words, with one runnable
-example per concept. [`SPEC.md`](https://github.com/bijective-systems-org/mestra/blob/main/SPEC.md) is the reference, read by section.
-[`docs/api-conventions.md`](https://github.com/bijective-systems-org/mestra/blob/main/docs/api-conventions.md) is the names, the argument order, the
+[`docs/guide.md`](https://github.com/bijective-systems-org/gamut/blob/v0.1.3/docs/guide.md) is the format in plain words, with one runnable
+example per concept. [`SPEC.md`](https://github.com/bijective-systems-org/gamut/blob/v0.1.3/SPEC.md) is the reference, read by section.
+[`docs/api-conventions.md`](https://github.com/bijective-systems-org/gamut/blob/v0.1.3/docs/api-conventions.md) is the names, the argument order, the
 defaults and the messages all four languages follow, for anyone
 comparing two of them.
 
