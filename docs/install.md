@@ -26,7 +26,7 @@ python -c "import gamut; print(gamut.__version__, gamut.FORMAT)"
 
 ### From a checkout
 
-Until the first release is on PyPI, and on platforms without a wheel:
+On platforms without a wheel, or to build the core yourself:
 
 ```bash
 git clone https://github.com/bijective-systems-org/gamut.git

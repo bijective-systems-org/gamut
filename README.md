@@ -174,7 +174,6 @@ about 176,000 nodes, one run reads in 15 ms against 124 ms from its VTK file.
 The Python wheels for macOS, Linux and Windows contain the core with HDF5
 linked in. MATLAB and Julia use the same core: the wheel's
 (`gamut.library_path()` prints where it is) or one built with CMake.
-Until version 1 is on PyPI, run `pip install .` in a checkout.
 [Installing](https://github.com/bijective-systems-org/gamut/blob/main/docs/install.md) has the details for each language.
 
 ## Documentation

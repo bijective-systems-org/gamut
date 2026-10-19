@@ -15,10 +15,21 @@ name: publish
 # token minted for the `pypi` environment, which PyPI trusts for this
 # repository and this workflow file alone, so there is no API token
 # anywhere. Every action is pinned to a commit, as in ci.yml.
+#
+# A pull request that changes the packaging, or a manual run, builds and
+# tests the wheels and the sdist and uploads nothing: only a tag reaches
+# `conformance` (ci.yml already runs on every pull request) and `publish`.
 
 on:
   push:
     tags: ['v*']
+  pull_request:
+    paths:
+      - .github/workflows/publish.yml
+      - pyproject.toml
+      - CMakeLists.txt
+      - tools/build_deps.sh
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -29,6 +40,7 @@ defaults:
 
 jobs:
   conformance:
+    if: github.ref_type == 'tag'
     uses: ./.github/workflows/ci.yml
 
   wheels:
@@ -78,6 +90,7 @@ jobs:
           python-version: '3.12'
 
       - name: The tag names the version in pyproject.toml
+        if: github.ref_type == 'tag'
         run: |
           python - <<'PY'
           import os, sys, tomllib
@@ -101,6 +114,7 @@ jobs:
 
   publish:
     name: upload to PyPI
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: [conformance, wheels, sdist]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
