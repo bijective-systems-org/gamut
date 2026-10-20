@@ -226,7 +226,8 @@ def main():
     elif args.command == "measure":
         info = json.loads(Path(args.result).read_text())["shape"]
         reads = read_functions(args, args.format, out, info)
-        # Imports and binding setup happen before timing, as in the original harness.
+        # Warm imports before timing. Native ctypes bindings are constructed
+        # per operation and their small setup cost remains in the measurement.
         for work in reads.values():
             work()
         print(json.dumps({name: {**timed(work), "checksum": work()} for name, work in reads.items()}))

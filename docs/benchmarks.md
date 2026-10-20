@@ -71,6 +71,19 @@ claim; Gamut is not the fastest path for every operation.
 
 ### What the copies contain
 
+The timed operations are the same for every peer in a case:
+
+| Operation | Capsule family | XFOIL sweep |
+|---|---|---|
+| One run | All nodal `pressure_coefficient` values for row 100 | All nodal `cp` values for row 100 |
+| One node, every run | Node 3000 in every row | Node 12 in every row |
+| A region, every run | Nodes 0–671 in every row | Nodes 0–79 in every row |
+| Runs by condition | `mach > 20 and alpha > 0`, then `axial_force_coefficient` | `alpha > 5 and reynolds > 1000000`, then `cl` |
+
+Positions here start at zero. Field reads exclude coordinates and cells;
+those are checked separately for equivalence. Numeric reductions consume
+the returned values and ignore NaNs, including missing failed-run results.
+
 Every copy contains the same run table, node fields, coordinates and
 connectivity, including missing results and failed-run labels. Native
 copies include `runs.csv` (row to geometry/solution mapping) and
@@ -98,7 +111,8 @@ these benchmark bindings. No GPU, training throughput or cloud access is
 measured.
 
 Each read includes opening/closing the file and any CSV/schema access it
-needs. Imports are outside the clocks. Each operation has one warm-up and
+needs. Imports are outside the clocks; the native ctypes bindings are
+constructed per operation, with that small setup cost included. Each operation has one warm-up and
 five timed reads; the tables show medians, with min/max in the JSON. Files
 are in the OS cache, so these measure library work and decoding rather
 than cold disk throughput. Writes are timed once from arrays already in
