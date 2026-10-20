@@ -207,8 +207,9 @@ def study_summary(capsule: dict, xfoil: dict) -> str:
     y = 64
     for label, result, formats in groups:
         shape = result["shape"]
+        geometries = "geometry" if shape["geometries"] == 1 else "geometries"
         out.append(f'<text class="ink h" x="0" y="{y}">{label}: {shape["runs"]:,} runs, '
-                   f'{shape["nodes"]:,} nodes, {shape["geometries"]} geometries</text>')
+                   f'{shape["nodes"]:,} nodes, {shape["geometries"]} {geometries}</text>')
         y += 24
         for fmt in formats:
             f = result["formats"][fmt]

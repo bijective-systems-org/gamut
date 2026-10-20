@@ -1,0 +1,256 @@
+{
+ "case": "gamut-benchmarks-capsule.gamut",
+ "machine": {
+  "python": "3.11.11",
+  "system": "macOS-27.0.1-arm64-arm-64bit",
+  "cpu": "Apple M3",
+  "memory_bytes": "8589934592",
+  "cores": "8",
+  "packages": {
+   "gamut": "1.1.0",
+   "numpy": "2.3.5",
+   "h5py": "3.15.1",
+   "netCDF4": "1.7.4",
+   "xarray": "2026.2.0",
+   "zarr": "3.1.6",
+   "pyarrow": "23.0.1",
+   "pandas": "2.3.3",
+   "pyvista": "0.48.1",
+   "vtk": "9.5.2",
+   "nvidia-physicsnemo": "2.2.2",
+   "tensordict": "0.15.2",
+   "torch": "2.13.0"
+  },
+  "source": "58ef5b1"
+ },
+ "shape": {
+  "runs": 1364,
+  "nodes": 6722,
+  "cells": 6720,
+  "geometries": 44,
+  "fields": [
+   "heat_flux_ratio",
+   "pressure_coefficient"
+  ]
+ },
+ "formats": {
+  "gamut": {
+   "bytes": 66041388,
+   "write_s": 1.3911374170565978,
+   "verified": true,
+   "one_run": {
+    "median_s": 0.0018572499975562096,
+    "min_s": 0.00180154200643301,
+    "max_s": 0.0020891670137643814,
+    "repeats": 5,
+    "checksum": 2501.053484458284
+   },
+   "one_node": {
+    "median_s": 0.12093245901633054,
+    "min_s": 0.11960133397951722,
+    "max_s": 0.13232037506531924,
+    "repeats": 5,
+    "checksum": 0.0
+   },
+   "region": {
+    "median_s": 0.13278087496291846,
+    "min_s": 0.1243526249891147,
+    "max_s": 0.13314137503039092,
+    "repeats": 5,
+    "checksum": 578884.7953446857
+   },
+   "query": {
+    "median_s": 0.0018658749759197235,
+    "min_s": 0.0018216659082099795,
+    "max_s": 0.0019250418990850449,
+    "repeats": 5,
+    "checksum": 469.07682701663435
+   }
+  },
+  "gamut_threads": {
+   "bytes": 66041388,
+   "write_s": null,
+   "verified": true,
+   "one_run": {
+    "median_s": 0.0019155830377712846,
+    "min_s": 0.001855833106674254,
+    "max_s": 0.001939333975315094,
+    "repeats": 5,
+    "checksum": 2501.053484458284
+   },
+   "one_node": {
+    "median_s": 0.025171250104904175,
+    "min_s": 0.024965666001662612,
+    "max_s": 0.02562375005800277,
+    "repeats": 5,
+    "checksum": 0.0
+   },
+   "region": {
+    "median_s": 0.02661791699938476,
+    "min_s": 0.025871041929349303,
+    "max_s": 0.027460832963697612,
+    "repeats": 5,
+    "checksum": 578884.7953446857
+   },
+   "query": {
+    "median_s": 0.0020187499467283487,
+    "min_s": 0.0019699999829754233,
+    "max_s": 0.002078291028738022,
+    "repeats": 5,
+    "checksum": 469.07682701663435
+   }
+  },
+  "exodus": {
+   "bytes": 159962079,
+   "write_s": 0.32743754202965647,
+   "verified": true,
+   "one_run": {
+    "median_s": 0.006056290934793651,
+    "min_s": 0.005818750010803342,
+    "max_s": 0.006212292006239295,
+    "repeats": 5,
+    "checksum": 2501.053484458284
+   },
+   "one_node": {
+    "median_s": 0.07306079205591232,
+    "min_s": 0.07163366698659956,
+    "max_s": 0.07573754200711846,
+    "repeats": 5,
+    "checksum": 0.0
+   },
+   "region": {
+    "median_s": 0.11258745798841119,
+    "min_s": 0.1117662499891594,
+    "max_s": 0.11359020892996341,
+    "repeats": 5,
+    "checksum": 578884.7953446857
+   },
+   "query": {
+    "median_s": 0.004439292009919882,
+    "min_s": 0.004246375057846308,
+    "max_s": 0.004651375114917755,
+    "repeats": 5,
+    "checksum": 469.07682701663435
+   }
+  },
+  "exodus_gzip": {
+   "bytes": 67887851,
+   "write_s": 1.1864888339769095,
+   "verified": true,
+   "one_run": {
+    "median_s": 0.005735457991249859,
+    "min_s": 0.005583708989433944,
+    "max_s": 0.005935374996624887,
+    "repeats": 5,
+    "checksum": 2501.053484458284
+   },
+   "one_node": {
+    "median_s": 0.18332179193384945,
+    "min_s": 0.18229620903730392,
+    "max_s": 0.1859086670447141,
+    "repeats": 5,
+    "checksum": 0.0
+   },
+   "region": {
+    "median_s": 0.2254687499953434,
+    "min_s": 0.22494154202286154,
+    "max_s": 0.23095545801334083,
+    "repeats": 5,
+    "checksum": 578884.7953446857
+   },
+   "query": {
+    "median_s": 0.00435008411295712,
+    "min_s": 0.004259750014171004,
+    "max_s": 0.0046443750616163015,
+    "repeats": 5,
+    "checksum": 469.07682701663435
+   }
+  },
+  "cgns": {
+   "bytes": 166688183,
+   "write_s": 0.4845149170141667,
+   "verified": true,
+   "one_run": {
+    "median_s": 0.02268033300060779,
+    "min_s": 0.022567208972759545,
+    "max_s": 0.02293416694737971,
+    "repeats": 5,
+    "checksum": 2501.053484458284
+   },
+   "one_node": {
+    "median_s": 0.8356172499479726,
+    "min_s": 0.8343800000147894,
+    "max_s": 0.841883415938355,
+    "repeats": 5,
+    "checksum": 0.0
+   },
+   "region": {
+    "median_s": 0.8438410409726202,
+    "min_s": 0.8400669159600511,
+    "max_s": 0.8486758749932051,
+    "repeats": 5,
+    "checksum": 578884.7953446857
+   },
+   "query": {
+    "median_s": 0.004161290940828621,
+    "min_s": 0.00409058399964124,
+    "max_s": 0.004194583045318723,
+    "repeats": 5,
+    "checksum": 469.07682701663435
+   }
+  },
+  "h5py": {
+   "bytes": 66041388,
+   "write_s": null,
+   "verified": true,
+   "one_run": {
+    "median_s": 0.0004922919906675816,
+    "min_s": 0.00048270903062075377,
+    "max_s": 0.0005427500000223517,
+    "repeats": 5,
+    "checksum": 2501.053484458284
+   },
+   "one_node": {
+    "median_s": 0.12582104199100286,
+    "min_s": 0.12545600009616464,
+    "max_s": 0.13485270796809345,
+    "repeats": 5,
+    "checksum": 0.0
+   },
+   "region": {
+    "median_s": 0.13793187506962568,
+    "min_s": 0.12760783301200718,
+    "max_s": 0.14038258290383965,
+    "repeats": 5,
+    "checksum": 578884.7953446857
+   },
+   "query": {
+    "median_s": 0.00031045801006257534,
+    "min_s": 0.0003043749602511525,
+    "max_s": 0.0003511670511215925,
+    "repeats": 5,
+    "checksum": 469.07682701663435
+   }
+  }
+ },
+ "reads": {
+  "field": "pressure_coefficient",
+  "scalar": "axial_force_coefficient",
+  "row": 100,
+  "node": 3000,
+  "region": "0:672",
+  "where": "mach > 20 and alpha > 0"
+ },
+ "native": {
+  "CGNS_LIBRARY": "/opt/anaconda3/envs/myenv/lib/libvtkcgns-9.5.dylib",
+  "CGNS_INDEX_BYTES": "8",
+  "EXODUS_LIBRARY": "/opt/anaconda3/envs/myenv/lib/libvtkexodusII-9.5.dylib",
+  "EXODUS_API_VERSION": "904"
+ },
+ "input_sha256": "c4757c98d126a0d0bb45e830473bc38d2654a3e1b89be45133bda4f2c3869696",
+ "native_versions": {
+  "CGNS": "4.5.0",
+  "Exodus": "9.04",
+  "cgsize_t_bytes": 8
+ }
+}

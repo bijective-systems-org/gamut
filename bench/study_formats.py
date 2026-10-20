@@ -13,6 +13,7 @@ The matched h5py baseline reads the very same Gamut file, not another layout.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -238,6 +239,7 @@ def main():
         assert 0 <= args.row < info["runs"] and 0 <= args.node < info["nodes"]
         assert 0 <= args.lo < args.hi <= info["nodes"]
         result = {"case": Path(args.study).name, "machine": machine(), "shape": info,
+                  "input_sha256": hashlib.sha256(Path(args.study).read_bytes()).hexdigest(),
                   "formats": {}, "reads": {k: getattr(args, k) for k in
                   ("field", "scalar", "row", "node", "region", "where")},
                   "native": {k: os.environ.get(k) for k in ("CGNS_LIBRARY", "CGNS_INDEX_BYTES",
