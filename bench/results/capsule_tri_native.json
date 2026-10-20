@@ -3,9 +3,9 @@
  "machine": {
   "python": "3.11.11",
   "system": "macOS-27.0.1-arm64-arm-64bit",
-  "cpu": "",
-  "memory_bytes": "",
-  "cores": "",
+  "cpu": "Apple M3",
+  "memory_bytes": "8589934592",
+  "cores": "8",
   "packages": {
    "gamut": "1.1.0",
    "numpy": "2.3.5",
@@ -21,7 +21,8 @@
    "tensordict": "0.15.2",
    "torch": "2.13.0"
   },
-  "source": "5233f4d"
+  "source": "5233f4d",
+  "host_observation": "CPU, RAM and core count measured on the same host after the run; benchmark subprocess sysctl access was sandbox-blocked. Other metadata recorded by the runner."
  },
  "shape": {
   "runs": 1364,
