@@ -192,89 +192,83 @@ def table(r: dict, reads: list[str]) -> str:
 
 
 def study_summary(capsule: dict, xfoil: dict) -> str:
-    """Two structured tables; colour identifies Gamut, not a performance rank."""
-    width, row, heading, header = 760, 40, 38, 38
-    groups = [("Capsule family", capsule, ["gamut", "gamut_threads", "exodus_gzip", "cgns"]),
-              ("XFOIL airfoil sweep", xfoil, ["gamut", "gamut_threads", "exodus_gzip", "cgns", "pmsh"])]
-    height = 54 + sum(heading + header + row * len(formats) for _, _, formats in groups) + 20 + 38
+    """Paired dataset bars; every panel has an explicit logarithmic axis."""
+    width, height, panel_width, panel_height = 760, 734, 370, 292
+    datasets = [("Capsule family", capsule, "capsule"), ("XFOIL sweep", xfoil, "xfoil")]
+    formats = [("gamut", "Gamut · 1 thread"), ("gamut_threads", "Gamut · 4 threads"),
+               ("exodus_gzip", "Exodus II · gzip 1 + shuffle"),
+               ("cgns", "CGNS · uncompressed defaults"), ("pmsh", "PhysicsNeMo-Mesh · CPU")]
+    panels = [("File size", "MB", "bytes", 1e6),
+              ("Read one run", "ms", "one_run", 1e-3),
+              ("Read one node across every run", "ms", "one_node", 1e-3),
+              ("Select runs and read a result", "ms", "query", 1e-3)]
     style = """<style>
       text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
-      .page, .body { fill: #FFFFFF; } .ink { fill: #1F2328; } .muted { fill: #59636E; }
-      .section { fill: #F0F3F6; } .head { fill: #F6F8FA; } .stripe { fill: #FAFBFC; }
-      .gamut-row { fill: #EDF5FF; } .accent { fill: #0070DC; } .gamut-text { fill: #005EB8; }
-      .rule { stroke: #D8DEE5; stroke-width: 1; fill: none; }
-      .title { font-size: 18px; font-weight: 600; } .label { font-size: 14px; font-weight: 600; }
-      .name { font-size: 13px; font-weight: 600; } .small { font-size: 11px; }
-      .column { font-size: 11px; font-weight: 600; }
-      .number { font-size: 14px; font-variant-numeric: tabular-nums; }
+      .page, .panel { fill: #FFFFFF; } .ink { fill: #1F2328; } .muted { fill: #59636E; }
+      .capsule { fill: #0070DC; } .xfoil { fill: #74B5EB; }
+      .grid { stroke: #E1E6EC; stroke-width: 1; } .outline { stroke: #D8DEE5; fill: none; }
+      .title { font-size: 18px; font-weight: 600; } .heading { font-size: 13px; font-weight: 600; }
+      .name { font-size: 12px; } .small { font-size: 11px; }
+      .value { font-size: 11px; font-variant-numeric: tabular-nums; }
       @media (prefers-color-scheme: dark) {
-        .page, .body { fill: #0D1117; } .ink { fill: #E6EDF3; } .muted { fill: #9AA6B4; }
-        .section { fill: #1B2532; } .head { fill: #151D27; } .stripe { fill: #111820; }
-        .gamut-row { fill: #102C48; } .accent { fill: #74BFF8; } .gamut-text { fill: #8CCBFF; }
-        .rule { stroke: #303D4C; }
+        .page, .panel { fill: #0D1117; } .ink { fill: #E6EDF3; } .muted { fill: #9AA6B4; }
+        .capsule { fill: #369BF7; } .xfoil { fill: #95CEFA; }
+        .grid { stroke: #293440; } .outline { stroke: #303D4C; }
       }
     </style>"""
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
-           f'width="{width}" height="{height}" role="img" aria-label="Measured study sizes and reads">',
+           f'width="{width}" height="{height}" role="img" aria-label="Paired dataset bars for study size and reads">',
            '<title>Study size and read time</title>',
-           '<desc>Two tables compare the same data across native formats. Blue identifies Gamut. '
-           'All values are measured; lower values indicate smaller files or faster reads. '
-           'The benchmark page has accessible tables, configurations and limitations.</desc>',
+           '<desc>Four horizontal bar charts compare formats on two datasets. Dark blue is the capsule '
+           'family; light blue is the XFOIL sweep. Axes are logarithmic, with actual values labelled. '
+           'PMSH was not measured on the capsule mesh. Accessible tables and methodology are in the benchmark page.</desc>',
            style, '<rect class="page" width="100%" height="100%"/>',
-           '<text class="ink title" x="0" y="20">Study size and read time</text>',
-           '<text class="muted small" x="0" y="40">Same data in each representation · lower values mean smaller files or faster reads</text>']
-    edges = [0, 276, 383, 490, 638, 760]
-    columns = [("File size", "", 369), ("One run", "read", 476),
-               ("One node", "across all runs", 624), ("Run query", "select + read", 746)]
-    labels = {"gamut": ("Gamut", "1 thread"), "gamut_threads": ("Gamut", "4 threads"),
-              "exodus_gzip": ("Exodus II", "gzip 1 + shuffle"),
-              "cgns": ("CGNS", "uncompressed defaults"),
-              "pmsh": ("PhysicsNeMo-Mesh", "CPU memory-mapped")}
-    y = 54
-    for group, (label, result, formats) in enumerate(groups):
+           '<text class="ink title" x="0" y="20">Study size and read time</text>']
+    for x, (name, result, colour) in zip((0, 390), datasets):
         shape = result["shape"]
-        geometries = "geometry" if shape["geometries"] == 1 else "geometries"
-        card_height = heading + header + row * len(formats)
-        out += [f'<defs><clipPath id="table-{group}"><rect x="0.5" y="{y+0.5}" '
-                f'width="759" height="{card_height-1}" rx="6"/></clipPath></defs>',
-                f'<g clip-path="url(#table-{group})">',
-                f'<rect class="body" x="0" y="{y}" width="760" height="{card_height}"/>',
-                f'<rect class="section" x="0" y="{y}" width="760" height="{heading}"/>',
-                f'<text class="ink label" x="14" y="{y+24}">{label}</text>',
-                f'<text class="muted small" x="746" y="{y+24}" text-anchor="end">'
-                f'{shape["runs"]:,} runs · {shape["nodes"]:,} nodes · {shape["geometries"]} {geometries}</text>',
-                f'<rect class="head" x="0" y="{y+heading}" width="760" height="{header}"/>',
-                f'<text class="muted column" x="14" y="{y+heading+24}">FORMAT / CONFIGURATION</text>']
-        for label, sub, x in columns:
-            out.append(f'<text class="muted column" x="{x}" y="{y+heading+16 if sub else y+heading+24}" '
-                       f'text-anchor="end">{label}</text>')
-            if sub:
-                out.append(f'<text class="muted small" x="{x}" y="{y+heading+30}" text-anchor="end">{sub}</text>')
-        for i, fmt in enumerate(formats):
-            f = result["formats"][fmt]
-            top = y + heading + header + i * row
-            ours = fmt.startswith("gamut")
-            fill = "gamut-row" if ours else ("stripe" if i % 2 == 0 else "body")
-            colour = "gamut-text" if ours else "ink"
-            out.append(f'<rect class="{fill}" x="0" y="{top}" width="760" height="{row}"/>')
-            if ours:
-                out.append(f'<rect class="accent" x="0" y="{top}" width="3" height="{row}"/>')
-            name, config = labels[fmt]
-            out += [f'<text class="{colour} name" x="14" y="{top+16}">{name}</text>',
-                    f'<text class="muted small" x="14" y="{top+31}">{config}</text>']
-            values = [megabytes(f["bytes"])] + [seconds(f[k]["median_s"]) for k in
-                                               ("one_run", "one_node", "query")]
-            for text, (_, _, x) in zip(values, columns):
-                out.append(f'<text class="{colour} number" x="{x}" y="{top+25}" text-anchor="end">{text}</text>')
-            out.append(f'<path class="rule" d="M0 {top} H760"/>')
-        for x in edges[1:-1]:
-            out.append(f'<path class="rule" d="M{x} {y+heading} V{y+card_height}"/>')
-        out += ['</g>', f'<rect class="rule" x="0.5" y="{y+0.5}" width="759" '
-                f'height="{card_height-1}" rx="6"/>']
-        y += card_height + 20
-    out += [f'<text class="muted small" x="0" y="{height-20}">Apple M3 · warm-cache medians of five · each read opens and closes the file</text>',
-            f'<text class="muted small" x="0" y="{height-4}">Native sizes include CSV/schema companions. Settings and limitations are on the benchmark page.</text>']
-    out.append('</svg>')
+        out += [f'<rect class="{colour}" x="{x}" y="37" width="12" height="8" rx="1"/>',
+                f'<text class="ink small" x="{x+20}" y="45">{name} · {shape["runs"]:,} runs · {shape["nodes"]:,} nodes</text>']
+    out.append('<text class="muted small" x="0" y="66">Shorter is smaller or faster · logarithmic axes keep both datasets readable</text>')
+    for panel, (title, units, metric, unit) in enumerate(panels):
+        x, y = (panel % 2) * 390, 82 + (panel // 2) * 310
+        out += [f'<rect class="panel" x="{x}" y="{y}" width="{panel_width}" height="{panel_height}" rx="6"/>',
+                f'<rect class="outline" x="{x+0.5}" y="{y+0.5}" width="{panel_width-1}" height="{panel_height-1}" rx="6"/>',
+                f'<text class="ink heading" x="{x+14}" y="{y+23}">{title}</text>',
+                f'<text class="muted small" x="{x+14}" y="{y+41}">{units} · log scale</text>']
+        numbers = [r["formats"][fmt]["bytes"] if metric == "bytes"
+                   else r["formats"][fmt][metric]["median_s"]
+                   for _, r, _ in datasets for fmt, _ in formats if fmt in r["formats"]]
+        lo = 10 ** math.floor(math.log10(min(numbers) / unit))
+        hi = 10 ** math.ceil(math.log10(max(numbers) / unit))
+        if hi == lo:
+            hi *= 10
+        span = 242
+        def position(value):
+            return x + 14 + span * math.log10(value / unit / lo) / math.log10(hi / lo)
+        ticks = [lo * 10 ** k for k in range(round(math.log10(hi / lo)) + 1)]
+        for i, (fmt, label) in enumerate(formats):
+            top = y + 62 + i * 42
+            for tick in ticks:
+                tx = position(tick * unit)
+                out.append(f'<path class="grid" d="M{tx:.2f} {top+5} V{top+29}"/>')
+            out.append(f'<text class="ink name" x="{x+14}" y="{top}">{label}</text>')
+            for j, (_, result, colour) in enumerate(datasets):
+                by = top + 7 + j * 12
+                if fmt not in result["formats"]:
+                    out.append(f'<text class="muted value" x="{x+356}" y="{by+8}" text-anchor="end">not measured</text>')
+                    continue
+                record = result["formats"][fmt]
+                value = record["bytes"] if metric == "bytes" else record[metric]["median_s"]
+                label = megabytes(value) if metric == "bytes" else seconds(value)
+                length = position(value) - x - 14
+                out += [f'<rect class="{colour}" x="{x+14}" y="{by}" width="{length:.2f}" height="8" rx="1"/>',
+                        f'<text class="ink value" x="{x+356}" y="{by+8}" text-anchor="end">{label}</text>']
+        for tick in ticks:
+            label = f"{tick:,.0f}" if tick >= 1 else f"{tick:g}"
+            out.append(f'<text class="muted small" x="{position(tick*unit):.2f}" y="{y+278}" text-anchor="middle">{label}</text>')
+    out += ['<text class="muted small" x="0" y="710">Apple M3 · warm-cache medians of five · each read opens and closes the file</text>',
+            '<text class="muted small" x="0" y="728">PMSH: capsule mesh not supported. Native sizes include CSV/schema companions. Full method on the benchmark page.</text>',
+            '</svg>']
     return "\n".join(out) + "\n"
 
 
