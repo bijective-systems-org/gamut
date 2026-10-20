@@ -194,7 +194,7 @@ def table(r: dict, reads: list[str]) -> str:
 def study_summary(capsule: dict, xfoil: dict) -> str:
     """Paired dataset bars; every panel has an explicit logarithmic axis."""
     width, height, panel_width, panel_height = 760, 734, 370, 292
-    datasets = [("Capsule family", capsule, "capsule"), ("XFOIL sweep", xfoil, "xfoil")]
+    datasets = [("Capsule · triangulated", capsule, "capsule"), ("XFOIL sweep", xfoil, "xfoil")]
     formats = [("gamut", "Gamut · 1 thread"), ("gamut_threads", "Gamut · 4 threads"),
                ("exodus_gzip", "Exodus II · gzip 1 + shuffle"),
                ("cgns", "CGNS · uncompressed defaults"), ("pmsh", "PhysicsNeMo-Mesh · CPU")]
@@ -219,9 +219,9 @@ def study_summary(capsule: dict, xfoil: dict) -> str:
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
            f'width="{width}" height="{height}" role="img" aria-label="Paired dataset bars for study size and reads">',
            '<title>Study size and read time</title>',
-           '<desc>Four horizontal bar charts compare formats on two datasets. Dark blue is the capsule '
-           'family; light blue is the XFOIL sweep. Axes are logarithmic, with actual values labelled. '
-           'PMSH was not measured on the capsule mesh. Accessible tables and methodology are in the benchmark page.</desc>',
+           '<desc>Four horizontal bar charts compare formats on two datasets. Dark blue is the triangulated capsule '
+           'family; light blue is the XFOIL sweep. Every format uses the same transformed capsule mesh. '
+           'Axes are logarithmic, with actual values labelled. Accessible tables and methodology are in the benchmark page.</desc>',
            style, '<rect class="page" width="100%" height="100%"/>',
            '<text class="ink title" x="0" y="20">Study size and read time</text>']
     for x, (name, result, colour) in zip((0, 390), datasets):
@@ -267,7 +267,7 @@ def study_summary(capsule: dict, xfoil: dict) -> str:
             label = f"{tick:,.0f}" if tick >= 1 else f"{tick:g}"
             out.append(f'<text class="muted small" x="{position(tick*unit):.2f}" y="{y+278}" text-anchor="middle">{label}</text>')
     out += ['<text class="muted small" x="0" y="710">Apple M3 · warm-cache medians of five · each read opens and closes the file</text>',
-            '<text class="muted small" x="0" y="728">PMSH: capsule mesh not supported. Native sizes include CSV/schema companions. Full method on the benchmark page.</text>',
+            '<text class="muted small" x="0" y="728">PMSH cannot preserve quads. Capsule bars use triangles for every format. Sizes include CSV/schema companions.</text>',
             '</svg>']
     return "\n".join(out) + "\n"
 
@@ -285,9 +285,10 @@ def generated() -> tuple[dict[str, str], dict[str, str]]:
     capsule = load("capsule_incidence")
     airfrans = load("airfrans")
     native = load("capsule_native")
+    triangulated = load("capsule_tri_native")
     xfoil = load("xfoil_native")
     figures = {
-        "bench-study.svg": study_summary(native, xfoil),
+        "bench-study.svg": study_summary(triangulated, xfoil),
         "bench-summary.svg": summary_figure(capsule),
         "bench-size.svg": size_figure([("The capsule family", capsule), ("AirfRANS", airfrans)]),
         "bench-one-node.svg": read_figure(
@@ -303,6 +304,7 @@ def generated() -> tuple[dict[str, str], dict[str, str]]:
         "airfrans": table(airfrans, ["open", "one_run", "query"]),
         "machine": machine_line(capsule),
         "capsule_native": table(native, ["one_run", "one_node", "region", "query"]),
+        "capsule_tri_native": table(triangulated, ["one_run", "one_node", "region", "query"]),
         "xfoil_native": table(xfoil, ["one_run", "one_node", "region", "query"]),
         "machine_native": machine_line(xfoil),
     }

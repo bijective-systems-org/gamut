@@ -56,8 +56,22 @@ Library names/extensions depend on the platform. The bindings also accept
 VTK's prefixed native libraries. The ABI values must match those libraries;
 they are not inferred from a filename. `Mesh.save/load` is used unchanged,
 on CPU; reads consume the tensors rather than timing mapping handles alone.
-PMSH requires simplices. For the quadrilateral capsule study, select
+PMSH requires simplices and cannot preserve the capsule's quads natively.
+For the unchanged quadrilateral capsule study, select
 `--formats gamut gamut_threads exodus exodus_gzip cgns h5py`.
+
+The separate converted case uses two triangles per quad, with unchanged
+nodes and nodal results. Prepare it once and run every peer on that input:
+
+```bash
+python bench/triangulate_quads.py capsule.gamut capsule-triangles.gamut > preparation.json
+python bench/study_formats.py run capsule-triangles.gamut WORK_DIR bench/results/capsule_tri_native.json
+```
+
+The preparation receipt records both hashes and the split order. No solver
+is rerun; the new connectivity need not describe the same nonplanar surface.
+Only the common benchmark payload is copied, with no cell results. Keep
+the original quad and converted triangle measurements separate.
 
 Do not add newly measured rows to an older result file. Run all selected
 peers together, keep input/source hashes and package versions, and regenerate

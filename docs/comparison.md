@@ -28,6 +28,21 @@ is a storage baseline, not another simulation standard.
 The [benchmarks](benchmarks.md) measure size and read speed against
 several of these on real studies.
 
+### Mesh representation: Gamut and PhysicsNeMo-Mesh
+
+| Capability | Gamut | PhysicsNeMo-Mesh |
+|---|---|---|
+| Preserve the capsule's quadrilateral cells | Yes, directly | No; convert the quads to triangles |
+| Cell model | VTK cell types, including quads and hexahedra ([specification](../SPEC.md)) | Simplices: points, segments, triangles, tetrahedra and higher-dimensional equivalents ([NVIDIA's data model](https://docs.nvidia.com/physicsnemo/latest/user-guide/mesh/using_mesh.html)) |
+| Run relationships in these benchmarks | Defined in the study file | Supplied by the benchmark's CSV/schema companions |
+
+The quad limitation matters when preserving a solver mesh. Triangulating
+for PMSH changes its connectivity, and a nonplanar quad need not describe
+the same surface after splitting. The [capsule conversion benchmark](benchmarks.md#the-capsule-with-triangulated-connectivity)
+uses the same transformed mesh for every peer; it does not establish native
+quad support or recompute the solver results. PhysicsNeMo-Mesh's mesh
+processing and PyTorch operations serve a different part of the workflow.
+
 Exodus and CGNS already supply scientific data models and established
 language interfaces. Gamut's particular focus is the study across runs:
 design and condition parameters, status, published splits, the unit of

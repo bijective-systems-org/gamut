@@ -152,16 +152,21 @@ measure the cost of those conventions and operations alongside native
 simulation formats and direct storage access.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/bench-study.svg" alt="Measured sizes and reads for a capsule geometry family and an XFOIL airfoil sweep, comparing Gamut, compressed Exodus II, CGNS and PhysicsNeMo-Mesh where the same mesh is supported." width="760">
+  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/bench-study.svg" alt="Measured sizes and reads for a triangulated capsule geometry family and an XFOIL airfoil sweep. Every format, including PhysicsNeMo-Mesh, uses the same mesh within each dataset." width="760">
 </p>
 
-On the capsule family, Gamut and Exodus with gzip occupy about the same
-space. Gamut reads one run in about 2 ms and selects runs by condition in
-about 2 ms; four decompression threads bring a node across all 1,364 runs
-to about 25 ms. Direct h5py reads of the same Gamut arrays show similar
-bulk decoding time, with less fixed overhead for small reads. On the
-smaller airfoil sweep, NVIDIA's memory-mapped PMSH reads faster, while
-Gamut is smaller. The [benchmarks](https://github.com/bijective-systems-org/gamut/blob/main/docs/benchmarks.md)
+Gamut preserves the capsule's quadrilateral cells directly.
+**PhysicsNeMo-Mesh requires simplices, so its capsule case needs conversion
+to triangles.** The chart uses that same converted mesh for every format;
+the original quad results remain on the benchmarks page.
+
+On the triangulated capsule family, Gamut and compressed Exodus occupy
+about the same space. Gamut is smaller and reads one run faster than PMSH;
+four decompression threads also make the reads across all runs competitive.
+PMSH writes faster. On the smaller airfoil sweep, PMSH reads faster, while
+Gamut is smaller. Direct h5py reads of the same Gamut arrays show similar
+bulk decoding time, with less fixed overhead for small reads.
+The [benchmarks](https://github.com/bijective-systems-org/gamut/blob/main/docs/benchmarks.md)
 include the full timings, settings, payload checks and workloads where
 another approach is faster, plus the earlier VTK, VTKHDF, Zarr and NumPy
 comparisons.
@@ -172,7 +177,7 @@ selects converged runs and reads a named surface region in specified
 units. The format supplies the study conventions and operations that a
 custom array layout leaves each producer to maintain.
 
-<sub>Apple M3, 8 GB; warm-cache medians of five, each opening and closing the file. Native copies include the run-table/schema companions. Exodus uses gzip level 1 and shuffle; CGNS uses native uncompressed defaults; PMSH uses CPU memory mapping. The capsule mesh is quadrilateral and is not converted for PMSH. Full method, versions and source commits are on the benchmarks page.</sub>
+<sub>Apple M3, 8 GB; warm-cache medians of five, each opening and closing the file. Native copies include the run-table/schema companions; the condition query reads those companions for Exodus, CGNS and PMSH. Exodus uses gzip level 1 and shuffle; CGNS uses native uncompressed defaults; PMSH uses CPU memory mapping. Triangulation retains nodal values without a solver rerun. Full method, versions and source commits are on the benchmarks page.</sub>
 
 ## Install
 

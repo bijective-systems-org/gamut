@@ -42,8 +42,44 @@ whole run and queries this run table faster in these implementations.
 A node across every run is expensive for Gamut's default chunks; the four
 thread read reduces that cost. The matched h5py row makes both the fixed
 interface cost on small reads and similar bulk decoding cost visible.
-PMSH is not measured on this quadrilateral mesh: its mesh model requires
-simplices, and this comparison does not triangulate just one peer's input.
+PhysicsNeMo-Mesh cannot natively represent this quadrilateral mesh: its
+mesh model requires simplices. Gamut, Exodus and CGNS preserve the quads.
+The separate conversion case below measures PMSH after triangulating the
+input for every peer; the original quad results above remain unchanged.
+
+### The capsule with triangulated connectivity
+
+This is a separate storage/read case. Each original quad `[a,b,c,d]` is
+split into `[a,b,c]` and `[a,c,d]`, in source-cell order, giving 13,440
+triangles. All 6,722 nodes, 44 geometries, 1,364 runs, nodal values and run
+table entries are retained without interpolation. Every peer is rewritten
+and timed on that same transformed input, including Gamut; no row below
+is borrowed from the original quad measurements.
+
+<!-- results: capsule_tri_native -->
+| Format | Size | Write | One run | One node, every run | A region, every run | Runs by condition |
+|---|---:|---:|---:|---:|---:|---:|
+| **Gamut** | 66.1 MB | 1.42 s | 1.95 ms | 119 ms | 122 ms | 1.85 ms |
+| **Gamut, 4 threads** | 66.1 MB | — | 1.81 ms | 25.2 ms | 26.2 ms | 1.84 ms |
+| Exodus II, native defaults | 162 MB | 716 ms | 5.91 ms | 74.1 ms | 113 ms | 4.37 ms |
+| Exodus II, gzip 1 + shuffle | 68.1 MB | 1.17 s | 5.68 ms | 182 ms | 226 ms | 4.16 ms |
+| CGNS, native defaults | 171 MB | 638 ms | 22.9 ms | 851 ms | 861 ms | 4.23 ms |
+| PhysicsNeMo-Mesh (PMSH) | 168 MB | 398 ms | 4.94 ms | 29.2 ms | 30.9 ms | 4.37 ms |
+| Storage baseline: same file via h5py | 66.1 MB | — | 486 µs | 127 ms | 131 ms | 319 µs |
+<!-- end -->
+
+Gamut is smaller and reads one run faster than PMSH in this case. PMSH
+writes faster and reads a node across the family faster than single-thread
+Gamut; Gamut's four-thread reads are close to PMSH. The condition query for
+PMSH, Exodus and CGNS reads their CSV/schema companions, not their mesh
+files. These warm-cache results do not rank cold storage or GPU training.
+
+These timings measure storing and reading the converted data, not solving
+on a triangular mesh. No solver is rerun, no cell-derived quantities are
+transferred, and nonplanar quads need not describe the same surface after
+splitting. The ability to read this converted case does not give PMSH
+native quadrilateral support. [NVIDIA documents its simplicial mesh model
+and automatic triangulation on import](https://docs.nvidia.com/physicsnemo/latest/user-guide/mesh/using_mesh.html).
 
 ### An airfoil sweep
 
@@ -150,7 +186,18 @@ input is private. Regenerated solver results can differ from the retained
 input, so rerun all peers together rather than attaching new rows to these
 old timings. The bindings also accept the prefixed libraries supplied by
 VTK; no replacement serializer is used. `--formats` selects peers explicitly.
-For a quadrilateral study, omit `pmsh`. The scripts and results are in
+For an unchanged quadrilateral study, omit `pmsh`. To reproduce the
+separate capsule conversion case, prepare the common input first, then
+run **all** formats on it:
+
+```bash
+python bench/triangulate_quads.py capsule.gamut capsule-triangles.gamut > preparation.json
+python bench/study_formats.py run capsule-triangles.gamut WORK_DIR bench/results/capsule_tri_native.json
+```
+
+Preparation checks the complete retained arrays and records source/output
+hashes and the connectivity transformation. The capsule source hash and
+preparation receipt are also in `capsule_tri_native.json`. The scripts and results are in
 [`bench/`](../bench); `python bench/figures.py` regenerates tables and figures.
 
 ## Reading the study, in the same vocabulary

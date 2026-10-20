@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 734" width="760" height="734" role="img" aria-label="Paired dataset bars for study size and reads">
 <title>Study size and read time</title>
-<desc>Four horizontal bar charts compare formats on two datasets. Dark blue is the capsule family; light blue is the XFOIL sweep. Axes are logarithmic, with actual values labelled. PMSH was not measured on the capsule mesh. Accessible tables and methodology are in the benchmark page.</desc>
+<desc>Four horizontal bar charts compare formats on two datasets. Dark blue is the triangulated capsule family; light blue is the XFOIL sweep. Every format uses the same transformed capsule mesh. Axes are logarithmic, with actual values labelled. Accessible tables and methodology are in the benchmark page.</desc>
 <style>
       text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
       .page, .panel { fill: #FFFFFF; } .ink { fill: #1F2328; } .muted { fill: #59636E; }
@@ -18,7 +18,7 @@
 <rect class="page" width="100%" height="100%"/>
 <text class="ink title" x="0" y="20">Study size and read time</text>
 <rect class="capsule" x="0" y="37" width="12" height="8" rx="1"/>
-<text class="ink small" x="20" y="45">Capsule family · 1,364 runs · 6,722 nodes</text>
+<text class="ink small" x="20" y="45">Capsule · triangulated · 1,364 runs · 6,722 nodes</text>
 <rect class="xfoil" x="390" y="37" width="12" height="8" rx="1"/>
 <text class="ink small" x="410" y="45">XFOIL sweep · 363 runs · 160 nodes</text>
 <text class="muted small" x="0" y="66">Shorter is smaller or faster · logarithmic axes keep both datasets readable</text>
@@ -33,7 +33,7 @@
 <path class="grid" d="M256.00 149 V173"/>
 <text class="ink name" x="14" y="144">Gamut · 1 thread</text>
 <rect class="capsule" x="14" y="151" width="170.60" height="8" rx="1"/>
-<text class="ink value" x="356" y="159" text-anchor="end">66 MB</text>
+<text class="ink value" x="356" y="159" text-anchor="end">66.1 MB</text>
 <rect class="xfoil" x="14" y="163" width="55.46" height="8" rx="1"/>
 <text class="ink value" x="356" y="171" text-anchor="end">0.825 MB</text>
 <path class="grid" d="M14.00 191 V215"/>
@@ -43,7 +43,7 @@
 <path class="grid" d="M256.00 191 V215"/>
 <text class="ink name" x="14" y="186">Gamut · 4 threads</text>
 <rect class="capsule" x="14" y="193" width="170.60" height="8" rx="1"/>
-<text class="ink value" x="356" y="201" text-anchor="end">66 MB</text>
+<text class="ink value" x="356" y="201" text-anchor="end">66.1 MB</text>
 <rect class="xfoil" x="14" y="205" width="55.46" height="8" rx="1"/>
 <text class="ink value" x="356" y="213" text-anchor="end">0.825 MB</text>
 <path class="grid" d="M14.00 233 V257"/>
@@ -52,8 +52,8 @@
 <path class="grid" d="M195.50 233 V257"/>
 <path class="grid" d="M256.00 233 V257"/>
 <text class="ink name" x="14" y="228">Exodus II · gzip 1 + shuffle</text>
-<rect class="capsule" x="14" y="235" width="171.32" height="8" rx="1"/>
-<text class="ink value" x="356" y="243" text-anchor="end">67.9 MB</text>
+<rect class="capsule" x="14" y="235" width="171.42" height="8" rx="1"/>
+<text class="ink value" x="356" y="243" text-anchor="end">68.1 MB</text>
 <rect class="xfoil" x="14" y="247" width="59.00" height="8" rx="1"/>
 <text class="ink value" x="356" y="255" text-anchor="end">0.945 MB</text>
 <path class="grid" d="M14.00 275 V299"/>
@@ -62,8 +62,8 @@
 <path class="grid" d="M195.50 275 V299"/>
 <path class="grid" d="M256.00 275 V299"/>
 <text class="ink name" x="14" y="270">CGNS · uncompressed defaults</text>
-<rect class="capsule" x="14" y="277" width="194.93" height="8" rx="1"/>
-<text class="ink value" x="356" y="285" text-anchor="end">167 MB</text>
+<rect class="capsule" x="14" y="277" width="195.66" height="8" rx="1"/>
+<text class="ink value" x="356" y="285" text-anchor="end">171 MB</text>
 <rect class="xfoil" x="14" y="289" width="73.62" height="8" rx="1"/>
 <text class="ink value" x="356" y="297" text-anchor="end">1.65 MB</text>
 <path class="grid" d="M14.00 317 V341"/>
@@ -72,7 +72,8 @@
 <path class="grid" d="M195.50 317 V341"/>
 <path class="grid" d="M256.00 317 V341"/>
 <text class="ink name" x="14" y="312">PhysicsNeMo-Mesh · CPU</text>
-<text class="muted value" x="356" y="327" text-anchor="end">not measured</text>
+<rect class="capsule" x="14" y="319" width="195.20" height="8" rx="1"/>
+<text class="ink value" x="356" y="327" text-anchor="end">168 MB</text>
 <rect class="xfoil" x="14" y="331" width="59.43" height="8" rx="1"/>
 <text class="ink value" x="356" y="339" text-anchor="end">0.96 MB</text>
 <text class="muted small" x="14.00" y="360" text-anchor="middle">0.1</text>
@@ -89,8 +90,8 @@
 <path class="grid" d="M565.33 149 V173"/>
 <path class="grid" d="M646.00 149 V173"/>
 <text class="ink name" x="404" y="144">Gamut · 1 thread</text>
-<rect class="capsule" x="404" y="151" width="21.69" height="8" rx="1"/>
-<text class="ink value" x="746" y="159" text-anchor="end">1.86 ms</text>
+<rect class="capsule" x="404" y="151" width="23.34" height="8" rx="1"/>
+<text class="ink value" x="746" y="159" text-anchor="end">1.95 ms</text>
 <rect class="xfoil" x="404" y="163" width="16.92" height="8" rx="1"/>
 <text class="ink value" x="746" y="171" text-anchor="end">1.62 ms</text>
 <path class="grid" d="M404.00 191 V215"/>
@@ -98,8 +99,8 @@
 <path class="grid" d="M565.33 191 V215"/>
 <path class="grid" d="M646.00 191 V215"/>
 <text class="ink name" x="404" y="186">Gamut · 4 threads</text>
-<rect class="capsule" x="404" y="193" width="22.77" height="8" rx="1"/>
-<text class="ink value" x="746" y="201" text-anchor="end">1.92 ms</text>
+<rect class="capsule" x="404" y="193" width="20.74" height="8" rx="1"/>
+<text class="ink value" x="746" y="201" text-anchor="end">1.81 ms</text>
 <rect class="xfoil" x="404" y="205" width="11.89" height="8" rx="1"/>
 <text class="ink value" x="746" y="213" text-anchor="end">1.4 ms</text>
 <path class="grid" d="M404.00 233 V257"/>
@@ -107,8 +108,8 @@
 <path class="grid" d="M565.33 233 V257"/>
 <path class="grid" d="M646.00 233 V257"/>
 <text class="ink name" x="404" y="228">Exodus II · gzip 1 + shuffle</text>
-<rect class="capsule" x="404" y="235" width="61.19" height="8" rx="1"/>
-<text class="ink value" x="746" y="243" text-anchor="end">5.74 ms</text>
+<rect class="capsule" x="404" y="235" width="60.84" height="8" rx="1"/>
+<text class="ink value" x="746" y="243" text-anchor="end">5.68 ms</text>
 <rect class="xfoil" x="404" y="247" width="26.29" height="8" rx="1"/>
 <text class="ink value" x="746" y="255" text-anchor="end">2.12 ms</text>
 <path class="grid" d="M404.00 275 V299"/>
@@ -116,8 +117,8 @@
 <path class="grid" d="M565.33 275 V299"/>
 <path class="grid" d="M646.00 275 V299"/>
 <text class="ink name" x="404" y="270">CGNS · uncompressed defaults</text>
-<rect class="capsule" x="404" y="277" width="109.36" height="8" rx="1"/>
-<text class="ink value" x="746" y="285" text-anchor="end">22.7 ms</text>
+<rect class="capsule" x="404" y="277" width="109.68" height="8" rx="1"/>
+<text class="ink value" x="746" y="285" text-anchor="end">22.9 ms</text>
 <rect class="xfoil" x="404" y="289" width="185.37" height="8" rx="1"/>
 <text class="ink value" x="746" y="297" text-anchor="end">199 ms</text>
 <path class="grid" d="M404.00 317 V341"/>
@@ -125,7 +126,8 @@
 <path class="grid" d="M565.33 317 V341"/>
 <path class="grid" d="M646.00 317 V341"/>
 <text class="ink name" x="404" y="312">PhysicsNeMo-Mesh · CPU</text>
-<text class="muted value" x="746" y="327" text-anchor="end">not measured</text>
+<rect class="capsule" x="404" y="319" width="55.96" height="8" rx="1"/>
+<text class="ink value" x="746" y="327" text-anchor="end">4.94 ms</text>
 <rect class="xfoil" x="404" y="331" width="5.27" height="8" rx="1"/>
 <text class="ink value" x="746" y="339" text-anchor="end">1.16 ms</text>
 <text class="muted small" x="404.00" y="360" text-anchor="middle">1</text>
@@ -141,8 +143,8 @@
 <path class="grid" d="M175.33 459 V483"/>
 <path class="grid" d="M256.00 459 V483"/>
 <text class="ink name" x="14" y="454">Gamut · 1 thread</text>
-<rect class="capsule" x="14" y="461" width="167.99" height="8" rx="1"/>
-<text class="ink value" x="356" y="469" text-anchor="end">121 ms</text>
+<rect class="capsule" x="14" y="461" width="167.35" height="8" rx="1"/>
+<text class="ink value" x="356" y="469" text-anchor="end">119 ms</text>
 <rect class="xfoil" x="14" y="473" width="27.56" height="8" rx="1"/>
 <text class="ink value" x="356" y="481" text-anchor="end">2.2 ms</text>
 <path class="grid" d="M14.00 501 V525"/>
@@ -150,7 +152,7 @@
 <path class="grid" d="M175.33 501 V525"/>
 <path class="grid" d="M256.00 501 V525"/>
 <text class="ink name" x="14" y="496">Gamut · 4 threads</text>
-<rect class="capsule" x="14" y="503" width="113.01" height="8" rx="1"/>
+<rect class="capsule" x="14" y="503" width="113.08" height="8" rx="1"/>
 <text class="ink value" x="356" y="511" text-anchor="end">25.2 ms</text>
 <rect class="xfoil" x="14" y="515" width="11.11" height="8" rx="1"/>
 <text class="ink value" x="356" y="523" text-anchor="end">1.37 ms</text>
@@ -159,8 +161,8 @@
 <path class="grid" d="M175.33 543 V567"/>
 <path class="grid" d="M256.00 543 V567"/>
 <text class="ink name" x="14" y="538">Exodus II · gzip 1 + shuffle</text>
-<rect class="capsule" x="14" y="545" width="182.57" height="8" rx="1"/>
-<text class="ink value" x="356" y="553" text-anchor="end">183 ms</text>
+<rect class="capsule" x="14" y="545" width="182.27" height="8" rx="1"/>
+<text class="ink value" x="356" y="553" text-anchor="end">182 ms</text>
 <rect class="xfoil" x="14" y="557" width="55.00" height="8" rx="1"/>
 <text class="ink value" x="356" y="565" text-anchor="end">4.81 ms</text>
 <path class="grid" d="M14.00 585 V609"/>
@@ -168,8 +170,8 @@
 <path class="grid" d="M175.33 585 V609"/>
 <path class="grid" d="M256.00 585 V609"/>
 <text class="ink name" x="14" y="580">CGNS · uncompressed defaults</text>
-<rect class="capsule" x="14" y="587" width="235.71" height="8" rx="1"/>
-<text class="ink value" x="356" y="595" text-anchor="end">836 ms</text>
+<rect class="capsule" x="14" y="587" width="236.34" height="8" rx="1"/>
+<text class="ink value" x="356" y="595" text-anchor="end">851 ms</text>
 <rect class="xfoil" x="14" y="599" width="186.81" height="8" rx="1"/>
 <text class="ink value" x="356" y="607" text-anchor="end">207 ms</text>
 <path class="grid" d="M14.00 627 V651"/>
@@ -177,7 +179,8 @@
 <path class="grid" d="M175.33 627 V651"/>
 <path class="grid" d="M256.00 627 V651"/>
 <text class="ink name" x="14" y="622">PhysicsNeMo-Mesh · CPU</text>
-<text class="muted value" x="356" y="637" text-anchor="end">not measured</text>
+<rect class="capsule" x="14" y="629" width="118.19" height="8" rx="1"/>
+<text class="ink value" x="356" y="637" text-anchor="end">29.2 ms</text>
 <rect class="xfoil" x="14" y="641" width="4.28" height="8" rx="1"/>
 <text class="ink value" x="356" y="649" text-anchor="end">1.13 ms</text>
 <text class="muted small" x="14.00" y="670" text-anchor="middle">1</text>
@@ -192,44 +195,45 @@
 <path class="grid" d="M525.00 459 V483"/>
 <path class="grid" d="M646.00 459 V483"/>
 <text class="ink name" x="404" y="454">Gamut · 1 thread</text>
-<rect class="capsule" x="404" y="461" width="153.78" height="8" rx="1"/>
-<text class="ink value" x="746" y="469" text-anchor="end">1.87 ms</text>
+<rect class="capsule" x="404" y="461" width="153.43" height="8" rx="1"/>
+<text class="ink value" x="746" y="469" text-anchor="end">1.85 ms</text>
 <rect class="xfoil" x="404" y="473" width="123.18" height="8" rx="1"/>
 <text class="ink value" x="746" y="481" text-anchor="end">1.04 ms</text>
 <path class="grid" d="M404.00 501 V525"/>
 <path class="grid" d="M525.00 501 V525"/>
 <path class="grid" d="M646.00 501 V525"/>
 <text class="ink name" x="404" y="496">Gamut · 4 threads</text>
-<rect class="capsule" x="404" y="503" width="157.91" height="8" rx="1"/>
-<text class="ink value" x="746" y="511" text-anchor="end">2.02 ms</text>
+<rect class="capsule" x="404" y="503" width="153.12" height="8" rx="1"/>
+<text class="ink value" x="746" y="511" text-anchor="end">1.84 ms</text>
 <rect class="xfoil" x="404" y="515" width="124.60" height="8" rx="1"/>
 <text class="ink value" x="746" y="523" text-anchor="end">1.07 ms</text>
 <path class="grid" d="M404.00 543 V567"/>
 <path class="grid" d="M525.00 543 V567"/>
 <path class="grid" d="M646.00 543 V567"/>
 <text class="ink name" x="404" y="538">Exodus II · gzip 1 + shuffle</text>
-<rect class="capsule" x="404" y="545" width="198.26" height="8" rx="1"/>
-<text class="ink value" x="746" y="553" text-anchor="end">4.35 ms</text>
+<rect class="capsule" x="404" y="545" width="195.87" height="8" rx="1"/>
+<text class="ink value" x="746" y="553" text-anchor="end">4.16 ms</text>
 <rect class="xfoil" x="404" y="557" width="95.73" height="8" rx="1"/>
 <text class="ink value" x="746" y="565" text-anchor="end">618 µs</text>
 <path class="grid" d="M404.00 585 V609"/>
 <path class="grid" d="M525.00 585 V609"/>
 <path class="grid" d="M646.00 585 V609"/>
 <text class="ink name" x="404" y="580">CGNS · uncompressed defaults</text>
-<rect class="capsule" x="404" y="587" width="195.93" height="8" rx="1"/>
-<text class="ink value" x="746" y="595" text-anchor="end">4.16 ms</text>
+<rect class="capsule" x="404" y="587" width="196.76" height="8" rx="1"/>
+<text class="ink value" x="746" y="595" text-anchor="end">4.23 ms</text>
 <rect class="xfoil" x="404" y="599" width="93.45" height="8" rx="1"/>
 <text class="ink value" x="746" y="607" text-anchor="end">592 µs</text>
 <path class="grid" d="M404.00 627 V651"/>
 <path class="grid" d="M525.00 627 V651"/>
 <path class="grid" d="M646.00 627 V651"/>
 <text class="ink name" x="404" y="622">PhysicsNeMo-Mesh · CPU</text>
-<text class="muted value" x="746" y="637" text-anchor="end">not measured</text>
+<rect class="capsule" x="404" y="629" width="198.50" height="8" rx="1"/>
+<text class="ink value" x="746" y="637" text-anchor="end">4.37 ms</text>
 <rect class="xfoil" x="404" y="641" width="92.03" height="8" rx="1"/>
 <text class="ink value" x="746" y="649" text-anchor="end">576 µs</text>
 <text class="muted small" x="404.00" y="670" text-anchor="middle">0.1</text>
 <text class="muted small" x="525.00" y="670" text-anchor="middle">1</text>
 <text class="muted small" x="646.00" y="670" text-anchor="middle">10</text>
 <text class="muted small" x="0" y="710">Apple M3 · warm-cache medians of five · each read opens and closes the file</text>
-<text class="muted small" x="0" y="728">PMSH: capsule mesh not supported. Native sizes include CSV/schema companions. Full method on the benchmark page.</text>
+<text class="muted small" x="0" y="728">PMSH cannot preserve quads. Capsule bars use triangles for every format. Sizes include CSV/schema companions.</text>
 </svg>
