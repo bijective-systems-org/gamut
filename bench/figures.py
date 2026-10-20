@@ -192,37 +192,88 @@ def table(r: dict, reads: list[str]) -> str:
 
 
 def study_summary(capsule: dict, xfoil: dict) -> str:
-    """Two measured studies, with explicit configurations and no synthetic score."""
-    width, row = 760, 26
+    """Two structured tables; colour identifies Gamut, not a performance rank."""
+    width, row, heading, header = 760, 40, 38, 38
     groups = [("Capsule family", capsule, ["gamut", "gamut_threads", "exodus_gzip", "cgns"]),
               ("XFOIL airfoil sweep", xfoil, ["gamut", "gamut_threads", "exodus_gzip", "cgns", "pmsh"])]
-    height = 65 + sum(42 + row * len(formats) for _, _, formats in groups)
+    height = 54 + sum(heading + header + row * len(formats) for _, _, formats in groups) + 20 + 38
+    style = """<style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+      .page, .body { fill: #FFFFFF; } .ink { fill: #1F2328; } .muted { fill: #59636E; }
+      .section { fill: #F0F3F6; } .head { fill: #F6F8FA; } .stripe { fill: #FAFBFC; }
+      .gamut-row { fill: #EDF5FF; } .accent { fill: #0070DC; } .gamut-text { fill: #005EB8; }
+      .rule { stroke: #D8DEE5; stroke-width: 1; fill: none; }
+      .title { font-size: 18px; font-weight: 600; } .label { font-size: 14px; font-weight: 600; }
+      .name { font-size: 13px; font-weight: 600; } .small { font-size: 11px; }
+      .column { font-size: 11px; font-weight: 600; }
+      .number { font-size: 14px; font-variant-numeric: tabular-nums; }
+      @media (prefers-color-scheme: dark) {
+        .page, .body { fill: #0D1117; } .ink { fill: #E6EDF3; } .muted { fill: #9AA6B4; }
+        .section { fill: #1B2532; } .head { fill: #151D27; } .stripe { fill: #111820; }
+        .gamut-row { fill: #102C48; } .accent { fill: #74BFF8; } .gamut-text { fill: #8CCBFF; }
+        .rule { stroke: #303D4C; }
+      }
+    </style>"""
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
            f'width="{width}" height="{height}" role="img" aria-label="Measured study sizes and reads">',
-           STYLE, '<rect class="page" width="100%" height="100%"/>',
-           '<text class="ink h" x="0" y="20">Native simulation formats on the same study data</text>']
-    columns = [("Size", 390), ("One run", 505), ("One node, all runs", 645), ("Run query", 756)]
-    for label, x in columns:
-        out.append(f'<text class="soft" x="{x}" y="44" text-anchor="end">{label}</text>')
-    y = 64
-    for label, result, formats in groups:
+           '<title>Study size and read time</title>',
+           '<desc>Two tables compare the same data across native formats. Blue identifies Gamut. '
+           'All values are measured; lower values indicate smaller files or faster reads. '
+           'The benchmark page has accessible tables, configurations and limitations.</desc>',
+           style, '<rect class="page" width="100%" height="100%"/>',
+           '<text class="ink title" x="0" y="20">Study size and read time</text>',
+           '<text class="muted small" x="0" y="40">Same data in each representation · lower values mean smaller files or faster reads</text>']
+    edges = [0, 276, 383, 490, 638, 760]
+    columns = [("File size", "", 369), ("One run", "read", 476),
+               ("One node", "across all runs", 624), ("Run query", "select + read", 746)]
+    labels = {"gamut": ("Gamut", "1 thread"), "gamut_threads": ("Gamut", "4 threads"),
+              "exodus_gzip": ("Exodus II", "gzip 1 + shuffle"),
+              "cgns": ("CGNS", "uncompressed defaults"),
+              "pmsh": ("PhysicsNeMo-Mesh", "CPU memory-mapped")}
+    y = 54
+    for group, (label, result, formats) in enumerate(groups):
         shape = result["shape"]
         geometries = "geometry" if shape["geometries"] == 1 else "geometries"
-        out.append(f'<text class="ink h" x="0" y="{y}">{label}: {shape["runs"]:,} runs, '
-                   f'{shape["nodes"]:,} nodes, {shape["geometries"]} {geometries}</text>')
-        y += 24
-        for fmt in formats:
+        card_height = heading + header + row * len(formats)
+        out += [f'<defs><clipPath id="table-{group}"><rect x="0.5" y="{y+0.5}" '
+                f'width="759" height="{card_height-1}" rx="6"/></clipPath></defs>',
+                f'<g clip-path="url(#table-{group})">',
+                f'<rect class="body" x="0" y="{y}" width="760" height="{card_height}"/>',
+                f'<rect class="section" x="0" y="{y}" width="760" height="{heading}"/>',
+                f'<text class="ink label" x="14" y="{y+24}">{label}</text>',
+                f'<text class="muted small" x="746" y="{y+24}" text-anchor="end">'
+                f'{shape["runs"]:,} runs · {shape["nodes"]:,} nodes · {shape["geometries"]} {geometries}</text>',
+                f'<rect class="head" x="0" y="{y+heading}" width="760" height="{header}"/>',
+                f'<text class="muted column" x="14" y="{y+heading+24}">FORMAT / CONFIGURATION</text>']
+        for label, sub, x in columns:
+            out.append(f'<text class="muted column" x="{x}" y="{y+heading+16 if sub else y+heading+24}" '
+                       f'text-anchor="end">{label}</text>')
+            if sub:
+                out.append(f'<text class="muted small" x="{x}" y="{y+heading+30}" text-anchor="end">{sub}</text>')
+        for i, fmt in enumerate(formats):
             f = result["formats"][fmt]
-            out.append(f'<text class="{"ink h" if fmt.startswith("gamut") else "ink"}" '
-                       f'x="10" y="{y}">{NAMES[fmt]}</text>')
+            top = y + heading + header + i * row
+            ours = fmt.startswith("gamut")
+            fill = "gamut-row" if ours else ("stripe" if i % 2 == 0 else "body")
+            colour = "gamut-text" if ours else "ink"
+            out.append(f'<rect class="{fill}" x="0" y="{top}" width="760" height="{row}"/>')
+            if ours:
+                out.append(f'<rect class="accent" x="0" y="{top}" width="3" height="{row}"/>')
+            name, config = labels[fmt]
+            out += [f'<text class="{colour} name" x="14" y="{top+16}">{name}</text>',
+                    f'<text class="muted small" x="14" y="{top+31}">{config}</text>']
             values = [megabytes(f["bytes"])] + [seconds(f[k]["median_s"]) for k in
                                                ("one_run", "one_node", "query")]
-            for text, (_, x) in zip(values, columns):
-                out.append(f'<text class="ink" x="{x}" y="{y}" text-anchor="end">{text}</text>')
-            y += row
-        y += 18
-    out.append(f'<text class="soft" x="0" y="{height-8}">Apple M3 · warm-cache medians of five · '
-               'native files include the CSV/schema companions · settings and limits in the benchmark page</text>')
+            for text, (_, _, x) in zip(values, columns):
+                out.append(f'<text class="{colour} number" x="{x}" y="{top+25}" text-anchor="end">{text}</text>')
+            out.append(f'<path class="rule" d="M0 {top} H760"/>')
+        for x in edges[1:-1]:
+            out.append(f'<path class="rule" d="M{x} {y+heading} V{y+card_height}"/>')
+        out += ['</g>', f'<rect class="rule" x="0.5" y="{y+0.5}" width="759" '
+                f'height="{card_height-1}" rx="6"/>']
+        y += card_height + 20
+    out += [f'<text class="muted small" x="0" y="{height-20}">Apple M3 · warm-cache medians of five · each read opens and closes the file</text>',
+            f'<text class="muted small" x="0" y="{height-4}">Native sizes include CSV/schema companions. Settings and limitations are on the benchmark page.</text>']
     out.append('</svg>')
     return "\n".join(out) + "\n"
 
