@@ -25,6 +25,9 @@ NAMES = {"gamut": "Gamut", "gamut_threads": "Gamut, 4 threads", "vtk_folder": "V
          "hdf5_per_run": "HDF5, a group per run", "netcdf": "netCDF-4 (xarray)",
          "zarr": "Zarr (xarray)", "parquet": "Parquet, run table only", "vtkhdf": "VTKHDF, a step per run",
          "npz_per_run": "NumPy, a file per run", "npy": "NumPy arrays, uncompressed"}
+NAMES.update({"exodus": "Exodus II, native defaults", "exodus_gzip": "Exodus II, gzip 1 + shuffle",
+              "cgns": "CGNS, native defaults", "pmsh": "PhysicsNeMo-Mesh (PMSH)",
+              "h5py": "Storage baseline: same file via h5py"})
 READS = {"open": "Open", "one_run": "One run", "one_node": "One node, every run",
          "region": "A region, every run", "query": "Runs by condition"}
 
@@ -188,6 +191,41 @@ def table(r: dict, reads: list[str]) -> str:
     return "\n".join(rows)
 
 
+def study_summary(capsule: dict, xfoil: dict) -> str:
+    """Two measured studies, with explicit configurations and no synthetic score."""
+    width, row = 760, 26
+    groups = [("Capsule family", capsule, ["gamut", "gamut_threads", "exodus_gzip", "cgns"]),
+              ("XFOIL airfoil sweep", xfoil, ["gamut", "gamut_threads", "exodus_gzip", "cgns", "pmsh"])]
+    height = 65 + sum(42 + row * len(formats) for _, _, formats in groups)
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
+           f'width="{width}" height="{height}" role="img" aria-label="Measured study sizes and reads">',
+           STYLE, '<rect class="page" width="100%" height="100%"/>',
+           '<text class="ink h" x="0" y="20">Native simulation formats on the same study data</text>']
+    columns = [("Size", 390), ("One run", 505), ("One node, all runs", 645), ("Run query", 756)]
+    for label, x in columns:
+        out.append(f'<text class="soft" x="{x}" y="44" text-anchor="end">{label}</text>')
+    y = 64
+    for label, result, formats in groups:
+        shape = result["shape"]
+        out.append(f'<text class="ink h" x="0" y="{y}">{label}: {shape["runs"]:,} runs, '
+                   f'{shape["nodes"]:,} nodes, {shape["geometries"]} geometries</text>')
+        y += 24
+        for fmt in formats:
+            f = result["formats"][fmt]
+            out.append(f'<text class="{"ink h" if fmt.startswith("gamut") else "ink"}" '
+                       f'x="10" y="{y}">{NAMES[fmt]}</text>')
+            values = [megabytes(f["bytes"])] + [seconds(f[k]["median_s"]) for k in
+                                               ("one_run", "one_node", "query")]
+            for text, (_, x) in zip(values, columns):
+                out.append(f'<text class="ink" x="{x}" y="{y}" text-anchor="end">{text}</text>')
+            y += row
+        y += 18
+    out.append(f'<text class="soft" x="0" y="{height-8}">Apple M3 · warm-cache medians of five · '
+               'native files include the CSV/schema companions · settings and limits in the benchmark page</text>')
+    out.append('</svg>')
+    return "\n".join(out) + "\n"
+
+
 def machine_line(r: dict) -> str:
     m = r["machine"]
     p = m.get("packages", {})
@@ -200,7 +238,10 @@ def machine_line(r: dict) -> str:
 def generated() -> tuple[dict[str, str], dict[str, str]]:
     capsule = load("capsule_incidence")
     airfrans = load("airfrans")
+    native = load("capsule_native")
+    xfoil = load("xfoil_native")
     figures = {
+        "bench-study.svg": study_summary(native, xfoil),
         "bench-summary.svg": summary_figure(capsule),
         "bench-size.svg": size_figure([("The capsule family", capsule), ("AirfRANS", airfrans)]),
         "bench-one-node.svg": read_figure(
@@ -215,6 +256,9 @@ def generated() -> tuple[dict[str, str], dict[str, str]]:
         "capsule": table(capsule, ["open", "one_run", "one_node", "region", "query"]),
         "airfrans": table(airfrans, ["open", "one_run", "query"]),
         "machine": machine_line(capsule),
+        "capsule_native": table(native, ["one_run", "one_node", "region", "query"]),
+        "xfoil_native": table(xfoil, ["one_run", "one_node", "region", "query"]),
+        "machine_native": machine_line(xfoil),
     }
     return figures, tables
 
