@@ -1,6 +1,6 @@
 function registerModelType(className)
 %REGISTERMODELTYPE Registers a model type for gamut.evaluate.
-%   gamut.registerModelType('romlib.gamut.GP')
+%   gamut.registerModelType('mylib.gamut.GP')
 %   The class has a constant property Type (its name in model files), a
 %   static method load(numbers), and methods call(model, inputs, wanted)
 %   and save(model) (SPEC.md section 7.3).  numbers is the model's data as
