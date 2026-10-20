@@ -192,82 +192,94 @@ def table(r: dict, reads: list[str]) -> str:
 
 
 def study_summary(capsule: dict, xfoil: dict) -> str:
-    """Paired dataset bars; every panel has an explicit logarithmic axis."""
-    width, height, panel_width, panel_height = 760, 734, 370, 292
-    datasets = [("Capsule · triangulated", capsule, "capsule"), ("XFOIL sweep", xfoil, "xfoil")]
+    """Paired dataset bars, each a format's size or time divided by Gamut's on
+    one thread on the same dataset, so both datasets share one linear axis
+    with Gamut as the line at 1x. Rows run best first by the capsule result;
+    a bar past the axis is cut and carries its ratio; the right-hand column
+    gives the measured values."""
+    width, gap, pad, limit, span = 760, 20, 14, 3, 246
+    panel_width = (width - gap) // 2
+    row, bar, bar_gap = 42, 9, 2
+    datasets = [("Capsule family · triangulated", capsule, "capsule"), ("XFOIL airfoil sweep", xfoil, "xfoil")]
     formats = [("gamut", "Gamut · 1 thread"), ("gamut_threads", "Gamut · 4 threads"),
                ("exodus_gzip", "Exodus II · gzip 1 + shuffle"),
                ("cgns", "CGNS · uncompressed defaults"), ("pmsh", "PhysicsNeMo-Mesh · CPU")]
-    panels = [("File size", "MB", "bytes", 1e6),
-              ("Read one run", "ms", "one_run", 1e-3),
-              ("Read one node across every run", "ms", "one_node", 1e-3),
-              ("Select runs and read a result", "ms", "query", 1e-3)]
+    panels = [("File size", "bytes"), ("Read one run", "one_run"),
+              ("Read one node across every run", "one_node"), ("Select runs and read a result", "query")]
+
+    def measured(r, fmt, metric):
+        record = r["formats"][fmt]
+        return record["bytes"] if metric == "bytes" else record[metric]["median_s"]
+
+    rows = []
+    for _, metric in panels:
+        shown = [(fmt, "Gamut" if metric == "bytes" and fmt == "gamut" else label) for fmt, label in formats
+                 if all(fmt in r["formats"] for _, r, _ in datasets)
+                 and not (metric == "bytes" and fmt == "gamut_threads")]    # the same file as one thread
+        rows.append(sorted(shown, key=lambda f: measured(capsule, f[0], metric) / measured(capsule, "gamut", metric)))
+    band = [44 + max(len(rows[2 * b]), len(rows[2 * b + 1])) * row + 26 for b in (0, 1)]
+    top = 92
+    height = top + band[0] + band[1] + 40
     style = """<style>
       text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
-      .page, .panel { fill: #FFFFFF; } .ink { fill: #1F2328; } .muted { fill: #59636E; }
+      .page { fill: #FFFFFF; } .ink { fill: #1F2328; } .muted { fill: #59636E; }
       .capsule { fill: #0070DC; } .xfoil { fill: #74B5EB; }
-      .grid { stroke: #E1E6EC; stroke-width: 1; } .outline { stroke: #D8DEE5; fill: none; }
+      .grid { stroke: #E1E6EC; stroke-width: 1; } .base { stroke: #1F2328; stroke-width: 1.5; }
+      .cut { stroke: #FFFFFF; stroke-width: 2; fill: none; }
       .title { font-size: 18px; font-weight: 600; } .heading { font-size: 13px; font-weight: 600; }
-      .name { font-size: 12px; } .small { font-size: 11px; }
+      .name { font-size: 12px; } .ours { font-weight: 600; } .small { font-size: 11px; }
       .value { font-size: 11px; font-variant-numeric: tabular-nums; }
       @media (prefers-color-scheme: dark) {
-        .page, .panel { fill: #0D1117; } .ink { fill: #E6EDF3; } .muted { fill: #9AA6B4; }
+        .page { fill: #0D1117; } .ink { fill: #E6EDF3; } .muted { fill: #9AA6B4; }
         .capsule { fill: #369BF7; } .xfoil { fill: #95CEFA; }
-        .grid { stroke: #293440; } .outline { stroke: #303D4C; }
+        .grid { stroke: #293440; } .base { stroke: #E6EDF3; } .cut { stroke: #0D1117; }
       }
     </style>"""
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
-           f'width="{width}" height="{height}" role="img" aria-label="Paired dataset bars for study size and reads">',
-           '<title>Study size and read time</title>',
+           f'width="{width}" height="{height}" role="img" aria-label="Study size and read time relative to Gamut">',
+           '<title>Size and read time against Gamut</title>',
            '<desc>Four horizontal bar charts compare formats on two datasets. Dark blue is the triangulated capsule '
-           'family; light blue is the XFOIL sweep. Every format uses the same transformed capsule mesh. '
-           'Axes are logarithmic, with actual values labelled. Accessible tables and methodology are in the benchmark page.</desc>',
+           'family; light blue is the XFOIL sweep. Every format uses the same transformed capsule mesh. Each bar is '
+           'the format\'s size or time divided by Gamut\'s on one thread on the same dataset, on a linear axis from '
+           f'0 to {limit} times; longer bars are cut and labelled with their ratio. Measured values are labelled. '
+           'Accessible tables and methodology are in the benchmark page.</desc>',
            style, '<rect class="page" width="100%" height="100%"/>',
-           '<text class="ink title" x="0" y="20">Study size and read time</text>']
-    for x, (name, result, colour) in zip((0, 390), datasets):
+           '<text class="ink title" x="0" y="20">Size and read time against Gamut</text>']
+    for x, (name, result, colour) in zip((0, panel_width + gap), datasets):
         shape = result["shape"]
         out += [f'<rect class="{colour}" x="{x}" y="37" width="12" height="8" rx="1"/>',
                 f'<text class="ink small" x="{x+20}" y="45">{name} · {shape["runs"]:,} runs · {shape["nodes"]:,} nodes</text>']
-    out.append('<text class="muted small" x="0" y="66">Shorter is smaller or faster · logarithmic axes keep both datasets readable</text>')
-    for panel, (title, units, metric, unit) in enumerate(panels):
-        x, y = (panel % 2) * 390, 82 + (panel // 2) * 310
-        out += [f'<rect class="panel" x="{x}" y="{y}" width="{panel_width}" height="{panel_height}" rx="6"/>',
-                f'<rect class="outline" x="{x+0.5}" y="{y+0.5}" width="{panel_width-1}" height="{panel_height-1}" rx="6"/>',
-                f'<text class="ink heading" x="{x+14}" y="{y+23}">{title}</text>',
-                f'<text class="muted small" x="{x+14}" y="{y+41}">{units} · log scale</text>']
-        numbers = [r["formats"][fmt]["bytes"] if metric == "bytes"
-                   else r["formats"][fmt][metric]["median_s"]
-                   for _, r, _ in datasets for fmt, _ in formats if fmt in r["formats"]]
-        lo = 10 ** math.floor(math.log10(min(numbers) / unit))
-        hi = 10 ** math.ceil(math.log10(max(numbers) / unit))
-        if hi == lo:
-            hi *= 10
-        span = 242
-        def position(value):
-            return x + 14 + span * math.log10(value / unit / lo) / math.log10(hi / lo)
-        ticks = [lo * 10 ** k for k in range(round(math.log10(hi / lo)) + 1)]
-        for i, (fmt, label) in enumerate(formats):
-            top = y + 62 + i * 42
-            for tick in ticks:
-                tx = position(tick * unit)
-                out.append(f'<path class="grid" d="M{tx:.2f} {top+5} V{top+29}"/>')
-            out.append(f'<text class="ink name" x="{x+14}" y="{top}">{label}</text>')
+    out.append('<text class="muted small" x="0" y="68">Bars are relative to Gamut on one thread (the line at 1×) on the '
+               'same dataset; labels are measured values. Shorter is smaller or faster.</text>')
+    for panel, ((title, metric), shown) in enumerate(zip(panels, rows)):
+        x = (panel % 2) * (panel_width + gap) + pad
+        y = top + (band[0] if panel // 2 else 0)
+        right = x - pad + panel_width - pad
+        bottom = y + 30 + len(shown) * row
+        out.append(f'<text class="ink heading" x="{x}" y="{y+16}">{title}</text>')
+        for k in range(limit + 1):
+            tx = x + span * k / limit
+            for i in range(len(shown)):
+                gy = y + 30 + i * row + 17
+                out.append(f'<path class="{"base" if k == 1 else "grid"}" d="M{tx:.1f} {gy} V{gy + 2 * bar + bar_gap + 6}"/>')
+            out.append(f'<text class="muted small" x="{tx:.1f}" y="{bottom+15}" text-anchor="middle">{k}{"×" if k else ""}</text>')
+        for i, (fmt, label) in enumerate(shown):
+            ty = y + 30 + i * row
+            out.append(f'<text class="ink name{" ours" if fmt.startswith("gamut") else ""}" x="{x}" y="{ty+14}">{label}</text>')
             for j, (_, result, colour) in enumerate(datasets):
-                by = top + 7 + j * 12
-                if fmt not in result["formats"]:
-                    out.append(f'<text class="muted value" x="{x+356}" y="{by+8}" text-anchor="end">not measured</text>')
-                    continue
-                record = result["formats"][fmt]
-                value = record["bytes"] if metric == "bytes" else record[metric]["median_s"]
-                label = megabytes(value) if metric == "bytes" else seconds(value)
-                length = position(value) - x - 14
-                out += [f'<rect class="{colour}" x="{x+14}" y="{by}" width="{length:.2f}" height="8" rx="1"/>',
-                        f'<text class="ink value" x="{x+356}" y="{by+8}" text-anchor="end">{label}</text>']
-        for tick in ticks:
-            label = f"{tick:,.0f}" if tick >= 1 else f"{tick:g}"
-            out.append(f'<text class="muted small" x="{position(tick*unit):.2f}" y="{y+278}" text-anchor="middle">{label}</text>')
-    out += ['<text class="muted small" x="0" y="710">Apple M3 · warm-cache medians of five · each read opens and closes the file</text>',
-            '<text class="muted small" x="0" y="728">PMSH cannot preserve quads. Capsule bars use triangles for every format. Sizes include CSV/schema companions.</text>',
+                value = measured(result, fmt, metric)
+                ratio = value / measured(result, "gamut", metric)
+                length = max(span * min(ratio, limit) / limit, 1.5)
+                by = ty + 20 + j * (bar + bar_gap)
+                text = megabytes(value) if metric == "bytes" else seconds(value)
+                out.append(f'<rect class="{colour}" x="{x}" y="{by}" width="{length:.1f}" height="{bar}" rx="1"/>')
+                if ratio > limit:
+                    cx = x + length - 10
+                    out.append(f'<path class="cut" d="M{cx-2:.1f} {by+bar+1} L{cx+2:.1f} {by-1} M{cx+3:.1f} {by+bar+1} L{cx+7:.1f} {by-1}"/>')
+                    text += f" · {ratio:.0f}×"
+                out.append(f'<text class="ink value" x="{right}" y="{by+bar-1}" text-anchor="end">{text}</text>')
+    out += [f'<text class="muted small" x="0" y="{height-26}">Apple M3 · warm-cache medians of five · each read opens and closes the file</text>',
+            f'<text class="muted small" x="0" y="{height-8}">PMSH cannot preserve quads. Capsule bars use triangles for every format. Sizes include CSV/schema companions.</text>',
             '</svg>']
     return "\n".join(out) + "\n"
 

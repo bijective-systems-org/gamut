@@ -152,7 +152,7 @@ measure the cost of those conventions and operations alongside native
 simulation formats and direct storage access.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/bench-study.svg" alt="Measured sizes and reads for a triangulated capsule geometry family and an XFOIL airfoil sweep. Every format, including PhysicsNeMo-Mesh, uses the same mesh within each dataset." width="760">
+  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/bench-study.svg" alt="File size and read times of Exodus II, CGNS and PhysicsNeMo-Mesh relative to Gamut, for a triangulated capsule geometry family and an XFOIL airfoil sweep. Every format uses the same mesh within each dataset." width="760">
 </p>
 
 Gamut preserves the capsule's quadrilateral cells directly.
