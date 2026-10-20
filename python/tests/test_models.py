@@ -34,7 +34,7 @@ def test_nearest_model_file_and_evaluation(tmp_path):
     model = gamut.Nearest(["mach", "alpha"], [0.3, 0.0], [0.6, 4.0], x,
                            {"cl": [0.0, 0.5, 0.4, 0.1],
                             "p": [[1, 1, 1], [2, 2, 2], [3, 3, 3], [4, 4, 4]]})
-    with gamut.create_model(mp, writer="proximant", mesh="shared", per="fixed",
+    with gamut.create_model(mp, writer="Proximant", mesh="shared", per="fixed",
                              coordinates={"units": "m", "axes": 1},
                              parameters={"mach": {"units": "1", "role": "condition", "lower": 0.3, "upper": 0.6},
                                          "alpha": {"units": "degree", "role": "condition", "lower": 0.0, "upper": 4.0}},
