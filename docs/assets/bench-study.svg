@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 692" width="760" height="692" role="img" aria-label="Study size and read time relative to Gamut">
 <title>Size and read time against Gamut</title>
-<desc>Four horizontal bar charts compare formats on two datasets. Dark blue is the triangulated capsule family; light blue is the XFOIL sweep. Every format uses the same transformed capsule mesh. Each bar is the format's size or time divided by Gamut's on one thread on the same dataset, on a linear axis from 0 to 3 times; longer bars are cut and labelled with their ratio. Measured values are labelled. Accessible tables and methodology are in the benchmark page.</desc>
+<desc>Four horizontal bar charts compare formats on two datasets. Dark blue is the triangulated capsule family; light blue is the XFOIL sweep. Within each dataset every format uses the same mesh. Each bar is the format's size or time divided by Gamut's on one thread on the same dataset, on a linear axis from 0 to 3 times; longer bars are cut and labelled with their ratio. Measured values are labelled. Accessible tables and methodology are in the benchmark page.</desc>
 <style>
       text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
       .page { fill: #FFFFFF; } .ink { fill: #1F2328; } .muted { fill: #59636E; }

@@ -216,7 +216,7 @@ def study_summary(capsule: dict, xfoil: dict) -> str:
         shown = [(fmt, "Gamut" if metric == "bytes" and fmt == "gamut" else label) for fmt, label in formats
                  if all(fmt in r["formats"] for _, r, _ in datasets)
                  and not (metric == "bytes" and fmt == "gamut_threads")]    # the same file as one thread
-        rows.append(sorted(shown, key=lambda f: measured(capsule, f[0], metric) / measured(capsule, "gamut", metric)))
+        rows.append(sorted(shown, key=lambda f: measured(capsule, f[0], metric)))
     band = [44 + max(len(rows[2 * b]), len(rows[2 * b + 1])) * row + 26 for b in (0, 1)]
     top = 92
     height = top + band[0] + band[1] + 40
@@ -239,7 +239,7 @@ def study_summary(capsule: dict, xfoil: dict) -> str:
            f'width="{width}" height="{height}" role="img" aria-label="Study size and read time relative to Gamut">',
            '<title>Size and read time against Gamut</title>',
            '<desc>Four horizontal bar charts compare formats on two datasets. Dark blue is the triangulated capsule '
-           'family; light blue is the XFOIL sweep. Every format uses the same transformed capsule mesh. Each bar is '
+           'family; light blue is the XFOIL sweep. Within each dataset every format uses the same mesh. Each bar is '
            'the format\'s size or time divided by Gamut\'s on one thread on the same dataset, on a linear axis from '
            f'0 to {limit} times; longer bars are cut and labelled with their ratio. Measured values are labelled. '
            'Accessible tables and methodology are in the benchmark page.</desc>',
