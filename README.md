@@ -145,25 +145,39 @@ node 13 in MATLAB and Julia.
 
 ## Performance
 
+Gamut stores the study's meaning alongside compressed arrays: inputs,
+units, run status and geometry relationships, with the same study
+interface across languages. It builds on HDF5/netCDF-4; the benchmarks
+measure the cost of those conventions and operations alongside native
+simulation formats and direct storage access.
+
 <p align="center">
-  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/bench-summary.svg" alt="Size on disk and three read times for one study stored as Gamut, HDF5 with a group per run, netCDF-4, VTKHDF, Zarr, a NumPy file per run, uncompressed NumPy arrays and VTK files." width="760">
+  <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/bench-study.svg" alt="Measured sizes and reads for a triangulated capsule geometry family and an XFOIL airfoil sweep. Every format, including PhysicsNeMo-Mesh, uses the same mesh within each dataset." width="760">
 </p>
 
-Gamut is about the size of netCDF-4 and Zarr, a little smaller than VTKHDF
-and HDF5 written a run at a time, and a sixth of the VTK files. Choosing
-runs by condition and reading a result of each takes about a millisecond,
-as fast as a Parquet file of the run table alone. Opening a file costs
-Gamut about 0.9 ms, so HDF5 and VTKHDF read straight with h5py fetch one
-small run faster, and uncompressed NumPy arrays, at 2.3 times the size,
-read fastest of all. Gamut's chunks are laid out for reading whole runs,
-so one node across every run takes 127 ms, slower than Zarr or netCDF-4.
-HDF5 decompresses on one core; with threads turned on, Gamut fetches the
-compressed chunks of a whole-run or contiguous read through HDF5 and
-decompresses them in parallel, and four threads bring that read to 39 ms.
-On 100 runs of AirfRANS, each on its own mesh of
-about 176,000 nodes, one run reads in 15 ms against 124 ms from its VTK file.
+Gamut preserves the capsule's quadrilateral cells directly.
+**PhysicsNeMo-Mesh requires simplices, so its capsule case needs conversion
+to triangles.** The chart uses that same converted mesh for every format;
+the original quad results remain on the benchmarks page.
 
-<sub>Apple M3, 8 GB, macOS 27, files in the operating system's cache; medians of five reads, each opening the file. The [benchmarks page](https://github.com/bijective-systems-org/gamut/blob/main/docs/benchmarks.md) has every number, the method and the scripts to repeat it.</sub>
+On the triangulated capsule family, Gamut and compressed Exodus occupy
+about the same space. Gamut is smaller and reads one run faster than PMSH;
+four decompression threads also make the reads across all runs competitive.
+PMSH writes faster. On the smaller airfoil sweep, PMSH reads faster, while
+Gamut is smaller. Direct h5py reads of the same Gamut arrays show similar
+bulk decoding time, with less fixed overhead for small reads.
+The [benchmarks](https://github.com/bijective-systems-org/gamut/blob/main/docs/benchmarks.md)
+include the full timings, settings, payload checks and workloads where
+another approach is faster, plus the earlier VTK, VTKHDF, Zarr and NumPy
+comparisons.
+
+The [four-language example above](#example) shows the same write, append
+and read returning the same values. The [reading-parts example](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/08-reading-parts.md)
+selects converged runs and reads a named surface region in specified
+units. The format supplies the study conventions and operations that a
+custom array layout leaves each producer to maintain.
+
+<sub>Apple M3, 8 GB; warm-cache medians of five, each opening and closing the file. Native copies include the run-table/schema companions; the condition query reads those companions for Exodus, CGNS and PMSH. Exodus uses gzip level 1 and shuffle; CGNS uses native uncompressed defaults; PMSH uses CPU memory mapping. Triangulation retains nodal values without a solver rerun. Full method, versions and source commits are on the benchmarks page.</sub>
 
 ## Install
 

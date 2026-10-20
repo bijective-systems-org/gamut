@@ -62,7 +62,7 @@ def machine() -> dict[str, Any]:
     commit = subprocess.run(["git", "-C", here, "rev-parse", "--short", "HEAD"],
                             capture_output=True, text=True).stdout.strip()
     dirty = subprocess.run(["git", "-C", here, "status", "--porcelain", "--", "src", "include",
-                            "python/gamut"], capture_output=True, text=True).stdout.strip()
+                            "python/gamut", "bench/*.py"], capture_output=True, text=True).stdout.strip()
     info["source"] = commit + (" (modified)" if dirty else "")
     return info
 

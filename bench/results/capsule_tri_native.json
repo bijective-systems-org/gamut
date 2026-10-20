@@ -1,0 +1,302 @@
+{
+ "case": "capsule-triangles.gamut",
+ "machine": {
+  "python": "3.11.11",
+  "system": "macOS-27.0.1-arm64-arm-64bit",
+  "cpu": "Apple M3",
+  "memory_bytes": "8589934592",
+  "cores": "8",
+  "packages": {
+   "gamut": "1.1.0",
+   "numpy": "2.3.5",
+   "h5py": "3.15.1",
+   "netCDF4": "1.7.4",
+   "xarray": "2026.2.0",
+   "zarr": "3.1.6",
+   "pyarrow": "23.0.1",
+   "pandas": "2.3.3",
+   "pyvista": "0.48.1",
+   "vtk": "9.5.2",
+   "nvidia-physicsnemo": "2.2.2",
+   "tensordict": "0.15.2",
+   "torch": "2.13.0"
+  },
+  "source": "5233f4d",
+  "host_observation": "CPU, RAM and core count measured on the same host after the run; benchmark subprocess sysctl access was sandbox-blocked. Other metadata recorded by the runner."
+ },
+ "shape": {
+  "runs": 1364,
+  "nodes": 6722,
+  "cells": 13440,
+  "geometries": 44,
+  "fields": [
+   "heat_flux_ratio",
+   "pressure_coefficient"
+  ]
+ },
+ "input_sha256": "482f88bf839ea4f325165267fbd7f706c3b1c8ab522248e6e3390816c776cb1a",
+ "formats": {
+  "gamut": {
+   "bytes": 66051786,
+   "write_s": 1.4211506249848753,
+   "verified": true,
+   "one_run": {
+    "median_s": 0.0019470000406727195,
+    "min_s": 0.0018399590626358986,
+    "max_s": 0.0020022919634357095,
+    "repeats": 5,
+    "checksum": 2501.053484458284
+   },
+   "one_node": {
+    "median_s": 0.11875037499703467,
+    "min_s": 0.11871870793402195,
+    "max_s": 0.11940545798279345,
+    "repeats": 5,
+    "checksum": 0.0
+   },
+   "region": {
+    "median_s": 0.12166558299213648,
+    "min_s": 0.12053149996791035,
+    "max_s": 0.12787079205736518,
+    "repeats": 5,
+    "checksum": 578884.7953446857
+   },
+   "query": {
+    "median_s": 0.0018535420531406999,
+    "min_s": 0.0018280419753864408,
+    "max_s": 0.001928500016219914,
+    "repeats": 5,
+    "checksum": 469.07682701663435
+   }
+  },
+  "gamut_threads": {
+   "bytes": 66051786,
+   "write_s": null,
+   "verified": true,
+   "one_run": {
+    "median_s": 0.0018074580002576113,
+    "min_s": 0.0017748749814927578,
+    "max_s": 0.0018607079982757568,
+    "repeats": 5,
+    "checksum": 2501.053484458284
+   },
+   "one_node": {
+    "median_s": 0.025223582983016968,
+    "min_s": 0.025071125011891127,
+    "max_s": 0.02578600007109344,
+    "repeats": 5,
+    "checksum": 0.0
+   },
+   "region": {
+    "median_s": 0.026219167048111558,
+    "min_s": 0.02612112497445196,
+    "max_s": 0.02663287497125566,
+    "repeats": 5,
+    "checksum": 578884.7953446857
+   },
+   "query": {
+    "median_s": 0.0018428749172016978,
+    "min_s": 0.0018345409771427512,
+    "max_s": 0.0019229999743402004,
+    "repeats": 5,
+    "checksum": 469.07682701663435
+   }
+  },
+  "exodus": {
+   "bytes": 162326909,
+   "write_s": 0.7164555829949677,
+   "verified": true,
+   "one_run": {
+    "median_s": 0.005910167004913092,
+    "min_s": 0.005812167073599994,
+    "max_s": 0.0059512919979169965,
+    "repeats": 5,
+    "checksum": 2501.053484458284
+   },
+   "one_node": {
+    "median_s": 0.07414662500377744,
+    "min_s": 0.0719233329873532,
+    "max_s": 0.07577862497419119,
+    "repeats": 5,
+    "checksum": 0.0
+   },
+   "region": {
+    "median_s": 0.11255720793269575,
+    "min_s": 0.11208162503316998,
+    "max_s": 0.11513525003101677,
+    "repeats": 5,
+    "checksum": 578884.7953446857
+   },
+   "query": {
+    "median_s": 0.004373874980956316,
+    "min_s": 0.0042489999905228615,
+    "max_s": 0.004484917037189007,
+    "repeats": 5,
+    "checksum": 469.07682701663435
+   }
+  },
+  "exodus_gzip": {
+   "bytes": 68149305,
+   "write_s": 1.169414333999157,
+   "verified": true,
+   "one_run": {
+    "median_s": 0.005678584100678563,
+    "min_s": 0.00562104198615998,
+    "max_s": 0.005854416987858713,
+    "repeats": 5,
+    "checksum": 2501.053484458284
+   },
+   "one_node": {
+    "median_s": 0.18178912508301437,
+    "min_s": 0.18017237505409867,
+    "max_s": 0.18343249999452382,
+    "repeats": 5,
+    "checksum": 0.0
+   },
+   "region": {
+    "median_s": 0.22636483400128782,
+    "min_s": 0.2244442090159282,
+    "max_s": 0.23011983407195657,
+    "repeats": 5,
+    "checksum": 578884.7953446857
+   },
+   "query": {
+    "median_s": 0.004156499984674156,
+    "min_s": 0.004134542075917125,
+    "max_s": 0.004265416995622218,
+    "repeats": 5,
+    "checksum": 469.07682701663435
+   }
+  },
+  "cgns": {
+   "bytes": 171418453,
+   "write_s": 0.6378617499722168,
+   "verified": true,
+   "one_run": {
+    "median_s": 0.022893166984431446,
+    "min_s": 0.02266699995379895,
+    "max_s": 0.022959207999520004,
+    "repeats": 5,
+    "checksum": 2501.053484458284
+   },
+   "one_node": {
+    "median_s": 0.8507028330350295,
+    "min_s": 0.8459307500161231,
+    "max_s": 0.8588103340007365,
+    "repeats": 5,
+    "checksum": 0.0
+   },
+   "region": {
+    "median_s": 0.8609174999874085,
+    "min_s": 0.8503253749804571,
+    "max_s": 0.8755294169532135,
+    "repeats": 5,
+    "checksum": 578884.7953446857
+   },
+   "query": {
+    "median_s": 0.004227541969157755,
+    "min_s": 0.004171500098891556,
+    "max_s": 0.004291374934837222,
+    "repeats": 5,
+    "checksum": 469.07682701663435
+   }
+  },
+  "pmsh": {
+   "bytes": 168431733,
+   "write_s": 0.3981598330428824,
+   "verified": true,
+   "one_run": {
+    "median_s": 0.0049403749871999025,
+    "min_s": 0.0048240829491987824,
+    "max_s": 0.005113499937579036,
+    "repeats": 5,
+    "checksum": 2501.053484458284
+   },
+   "one_node": {
+    "median_s": 0.029185416060499847,
+    "min_s": 0.027818875038065016,
+    "max_s": 0.0323399999178946,
+    "repeats": 5,
+    "checksum": 0.0
+   },
+   "region": {
+    "median_s": 0.03093595802783966,
+    "min_s": 0.030765082919970155,
+    "max_s": 0.032379375072196126,
+    "repeats": 5,
+    "checksum": 578884.7953446857
+   },
+   "query": {
+    "median_s": 0.004370208014734089,
+    "min_s": 0.004214374930597842,
+    "max_s": 0.004402667051181197,
+    "repeats": 5,
+    "checksum": 469.07682701663435
+   }
+  },
+  "h5py": {
+   "bytes": 66051786,
+   "write_s": null,
+   "verified": true,
+   "one_run": {
+    "median_s": 0.0004863340873271227,
+    "min_s": 0.0004710000939667225,
+    "max_s": 0.0005139169516041875,
+    "repeats": 5,
+    "checksum": 2501.053484458284
+   },
+   "one_node": {
+    "median_s": 0.1273818330373615,
+    "min_s": 0.12613133306149393,
+    "max_s": 0.13206470804288983,
+    "repeats": 5,
+    "checksum": 0.0
+   },
+   "region": {
+    "median_s": 0.13122670794837177,
+    "min_s": 0.12823479098733515,
+    "max_s": 0.1428943749051541,
+    "repeats": 5,
+    "checksum": 578884.7953446857
+   },
+   "query": {
+    "median_s": 0.0003186250105500221,
+    "min_s": 0.0003107499796897173,
+    "max_s": 0.00042625004425644875,
+    "repeats": 5,
+    "checksum": 469.07682701663435
+   }
+  }
+ },
+ "reads": {
+  "field": "pressure_coefficient",
+  "scalar": "axial_force_coefficient",
+  "row": 100,
+  "node": 3000,
+  "region": "0:672",
+  "where": "mach > 20 and alpha > 0"
+ },
+ "native": {
+  "CGNS_LIBRARY": "/opt/anaconda3/envs/myenv/lib/libvtkcgns-9.5.dylib",
+  "CGNS_INDEX_BYTES": "8",
+  "EXODUS_LIBRARY": "/opt/anaconda3/envs/myenv/lib/libvtkexodusII-9.5.dylib",
+  "EXODUS_API_VERSION": "904"
+ },
+ "preparation": {
+  "source": "capsule.gamut",
+  "source_sha256": "c4757c98d126a0d0bb45e830473bc38d2654a3e1b89be45133bda4f2c3869696",
+  "output": "capsule-triangles.gamut",
+  "output_sha256": "482f88bf839ea4f325165267fbd7f706c3b1c8ab522248e6e3390816c776cb1a",
+  "transform": "quad [a,b,c,d] -> triangles [a,b,c], [a,c,d] in source-cell order",
+  "source_cells": 6720,
+  "output_cells": 13440,
+  "output_vtk_type": 5,
+  "verified": true,
+  "payload": "benchmark nodes, nodal fields, run table and geometry mapping; no cell results"
+ },
+ "native_versions": {
+  "CGNS": "4.5.0",
+  "Exodus": "9.04",
+  "cgsize_t_bytes": 8
+ }
+}

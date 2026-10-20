@@ -69,7 +69,8 @@ def write_gamut(d: dict, out: str) -> None:
     fields = {n: {"units": d["declared"][n]["units"], "at": "node"} for n in d["fields"]}
     fixed = d["per"] == "fixed"
     with gamut.create(out, writer="benchmark", mesh="shared", per=d["per"],
-                       coordinates={"units": d["declared"]["coordinates"]["units"], "axes": 3},
+                       coordinates={"units": d["declared"]["coordinates"]["units"],
+                                    "axes": d["points"][0].shape[1]},
                        parameters=parameters,
                        labels=labels, scalars=scalars, fields=fields) as study:
         study.set_mesh(d["points"][0] if fixed else None, d["cells"],
