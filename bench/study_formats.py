@@ -27,7 +27,7 @@ from common import machine, run_child, size_of, timed
 from native_formats import CGNS, Exodus
 from shared_mesh import load, parse_where, write_gamut
 
-FORMATS = ("gamut", "gamut_threads", "exodus", "cgns", "pmsh", "h5py")
+FORMATS = ("gamut", "gamut_threads", "exodus", "exodus_gzip", "cgns", "pmsh", "h5py")
 
 
 def path_of(work, fmt):
@@ -57,7 +57,7 @@ def read_manifest(out):
 
 
 def native_path(out, fmt, member):
-    return out / f"geometry_{member:05d}.{dict(exodus='e', cgns='cgns', pmsh='pmsh')[fmt]}"
+    return out / f"geometry_{member:05d}.{dict(exodus='e', exodus_gzip='e', cgns='cgns', pmsh='pmsh')[fmt]}"
 
 
 def write_native(d, out, fmt):
@@ -76,7 +76,7 @@ def write_native(d, out, fmt):
                 mesh.point_data[name] = torch.from_numpy(values[d["member"] == m].T.copy())
             mesh.save(native_path(out, fmt, m))
     else:
-        api = CGNS() if fmt == "cgns" else Exodus()
+        api = CGNS() if fmt == "cgns" else Exodus(compressed=fmt == "exodus_gzip")
         for m, points in enumerate(d["points"]):
             api.write(native_path(out, fmt, m), points, d["cells"],
                       {n: a[d["member"] == m] for n, a in d["fields"].items()})
@@ -202,7 +202,7 @@ def main():
     if args.command == "write":
         d = load(args.study)
         # Exclude language/package import time for every writer.
-        if args.format in ("exodus", "cgns", "pmsh"):
+        if args.format in ("exodus", "exodus_gzip", "cgns", "pmsh"):
             import pandas
         if args.format == "pmsh":
             import torch

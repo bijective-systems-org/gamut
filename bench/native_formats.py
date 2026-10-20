@@ -133,9 +133,10 @@ class CGNS(Library):
 
 
 class Exodus(Library):
-    def __init__(self):
+    def __init__(self, compressed=False):
         super().__init__("EXODUS_LIBRARY", "ex_open_int")
         self.api = int(os.environ["EXODUS_API_VERSION"])
+        self.compressed = compressed
         for name, args in {
             "ex_create_int": [S, I, IP, IP, I],
             "ex_open_int": [S, I, IP, IP, ct.POINTER(ct.c_float), I], "ex_close": [I],
@@ -146,6 +147,7 @@ class Exodus(Library):
             "ex_get_block": [I, I, L, P, IP, IP, IP, IP, IP],
             "ex_put_conn": [I, I, L, P, P, P], "ex_get_conn": [I, I, L, P, P, P],
             "ex_put_variable_param": [I, I, I],
+            "ex_set_option": [I, I, I],
             "ex_put_variable_names": [I, I, I, ct.POINTER(S)],
             "ex_put_time": [I, I, P], "ex_put_var": [I, I, I, I, L, L, P],
             "ex_get_partial_var": [I, I, I, I, L, L, L, P],
@@ -165,6 +167,9 @@ class Exodus(Library):
                                             ct.byref(version), self.api))
         self.check(f)
         try:
+            if write and self.compressed:
+                self.check(self.ex_set_option(f, 3, 1))  # gzip level 1
+                self.check(self.ex_set_option(f, 4, 1))  # shuffle
             yield f
         finally:
             self.check(self.ex_close(f))
