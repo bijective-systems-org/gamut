@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+MATLAB installs from a toolbox, `Gamut.mltbx`, attached to each release:
+MATLAB R2023b or later on Linux, Windows or an Apple silicon Mac, and no
+compiler. Each release also carries the core on its own for each platform
+(`gamut-core-<version>-<platform>`, with its headers and CMake package) for
+Julia, C and C++. Every package now includes the licences of HDF5 and zlib,
+which the core links in.
+
 Calls from several threads no longer crash. HDF5 keeps state for the whole
 process and is built without its thread-safety option, so two threads each
 reading its own file could bring it down; every call that reaches a file
