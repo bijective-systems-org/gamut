@@ -199,8 +199,16 @@ bool read_parallel(const File& f, const std::string& path, DType mem,
     std::vector<std::vector<unsigned char>> raw(b1 - b0);
     std::vector<std::uint32_t> masks(b1 - b0, 0);
     for (std::size_t k = b0; k < b1; ++k) {
+      // The size the chunk index records, which H5Dread_chunk reads; the
+      // storage-size call gives the nominal size for an unfiltered dataset.
       hsize_t stored = 0;
-      if (H5Dget_chunk_storage_size(dset.get(), chunks[k].data(), &stored) < 0) stored = 0;
+      unsigned filters = 0;
+      haddr_t address = HADDR_UNDEF;
+      if (H5Dget_chunk_info_by_coord(dset.get(), chunks[k].data(), &filters, &address,
+                                     &stored) < 0 ||
+          address == HADDR_UNDEF) {
+        stored = 0;
+      }
       if (stored == 0) continue;   // never written: zeros, as HDF5 gives
       if (stored > max_stored) {
         throw Error("E23", "a chunk of \"" + path + "\" is larger than its contents can be",

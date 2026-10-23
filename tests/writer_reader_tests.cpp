@@ -548,26 +548,36 @@ void test_read_limit_before_allocation() {
 void test_short_unfiltered_chunk() {
   const std::string path = "wr_short_chunk.gamut";
   {
+    // Three chunks of four; the middle one stored in 20 bytes, not 32.
     File f = File::create(path);
-    f.create_dataset("/x", DType::Float64, 0, {8}, {H5S_UNLIMITED}, {4}, {});
+    f.create_dataset("/x", DType::Float64, 0, {12}, {H5S_UNLIMITED}, {4}, {});
     const hid_t d = H5Dopen2(f.get(), "/x", H5P_DEFAULT);
-    const hsize_t origin = 0;
+    const hsize_t origin = 4;
     const unsigned char bytes[20] = {};
     CHECK(H5Dwrite_chunk(d, H5P_DEFAULT, 0, &origin, sizeof bytes, bytes) >= 0);
     H5Dclose(d);
   }
   {
     const File f = File::open_read(path);
-    double out[8] = {};
+    double out[12] = {};
     CHECK(rule_of([&] { f.read("/x", DType::Float64, {}, out, sizeof out); }) == "E23");
     CHECK(rule_of([&] {
-            f.read("/x", DType::Float64, {Selection::range(4, 8)}, out, 4 * sizeof(double));
-          }).empty());   // the second chunk was never written: zeros
+            return read_parallel(f, "/x", DType::Float64, {}, out, sizeof out, 4);
+          }) == "E23");
+    // Chunks never written read as zeros, and positions 0 and 11 touch only
+    // the first and last chunks.
+    CHECK(rule_of([&] {
+            f.read("/x", DType::Float64, {Selection::range(8, 12)}, out, 4 * sizeof(double));
+          }).empty());
+    CHECK(rule_of([&] {
+            f.read("/x", DType::Float64, {Selection::list({0, 11})}, out, 2 * sizeof(double));
+          }).empty());
   }
   {
     File f = File::open_write(path);
     const double one[2] = {1.0, 2.0};
-    CHECK(rule_of([&] { f.write("/x", DType::Float64, {1}, {2}, one); }) == "E23");
+    CHECK(rule_of([&] { f.write("/x", DType::Float64, {5}, {2}, one); }) == "E23");
+    CHECK(rule_of([&] { f.write("/x", DType::Float64, {9}, {2}, one); }).empty());
   }
   if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
 }

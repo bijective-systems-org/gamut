@@ -75,11 +75,14 @@ Id open_dataset(hid_t file, const std::string& path) {
 // An unfiltered chunk is stored whole, and HDF5 reads or rewrites a stored
 // chunk as that many bytes. A chunk stored in another size (a compressed one
 // whose filter message is damaged looks unfiltered) would take HDF5 past its
-// own buffer, so every stored chunk in the box [lo, hi) is checked first.
-void check_stored_chunks(hid_t dset, const std::string& path, const std::vector<hsize_t>& lo,
-                         const std::vector<hsize_t>& hi) {
+// own buffer, so every stored chunk a call touches is checked first: on each
+// axis, the chunks its runs (start, count; increasing) fall in. That is no
+// more chunks than HDF5 itself then visits.
+using Runs = std::vector<std::pair<std::int64_t, std::int64_t>>;
+
+void check_stored_chunks(hid_t dset, const std::string& path, const std::vector<Runs>& runs) {
   Id dcpl(H5Dget_create_plist(dset));
-  const std::size_t rank = lo.size();
+  const std::size_t rank = runs.size();
   if (rank == 0 || !dcpl.valid() || H5Pget_layout(dcpl.get()) != H5D_CHUNKED ||
       H5Pget_nfilters(dcpl.get()) != 0) {
     return;
@@ -95,13 +98,25 @@ void check_stored_chunks(hid_t dset, const std::string& path, const std::vector<
     }
     bytes *= c;
   }
-  std::vector<hsize_t> first(rank), last(rank);
+  // On each axis, the touched chunk indices as ranges [first, last].
+  std::vector<std::vector<std::pair<hsize_t, hsize_t>>> ranges(rank);
   for (std::size_t a = 0; a < rank; ++a) {
-    if (hi[a] <= lo[a]) return;
-    first[a] = lo[a] / chunk[a];
-    last[a] = (hi[a] - 1) / chunk[a];
+    const auto c = static_cast<std::int64_t>(chunk[a]);
+    for (const auto& r : runs[a]) {
+      if (r.second <= 0) continue;
+      const auto first = static_cast<hsize_t>(r.first / c);
+      const auto last = static_cast<hsize_t>((r.first + r.second - 1) / c);
+      if (!ranges[a].empty() && first <= ranges[a].back().second + 1) {
+        ranges[a].back().second = std::max(ranges[a].back().second, last);
+      } else {
+        ranges[a].emplace_back(first, last);
+      }
+    }
+    if (ranges[a].empty()) return;
   }
-  std::vector<hsize_t> at = first, origin(rank);
+  std::vector<std::size_t> range(rank, 0);
+  std::vector<hsize_t> at(rank), origin(rank);
+  for (std::size_t a = 0; a < rank; ++a) at[a] = ranges[a][0].first;
   while (true) {
     for (std::size_t a = 0; a < rank; ++a) origin[a] = at[a] * chunk[a];
     // The size the chunk index records, which is what HDF5 reads; the
@@ -121,14 +136,29 @@ void check_stored_chunks(hid_t dset, const std::string& path, const std::vector<
     bool done = true;
     while (a > 0) {
       --a;
-      if (++at[a] <= last[a]) {
-        done = false;
-        break;
+      if (at[a] < ranges[a][range[a]].second) {
+        ++at[a];
+      } else if (range[a] + 1 < ranges[a].size()) {
+        at[a] = ranges[a][++range[a]].first;
+      } else {
+        range[a] = 0;
+        at[a] = ranges[a][0].first;
+        continue;
       }
-      at[a] = first[a];
+      done = false;
+      break;
     }
     if (done) break;
   }
+}
+
+// One run, [start, start + count), on each axis.
+std::vector<Runs> box_runs(const std::vector<hsize_t>& start, const std::vector<hsize_t>& count) {
+  std::vector<Runs> runs(start.size());
+  for (std::size_t a = 0; a < start.size(); ++a) {
+    runs[a].emplace_back(static_cast<std::int64_t>(start[a]), static_cast<std::int64_t>(count[a]));
+  }
+  return runs;
 }
 
 std::string token_key(hid_t where, const H5O_token_t& token) {
@@ -910,14 +940,11 @@ void File::read(const std::string& path, DType mem,
            std::to_string(n * dtype_size(mem)));
   if (n == 0) return;
   {
-    // The box the selection spans: each axis from its first to its last position.
-    std::vector<hsize_t> lo(info.shape.size(), 0), hi = info.shape;
+    auto runs = box_runs(std::vector<hsize_t>(info.shape.size(), 0), info.shape);
     for (std::size_t a = 0; a < sel.size() && a < info.shape.size(); ++a) {
-      const auto runs = sel[a].runs(static_cast<std::int64_t>(info.shape[a]), path);
-      lo[a] = static_cast<hsize_t>(runs.front().first);
-      hi[a] = static_cast<hsize_t>(runs.back().first + runs.back().second);
+      runs[a] = sel[a].runs(static_cast<std::int64_t>(info.shape[a]), path);
     }
-    check_stored_chunks(dset.get(), path, lo, hi);
+    check_stored_chunks(dset.get(), path, runs);
   }
   Id memspace = count.empty() ? Id(H5Screate(H5S_SCALAR))
                               : Id(H5Screate_simple(static_cast<int>(count.size()),
@@ -958,7 +985,8 @@ std::vector<std::string> File::read_strings(const std::string& path, std::size_t
                                      "will read");
   }
   Id dset(open_dataset(id_.get(), path));
-  check_stored_chunks(dset.get(), path, std::vector<hsize_t>(info.shape.size(), 0), info.shape);
+  check_stored_chunks(dset.get(), path,
+                      box_runs(std::vector<hsize_t>(info.shape.size(), 0), info.shape));
   Id type(H5Dget_type(dset.get()));
   std::string buffer(item * count, '\0');
   need(H5Dread(dset.get(), type.get(), H5S_ALL, H5S_ALL, H5P_DEFAULT,
@@ -1098,11 +1126,7 @@ void File::write(const std::string& path, DType mem,
   for (const hsize_t c : count) {
     if (c == 0) return;
   }
-  {
-    std::vector<hsize_t> hi(start);
-    for (std::size_t a = 0; a < hi.size(); ++a) hi[a] += count[a];
-    check_stored_chunks(dset.get(), path, start, hi);
-  }
+  check_stored_chunks(dset.get(), path, box_runs(start, count));
   Id memspace;
   if (rank == 0) {
     memspace = Id(H5Screate(H5S_SCALAR));
@@ -1134,7 +1158,7 @@ void File::write_strings(const std::string& path, hsize_t start,
   }
   Id dset(open_dataset(id_.get(), path));
   const hsize_t count = values.size();
-  check_stored_chunks(dset.get(), path, {start}, {start + count});
+  check_stored_chunks(dset.get(), path, box_runs({start}, {count}));
   Id type(H5Dget_type(dset.get()));
   Id space(H5Dget_space(dset.get()));
   need(H5Sselect_hyperslab(space.get(), H5S_SELECT_SET, &start, nullptr,
