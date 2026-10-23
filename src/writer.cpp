@@ -399,10 +399,12 @@ std::unique_ptr<Writer> Writer::create(const std::string& path,
 std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
   std::unique_ptr<Writer> w(new Writer());
   w->path_ = path;
-  w->file_.reset(new File(File::open_write(path)));
-  w->schema_ = load_schema(*w->file_);
+  // Checked on a read-only handle: opening a file to write changes its
+  // bytes even when nothing is written, and a refused file stays as it was.
+  w->schema_ = load_schema(File::open_read(path), path);
   need(w->schema_.kind == "data", "E16",
        "runs are appended to data files, and \"" + path + "\" is a model file");
+  w->file_.reset(new File(File::open_write(path)));
   File& f = *w->file_;
   w->filters_ = pipeline_of(f.dataset_info("/row", false));
   w->datasets_ready_ = true;

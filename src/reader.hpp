@@ -18,9 +18,10 @@ namespace gamut_core {
 namespace internal {
 
 // Builds the schema from attributes, shapes and the (small) category
-// tables, reading no field or model values.  Objects it does not know
-// are left out; the validator reports them.
-Schema load_schema(const File& f);
+// tables, reading no field or model values, after refusing a file of
+// another format version (E1).  Objects it does not know are left out;
+// the validator reports them.
+Schema load_schema(const File& f, const std::string& path);
 
 class Reader {
  public:
