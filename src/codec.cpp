@@ -113,7 +113,8 @@ void check_dict(const Dict& d, bool top_level, int depth, const std::string& whe
     const std::string& key = entry.first;
     const Value& v = entry.second;
     if (!legal_netcdf_name(key) || reserved_name(key)) {
-      throw Error("E8", "the model-data key \"" + key + "\" is not a legal name");
+      throw Error("E8", "the model-data key \"" + key + "\" is not a legal name; " +
+                            std::string(kLegalName));
     }
     if (top_level && kTopLevel.count(key)) {
       throw Error("E18", "the model data's top level may not use \"" + key +
@@ -144,7 +145,8 @@ void write_dict_group(File& f, const std::string& path, const Dict& d, bool top_
     const std::string& key = entry.first;
     const Value& v = entry.second;
     if (!legal_netcdf_name(key) || reserved_name(key)) {
-      throw Error("E8", "the model-data key \"" + key + "\" is not a legal name");
+      throw Error("E8", "the model-data key \"" + key + "\" is not a legal name; " +
+                            std::string(kLegalName));
     }
     if (top_level && kTopLevel.count(key)) {
       throw Error("E18", "the model data's top level may not use \"" + key +

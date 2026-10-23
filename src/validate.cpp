@@ -244,7 +244,7 @@ void Validator::check_attrs(const Object& o, const AttrSpec& spec) {
 
 void Validator::check_name(const std::string& name, const std::string& concept, bool root) {
   if (!legal_netcdf_name(name)) {
-    add("E8", concept, "\"" + name + "\" is not a legal name (spec section 9.3)");
+    add("E8", concept, "\"" + name + "\" is not a legal name; " + std::string(kLegalName));
   } else if (reserved_name(name)) {
     add("E8", concept, "\"" + name + "\" takes the reserved prefix gamut_");
   } else if (root && (kReservedRoot.count(name) || name.compare(0, 9, "category_") == 0)) {
@@ -1348,18 +1348,31 @@ void Validator::warnings() {
     if (kv.second.text("role") != "status") continue;
     const std::string table = kv.second.text("category");
     if (!tables_.count(table)) continue;
+    const std::vector<std::string>& names = tables_[table];
+    std::vector<std::int64_t> by_code(names.size(), 0);
     std::int64_t bad = 0, first = -1;
     each<std::int64_t>(kv.second, [&](std::size_t r, std::int64_t c) {
-      if (c >= 0 && c < static_cast<std::int64_t>(tables_[table].size()) &&
-          tables_[table][static_cast<std::size_t>(c)] != "converged") {
+      if (c >= 0 && c < static_cast<std::int64_t>(names.size()) &&
+          names[static_cast<std::size_t>(c)] != "converged") {
         if (first < 0) first = static_cast<std::int64_t>(r);
         ++bad;
+        ++by_code[static_cast<std::size_t>(c)];
       }
       return true;
     });
     if (bad > 0) {
-      add("W2", kv.first, counted(bad, "row is", "rows are") + " not converged, the first row " +
-                          std::to_string(first) + "; training skips such rows by default");
+      std::string counts;
+      for (std::size_t c = 0; c < names.size(); ++c) {
+        if (by_code[c] == 0) continue;
+        counts += (counts.empty() ? "" : ", ") + std::to_string(by_code[c]) + " " + names[c];
+      }
+      const bool named = std::find(names.begin(), names.end(), "converged") != names.end();
+      add("W2", kv.first, counted(bad, "row is", "rows are") + " not converged (" + counts +
+                          "), the first row " + std::to_string(first) +
+                          (named ? "; tools that train on the file skip such rows unless told "
+                                   "otherwise"
+                                 : "; no status is named converged, the one name that marks a "
+                                   "row as usable"));
     }
   }
   auto nonfinite = [&](const Object& o, bool scalar) {
@@ -1443,16 +1456,32 @@ void Validator::warnings() {
     for (const auto& u : units) {
       const auto groups = ints(labels_[u]);
       std::map<std::int64_t, std::int64_t> side;
+      std::set<std::int64_t> divided;
+      std::int64_t first = 0;
+      std::size_t first_row = 0;
       for (std::size_t r = 0; r < split.size() && r < groups.size(); ++r) {
         const auto it = side.find(groups[r]);
         if (it == side.end()) {
           side[groups[r]] = split[r];
-        } else if (it->second != split[r]) {
-          add("W1", kv.first, "the split places rows of one " + u + " on both sides (row " +
-                              std::to_string(r) + ")");
-          break;
+        } else if (it->second != split[r] && divided.insert(groups[r]).second &&
+                   divided.size() == 1) {
+          first = groups[r];
+          first_row = r;
         }
       }
+      if (divided.empty()) continue;
+      // The divided group by name, as its table gives it.
+      const auto table = tables_.find(labels_[u].text("category"));
+      std::string name = "code " + std::to_string(first);
+      if (table != tables_.end() && first >= 0 &&
+          first < static_cast<std::int64_t>(table->second.size())) {
+        name = "\"" + table->second[static_cast<std::size_t>(first)] + "\"";
+      }
+      add("W1", kv.first, "the split places rows of one " + u + " on both sides: " + name +
+                          " (row " + std::to_string(first_row) + ")" +
+                          (divided.size() > 1
+                               ? " and " + std::to_string(divided.size() - 1) + " more"
+                               : std::string()));
     }
   }
   // W9: two rows of one run at the same time.

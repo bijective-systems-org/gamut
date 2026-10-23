@@ -196,6 +196,19 @@ def test_floats_are_not_taken_as_integers(tmp_path):
         assert e.value.rule == "E4"
 
 
+
+def test_a_number_given_as_text_is_named_as_such(tmp_path):
+    # A spreadsheet's "4.0" left as text: the refusal says so, rather than
+    # that the run has no value or that the name is not a label.
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"alpha": "degree"}, scalars={"cl": "1"}) as s:
+        with pytest.raises(gamut.GamutError, match=r'alpha is a parameter, which takes numbers, '
+                                                   r'and was given text \("4.0"\)'):
+            s.add_run({"alpha": "4.0", "cl": 0.1})
+        with pytest.raises(gamut.GamutError, match=r'cl is a result, which takes numbers'):
+            s.add_run({"alpha": 4.0, "cl": "0.15"})
+        s.add_run({"alpha": 4.0, "cl": 0.15})
+
 # --- strings and selections -------------------------------------------------------------
 
 

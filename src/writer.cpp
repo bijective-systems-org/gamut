@@ -23,6 +23,14 @@ namespace internal {
 
 namespace {
 
+// A number given as text, as a spreadsheet's cell often is ("4.0").
+std::string given_text(const std::string& name, const char* kind,
+                       const std::vector<std::string>& names) {
+  return name + " is a " + kind + ", which takes numbers, and was given text" +
+         (names.empty() ? std::string() : " (\"" + names.front() + "\")") +
+         "; convert it to a number first";
+}
+
 void need(bool ok, const std::string& rule, const std::string& message,
           const std::string& path = {}) {
   if (!ok) throw Error(rule, message, path);
@@ -496,7 +504,7 @@ void Writer::need_no_runs(const std::string& what) const {
 
 void Writer::check_new_root_name(const std::string& name) const {
   need(legal_netcdf_name(name), "E8",
-       "\"" + name + "\" is not a legal name (spec section 9.3)", name);
+       "\"" + name + "\" is not a legal name; " + std::string(kLegalName), name);
   need(!reserved_name(name), "E8",
        "\"" + name + "\" takes the reserved prefix gamut_", name);
   need(kReserved.count(name) == 0 && name.compare(0, 9, "category_") != 0, "E8",
@@ -526,7 +534,7 @@ void Writer::set_attribute(const std::string& name, const std::string& value) {
 void Writer::set_note(const std::string& key, const AttrValue& value) {
   need_open();
   need(legal_netcdf_name(key) && !reserved_name(key), "E8",
-       "the note key \"" + key + "\" is not a legal name", key);
+       "the note key \"" + key + "\" is not a legal name; " + std::string(kLegalName), key);
   need(value.kind() != AttrValue::Kind::Str || valid_utf8(value.as_text()), "E3",
        key + ": a note is valid UTF-8", key);
   file_->make_group("/notes");
@@ -536,7 +544,8 @@ void Writer::set_note(const std::string& key, const AttrValue& value) {
 void Writer::set_private(const std::string& name, const std::vector<unsigned char>& bytes) {
   need_open();
   need(legal_netcdf_name(name) && !reserved_name(name), "E8",
-       "the private record \"" + name + "\" is not a legal name", name);
+       "the private record \"" + name + "\" is not a legal name; " + std::string(kLegalName),
+       name);
   file_->make_group("/private");
   const std::string path = "/private/" + name;
   if (file_->exists(path)) file_->remove_link(path);
@@ -1293,7 +1302,13 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
   for (const auto& p : s.parameters) {
     known.insert(p.name);
     const auto it = batch.values.find(p.name);
-    need(it != batch.values.end(), "E2", p.name + ": every run needs a value", p.name);
+    if (it == batch.values.end()) {
+      const auto text = batch.names.find(p.name);
+      if (text != batch.names.end()) {
+        throw Error("E2", given_text(p.name, "parameter", text->second), p.name);
+      }
+      throw Error("E2", p.name + ": every run needs a value", p.name);
+    }
     need(it->second.count == n, "E5",
          p.name + ": expected " + std::to_string(n) + " values", p.name);
     root_bytes[p.name] = convert(it->second, p.dtype, p.name);
@@ -1496,8 +1511,11 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
     need(known.count(kv.first) == 1, "E2", kv.first + " is given but not declared", kv.first);
   }
   for (const auto& kv : batch.names) {
-    need(s.label(kv.first) != nullptr, "E2", kv.first + " is given by name but is not a label",
-         kv.first);
+    if (s.label(kv.first) != nullptr) continue;
+    if (s.result(kv.first) != nullptr) {
+      throw Error("E2", given_text(kv.first, "result", kv.second), kv.first);
+    }
+    throw Error("E2", kv.first + " is given by name but is not a label", kv.first);
   }
   if (check_only) return next_id_;   // the guard puts back what was resolved
   // --- write -----------------------------------------------------------------

@@ -21,7 +21,7 @@ cylinder.gamut: shared mesh, 9 runs
   file        ... KB
 $ gamut validate polar.gamut
 no errors, 3 warnings
-  W2 status: 1 row is not converged, the first row 17; training skips such rows by default
+  W2 status: 1 row is not converged (1 failed), the first row 17; tools that train on the file skip such rows unless told otherwise
   W3 cd: 1 value is missing or not finite, the first at row 17
   W3 cl: 1 value is missing or not finite, the first at row 17
 ```
@@ -29,7 +29,9 @@ no errors, 3 warnings
 `validate` checks the rules of the [specification](../../SPEC.md) and
 names each one it finds broken, within the [limits](../security.md#the-limits)
 of what it reads. Errors make a file invalid; warnings say
-what a reader should know, such as runs that failed.
+what a reader should know, such as runs that failed. A row in a finding
+is a position in the file, counted from 0 as `select` counts, not a row
+id.
 
 ## Taking data out
 
