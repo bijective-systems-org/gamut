@@ -63,6 +63,17 @@ the Julia package at the release tag that matches the wheel.
 every declaration, and `llms.txt` gives coding agents what Gamut is for,
 the pattern, the mistakes that are easy to make, and every page.
 
+A model in a file has its own step in the README and leads the models
+page: a quadratic, of a model type defined in a few lines, is fitted in
+Python to the README's sweep, saved, and evaluated in MATLAB by a MATLAB
+class of the same type, with no Python involved; the built-in nearest
+model is evaluated from Julia and C++. `help(gamut.create_model)` and
+`llms.txt` show the whole model pattern and its easy mistakes, and
+`help gamut.registerModelType` in MATLAB says what `call` receives and
+returns. A model's `save` that returns an object which is not model data
+is refused with the object named, where Python reported a
+zero-dimensional array.
+
 The validator holds a mesh's computed coordinates to the writer's rules: a
 computing model only in a model file whose mesh is per run, which must
 name one (E16), and that model existing with its output named (E17). The

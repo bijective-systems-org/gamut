@@ -54,11 +54,17 @@ def _fill(h: ctypes.c_void_p, prefix: str, d: Mapping[str, Any]) -> None:
         elif isinstance(value, (list, tuple)) and value and all(isinstance(x, str) for x in value):
             call("gamut_tree_set_strings", h, b(path), _lib.string_array(list(value)), len(value))
         else:
-            arr = np.asarray(value)
+            try:
+                arr = np.asarray(value)
+            except ValueError as e:   # a ragged list, say
+                raise GamutError("E18", f"{path}: not an array of model data ({e})") from None
             if arr.dtype.kind in "US":
                 items = [str(x) for x in arr.ravel()]
                 call("gamut_tree_set_strings", h, b(path), _lib.string_array(items), len(items))
                 continue
+            if arr.dtype == object:
+                raise GamutError("E18", f"{path}: {type(value).__name__} is not model data; save "
+                                         "returns numbers, text, booleans, arrays and dictionaries")
             if arr.ndim == 0:
                 raise GamutError("E18", f"{path}: a zero-dimensional array is stored as the "
                                          "number it holds")
@@ -116,9 +122,28 @@ _REGISTRY: dict[str, type] = {}
 
 
 def register_model_type(cls: type) -> type:
-    """Registers a model type: a class with a `type` name, a classmethod
-    `load(numbers)`, and methods `call(inputs, wanted)` and `save()`
-    (SPEC.md section 7.3).  Usable as a decorator."""
+    """Registers a model type, so that `evaluate` runs the files that name
+    it; usable as a decorator. A file records the type's name and its
+    numbers, never its code, so every program that evaluates the file
+    registers the type first. `create_model` shows the whole pattern.
+
+    The class has (SPEC.md section 7.3):
+
+    type         its name in files; name it after your project:
+                 "mylab.polynomial".
+    load(numbers)  a classmethod: the model from the dictionary `save`
+                 returned.
+    save()       the model's numbers: a dictionary of numbers, text,
+                 booleans, NumPy arrays of booleans, int32, int64 or
+                 float64, and dictionaries of those.
+    call(inputs, wanted)  inputs maps each input the model reads to an
+                 array with a value per row. wanted lists what to return,
+                 each item one of (output, "values"), (output, "std"),
+                 (output, "quantile", q) or (output, "derivative", name).
+                 Returns {output: {"values": ..., "std": ...,
+                 "quantiles": {q: ...}, "derivatives": {name: ...}}} with
+                 what was wanted: a value per row for a scalar, rows x
+                 nodes (or cells) for a field."""
     name = getattr(cls, "type", None)
     if not isinstance(name, str) or not name:
         raise GamutError("", "a model type has a class attribute `type`, its name")
@@ -205,7 +230,15 @@ class ModelFile(Study):
     """A model file open to write: declarations, then `add_model`."""
 
     def add_model(self, id: str, model: Any, inputs: Sequence[str], repr: str | None = None) -> None:
+        """Stores a model: `id` is the name the results give as their
+        "model"; `model` an object of a registered type, or `Nearest`;
+        `inputs` the parameters, labels or "coordinates" it reads. The file
+        keeps the numbers `model.save()` returns; `repr` is an optional
+        one-line description."""
         numbers = model.save()
+        if not isinstance(numbers, Mapping):
+            raise GamutError("E18", f"{id}: save() gave {type(numbers).__name__}; it returns a "
+                                     "dictionary of model data")
         handle = _to_tree(numbers)
         try:
             names = list(inputs)
@@ -223,8 +256,62 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
                  trained_on: Sequence[str] | None = None, title: str | None = None,
                  license: str | None = None, references: str | None = None,
                  source: str | None = None) -> ModelFile:
-    """Creates a model file (spec section 7): no runs; parameters with
-    bounds; every scalar and field names the model and output computing it."""
+    """Creates a model file and returns it open to add models: use it in a
+    `with` block, or call `close()`. A model file holds no runs. It is
+    declared as `create` declares a data file (labels, constants, mesh,
+    per, coordinates, title, license, references, source), except:
+
+    parameters   each needs "lower" and "upper", the range the model was
+                 fitted on: {"alpha": {"units": "degree", "lower": 0.0,
+                 "upper": 10.0}}. `evaluate` warns (W4) of an input
+                 outside it, and evaluates it.
+    scalars, fields  each names the model and the output that computes
+                 it: {"cl": {"units": "1", "model": "fit", "output":
+                 "cl"}}. A spread or a derivative is declared as in
+                 `create` ("of", "statistic", "with_respect_to"), and
+                 the model's `call` is asked for it.
+    trained_on   the file_id (`study.describe()["file_id"]`) of each
+                 study the model was fitted on.
+
+    Then `add_model(id, model, inputs)` stores each model: an object of a
+    type registered with `register_model_type`, or the built-in `Nearest`.
+    The file keeps the numbers its `save` returns, never code; a program
+    that evaluates the file registers the type first. Closing refuses a
+    file with no model, or a result whose model was never added.
+
+    The whole pattern, with a model type of one's own:
+
+        import numpy as np
+        import gamut
+
+        @gamut.register_model_type
+        class Polynomial:
+            type = "example.polynomial"        # the name the file records
+
+            def __init__(self, coefficients):
+                self.coefficients = np.asarray(coefficients, dtype=float)
+
+            @classmethod
+            def load(cls, numbers):            # numbers: the dictionary save returned
+                return cls(numbers["coefficients"])
+
+            def save(self):                    # numbers, text, booleans, arrays, dictionaries
+                return {"coefficients": self.coefficients}
+
+            def call(self, inputs, wanted):    # an array per input, a value per row
+                (x,) = inputs.values()
+                return {output: {"values": np.polyval(self.coefficients, x)}
+                        for output, *_ in wanted}
+
+        alpha = np.array([0.0, 2.0, 4.0, 6.0])
+        with gamut.create_model("lift.gamut", writer="my fit",
+                                parameters={"alpha": {"units": "degree", "lower": 0.0, "upper": 6.0}},
+                                scalars={"cl": {"units": "1", "model": "fit", "output": "cl"}}) as model:
+            model.add_model("fit", Polynomial(np.polyfit(alpha, 0.11 * alpha, 2)), inputs=["alpha"])
+
+        with gamut.evaluate("lift.gamut", {"alpha": [1.0, 5.0]}) as answer:   # an ordinary data file
+            print(answer.get_scalar("cl"))
+    """
     axes = _axes(coordinates)        # before the file exists: a refusal leaves none
     handle = ctypes.c_void_p()
     call("gamut_create_model", b(path), b(writer), b(mesh or ""), b(per), ctypes.byref(handle))
@@ -305,7 +392,11 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
     returns the resulting data file, open to read.  `inputs` maps each
     parameter to values and each label to names from the model file's
     table, all of one length; `coordinates` (rows x nodes x axes) when a
-    model reads geometry the file does not store."""
+    model reads geometry the file does not store.  Each model's type must
+    be registered (`register_model_type`; `Nearest` is built in).  An
+    input outside a parameter's bounds is evaluated, with a warning (W4).
+    Without `path` the data file is temporary and removed when closed:
+    read it in a `with` block, or give `path` to keep it."""
     with _open(model_path) as m:
         if m.kind != "model":
             raise GamutError("E16", f"{model_path} is not a model file")

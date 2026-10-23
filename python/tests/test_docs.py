@@ -4,6 +4,7 @@ bench/results/ gives."""
 
 from __future__ import annotations
 
+import inspect
 import re
 import subprocess
 import sys
@@ -71,3 +72,25 @@ def test_llms_txt_shows_the_package_overview(tmp_path, monkeypatch):
     shown = re.search(r"```python\n(.*?)```", (ROOT / "llms.txt").read_text(encoding="utf-8"), re.S)[1]
     overview = re.search(r"The whole pattern:\n\n(.*?)\n\n\S", gamut.__doc__, re.S)[1]
     assert shown.strip() == textwrap.dedent(overview).strip()
+
+
+def _model_pattern() -> str:
+    doc = inspect.getdoc(gamut.create_model)
+    return textwrap.dedent(re.search(r"The whole pattern, with a model type of one's own:\n\n(.*)",
+                                     doc, re.S)[1]).strip()
+
+
+def test_the_model_pattern_runs(tmp_path, monkeypatch, capsys):
+    # help(gamut.create_model) ends on the whole model pattern; it runs as
+    # shown, and the model file and the answer it gives are valid.
+    monkeypatch.chdir(tmp_path)
+    exec(_model_pattern(), {})
+    assert capsys.readouterr().out.strip() == "[0.11 0.55]"
+    assert gamut.validate(str(tmp_path / "lift.gamut")).ok
+
+
+@pytest.mark.skipif(not PAGES, reason="the documentation is not beside this test (an installed package)")
+def test_llms_txt_shows_the_model_pattern():
+    shown = re.findall(r"```python\n(.*?)```", (ROOT / "llms.txt").read_text(encoding="utf-8"), re.S)
+    assert any(block.strip() == _model_pattern() for block in shown), \
+        "llms.txt shows the model pattern of help(gamut.create_model)"

@@ -1,6 +1,8 @@
 classdef Linear
     %LINEAR A test model type: y = a + b * x for one input, with a constant
-    %standard deviation; it serves values and std, nothing else.
+    %standard deviation; it serves values, std, quantiles (a + b * x +
+    %(2q - 1) * std, to test the plumbing) and the derivative with respect
+    %to its input.
     properties (Constant)
         Type = 'test_linear'
     end
@@ -24,7 +26,15 @@ classdef Linear
                 switch w{2}
                     case 'values', out.(w{1}).values = m.A + m.B * x;
                     case 'std', out.(w{1}).std = repmat(m.Std, size(x));
-                    otherwise, error('gamut:error', 'test_linear gives values and std only');
+                    case 'quantile'
+                        if ~isfield(out, w{1}) || ~isfield(out.(w{1}), 'quantiles')
+                            out.(w{1}).quantiles = containers.Map('KeyType', 'double', ...
+                                'ValueType', 'any');
+                        end
+                        q = out.(w{1}).quantiles;          % a handle: filled in place
+                        q(w{3}) = m.A + m.B * x + (2 * w{3} - 1) * m.Std;
+                    case 'derivative', out.(w{1}).derivatives.(w{3}) = repmat(m.B, size(x));
+                    otherwise, error('gamut:error', 'test_linear gives no %s', w{2});
                 end
             end
         end

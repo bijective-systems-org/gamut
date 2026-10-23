@@ -156,6 +156,21 @@ def test_refusals(tmp_path):
         f.add_model("m", Foreign(), inputs=["x"])
     with pytest.raises(gamut.GamutError, match="not registered"):
         gamut.evaluate(mp2, {"x": [0.5]})
+    # What save returns must be a dictionary of data: anything else is named
+    # as such, a ragged list is refused, and a float32 array (as model
+    # weights often are) is refused by its dtype.
+    for numbers, says in (({"w": object()}, "w: object is not model data"),
+                          (object(), "save\\(\\) gave object"),
+                          ([1.0], "save\\(\\) gave list"),
+                          ({"w": [[1], [2, 3]]}, "w: not an array of model data"),
+                          ({"w": np.zeros(2, np.float32)}, "not float32")):
+        Foreign.save = lambda self, numbers=numbers: numbers
+        with pytest.raises(gamut.GamutError, match=says) as e:
+            with gamut.create_model(str(tmp_path / "data.gamut"), writer="t",
+                                     parameters={"x": {"units": "m", "lower": 0, "upper": 1}},
+                                     scalars={"y": {"units": "1", "model": "m", "output": "y"}}) as f:
+                f.add_model("m", Foreign(), inputs=["x"])
+        assert e.value.rule == "E18"
     # A nearest model whose bounds differ from its parameters' is refused.
     mp3 = str(tmp_path / "bounds.gamut")
     with pytest.raises(gamut.GamutError) as e:
