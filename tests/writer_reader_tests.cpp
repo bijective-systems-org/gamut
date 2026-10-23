@@ -542,6 +542,36 @@ void test_read_limit_before_allocation() {
   std::remove(path.c_str());
 }
 
+// An unfiltered chunk stored in fewer bytes than it holds, as a damaged
+// filter message leaves a compressed one: reading or writing it is refused
+// rather than letting HDF5 read past its buffer.
+void test_short_unfiltered_chunk() {
+  const std::string path = "wr_short_chunk.gamut";
+  {
+    File f = File::create(path);
+    f.create_dataset("/x", DType::Float64, 0, {8}, {H5S_UNLIMITED}, {4}, {});
+    const hid_t d = H5Dopen2(f.get(), "/x", H5P_DEFAULT);
+    const hsize_t origin = 0;
+    const unsigned char bytes[20] = {};
+    CHECK(H5Dwrite_chunk(d, H5P_DEFAULT, 0, &origin, sizeof bytes, bytes) >= 0);
+    H5Dclose(d);
+  }
+  {
+    const File f = File::open_read(path);
+    double out[8] = {};
+    CHECK(rule_of([&] { f.read("/x", DType::Float64, {}, out, sizeof out); }) == "E23");
+    CHECK(rule_of([&] {
+            f.read("/x", DType::Float64, {Selection::range(4, 8)}, out, 4 * sizeof(double));
+          }).empty());   // the second chunk was never written: zeros
+  }
+  {
+    File f = File::open_write(path);
+    const double one[2] = {1.0, 2.0};
+    CHECK(rule_of([&] { f.write("/x", DType::Float64, {1}, {2}, one); }) == "E23");
+  }
+  if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
+}
+
 }  // namespace
 
 int main() {
@@ -556,6 +586,7 @@ int main() {
       {"growable", test_append_needs_growable_columns},
       {"rank", test_threaded_read_of_fewer_axes},
       {"read_limit", test_read_limit_before_allocation},
+      {"short_chunk", test_short_unfiltered_chunk},
   };
   for (const auto& t : tests) {
     try {

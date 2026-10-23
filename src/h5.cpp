@@ -72,6 +72,65 @@ Id open_dataset(hid_t file, const std::string& path) {
   return dset;
 }
 
+// An unfiltered chunk is stored whole, and HDF5 reads or rewrites a stored
+// chunk as that many bytes. A chunk stored in another size (a compressed one
+// whose filter message is damaged looks unfiltered) would take HDF5 past its
+// own buffer, so every stored chunk in the box [lo, hi) is checked first.
+void check_stored_chunks(hid_t dset, const std::string& path, const std::vector<hsize_t>& lo,
+                         const std::vector<hsize_t>& hi) {
+  Id dcpl(H5Dget_create_plist(dset));
+  const std::size_t rank = lo.size();
+  if (rank == 0 || !dcpl.valid() || H5Pget_layout(dcpl.get()) != H5D_CHUNKED ||
+      H5Pget_nfilters(dcpl.get()) != 0) {
+    return;
+  }
+  std::vector<hsize_t> chunk(rank);
+  need(H5Pget_chunk(dcpl.get(), static_cast<int>(rank), chunk.data()) == static_cast<int>(rank),
+       "cannot read the chunks of \"" + path + "\"");
+  Id type(H5Dget_type(dset));
+  hsize_t bytes = H5Tget_size(type.get());
+  for (const hsize_t c : chunk) {
+    if (c == 0 || bytes > kMaxDatasetBytes / c) {
+      throw Error("E23", "a chunk of \"" + path + "\" is larger than this reader reads", path);
+    }
+    bytes *= c;
+  }
+  std::vector<hsize_t> first(rank), last(rank);
+  for (std::size_t a = 0; a < rank; ++a) {
+    if (hi[a] <= lo[a]) return;
+    first[a] = lo[a] / chunk[a];
+    last[a] = (hi[a] - 1) / chunk[a];
+  }
+  std::vector<hsize_t> at = first, origin(rank);
+  while (true) {
+    for (std::size_t a = 0; a < rank; ++a) origin[a] = at[a] * chunk[a];
+    // The size the chunk index records, which is what HDF5 reads; the
+    // storage-size call gives the nominal size for an unfiltered dataset.
+    unsigned mask = 0;
+    haddr_t address = HADDR_UNDEF;
+    hsize_t stored = 0;
+    if (H5Dget_chunk_info_by_coord(dset, origin.data(), &mask, &address, &stored) < 0 ||
+        address == HADDR_UNDEF) {
+      stored = 0;   // not written
+    }
+    if (stored != 0 && stored != bytes) {
+      throw Error("E23", "a chunk of \"" + path + "\" is stored in " + std::to_string(stored) +
+                             " bytes and holds " + std::to_string(bytes), path);
+    }
+    std::size_t a = rank;
+    bool done = true;
+    while (a > 0) {
+      --a;
+      if (++at[a] <= last[a]) {
+        done = false;
+        break;
+      }
+      at[a] = first[a];
+    }
+    if (done) break;
+  }
+}
+
 std::string token_key(hid_t where, const H5O_token_t& token) {
   char* text = nullptr;
   if (H5Otoken_to_str(where, &token, &text) < 0 || text == nullptr) {
@@ -850,6 +909,16 @@ void File::read(const std::string& path, DType mem,
            " bytes and the selection needs " +
            std::to_string(n * dtype_size(mem)));
   if (n == 0) return;
+  {
+    // The box the selection spans: each axis from its first to its last position.
+    std::vector<hsize_t> lo(info.shape.size(), 0), hi = info.shape;
+    for (std::size_t a = 0; a < sel.size() && a < info.shape.size(); ++a) {
+      const auto runs = sel[a].runs(static_cast<std::int64_t>(info.shape[a]), path);
+      lo[a] = static_cast<hsize_t>(runs.front().first);
+      hi[a] = static_cast<hsize_t>(runs.back().first + runs.back().second);
+    }
+    check_stored_chunks(dset.get(), path, lo, hi);
+  }
   Id memspace = count.empty() ? Id(H5Screate(H5S_SCALAR))
                               : Id(H5Screate_simple(static_cast<int>(count.size()),
                                                     count.data(), nullptr));
@@ -889,6 +958,7 @@ std::vector<std::string> File::read_strings(const std::string& path, std::size_t
                                      "will read");
   }
   Id dset(open_dataset(id_.get(), path));
+  check_stored_chunks(dset.get(), path, std::vector<hsize_t>(info.shape.size(), 0), info.shape);
   Id type(H5Dget_type(dset.get()));
   std::string buffer(item * count, '\0');
   need(H5Dread(dset.get(), type.get(), H5S_ALL, H5S_ALL, H5P_DEFAULT,
@@ -1028,6 +1098,11 @@ void File::write(const std::string& path, DType mem,
   for (const hsize_t c : count) {
     if (c == 0) return;
   }
+  {
+    std::vector<hsize_t> hi(start);
+    for (std::size_t a = 0; a < hi.size(); ++a) hi[a] += count[a];
+    check_stored_chunks(dset.get(), path, start, hi);
+  }
   Id memspace;
   if (rank == 0) {
     memspace = Id(H5Screate(H5S_SCALAR));
@@ -1058,9 +1133,10 @@ void File::write_strings(const std::string& path, hsize_t start,
     std::memcpy(&buffer[i * item], values[i].data(), values[i].size());
   }
   Id dset(open_dataset(id_.get(), path));
+  const hsize_t count = values.size();
+  check_stored_chunks(dset.get(), path, {start}, {start + count});
   Id type(H5Dget_type(dset.get()));
   Id space(H5Dget_space(dset.get()));
-  const hsize_t count = values.size();
   need(H5Sselect_hyperslab(space.get(), H5S_SELECT_SET, &start, nullptr,
                            &count, nullptr) >= 0,
        "\"" + path + "\": the strings lie outside the dataset");
