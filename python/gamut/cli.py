@@ -246,7 +246,10 @@ def _human(doc: dict) -> str:
         lines.append("  constants   " + ", ".join(f"{c['name']} = {_number(c)} {c['units']}"
                                                   for c in doc["constants"]))
     for m in doc["models"]:
-        lines.append(f"  model       {m['id']}: {m.get('type')} reading {m.get('inputs')}")
+        about = f" ({m['repr']})" if m.get("repr") else ""
+        lines.append(f"  model       {m['id']}: {m.get('type')} reading {m.get('inputs')}{about}")
+    if doc["metadata"].get("trained_on"):
+        lines.append(f"  trained on  {doc['metadata']['trained_on']}")
     size = doc["file_bytes"]
     unit = "KB" if size < 1e6 else ("MB" if size < 1e9 else "GB")
     scale = 1e3 if unit == "KB" else (1e6 if unit == "MB" else 1e9)

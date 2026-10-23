@@ -163,6 +163,8 @@ def test_refusals(tmp_path):
                           (object(), "save\\(\\) gave object"),
                           ([1.0], "save\\(\\) gave list"),
                           ({"w": [[1], [2, 3]]}, "w: not an array of model data"),
+                          ({"w": [1.0, "a"]}, "w: text is stored as one list"),
+                          ({"w": [["a"], ["b"]]}, "w: text is stored as one list"),
                           ({"w": np.zeros(2, np.float32)}, "not float32")):
         Foreign.save = lambda self, numbers=numbers: numbers
         with pytest.raises(gamut.GamutError, match=says) as e:

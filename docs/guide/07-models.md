@@ -68,6 +68,7 @@ lift_model.gamut: model file
   parameters  alpha [degree] 0 to 10
   results     cl [1]
   model       fit: example.polynomial reading alpha
+  trained on  ...
   file        ... KB
 ```
 

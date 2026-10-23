@@ -59,6 +59,11 @@ def _fill(h: ctypes.c_void_p, prefix: str, d: Mapping[str, Any]) -> None:
             except ValueError as e:   # a ragged list, say
                 raise GamutError("E18", f"{path}: not an array of model data ({e})") from None
             if arr.dtype.kind in "US":
+                # A list of strings was stored above: text here is mixed with
+                # other values, or has more than one axis (spec section 12).
+                if isinstance(value, (list, tuple)) or arr.ndim != 1:
+                    raise GamutError("E18", f"{path}: text is stored as one list of strings, "
+                                             "with no other values in it")
                 items = [str(x) for x in arr.ravel()]
                 call("gamut_tree_set_strings", h, b(path), _lib.string_array(items), len(items))
                 continue
