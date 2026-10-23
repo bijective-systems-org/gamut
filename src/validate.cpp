@@ -548,33 +548,45 @@ void Validator::root_attrs() {
 }
 
 void Validator::walk_links() {
-  // Every link of the public tree: hard links only (E22), bounded depth (E23).
-  std::vector<std::pair<std::string, int>> todo = {{"/", 0}};
+  // Every link of the public tree: hard links only (E22), bounded depth
+  // (E23). Every dataset, /private and /VTKHDF included, since readers and
+  // copies refuse them there too: values stored in the file (E22).
+  struct Group {
+    std::string path;
+    int depth;
+    bool open;   // in the public tree
+  };
+  std::vector<Group> todo = {{"/", 0, true}};
   while (!todo.empty()) {
-    const auto here = todo.back();
+    const Group here = todo.back();
     todo.pop_back();
-    if (here.second > kMaxGroupDepth) {
-      add("E23", here.first, "nested deeper than this reader walks (" +
-                             std::to_string(kMaxGroupDepth) + ")");
+    if (here.depth > kMaxGroupDepth) {
+      add("E23", here.path, "nested deeper than this reader walks (" +
+                            std::to_string(kMaxGroupDepth) + ")");
       continue;
     }
-    for (const Member& m : file_->members(here.first)) {
-      const std::string child = (here.first == "/" ? "/" : here.first + "/") + m.name;
+    for (const Member& m : file_->members(here.path)) {
+      const std::string child = (here.path == "/" ? "/" : here.path + "/") + m.name;
       if (m.kind != LinkKind::Hard) {
-        add("E22", child, std::string("is ") + link_kind_name(m.kind) +
-                          "; a file holds hard links only, and readers never follow others");
+        if (here.open) {
+          add("E22", child, std::string("is ") + link_kind_name(m.kind) +
+                            "; a file holds hard links only, and readers never follow others");
+        }
         continue;
       }
       if (m.is_dataset) {
-        const std::string outside = file_->stored_outside(child);
-        if (!outside.empty()) {
-          add("E22", child, outside);
-          stored_outside_ = true;
-          continue;
-        }
+        // One dataset that cannot be opened is reported, and the walk goes on.
+        guarded(child, [&] {
+          const std::string outside = file_->stored_outside(child);
+          if (!outside.empty()) {
+            add("E22", child, outside);
+            stored_outside_ = true;
+          }
+        });
       }
-      if (m.is_group && child != "/private" && child != "/VTKHDF") {
-        todo.emplace_back(child, here.second + 1);
+      if (m.is_group) {
+        todo.push_back({child, here.depth + 1,
+                        here.open && child != "/private" && child != "/VTKHDF"});
       }
     }
   }

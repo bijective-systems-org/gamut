@@ -475,6 +475,40 @@ void test_values_stored_outside() {
   std::remove(path.c_str());
 }
 
+// The validator looks for values stored outside the file under /private
+// too, since copying a file reads its private records.
+void test_private_values_stored_outside() {
+  const std::string path = "wr_outside_private.gamut";
+  const std::string outside = "wr_outside_private.raw";
+  std::remove(outside.c_str());
+  {
+    auto w = Writer::create(path, "tests", "", "fixed");
+    w->declare_parameter(param("x", "design", "1"));
+    w->close();
+  }
+  {
+    File f = File::open_write(path);
+    const hid_t g = H5Gcreate2(f.get(), "/private", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    const hsize_t four = 4;
+    const hid_t space = H5Screate_simple(1, &four, nullptr);
+    const hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
+    H5Pset_external(dcpl, outside.c_str(), 0, H5F_UNLIMITED);
+    const hid_t d = H5Dcreate2(g, "record", H5T_STD_U8LE, space, H5P_DEFAULT, dcpl, H5P_DEFAULT);
+    CHECK(d >= 0);
+    H5Dclose(d);
+    H5Pclose(dcpl);
+    H5Sclose(space);
+    H5Gclose(g);
+  }
+  bool e22 = false;
+  for (const auto& finding : validate_file(path).findings) {
+    e22 = e22 || (finding.rule == "E22" && finding.path.find("private") != std::string::npos);
+  }
+  CHECK(e22);
+  CHECK(!exists(outside));
+  std::remove(path.c_str());
+}
+
 // A run-table column grows with each run, so appending refuses one that
 // cannot grow (E20) before writing anything.
 void test_append_needs_growable_columns() {
@@ -597,6 +631,7 @@ int main() {
       {"rank", test_threaded_read_of_fewer_axes},
       {"read_limit", test_read_limit_before_allocation},
       {"short_chunk", test_short_unfiltered_chunk},
+      {"private_outside", test_private_values_stored_outside},
   };
   for (const auto& t : tests) {
     try {

@@ -464,7 +464,8 @@ to read every string keeps names, table entries and labels to ASCII.
 A reader treats a file as untrusted. It follows only hard links, and reads
 only values stored in the file: a soft or external link, or a dataset whose
 values are stored elsewhere (HDF5 external storage or a virtual dataset), is
-an error and is never opened (E22). It caps recursion over
+an error (E22): such a link is never followed, and such values are never
+read, anywhere in the file. It caps recursion over
 groups and model data at a depth it states (64 recommended), an eager
 read at an element count it states (2³¹ recommended), and the chunks one
 read touches when its chunks are smaller than §11.4's defaults (2²⁰
