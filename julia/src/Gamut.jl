@@ -123,6 +123,8 @@ format() = unsafe_string(ccall(sym(:gamut_format), Cstring, ()))
 
 const DTYPE = Dict(UInt8 => 1, Int8 => 2, Int32 => 3, Int64 => 4, Float32 => 5, Float64 => 6)
 const AS_GIVEN = 0
+# The most rows a selection scans (docs/security.md).
+const MAX_ROWS_SCANNED = Int64(1) << 27
 
 function precision_code(v)
     v === nothing && return AS_GIVEN
@@ -764,7 +766,9 @@ end
 """    select(study, where)    the 1-based row positions matching, e.g. "mach > 0.5 and status == converged"."""
 function select(s::Study, where)
     need_reader(s)
-    out = Vector{Int64}(undef, max(s.row_count, 1))
+    # The core refuses a larger file before it fills a buffer, so none
+    # larger is allocated.
+    out = Vector{Int64}(undef, 0 < s.row_count <= MAX_ROWS_SCANNED ? s.row_count : 1)
     n = Ref{Int64}(0)
     @mes gamut_select (Ptr{Cvoid}, Cstring, Ptr{Int64}, Int64, Ref{Int64}) handle(s) cs(where) out length(out) n
     return out[1:n[]] .+ 1

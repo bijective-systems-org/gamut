@@ -507,3 +507,25 @@ def test_one_row_of_a_column_is_a_number_in_every_kind_of_file(tmp_path):
         assert np.ndim(f.get_scalar("y", rows=0)) == 0
         assert np.ndim(f.get_parameter("r", rows=0)) == 0
         assert f.get_scalar("y", rows=[0]).shape == (1,)
+
+
+def test_select_sizes_nothing_from_a_declared_row_count(tmp_path):
+    """A file declaring 2**30 rows is refused by the core's scan limit
+    before a buffer for them exists."""
+    import tracemalloc
+    p = str(tmp_path / "huge.gamut")
+    with gamut.create(p, writer="tests", parameters={"mach": "1"}) as s:
+        s.add_run({"mach": 0.3})
+    with h5py.File(p, "r+") as f:
+        for name in ("row", "mach"):
+            f[name].resize((1 << 30,))
+    tracemalloc.start()
+    try:
+        with gamut.open(p) as s:
+            with pytest.raises(gamut.GamutError) as e:
+                s.select("mach > 0.5")
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert e.value.rule == "E23"
+    assert peak < 1 << 20

@@ -571,7 +571,8 @@ class Study:
         """The positions of the rows `where` selects, e.g.
         "mach > 0.5 and status == converged" (docs/reference/selecting.md)."""
         self._need_reader()
-        out = np.empty(max(self.row_count, 1), dtype=np.int64)
+        rows = self.row_count
+        out = np.empty(rows if 0 < rows <= _lib.MAX_ROWS_SCANNED else 1, dtype=np.int64)
         n = ctypes.c_int64()
         call("gamut_select", self._handle(), b(where), out.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
              out.size, ctypes.byref(n))

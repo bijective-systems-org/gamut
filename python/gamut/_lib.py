@@ -14,6 +14,9 @@ import numpy as np
 GAMUT_AS_GIVEN = 0
 GAMUT_UINT8, GAMUT_INT8, GAMUT_INT32, GAMUT_INT64, GAMUT_FLOAT32, GAMUT_FLOAT64 = 1, 2, 3, 4, 5, 6
 SEL_ALL, SEL_RANGE, SEL_INDEX = 0, 1, 2
+# The most rows a selection scans (docs/security.md); the core refuses a
+# larger file before it fills a buffer, so none larger is allocated.
+MAX_ROWS_SCANNED = 1 << 27
 
 _DTYPE_CODE = {
     np.dtype(np.uint8): GAMUT_UINT8,

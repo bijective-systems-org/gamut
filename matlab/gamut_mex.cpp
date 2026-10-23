@@ -490,7 +490,10 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     check(gamut_info(f, "row_count", &s, &e), e);
     const int64_t rows = std::stoll(gamut_strings_get(s, 0));
     gamut_strings_free(s);
-    std::vector<int64_t> out(static_cast<std::size_t>(rows > 0 ? rows : 1));
+    // The core refuses a file of more rows than a selection scans (2^27,
+    // docs/security.md) before it fills a buffer, so none larger is made.
+    const bool scanned = rows > 0 && rows <= (int64_t(1) << 27);
+    std::vector<int64_t> out(static_cast<std::size_t>(scanned ? rows : 1));
     int64_t n = 0;
     check(gamut_select(f, text(arg(2), "where").c_str(), out.data(), static_cast<int64_t>(out.size()), &n, &e), e);
     plhs[0] = mxCreateNumericMatrix(static_cast<mwSize>(n), 1, mxINT64_CLASS, mxREAL);
