@@ -2,7 +2,7 @@
 
 > Gamut is an open file format, with one library for Python, MATLAB, Julia, C++ and C, for the results of a parametric simulation study: a sweep, a design of experiments, a CFD or FEA campaign, and the models fitted to it. One `.gamut` file holds every run's inputs, status and results, and the mesh and every field on it, all with units. Files are HDF5 laid out as netCDF-4, so h5py, xarray and the netCDF tools read them without Gamut.
 
-Use Gamut when many runs of one simulation setup should live in one file that people using different languages read the same way, when the runs feed a surrogate, reduced-order or machine-learning model (a field on a shared mesh is one block of runs × nodes; a file can publish its train/test split and the group a fair test holds out), or when whoever receives the file must be able to check it (`gamut validate` names each broken rule). It is not a solver's output or restart format (use CGNS, VTK or Exodus for one run), and not a general array store (use Zarr or HDF5 directly).
+Use Gamut when many runs of one simulation setup should live in one file that people using different languages read the same way, when the runs feed a surrogate, reduced-order or machine-learning model (a field on a shared mesh is one block of runs × nodes; a file can publish its train/test split and the group a fair test holds out), when a fitted model should travel as a file with its units, input bounds and provenance and no code (rather than a pickle), or when whoever receives the file must be able to check it (`gamut validate` names each broken rule). It is not a solver's output or restart format (use CGNS, VTK or Exodus for one run), and not a general array store (use Zarr or HDF5 directly).
 
 Install: `pip install gamut-format`, then `import gamut` (Python 3.10 or later; the wheel carries its own HDF5). The command line is `gamut`. MATLAB R2023b or later: open `Gamut.mltbx` from the latest GitHub release (no compiler). Julia, C and C++ use the same core library, from each release's `gamut-core-<version>-<platform>` archive: see the install page.
 
@@ -27,6 +27,43 @@ print(gamut.validate("polar.gamut").ok)
 
 Every name is declared in `create`, with its units and role; then each run gives a value for each name. A mesh adds `mesh="shared", per="fixed"`, `coordinates`, `study.set_mesh(points, cells)` and `fields={"p": {"units": "Pa", "at": "node"}}`, and `study.get_field("p")` returns runs × nodes. `help(gamut.create)` lists every declaration.
 
+## A fitted model as a file
+
+A model fitted to a study (a response surface, a reduced-order model, a Gaussian process) is saved as a model file: no runs; parameters with the bounds the model was fitted on; each result naming the model and output that computes it; the model's numbers as plain data, never code. The model's type is a class registered in each program that evaluates the file (Python with `gamut.register_model_type`, MATLAB with `gamut.registerModelType` and a class; Julia evaluates only the built-in `Nearest`). `evaluate` returns an ordinary data file. The example in `help(gamut.create_model)`:
+
+```python
+import numpy as np
+import gamut
+
+@gamut.register_model_type
+class Polynomial:
+    type = "example.polynomial"        # the name the file records
+
+    def __init__(self, coefficients):
+        self.coefficients = np.asarray(coefficients, dtype=float)
+
+    @classmethod
+    def load(cls, numbers):            # numbers: the dictionary save returned
+        return cls(numbers["coefficients"])
+
+    def save(self):                    # numbers, text, booleans, arrays, dictionaries
+        return {"coefficients": self.coefficients}
+
+    def call(self, inputs, wanted):    # an array per input, a value per row
+        (x,) = inputs.values()
+        return {output: {"values": np.polyval(self.coefficients, x)}
+                for output, *_ in wanted}
+
+alpha = np.array([0.0, 2.0, 4.0, 6.0])
+with gamut.create_model("lift.gamut", writer="my fit",
+                        parameters={"alpha": {"units": "degree", "lower": 0.0, "upper": 6.0}},
+                        scalars={"cl": {"units": "1", "model": "fit", "output": "cl"}}) as model:
+    model.add_model("fit", Polynomial(np.polyfit(alpha, 0.11 * alpha, 2)), inputs=["alpha"])
+
+with gamut.evaluate("lift.gamut", {"alpha": [1.0, 5.0]}) as answer:   # an ordinary data file
+    print(answer.get_scalar("cl"))
+```
+
 ## Easy to get wrong
 
 - Units are required, in the UDUNITS grammar: `"1"` for dimensionless, `"degree"`, `"m s-1"`. The grammar is checked when writing; the unit names only when a read converts them.
@@ -35,6 +72,11 @@ Every name is declared in `create`, with its units and role; then each run gives
 - Values must be numbers: text such as `"4.0"` from a CSV is refused for a parameter or result.
 - Rows are positions counted from 0 in Python and C++ and from 1 in MATLAB and Julia. Row ids (`get_row_ids`) are separate and survive extracting runs to another file.
 - A file from someone else: check it with `gamut validate FILE`, and open files nobody vouches for in a child process.
+- A model file's parameters need both `lower` and `upper`, and each result both `model` (the id given to `add_model`) and `output` (a key of what `call` returns).
+- A model type is registered in every process that evaluates its files, before `evaluate`. Without it the file still opens and reads, and `evaluate` is refused with the type's name. Name types after the project (`"mylab.polynomial"`): the name is all a file records.
+- `save` returns numbers, text, booleans, NumPy arrays of bool, int32, int64 or float64, and dictionaries of those. float32 arrays (such as most neural-network weights) and arbitrary objects are refused (E18): cast to float64, store plain arrays. The top level may not use the keys `type`, `inputs` or `repr`.
+- `call(inputs, wanted)` gets one array per input the model reads, a value per row, and returns `{output: {"values": array}}`; a scalar has a value per row, a field rows × nodes. `wanted` holds tuples `(output, "values")`, `(output, "std")`, `(output, "quantile", q)`, `(output, "derivative", name)`.
+- `evaluate` without `path=` returns a temporary file, removed when it closes: read inside the `with` block, or pass `path=` to keep it. An input outside the bounds is evaluated with a warning (W4), not refused.
 
 ## Docs
 
@@ -46,7 +88,7 @@ Every name is declared in `create`, with its units and role; then each run gives
 - [Changing meshes](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/04-changing-meshes.md): a mesh per run
 - [Time series](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/05-time-series.md): transient runs, a row per saved step
 - [Uncertainty and gradients](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/06-uncertainty-and-gradients.md): standard deviations, quantiles and derivatives beside a result
-- [Models](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/07-models.md): a fitted model as a file, evaluated on new inputs
+- [Models](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/07-models.md): a fitted model saved as a file and evaluated on new inputs; a model type of your own in Python and MATLAB
 - [Reading parts](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/08-reading-parts.md): runs by condition, nodes by zone, values in other units
 - [Combining files](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/09-combining-files.md): append, extract, rewrite
 - [VTK](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/10-vtk.md): a folder of VTK files as one study, and back
