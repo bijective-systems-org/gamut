@@ -57,6 +57,9 @@ opts.Description = ['Gamut is a file format for parametric simulation studies: t
 opts.ToolboxMatlabPath = stage;
 opts.ToolboxGettingStartedGuide = fullfile(stage, 'doc', 'GettingStarted.m');
 opts.MinimumMatlabRelease = ['R' version('-release')];
+if ~isfield(opts.SupportedPlatforms, 'Mac')
+    platforms{2, 1} = 'Maci64';   % its name before R2026a
+end
 for k = 1:numel(present)
     opts.SupportedPlatforms.(platforms{k, 1}) = present(k);
 end

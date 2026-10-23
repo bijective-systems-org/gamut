@@ -22,10 +22,11 @@ name: publish
 # Linux one in the manylinux image the Linux wheel is built in, and the
 # MATLAB gateway against it; `toolbox` packages the gateways and their cores
 # with matlab/package_toolbox.m, and `toolbox-test` installs the toolbox in
-# a fresh MATLAB on each platform, runs the MATLAB example with it and
-# validates the file it writes. `release` attaches the toolbox and the cores
-# to the release, or to a draft release when the release is not written yet;
-# it holds the only other permission, to write this repository's releases.
+# a fresh MATLAB, the oldest release it claims and the latest, runs the
+# MATLAB example with it and validates the file it writes. `release`
+# attaches the toolbox and the cores to the release, or to a draft release
+# when the release is not written yet; it holds the only other permission,
+# to write this repository's releases.
 #
 # A pull request that changes the packaging, or a manual run, builds and
 # tests the wheels, the sdist, the cores and the toolbox and uploads
@@ -57,8 +58,9 @@ defaults:
 env:
   # The MATLAB that builds the gateways and packages them, and so the oldest
   # release the toolbox claims (package_toolbox.m reads it from the MATLAB it
-  # runs in). From R2026a MATLAB runs on Apple silicon Macs alone.
-  MATLAB_RELEASE: R2026a
+  # runs in): the first to run natively on Apple silicon. It runs on macOS 14
+  # and Ubuntu 22.04 at the newest, hence those runners for it.
+  MATLAB_RELEASE: R2023b
   MANYLINUX: quay.io/pypa/manylinux_2_28_x86_64:2026.10.16-1@sha256:1e7b8460ad8fb3fb0fbe1cd818845159ac896b4fd17452d56e892c291f3b97a8
 
 jobs:
@@ -144,7 +146,7 @@ jobs:
           # The Linux gateway is built on the oldest runner: built on glibc
           # 2.38 or later it would ask for symbols older systems lack.
           - {platform: linux-x86_64, os: ubuntu-22.04, library: lib/libgamut.so, mex: mexa64}
-          - {platform: macos-arm64, os: macos-15, library: lib/libgamut.dylib, mex: mexmaca64}
+          - {platform: macos-arm64, os: macos-14, library: lib/libgamut.dylib, mex: mexmaca64}
           - {platform: macos-x86_64, os: macos-15-intel}
           - {platform: windows-x86_64, os: windows-2022, library: bin/gamut.dll, mex: mexw64}
     runs-on: ${{ matrix.os }}
@@ -200,10 +202,6 @@ jobs:
           echo "the gateway needs $newest"
           [ "$(printf '%s\n' "$newest" GLIBC_2.28 | sort -V | tail -1)" = GLIBC_2.28 ]
 
-      - name: The licences beside the gateway
-        if: matrix.mex
-        run: cp -R "dist/$CORE/licenses" matlab/
-
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: matrix.mex
         with:
@@ -212,13 +210,12 @@ jobs:
             matlab/gamut_mex.${{ matrix.mex }}
             matlab/libgamut.*
             matlab/gamut.dll
-            matlab/licenses
           if-no-files-found: error
 
   toolbox:
     name: MATLAB toolbox
     needs: cores
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -256,7 +253,8 @@ jobs:
         include:
           - {name: Linux, os: ubuntu-22.04}
           - {name: 'Linux, latest MATLAB', os: ubuntu-24.04, release: latest}
-          - {name: macOS, os: macos-15}
+          - {name: macOS, os: macos-14}
+          - {name: 'macOS, latest MATLAB', os: macos-15, release: latest}
           - {name: Windows, os: windows-2022}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
