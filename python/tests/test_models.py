@@ -77,6 +77,12 @@ def test_nearest_matches_the_written_out_rule_exactly():
     assert got.astype(int).tolist() == reference_nearest(x, lower, upper, q)
     nan = m.call({"a": [np.nan], "b": [0.5], "c": [0.5]}, [("i", "values")])["i"]["values"]
     assert np.isnan(nan[0])
+    # The core reads one value per row from each input, so unequal or
+    # missing inputs are refused first.
+    with pytest.raises(gamut.GamutError, match="300 values of every input"):
+        m.call({"a": q[:, 0], "b": q[:, 1], "c": q[:5, 2]}, [("i", "values")])
+    with pytest.raises(gamut.GamutError, match="needs the inputs c"):
+        m.call({"a": q[:, 0], "b": q[:, 1]}, [("i", "values")])
 
 
 @gamut.register_model_type

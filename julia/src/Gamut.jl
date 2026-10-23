@@ -970,8 +970,13 @@ save(m::Nearest) = Dict{String,Any}("columns" => m.columns, "lower" => m.lower, 
 load_nearest(n) = Nearest(n["columns"], n["lower"], n["upper"], n["x"], n["outputs"])
 
 function call(m::Nearest, inputs, wanted)
-    nrows = isempty(inputs) ? 0 : length(first(values(inputs)))
-    cols = [Vector{Float64}(inputs[c]) for c in m.columns]
+    missing = [c for c in m.columns if !haskey(inputs, c)]
+    isempty(missing) || throw(GamutError("", "nearest needs the inputs $(join(missing, ", "))"))
+    cols = [Vector{Float64}(vec(inputs[c])) for c in m.columns]
+    nrows = !isempty(cols) ? length(cols[1]) : isempty(inputs) ? 0 : length(first(values(inputs)))
+    # The core reads nrows values from each column and cannot see their lengths.
+    all(c -> length(c) == nrows, cols) ||
+        throw(GamutError("E5", "nearest needs $nrows values of every input, one per row"))
     t = to_tree(save(m))
     out = Dict{String,Any}()
     try

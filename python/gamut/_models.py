@@ -157,8 +157,14 @@ class Nearest:
                 "x": self.x, "outputs": dict(self.outputs)}
 
     def call(self, inputs: Mapping[str, Any], wanted: Sequence[tuple]) -> dict[str, dict]:
-        n = len(next(iter(inputs.values()))) if inputs else 0
+        missing = [c for c in self.columns if c not in inputs]
+        if missing:
+            raise GamutError("", f"nearest needs the inputs {', '.join(missing)}")
         cols = [np.ascontiguousarray(np.asarray(inputs[c], dtype=np.float64)) for c in self.columns]
+        n = len(cols[0]) if cols else len(next(iter(inputs.values()))) if inputs else 0
+        # The core reads n values from each column and cannot see their lengths.
+        if any(c.shape != (n,) for c in cols):
+            raise GamutError("E5", f"nearest needs {n} values of every input, one per row")
         handle = _to_tree(self.save())
         try:
             names = _lib.string_array(self.columns)
