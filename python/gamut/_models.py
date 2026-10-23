@@ -5,7 +5,9 @@ driven from Python with the core writing the result."""
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
+import math
 import os
 import tempfile
 import warnings
@@ -246,7 +248,7 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
             has = "lower" in spec or "upper" in spec
             call("gamut_declare_parameter", handle, b(name), b(spec.get("role", "design")),
                  b(spec.get("units")), _precision(spec.get("dtype")), 1 if has else 0,
-                 float(spec.get("lower", 0.0)), float(spec.get("upper", 0.0)),
+                 float(spec.get("lower", math.nan)), float(spec.get("upper", math.nan)),
                  b(spec.get("run_group", "")))
         if coordinates is not None:
             call("gamut_declare_coordinates", handle, b(coordinates.get("units")),
@@ -391,8 +393,10 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
         try:
             call("gamut_evaluate_begin", m._handle(), b(out_path), ctypes.byref(writer))
         except BaseException:
+            # The core removes a file it created; this is the name reserved above.
             if temporary:
-                os.remove(out_path)
+                with contextlib.suppress(FileNotFoundError):
+                    os.remove(out_path)
             raise
         w = Study(writer, out_path, writing=True)
         w._mesh_kind, w._per = m._mesh_kind, m._per

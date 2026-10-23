@@ -290,7 +290,7 @@ function declare(h, kw)
     for (name, v) in pairs_of(get(kw, :parameters, nothing))
         d = spec(v, "units")
         has = haskey(d, "lower") || haskey(d, "upper")
-        @mes gamut_declare_parameter (Ptr{Cvoid}, Cstring, Cstring, Cstring, Cint, Cint, Cdouble, Cdouble, Cstring) h cs(name) cs(getstr(d, "role", "design")) cs(getstr(d, "units")) precision_code(get(precision, name, get(d, "dtype", nothing))) (has ? 1 : 0) Float64(get(d, "lower", 0.0)) Float64(get(d, "upper", 0.0)) cs(getstr(d, "run_group"))
+        @mes gamut_declare_parameter (Ptr{Cvoid}, Cstring, Cstring, Cstring, Cint, Cint, Cdouble, Cdouble, Cstring) h cs(name) cs(getstr(d, "role", "design")) cs(getstr(d, "units")) precision_code(get(precision, name, get(d, "dtype", nothing))) (has ? 1 : 0) Float64(get(d, "lower", NaN)) Float64(get(d, "upper", NaN)) cs(getstr(d, "run_group"))
     end
     c = get(kw, :coordinates, nothing)
     if c !== nothing

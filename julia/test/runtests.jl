@@ -178,6 +178,10 @@ mktempdir() do tmp
         @test_throws GamutError Gamut.create(p; writer="t", parameter=Dict("x" => "m"))
         e = try Gamut.create(p; writer="t", mesh="shared"); nothing catch x; x end
         @test e isa GamutError && e.rule == "E6" && !isfile(p)
+        for bound in ((lower=0.0,), (upper=1.0,))
+            e = try Gamut.create(p; writer="t", parameters=Dict("x" => (units="1", bound...))); nothing catch x; x end
+            @test e isa GamutError && e.rule == "E16" && !isfile(p)
+        end
         pts, cells = grid(2, 2)
         Gamut.create(joinpath(tmp, "cells.gamut"); writer="t", mesh="shared", per="fixed",
                       coordinates=(units="m", axes=2)) do s

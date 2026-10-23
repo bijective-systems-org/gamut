@@ -37,8 +37,10 @@ The languages agree in more places. `gamut_create` from C, or
 Python, MATLAB and Julia already refused it, where it took `fixed`. Cell
 offsets of the wrong length are refused (E5) in Python, MATLAB and Julia
 before the core reads them, as the C++ layer already did, and so are a
-nearest model's inputs of unequal length. A failed Python `evaluate`
-leaves no file behind. In Julia, a `true` note is stored as the integer 1,
+nearest model's inputs of unequal length. A parameter given only one of
+`lower` and `upper` is refused (E16) in Python, MATLAB and Julia, where the
+other was taken as 0 or the one given was dropped. An evaluation that
+fails leaves no file behind, in every language. In Julia, a `true` note is stored as the integer 1,
 and `related` keys a derivative along each coordinate axis separately, as
 in Python.
 

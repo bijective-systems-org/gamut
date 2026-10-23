@@ -4,6 +4,7 @@ the shared core."""
 from __future__ import annotations
 
 import ctypes
+import math
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -685,7 +686,7 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
             has = "lower" in spec or "upper" in spec
             call("gamut_declare_parameter", handle, b(name), b(spec.get("role", "design")),
                  b(spec.get("units")), _precision(precision.get(name, spec.get("dtype"))),
-                 1 if has else 0, float(spec.get("lower", 0.0)), float(spec.get("upper", 0.0)),
+                 1 if has else 0, float(spec.get("lower", math.nan)), float(spec.get("upper", math.nan)),
                  b(spec.get("run_group", "")))
         if coordinates is not None:
             call("gamut_declare_coordinates", handle, b(coordinates.get("units")),

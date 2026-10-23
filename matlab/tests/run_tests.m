@@ -234,23 +234,41 @@ catch err
     ok(strcmp(err.identifier, 'gamut:E6'), 'a mesh without per refused');
 end
 
-% The example in examples/matlab runs and writes a valid file.
-example = fullfile(fileparts(fileparts(here)), 'examples', 'matlab', 'one_mesh.m');
-if isfile(example)
-    written = run_example(example, tmp);
-    ok(isempty(gamut.validate(written)), 'the MATLAB example writes a valid file');
+for bound = {struct('units', '1', 'lower', 0), struct('units', '1', 'upper', 1)}
+    try
+        gamut.create(fullfile(tmp, 'one_bound.gamut'), 'writer', 'tests', ...
+            'parameters', struct('x', bound{1}));
+        ok(false, 'one bound refused');
+    catch err
+        ok(strcmp(err.identifier, 'gamut:E16'), 'one bound refused');
+    end
+end
+
+% The examples in examples/matlab run: one_mesh writes a valid file, and
+% the README's sweep, and the same file read with ncread, print its line.
+examples = fullfile(fileparts(fileparts(here)), 'examples', 'matlab');
+if isfile(fullfile(examples, 'one_mesh.m'))
+    run_example(fullfile(examples, 'one_mesh.m'), tmp);
+    ok(isempty(gamut.validate(fullfile(tmp, 'cylinder.gamut'))), ...
+        'the MATLAB example writes a valid file');
+    readme = fileread(fullfile(fileparts(fileparts(here)), 'README.md'));
+    line = regexp(readme, 'lift of the runs that converged:[^\r\n]*', 'match', 'once');
+    out = run_example(fullfile(examples, 'sweep.m'), tmp);
+    ok(~isempty(line) && contains(out, line), 'the MATLAB sweep prints the README''s line');
+    out = run_example(fullfile(examples, 'read_with_ncread.m'), tmp);
+    ok(~isempty(line) && contains(out, line), 'ncread reads the sweep alike');
 end
 
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end
 end
 
-function written = run_example(example, folder)
-% Runs an example script in its own workspace and folder, quietly.
+function out = run_example(example, folder)
+% Runs an example script in its own workspace and folder; returns what it
+% printed.
 old = cd(folder);
 restore = onCleanup(@() cd(old));
 copyfile(example, folder);
 [~, name] = fileparts(example);
-evalc(name);
-written = fullfile(folder, 'cylinder.gamut');
+out = evalc(name);
 end

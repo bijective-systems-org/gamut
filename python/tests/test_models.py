@@ -278,6 +278,27 @@ def test_a_failed_evaluation_leaves_no_file(tmp_path):
     with pytest.raises(gamut.GamutError):
         gamut.evaluate(mp, {"x": [1.0, 2.0]})
     assert {f for f in set(os.listdir(tempfile.gettempdir())) - before if f.endswith(".gamut")} == set()
+    # Refused while the new file is being declared, before any model runs.
+    import h5py
+    with h5py.File(mp, "r+") as f:
+        del f["x"].attrs["units"]
+    with pytest.raises(gamut.GamutError) as e:
+        gamut.evaluate(mp, {"x": [1.0]}, path=out)
+    assert e.value.rule == "E7"
+    assert not os.path.exists(out)
+    with pytest.raises(gamut.GamutError):
+        gamut.evaluate(mp, {"x": [1.0]})
+    assert {f for f in set(os.listdir(tempfile.gettempdir())) - before if f.endswith(".gamut")} == set()
+
+
+def test_one_bound_is_refused(tmp_path):
+    """Neither bound is taken as 0 when only the other is given."""
+    for i, bound in enumerate(({"lower": 0.0}, {"upper": 1.0})):
+        for create in (gamut.create, gamut.create_model):
+            with pytest.raises(gamut.GamutError) as e:
+                create(str(tmp_path / f"{create.__name__}{i}.gamut"), writer="tests",
+                       parameters={"x": {"units": "1", **bound}})
+            assert e.value.rule == "E16" and "give both bounds" in e.value.message
 
 
 def test_a_model_file_declares_a_bool_label_as_a_data_file_does(tmp_path):

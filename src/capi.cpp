@@ -709,12 +709,13 @@ int gamut_write_copy(const char* src_path, const char* dst_path, gamut_error* er
 
 void gamut_abandon(gamut_file* f, int remove_file) {
   if (f == nullptr) return;
-  const Lock lock(hdf5_mutex());
-  std::unique_ptr<gamut_file> owned(f);
   try {
+    const Lock lock(hdf5_mutex());
+    std::unique_ptr<gamut_file> owned(f);
     if (owned->writer) owned->writer->abandon(remove_file != 0);
   } catch (...) {
-    // Abandoning reports nothing; the handle is freed either way.
+    // Abandoning reports nothing; the handle is freed with the lock held,
+    // or, if the lock itself failed, not at all.
   }
 }
 

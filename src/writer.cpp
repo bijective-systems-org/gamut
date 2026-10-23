@@ -569,7 +569,7 @@ void Writer::declare_parameter(const Parameter& p) {
        p.name + ": give both bounds or neither", p.name);
   if (p.lower) {
     need(std::isfinite(*p.lower) && std::isfinite(*p.upper) && *p.lower <= *p.upper,
-         "E16", p.name + ": bounds must be finite with lower <= upper", p.name);
+         "E16", p.name + ": give both bounds as finite numbers with lower <= upper", p.name);
   }
   need(p.run_group.empty() || p.role == "time", "E15",
        p.name + ": run_group belongs on a time parameter", p.name);
