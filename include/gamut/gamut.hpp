@@ -62,11 +62,9 @@ struct Strings {
   }
 };
 
-// The limits of docs/security.md that the core applies to a read and to a
-// selection, checked here too so that nothing that would be refused is
-// allocated first.
-constexpr int64_t kMaxReadElements = int64_t(1) << 31;
-constexpr int64_t kMaxReadBytes = int64_t(1) << 33;
+// The limit of docs/security.md on the rows a selection scans, checked here
+// too so that a buffer the core would refuse is not allocated first.  (The
+// core checks a read's size in gamut_shape, before any buffer exists.)
 constexpr int64_t kMaxRowsSelected = int64_t(1) << 27;
 
 inline std::vector<const char*> pointers(const std::vector<std::string>& items) {
@@ -448,15 +446,8 @@ class Study {
     Array<T> a;
     a.shape.assign(shape, shape + rank);
     int64_t n = 1;
-    for (int64_t d : a.shape) {
-      if (d < 0 || (d > 0 && n > detail::kMaxReadElements / d))
-        throw Error("E23", name + ": a read of more than " + std::to_string(detail::kMaxReadElements) +
-                           " elements is refused; read a part at a time");
-      n *= d;
-    }
+    for (int64_t d : a.shape) n *= d;
     const int64_t bytes = n * static_cast<int64_t>(sizeof(T));
-    if (n > detail::kMaxReadElements || bytes > detail::kMaxReadBytes)
-      throw Error("E23", name + ": a read of " + std::to_string(bytes) + " bytes is refused; read a part at a time");
     a.values.resize(static_cast<size_t>(n));
     detail::check(gamut_read(f_, name.c_str(), &r, &s, detail::dtype<T>(), a.values.data(), bytes, &e), e);
     return a;

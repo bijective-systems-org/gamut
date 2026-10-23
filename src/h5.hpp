@@ -64,6 +64,12 @@ const std::size_t kMaxFilterParameters = 1024;
 std::size_t checked_count(const std::string& path, std::size_t item,
                           std::initializer_list<std::int64_t> factors);
 
+// The element count of `shape`, a shape taken from the file: E23 above
+// `limit`.
+std::size_t checked_product(const std::string& path,
+                            const std::vector<hsize_t>& shape,
+                            std::size_t limit);
+
 // A read touching more chunks than this is refused (E23): HDF5 keeps state
 // per chunk touched, so a file of tiny chunks would make a small read cost
 // gigabytes (spec section 9.6).
@@ -142,6 +148,10 @@ class File {
   bool exists(const std::string& path) const;
   bool is_group(const std::string& path) const;
   bool is_dataset(const std::string& path) const;
+  // Why the dataset at `path` keeps its values outside the file (external
+  // storage, a virtual dataset), or "" when it does not; such a dataset is
+  // never read (E22).
+  std::string stored_outside(const std::string& path) const;
   std::vector<Member> members(const std::string& path) const;
 
   std::vector<RawAttr> attributes(const std::string& path) const;

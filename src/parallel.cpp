@@ -109,6 +109,8 @@ bool read_parallel(const File& f, const std::string& path, DType mem,
   // Shuffle must run before deflate when writing, so it is undone after.
   if (plan.shuffle && plan.deflate && plan.shuffle_index > plan.deflate_index) return false;
   const std::size_t rank = info.shape.size();
+  // More selections than axes is refused by the serial read, with its reason.
+  if (sel.size() > rank) return false;
   plan.shape = info.shape;
   plan.chunk = info.chunk;
   plan.lo.assign(rank, 0);
@@ -135,11 +137,8 @@ bool read_parallel(const File& f, const std::string& path, DType mem,
     check_chunks_touched(path, info, boxes);
   }
   std::vector<hsize_t> box(rank);
-  std::size_t total = 1;
-  for (std::size_t a = 0; a < rank; ++a) {
-    box[a] = plan.hi[a] - plan.lo[a];
-    total *= static_cast<std::size_t>(box[a]);
-  }
+  for (std::size_t a = 0; a < rank; ++a) box[a] = plan.hi[a] - plan.lo[a];
+  const std::size_t total = checked_product(path, box, kMaxDatasetElements);
   if (out_bytes != total * dtype_size(mem)) return false;
   if (total == 0) return true;
 

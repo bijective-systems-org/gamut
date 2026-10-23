@@ -45,6 +45,33 @@ Id open_object(hid_t file, const std::string& path) {
   return id;
 }
 
+// Why a dataset's values live outside the file, or "" when they are inside
+// it.  HDF5 external storage and virtual datasets read other paths, so they
+// are refused (E22) before a dataset's extent or values are touched.
+std::string outside_storage(hid_t dset, const std::string& path) {
+  Id dcpl(H5Dget_create_plist(dset));
+  need(dcpl.valid(), "cannot read how \"" + path + "\" is stored");
+  if (H5Pget_layout(dcpl.get()) == H5D_VIRTUAL) {
+    return "\"" + path + "\" is a virtual dataset, whose values are in other files; a file "
+           "holds its own values, and readers never open another path";
+  }
+  const int external = H5Pget_external_count(dcpl.get());
+  need(external >= 0, "cannot read how \"" + path + "\" is stored");
+  if (external > 0) {
+    return "\"" + path + "\" keeps its values in external files; a file holds its own "
+           "values, and readers never open another path";
+  }
+  return "";
+}
+
+Id open_dataset(hid_t file, const std::string& path) {
+  Id dset(H5Dopen2(file, path.c_str(), H5P_DEFAULT));
+  need(dset.valid(), "cannot open \"" + path + "\"");
+  const std::string outside = outside_storage(dset.get(), path);
+  if (!outside.empty()) throw Error("E22", outside, path);
+  return dset;
+}
+
 std::string token_key(hid_t where, const H5O_token_t& token) {
   char* text = nullptr;
   if (H5Otoken_to_str(where, &token, &text) < 0 || text == nullptr) {
@@ -125,24 +152,6 @@ AttrType type_of(hid_t type_id, hid_t space_id) {
   return t;
 }
 
-std::size_t checked_product(const std::string& path,
-                            const std::vector<hsize_t>& shape,
-                            std::size_t limit) {
-  std::size_t n = 1;
-  for (const hsize_t raw : shape) {
-    const std::size_t e = static_cast<std::size_t>(raw);
-    if (e != 0 && n > limit / e) {
-      throw Error("E23", "\"" + path + "\" declares more elements than this "
-                                        "reader will read");
-    }
-    n *= e;
-  }
-  if (n > limit) {
-    throw Error("E23", "\"" + path + "\" declares more elements than this "
-                                      "reader will read");
-  }
-  return n;
-}
 
 hid_t file_type(DType t) {
   switch (t) {
@@ -191,6 +200,25 @@ Id make_dcpl(const std::vector<hsize_t>& chunk, const FilterPipeline& filters) {
 }
 
 }  // namespace
+
+std::size_t checked_product(const std::string& path,
+                            const std::vector<hsize_t>& shape,
+                            std::size_t limit) {
+  std::size_t n = 1;
+  for (const hsize_t raw : shape) {
+    const std::size_t e = static_cast<std::size_t>(raw);
+    if (e != 0 && n > limit / e) {
+      throw Error("E23", "\"" + path + "\" declares more elements than this "
+                                        "reader will read");
+    }
+    n *= e;
+  }
+  if (n > limit) {
+    throw Error("E23", "\"" + path + "\" declares more elements than this "
+                                      "reader will read");
+  }
+  return n;
+}
 
 void Id::close() {
   if (id_ >= 0) {
@@ -507,12 +535,17 @@ DsetInfo& with_shape(hid_t dset, DsetInfo& info) {
 
 }  // namespace
 
+std::string File::stored_outside(const std::string& path) const {
+  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
+  need(dset.valid(), "cannot open \"" + path + "\"");
+  return outside_storage(dset.get(), path);
+}
+
 DsetInfo File::dataset_shape(const std::string& path) const {
   DsetInfo info;
   if (!is_dataset(path)) return info;
   info.is_dataset = true;
-  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
-  need(dset.valid(), "cannot open the dataset \"" + path + "\"");
+  Id dset(open_dataset(id_.get(), path));
   return with_shape(dset.get(), info);
 }
 
@@ -521,6 +554,8 @@ std::pair<std::vector<RawAttr>, DsetInfo> File::inspect(const std::string& path)
   Id object = open_object(id_.get(), path);
   DsetInfo info;
   if (H5Iget_type(object.get()) == H5I_DATASET) {
+    const std::string outside = outside_storage(object.get(), path);
+    if (!outside.empty()) throw Error("E22", outside, path);
     info.is_dataset = true;
     with_shape(object.get(), info);
   }
@@ -531,8 +566,7 @@ DsetInfo File::dataset_info(const std::string& path, bool scales) const {
   DsetInfo info;
   if (!is_dataset(path)) return info;
   info.is_dataset = true;
-  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
-  need(dset.valid(), "cannot open the dataset \"" + path + "\"");
+  Id dset(open_dataset(id_.get(), path));
   with_shape(dset.get(), info);
   const int rank = static_cast<int>(info.shape.size());
   Id dcpl(H5Dget_create_plist(dset.get()));
@@ -807,8 +841,7 @@ void File::read(const std::string& path, DType mem,
   need(info.is_dataset, "\"" + path + "\" is not a dataset");
   if (read_gathered(path, info.shape, mem, sel, out, out_bytes)) return;
   check_chunks_touched(path, info, sel);
-  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
-  need(dset.valid(), "cannot open \"" + path + "\"");
+  Id dset(open_dataset(id_.get(), path));
   Id space(H5Dget_space(dset.get()));
   const std::vector<hsize_t> count = select(space.get(), path, info.shape, sel);
   const std::size_t n = checked_product(path, count, kMaxDatasetElements);
@@ -855,7 +888,7 @@ std::vector<std::string> File::read_strings(const std::string& path, std::size_t
     throw Error("E23", "\"" + path + "\" declares more bytes than this reader "
                                      "will read");
   }
-  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
+  Id dset(open_dataset(id_.get(), path));
   Id type(H5Dget_type(dset.get()));
   std::string buffer(item * count, '\0');
   need(H5Dread(dset.get(), type.get(), H5S_ALL, H5S_ALL, H5P_DEFAULT,
@@ -986,8 +1019,7 @@ void File::write(const std::string& path, DType mem,
                  const std::vector<hsize_t>& start,
                  const std::vector<hsize_t>& count, const void* data) {
   need(mem != DType::String, "strings are written with write_strings");
-  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
-  need(dset.valid(), "cannot open \"" + path + "\"");
+  Id dset(open_dataset(id_.get(), path));
   Id space(H5Dget_space(dset.get()));
   const int rank = H5Sget_simple_extent_ndims(space.get());
   need(static_cast<std::size_t>(rank) == start.size() &&
@@ -1025,7 +1057,7 @@ void File::write_strings(const std::string& path, hsize_t start,
              " bytes and \"" + values[i] + "\" is longer");
     std::memcpy(&buffer[i * item], values[i].data(), values[i].size());
   }
-  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
+  Id dset(open_dataset(id_.get(), path));
   Id type(H5Dget_type(dset.get()));
   Id space(H5Dget_space(dset.get()));
   const hsize_t count = values.size();
@@ -1040,8 +1072,7 @@ void File::write_strings(const std::string& path, hsize_t start,
 
 void File::set_extent(const std::string& path,
                       const std::vector<hsize_t>& shape) {
-  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
-  need(dset.valid(), "cannot open \"" + path + "\"");
+  Id dset(open_dataset(id_.get(), path));
   need(H5Dset_extent(dset.get(), shape.data()) >= 0,
        "cannot resize \"" + path + "\"");
 }
@@ -1070,8 +1101,7 @@ void File::make_scale(const std::string& path, hsize_t length, bool unlimited) {
 
 void File::set_scale_length(const std::string& path, hsize_t length) {
   set_extent(path, {length});
-  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
-  need(dset.valid(), "cannot open the dimension scale \"" + path + "\"");
+  Id dset(open_dataset(id_.get(), path));
   const std::string name = scale_name_attribute(length);
   if (H5Aexists(dset.get(), "NAME") > 0) {
     need(H5Adelete(dset.get(), "NAME") >= 0,
@@ -1090,18 +1120,15 @@ void File::set_scale_length(const std::string& path, hsize_t length) {
 
 void File::mark_coordinate_scale(const std::string& path,
                                  const std::string& name) {
-  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
-  need(dset.valid(), "cannot open \"" + path + "\"");
+  Id dset(open_dataset(id_.get(), path));
   need(H5DSset_scale(dset.get(), name.c_str()) >= 0,
        "cannot mark \"" + path + "\" as a dimension scale");
 }
 
 void File::attach_scale(const std::string& dataset, const std::string& scale,
                         unsigned axis) {
-  Id d(H5Dopen2(id_.get(), dataset.c_str(), H5P_DEFAULT));
-  need(d.valid(), "cannot open \"" + dataset + "\"");
-  Id s(H5Dopen2(id_.get(), scale.c_str(), H5P_DEFAULT));
-  need(s.valid(), "cannot open the dimension scale \"" + scale + "\"");
+  Id d(open_dataset(id_.get(), dataset));
+  Id s(open_dataset(id_.get(), scale));
   // A failed attachment has already deleted the REFERENCE_LIST it was
   // extending; the file must be discarded, and the message says so.
   need(H5DSattach_scale(d.get(), s.get(), axis) >= 0,
@@ -1112,10 +1139,8 @@ void File::attach_scale(const std::string& dataset, const std::string& scale,
 
 void File::detach_scale(const std::string& dataset, const std::string& scale,
                         unsigned axis) {
-  Id d(H5Dopen2(id_.get(), dataset.c_str(), H5P_DEFAULT));
-  need(d.valid(), "cannot open \"" + dataset + "\"");
-  Id s(H5Dopen2(id_.get(), scale.c_str(), H5P_DEFAULT));
-  need(s.valid(), "cannot open the dimension scale \"" + scale + "\"");
+  Id d(open_dataset(id_.get(), dataset));
+  Id s(open_dataset(id_.get(), scale));
   need(H5DSdetach_scale(d.get(), s.get(), axis) >= 0,
        "cannot detach \"" + scale + "\" from \"" + dataset + "\"");
 }

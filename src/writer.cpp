@@ -408,67 +408,73 @@ std::unique_ptr<Writer> Writer::create(const std::string& path,
 std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
   std::unique_ptr<Writer> w(new Writer());
   w->path_ = path;
-  // Checked on a read-only handle: opening a file to write changes its
-  // bytes even when nothing is written, and a refused file stays as it was.
-  w->schema_ = load_schema(File::open_read(path), path);
-  need(w->schema_.kind == "data", "E16",
-       "runs are appended to data files, and \"" + path + "\" is a model file");
+  // Everything is read and checked on a read-only handle, and the file is
+  // opened to write last: opening a file to write changes its bytes even
+  // when nothing is written, and a refused file stays as it was.
+  {
+    const File f = File::open_read(path);
+    w->schema_ = load_schema(f, path);
+    need(w->schema_.kind == "data", "E16",
+         "runs are appended to data files, and \"" + path + "\" is a model file");
+    w->filters_ = pipeline_of(f.dataset_info("/row", false));
+    w->datasets_ready_ = true;
+    w->schema_.mesh.set_done = !w->schema_.mesh.kind.empty();
+    auto resume = [&](const std::string& p) {
+      const DsetInfo info = f.dataset_info(p, false);
+      if (!info.is_dataset || info.shape.empty()) return;
+      DType t;
+      if (!dtype_of(info.type, &t) || t == DType::String) return;
+      need(info.chunked && info.maxshape[0] == H5S_UNLIMITED, "E20",
+           "\"" + p + "\" grows by a row with each run, so it must be chunked with an "
+           "unlimited first axis");
+      w->pending_[p] = make_pending(
+          p, t, std::vector<hsize_t>(info.shape.begin() + 1, info.shape.end()),
+          info.chunk[0], static_cast<std::int64_t>(info.shape[0]));
+    };
+    const Schema& s = w->schema_;
+    resume("/row");
+    for (const auto& x : s.parameters) resume(root(x.name));
+    for (const auto& x : s.labels) resume(root(x.name));
+    for (const auto& r : s.results) {
+      resume(r.where == "scalar" ? root(r.name) : field_path(r));
+    }
+    const Mesh& m = s.mesh;
+    if (m.kind == "shared" && m.per != "fixed") resume("/mesh/coordinates");
+    if (!m.per_group().empty()) resume("/mesh/row_instance");
+    if (m.kind == "changing") {
+      for (const char* p : {"/mesh/instance_nodes", "/mesh/instance_cells",
+                            "/mesh/coordinates", "/mesh/cell_types",
+                            "/mesh/cell_offsets", "/mesh/cell_connectivity",
+                            "/mesh/row_node_start", "/mesh/row_cell_start"}) {
+        resume(p);
+      }
+      for (const auto& ml : m.labels) resume(label_dataset(ml));
+      const bool cells = f.exists("/mesh/cell_types");
+      w->schema_.mesh.has_cells = cells ? 1 : 0;
+      const std::vector<std::int64_t> cn = f.read_i64("/mesh/instance_nodes");
+      const std::vector<std::int64_t> cc = cells ? f.read_i64("/mesh/instance_cells")
+                                                 : std::vector<std::int64_t>(cn.size(), 0);
+      for (std::size_t k = 0; k + 1 < cn.size(); ++k) {
+        w->instance_nodes_.push_back(cn[k + 1] - cn[k]);
+        w->instance_cells_.push_back(cc[k + 1] - cc[k]);
+      }
+      w->node_values_ = static_cast<std::int64_t>(f.dataset_info("/mesh/node_value", false).shape[0]);
+      w->cell_values_ = cells ? static_cast<std::int64_t>(
+                                    f.dataset_info("/mesh/cell_value", false).shape[0])
+                              : 0;
+    }
+    w->instances_written_ = m.n_instances;
+    if (!m.per_group().empty() && s.rows > 0) {
+      const std::vector<std::int64_t> codes = f.read_i64("/" + m.per_group());
+      const std::vector<std::int64_t> inst = f.read_i64("/mesh/row_instance");
+      for (std::size_t i = 0; i < codes.size() && i < inst.size(); ++i) {
+        w->member_instance_.emplace(codes[i], inst[i]);
+      }
+    }
+    const std::vector<std::int64_t> ids = f.read_i64("/row");
+    for (const std::int64_t id : ids) w->next_id_ = std::max(w->next_id_, id + 1);
+  }
   w->file_.reset(new File(File::open_write(path)));
-  File& f = *w->file_;
-  w->filters_ = pipeline_of(f.dataset_info("/row", false));
-  w->datasets_ready_ = true;
-  w->schema_.mesh.set_done = !w->schema_.mesh.kind.empty();
-  auto resume = [&](const std::string& p) {
-    const DsetInfo info = f.dataset_info(p, false);
-    if (!info.is_dataset || info.shape.empty()) return;
-    DType t;
-    if (!dtype_of(info.type, &t) || t == DType::String) return;
-    w->pending_[p] = make_pending(
-        p, t, std::vector<hsize_t>(info.shape.begin() + 1, info.shape.end()),
-        info.chunked ? info.chunk[0] : 1, static_cast<std::int64_t>(info.shape[0]));
-  };
-  const Schema& s = w->schema_;
-  resume("/row");
-  for (const auto& x : s.parameters) resume(root(x.name));
-  for (const auto& x : s.labels) resume(root(x.name));
-  for (const auto& r : s.results) {
-    resume(r.where == "scalar" ? root(r.name) : field_path(r));
-  }
-  const Mesh& m = s.mesh;
-  if (m.kind == "shared" && m.per != "fixed") resume("/mesh/coordinates");
-  if (!m.per_group().empty()) resume("/mesh/row_instance");
-  if (m.kind == "changing") {
-    for (const char* p : {"/mesh/instance_nodes", "/mesh/instance_cells",
-                          "/mesh/coordinates", "/mesh/cell_types",
-                          "/mesh/cell_offsets", "/mesh/cell_connectivity",
-                          "/mesh/row_node_start", "/mesh/row_cell_start"}) {
-      resume(p);
-    }
-    for (const auto& ml : m.labels) resume(label_dataset(ml));
-    const bool cells = f.exists("/mesh/cell_types");
-    w->schema_.mesh.has_cells = cells ? 1 : 0;
-    const std::vector<std::int64_t> cn = f.read_i64("/mesh/instance_nodes");
-    const std::vector<std::int64_t> cc = cells ? f.read_i64("/mesh/instance_cells")
-                                               : std::vector<std::int64_t>(cn.size(), 0);
-    for (std::size_t k = 0; k + 1 < cn.size(); ++k) {
-      w->instance_nodes_.push_back(cn[k + 1] - cn[k]);
-      w->instance_cells_.push_back(cc[k + 1] - cc[k]);
-    }
-    w->node_values_ = static_cast<std::int64_t>(f.dataset_info("/mesh/node_value", false).shape[0]);
-    w->cell_values_ = cells ? static_cast<std::int64_t>(
-                                  f.dataset_info("/mesh/cell_value", false).shape[0])
-                            : 0;
-  }
-  w->instances_written_ = m.n_instances;
-  if (!m.per_group().empty() && s.rows > 0) {
-    const std::vector<std::int64_t> codes = f.read_i64("/" + m.per_group());
-    const std::vector<std::int64_t> inst = f.read_i64("/mesh/row_instance");
-    for (std::size_t i = 0; i < codes.size() && i < inst.size(); ++i) {
-      w->member_instance_.emplace(codes[i], inst[i]);
-    }
-  }
-  const std::vector<std::int64_t> ids = f.read_i64("/row");
-  for (const std::int64_t id : ids) w->next_id_ = std::max(w->next_id_, id + 1);
   return w;
 }
 

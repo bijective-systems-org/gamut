@@ -62,6 +62,10 @@ class Reader {
   void set_threads(int n) { threads_ = n < 1 ? 1 : n; }
 
  private:
+  // The shape before the read limit is applied.
+  std::vector<std::int64_t> unchecked_shape(const std::string& path,
+                                            const Selection& runs,
+                                            const Selection& sites) const;
   Reader() = default;
   std::int64_t instance_of_run(std::int64_t run) const;
   // Entries k and k + 1 of a cumulative count, checked (E21).

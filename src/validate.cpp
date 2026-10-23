@@ -187,6 +187,7 @@ class Validator {
   std::string kind_;
   std::int64_t rows_ = 0;
   std::map<std::string, std::vector<std::string>> tables_;
+  bool stored_outside_ = false;
   std::map<std::string, Object> parameters_, labels_, scalars_, constants_;
   std::map<std::string, Object> fields_;      // by name; concept path inside
   std::map<std::string, Object> mesh_labels_;
@@ -563,6 +564,14 @@ void Validator::walk_links() {
         add("E22", child, std::string("is ") + link_kind_name(m.kind) +
                           "; a file holds hard links only, and readers never follow others");
         continue;
+      }
+      if (m.is_dataset) {
+        const std::string outside = file_->stored_outside(child);
+        if (!outside.empty()) {
+          add("E22", child, outside);
+          stored_outside_ = true;
+          continue;
+        }
       }
       if (m.is_group && child != "/private" && child != "/VTKHDF") {
         todo.emplace_back(child, here.second + 1);
@@ -1510,6 +1519,9 @@ Report Validator::run() {
   }
   guarded("", [&] { root_attrs(); });
   guarded("", [&] { walk_links(); });
+  // The checks below read datasets, and one whose values are outside the
+  // file is never read.
+  if (stored_outside_) return report_;
   guarded("categories", [&] { tables(); });
   row();
   guarded("", [&] { root_objects(); });

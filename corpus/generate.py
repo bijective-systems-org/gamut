@@ -665,6 +665,43 @@ def hostile_cases(out):
         del f["models/fit"].attrs["inputs"]
     cases["hostile_model_undeclared"] = {"rules": ["E17"],
                                          "reads": [{"evaluate": {"mach": [0.4], "alpha": [1.0]}}]}
+    # The constant keeps its value in another file through HDF5 external
+    # storage, and a scalar result is a virtual dataset over another file:
+    # a reader never opens another path, so both are refused when the file
+    # opens. Neither other file exists.
+    p = os.path.join(out, "hostile_external_storage.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
+    with h5py.File(p, "r+") as f:
+        del f["s_ref"]
+        dcpl = h5py.h5p.create(h5py.h5p.DATASET_CREATE)
+        dcpl.set_external(b"hostile_external_storage.raw", 0, 8)
+        d = h5py.Dataset(h5py.h5d.create(f.id, b"s_ref", h5py.h5t.IEEE_F64LE,
+                                         h5py.h5s.create(h5py.h5s.SCALAR), dcpl=dcpl))
+        sattr(d, "role", "constant")
+        sattr(d, "units", "m2")
+    cases["hostile_external_storage"] = {"rules": ["E22"], "refused": "E22"}
+    p = os.path.join(out, "hostile_virtual_dataset.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
+    with h5py.File(p, "r+") as f:
+        attrs = [(k, f["cl"].attrs[k], f["cl"].attrs.get_id(k).dtype)
+                 for k in f["cl"].attrs if k != "DIMENSION_LIST"]
+        f["cl"].dims[0].detach_scale(f["row"])
+        del f["cl"]
+        layout = h5py.VirtualLayout(shape=(4,), dtype="<f8")
+        layout[:] = h5py.VirtualSource("hostile_virtual_dataset_source.h5", "cl", shape=(4,))
+        d = f.create_virtual_dataset("cl", layout)
+        for k, v, t in attrs:
+            d.attrs.create(k, v, dtype=t)
+        d.dims[0].attach_scale(f["row"])
+    cases["hostile_virtual_dataset"] = {"rules": ["E22"], "refused": "E22"}
+    # 2**31 + 1 rows declared, none stored: reading a scalar whole is refused
+    # before a reader sizes a buffer for it.
+    p = os.path.join(out, "hostile_read_huge.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
+    with h5py.File(p, "r+") as f:
+        for name in ("row", "cl"):
+            f[name].resize(((1 << 31) + 1,))
+    cases["hostile_read_huge"] = {"rules": [], "reads": [{"scalar": "cl"}]}
     return cases
 
 

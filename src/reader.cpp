@@ -461,6 +461,26 @@ Selection shifted(const Selection& sites, std::int64_t length,
 std::vector<std::int64_t> Reader::shape(const std::string& path,
                                         const Selection& runs,
                                         const Selection& sites) const {
+  const std::vector<std::int64_t> out = unchecked_shape(path, runs, sites);
+  // Checked here, before any caller sizes a buffer for the read, at 8 bytes
+  // a value, the widest a read returns (docs/security.md).
+  const std::size_t limit = kMaxDatasetBytes / 8;
+  std::size_t n = 1;
+  for (const std::int64_t d : out) {
+    need(d >= 0, "E21", path + ": a negative count", path);
+    const std::size_t x = static_cast<std::size_t>(d);
+    need(x == 0 || n <= limit / x, "E23",
+         path + ": a read of more than " + std::to_string(limit) +
+             " values (8 GiB) is refused; read a part at a time",
+         path);
+    n *= x;
+  }
+  return out;
+}
+
+std::vector<std::int64_t> Reader::unchecked_shape(const std::string& path,
+                                                  const Selection& runs,
+                                                  const Selection& sites) const {
   const Schema& s = schema_;
   const Mesh& m = s.mesh;
   if (path == "row" || s.parameter(path) || s.label(path) ||

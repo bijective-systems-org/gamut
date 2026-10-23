@@ -10,10 +10,15 @@
 #include <string>
 #include <vector>
 
+#include <hdf5.h>
+#include <hdf5_hl.h>
+
 #include "chunk.hpp"
 #include "h5.hpp"
+#include "parallel.hpp"
 #include "reader.hpp"
 #include "types.hpp"
+#include "validate.hpp"
 #include "writer.hpp"
 
 namespace {
@@ -414,6 +419,129 @@ void test_other_major_version() {
   std::remove(path.c_str());
 }
 
+bool exists(const std::string& path) { return std::ifstream(path).good(); }
+
+void detach_row_scale(const File& f, const char* path) {
+  const hid_t d = H5Dopen2(f.get(), path, H5P_DEFAULT);
+  const hid_t row = H5Dopen2(f.get(), "/row", H5P_DEFAULT);
+  CHECK(H5DSdetach_scale(d, row, 0) >= 0);
+  H5Dclose(row);
+  H5Dclose(d);
+}
+
+// A table whose scalar result keeps its values in a file outside it
+// (HDF5 external storage), as a crafted file could: nothing reads that
+// file, and appending neither creates nor changes it, nor the table.
+void test_values_stored_outside() {
+  const std::string path = "wr_outside.gamut";
+  const std::string outside = "wr_outside.raw";
+  std::remove(outside.c_str());
+  {
+    auto w = Writer::create(path, "tests", "", "fixed");
+    w->declare_parameter(param("x", "design", "1"));
+    w->declare_result(scalar("y", "1"));
+    w->close();
+  }
+  {
+    File f = File::open_write(path);
+    detach_row_scale(f, "/y");
+    CHECK(H5Ldelete(f.get(), "/y", H5P_DEFAULT) >= 0);
+    const hsize_t zero = 0, unlimited = H5S_UNLIMITED;
+    const hid_t space = H5Screate_simple(1, &zero, &unlimited);
+    const hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
+    H5Pset_external(dcpl, outside.c_str(), 0, H5F_UNLIMITED);
+    const hid_t d = H5Dcreate2(f.get(), "/y", H5T_IEEE_F64LE, space, H5P_DEFAULT, dcpl,
+                               H5P_DEFAULT);
+    CHECK(d >= 0);
+    const hid_t row = H5Dopen2(f.get(), "/row", H5P_DEFAULT);
+    CHECK(H5DSattach_scale(d, row, 0) >= 0);
+    H5Dclose(row);
+    H5Dclose(d);
+    H5Pclose(dcpl);
+    H5Sclose(space);
+    f.write_attr("/y", "role", AttrValue::text("scalar"));
+    f.write_attr("/y", "units", AttrValue::text("1"));
+  }
+  const std::string before = file_bytes(path);
+  CHECK(rule_of([&] { Writer::open_append(path); }) == "E22");
+  CHECK(file_bytes(path) == before);
+  CHECK(!exists(outside));
+  const Report report = validate_file(path);
+  bool e22 = false;
+  for (const auto& finding : report.findings) e22 = e22 || finding.rule == "E22";
+  CHECK(e22);
+  CHECK(rule_of([&] { Reader::open(path); }) == "E22");
+  CHECK(!exists(outside));
+  std::remove(path.c_str());
+}
+
+// A run-table column grows with each run, so appending refuses one that
+// cannot grow (E20) before writing anything.
+void test_append_needs_growable_columns() {
+  const std::string path = "wr_fixed.gamut";
+  {
+    auto w = Writer::create(path, "tests", "", "fixed");
+    w->declare_result(scalar("y", "1"));
+    w->close();
+  }
+  {
+    File f = File::open_write(path);
+    detach_row_scale(f, "/y");
+    CHECK(H5Ldelete(f.get(), "/y", H5P_DEFAULT) >= 0);
+    f.create_dataset("/y", DType::Float64, 0, {0}, {0}, {}, {});
+    const hid_t d = H5Dopen2(f.get(), "/y", H5P_DEFAULT);
+    const hid_t row = H5Dopen2(f.get(), "/row", H5P_DEFAULT);
+    CHECK(H5DSattach_scale(d, row, 0) >= 0);
+    H5Dclose(row);
+    H5Dclose(d);
+    f.write_attr("/y", "role", AttrValue::text("scalar"));
+    f.write_attr("/y", "units", AttrValue::text("1"));
+  }
+  const std::string before = file_bytes(path);
+  CHECK(rule_of([&] { Writer::open_append(path); }) == "E20");
+  CHECK(file_bytes(path) == before);
+  std::remove(path.c_str());
+}
+
+// The threaded reader given more selections than a dataset has axes falls
+// back to the serial read, which refuses it, rather than index past them.
+void test_threaded_read_of_fewer_axes() {
+  const std::string path = "wr_rank.gamut";
+  {
+    File f = File::create(path);
+    f.create_dataset("/x", DType::Float64, 0, {16}, {H5S_UNLIMITED}, {4}, {});
+    const std::vector<double> x(16, 1.0);
+    f.write("/x", DType::Float64, {0}, {16}, x.data());
+  }
+  const File f = File::open_read(path);
+  double out[4] = {0, 0, 0, 0};
+  const std::vector<Selection> two = {Selection::all(), Selection::range(0, 1)};
+  CHECK(!read_parallel(f, "/x", DType::Float64, two, out, sizeof out, 4));
+  CHECK(!rule_of([&] { f.read("/x", DType::Float64, two, out, sizeof out); }).empty());
+  std::remove(path.c_str());
+}
+
+// A read is refused before any buffer is sized when it would return more
+// than 2^30 values (8 GiB at 8 bytes a value), however few are stored.
+void test_read_limit_before_allocation() {
+  const std::string path = "wr_huge.gamut";
+  {
+    auto w = Writer::create(path, "tests", "", "fixed");
+    w->declare_result(scalar("y", "1"));
+    w->close();
+  }
+  {
+    File f = File::open_write(path);
+    f.set_extent("/row", {(hsize_t(1) << 30) + 1});
+    f.set_extent("/y", {(hsize_t(1) << 30) + 1});
+  }
+  const auto r = Reader::open(path);
+  CHECK(rule_of([&] { r->shape("y", Selection::all(), Selection::all()); }) == "E23");
+  CHECK(r->shape("y", Selection::range(0, 8), Selection::all()) ==
+        std::vector<std::int64_t>{8});
+  std::remove(path.c_str());
+}
+
 }  // namespace
 
 int main() {
@@ -424,6 +552,10 @@ int main() {
       {"changing", test_changing_per_run_and_group},
       {"refusals", test_refusals},
       {"other_major", test_other_major_version},
+      {"outside", test_values_stored_outside},
+      {"growable", test_append_needs_growable_columns},
+      {"rank", test_threaded_read_of_fewer_axes},
+      {"read_limit", test_read_limit_before_allocation},
   };
   for (const auto& t : tests) {
     try {

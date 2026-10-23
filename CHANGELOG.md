@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+A file can no longer make a reader or a writer touch another path. A
+dataset whose values HDF5 keeps outside the file, through external storage
+or as a virtual dataset, passed validation and was read from that other
+file (a constant as soon as the file opened), and appending wrote to it,
+creating it if need be. Such a dataset is now an error (E22): the
+validator reports it, opening refuses the file, and appending refuses it
+before the file is opened to write. Appending also refuses a run-table
+column that cannot grow (E20), before writing anything.
+
+A read is refused (E23) before any buffer is sized when it would return
+more than 2³⁰ values (8 GiB at 8 bytes a value); a file declaring billions
+of rows made the Python, Julia and MATLAB layers allocate for them first.
+The threaded reader no longer reads past its arrays when a field has fewer
+axes than its selections.
+
 MATLAB installs from a toolbox, `Gamut.mltbx`, attached to each release:
 MATLAB R2023b or later on Linux, Windows or an Apple silicon Mac, and no
 compiler. Each release also carries the core on its own for each platform

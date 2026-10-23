@@ -461,8 +461,10 @@ to read every string keeps names, table entries and labels to ASCII.
 
 ### 9.6 Reading safely
 
-A reader treats a file as untrusted. It follows only hard links; a soft or
-external link is an error and is never opened (E22). It caps recursion over
+A reader treats a file as untrusted. It follows only hard links, and reads
+only values stored in the file: a soft or external link, or a dataset whose
+values are stored elsewhere (HDF5 external storage or a virtual dataset), is
+an error and is never opened (E22). It caps recursion over
 groups and model data at a depth it states (64 recommended), an eager
 read at an element count it states (2³¹ recommended), and the chunks one
 read touches when its chunks are smaller than §11.4's defaults (2²⁰
@@ -802,7 +804,7 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 | E19 | an axis of a dataset that is not itself a scale with no dimension scale, more than one, or one not named as §10 gives; a scale without attribute creation order tracked and indexed; a scale whose extent differs from an axis attached to it; an unlimited dimension §10 does not let grow (a zero-extent axis inside model data excepted, §12) |
 | E20 | a dataset with a growable dimension that is not chunked; a filter other than gzip 1–9 and shuffle; a user-defined fill value or a `_FillValue` attribute |
 | E21 | instances inconsistent: `row_instance` naming an instance that does not exist, giving two rows of one category different instances, or not numbering instances by first appearance; changing-mesh offsets not starting at 0, decreasing, or not ending at the node or cell count; row starts disagreeing with the instance sizes and row order |
-| E22 | a soft or external link in the public tree |
+| E22 | a soft or external link in the public tree; a dataset whose values are stored outside the file (HDF5 external storage, a virtual dataset) |
 | E23 | an object the reader cannot read, deeper than its cap, or (eager read only) above its element limit |
 | E24 | coordinates with other than one to three axes |
 
