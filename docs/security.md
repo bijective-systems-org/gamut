@@ -59,9 +59,10 @@ makes every read on it, each in a child process.
 Measured on 23 October 2026 with the core built as the packages are (HDF5
 1.14.6 linked in), and again under the address and undefined-behaviour
 sanitizers: all 840 copies were answered by rule, and every read of them
-returned or was refused. An earlier measurement found a copy that hung
-inside HDF5 itself, while reading the file's dimension-scale attributes;
-it has been reported to the HDF Group.
+returned or was refused. Runs with more copies find the rare one HDF5
+itself cannot meet: in 4,200 copies under the sanitizers, seven crashed and
+three hung, each inside HDF5's own code, most while reading a file's
+dimension-scale attributes. Such a hang has been reported to the HDF Group.
 
 So for a file nobody vouches for, a separate process is the protection.
 Check it with `gamut validate FILE` (or `gamut info`) in a child process
