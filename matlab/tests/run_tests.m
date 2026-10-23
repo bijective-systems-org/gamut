@@ -215,6 +215,25 @@ ok(r.rowCount() == 6 && isequal(cellstr(r.getLabel('status')), ...
     {'converged'; 'converged'; 'failed'; 'converged'; 'converged'; 'failed'}), 'a study''s table adds again');
 r.close();
 
+% Cell offsets of the wrong length are refused before the core reads them,
+% and a mesh without per is the core's refusal, as in every language.
+p = fullfile(tmp, 'short_offsets.gamut');
+w = gamut.create(p, 'writer', 'tests', 'mesh', 'shared', 'per', 'fixed', ...
+    'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'));
+try
+    w.setMesh([0 0; 1 0; 0 1], {5, 0, [0 1 2]});
+    ok(false, 'short offsets refused');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E5'), 'short offsets refused');
+end
+w.abandon(true);
+try
+    gamut.create(fullfile(tmp, 'no_per.gamut'), 'writer', 'tests', 'mesh', 'shared');
+    ok(false, 'a mesh without per refused');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E6'), 'a mesh without per refused');
+end
+
 % The example in examples/matlab runs and writes a valid file.
 example = fullfile(fileparts(fileparts(here)), 'examples', 'matlab', 'one_mesh.m');
 if isfile(example)

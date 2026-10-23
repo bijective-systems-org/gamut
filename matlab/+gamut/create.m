@@ -29,12 +29,7 @@ o = p.Results;
 if isempty(o.writer)
     error('gamut:usage', 'name the program writing the file: ''writer''');
 end
-if ~isempty(o.mesh) && isempty(o.per)
-    error('gamut:E6', 'a mesh needs per: fixed, run or group:<label>');
-end
-per = o.per;
-if isempty(per), per = 'fixed'; end
-h = gamut_mex('create', path, o.writer, o.mesh, per);
+h = gamut_mex('create', path, o.writer, o.mesh, o.per);
 s = gamut.Study(h, path, true, o.mesh, o.per);
 if ~isempty(o.coordinates)
     s.Axes = gamut.internal.field(o.coordinates, 'axes', 3);
