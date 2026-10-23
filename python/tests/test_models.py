@@ -237,3 +237,38 @@ def test_model_numbers_read_back_without_the_type_registered(tmp_path):
             assert f.model_numbers("line")["a"] == 2.0
     finally:
         gamut._models._REGISTRY["tests.line"] = registered
+
+
+@gamut.register_model_type
+class Short:
+    """A model that returns one value too few."""
+
+    type = "tests.short"
+
+    @classmethod
+    def load(cls, numbers):
+        return cls()
+
+    def save(self):
+        return {"k": 1}
+
+    def call(self, inputs, wanted):
+        return {"y": {"values": np.zeros(len(inputs["x"]) - 1)}}
+
+
+def test_a_failed_evaluation_leaves_no_file(tmp_path):
+    import os
+    mp = str(tmp_path / "short.gamut")
+    with gamut.create_model(mp, writer="tests",
+                             parameters={"x": {"units": "m", "lower": 0.0, "upper": 10.0}},
+                             scalars={"y": {"units": "1", "model": "short", "output": "y"}}) as m:
+        m.add_model("short", Short(), ["x"])
+    out = str(tmp_path / "out.gamut")
+    with pytest.raises(gamut.GamutError):
+        gamut.evaluate(mp, {"x": [1.0, 2.0]}, path=out)
+    assert not os.path.exists(out)
+    import tempfile
+    before = set(os.listdir(tempfile.gettempdir()))
+    with pytest.raises(gamut.GamutError):
+        gamut.evaluate(mp, {"x": [1.0, 2.0]})
+    assert {f for f in set(os.listdir(tempfile.gettempdir())) - before if f.endswith(".gamut")} == set()

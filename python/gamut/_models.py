@@ -375,7 +375,12 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
             fd, out_path = tempfile.mkstemp(suffix=".gamut")
             os.close(fd)
         writer = ctypes.c_void_p()
-        call("gamut_evaluate_begin", m._handle(), b(out_path), ctypes.byref(writer))
+        try:
+            call("gamut_evaluate_begin", m._handle(), b(out_path), ctypes.byref(writer))
+        except BaseException:
+            if temporary:
+                os.remove(out_path)
+            raise
         w = Study(writer, out_path, writing=True)
         w._mesh_kind, w._per = m._mesh_kind, m._per
         try:
@@ -413,8 +418,11 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
                                             "coordinates")
                 points = [np.asarray(pts[i]) for i in range(n)]
             w.add_runs(columns, fields=fields, points=points)
-        finally:
             w.close()
+        except BaseException:
+            # A failed evaluation leaves no file behind.
+            w._abandon(remove=True)
+            raise
     if temporary:
         handle = ctypes.c_void_p()
         call("gamut_open", b(out_path), ctypes.byref(handle))
