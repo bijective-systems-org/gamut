@@ -19,8 +19,9 @@ folder = tempname;
 mkdir(folder);
 written = run_example(example, folder);
 findings = gamut.validate(written);
-if ~isempty(findings)
-    error('gamut:tests', '%s breaks %s', written, strjoin({findings.rule}, ', '));
+errors = findings(strcmp({findings.severity}, 'error'));    % warnings, such as a failed run, are the example's
+if ~isempty(errors)
+    error('gamut:tests', '%s breaks %s', written, strjoin({errors.rule}, ', '));
 end
 fprintf('%s is valid\n', written);
 rmdir(folder, 's');

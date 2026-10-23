@@ -205,13 +205,15 @@ custom array layout leaves each producer to maintain.
 | Language | Install |
 |---|---|
 | Python 3.10 or later | `pip install gamut-format` |
-| MATLAB | `build_mex(core)` once in the `matlab` folder of a checkout |
+| MATLAB R2023b or later | open `Gamut.mltbx` from the [latest release](https://github.com/bijective-systems-org/gamut/releases/latest) |
 | Julia 1.9 or later | `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v1.1.0")` |
 | C++ and C | CMake build and install, then `find_package(gamut)`; include `gamut/gamut.hpp` (C++17) or `gamut/gamut.h` (C) |
 
-The Python wheels for macOS, Linux and Windows contain the core with HDF5
-linked in. MATLAB and Julia use the same core: the wheel's
-(`gamut.library_path()` prints where it is) or one built with CMake.
+The Python wheels and the MATLAB toolbox carry the core with HDF5 linked
+in, for macOS, Linux and Windows, and need no compiler. Julia, C and C++
+use the same core: each release's `gamut-core-<version>-<platform>`
+archive, the wheel's (`gamut.library_path()` prints where it is), or one
+built with CMake.
 [Installing](https://github.com/bijective-systems-org/gamut/blob/main/docs/install.md) has the details for each language.
 
 ## Documentation

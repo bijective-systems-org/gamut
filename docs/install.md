@@ -61,12 +61,23 @@ CMAKE_ARGS="-DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT=$PWD/deps -DZLIB_ROOT=$PWD/deps" 
 
 ## MATLAB
 
+Download `Gamut.mltbx` from the
+[latest release](https://github.com/bijective-systems-org/gamut/releases/latest/download/Gamut.mltbx)
+and open it in MATLAB, or run `matlab.addons.install('Gamut.mltbx')`. It
+needs MATLAB R2023b or later on Linux, Windows or an Apple silicon Mac, and
+no compiler: it carries the library, with its own HDF5 linked in apart from
+MATLAB's. `matlab.addons.uninstall('Gamut')` removes it.
+
 To read a file only, MATLAB needs nothing installed: its own `ncread`
 reads every array ([reading without the package](guide/12-matlab.md#reading-without-the-package)).
 
-The MATLAB package is the `matlab` folder of a checkout. Its gateway is
-compiled once against a core library; the simplest one to use is the
-Python wheel's, which keeps its HDF5 apart from MATLAB's. Find it with
+### From a checkout
+
+For an earlier MATLAB or an Intel Mac, compile the gateway yourself. The
+package is the `matlab` folder of a checkout, and its gateway is compiled
+once against a core library with HDF5 linked in: a release's
+`gamut-core-<version>-<platform>` archive, or the Python wheel's, found
+with
 
 ```bash
 python -c "import gamut; print(gamut.library_path())"
@@ -84,8 +95,7 @@ s.rowCount()
 
 `build_mex` needs a C++ compiler MATLAB accepts (`mex -setup C++`; on
 macOS, Xcode). It copies the core beside the gateway, so the `matlab`
-folder is all MATLAB needs on its path. Tested with MATLAB R2026a on
-macOS, and with the latest release on Linux.
+folder is all MATLAB needs on its path.
 
 ## Julia
 
@@ -100,9 +110,10 @@ using Gamut
 Gamut.version()
 ```
 
-As for MATLAB, the Python wheel's core serves: set `GAMUT_LIBRARY` to the
-path `gamut.library_path()` prints, in the environment or in `ENV` before
-the first call. From a checkout, `julia --project=julia` uses the package in
+The core is in each release's `gamut-core-<version>-<platform>` archive
+(`lib/`, or `bin/` on Windows), and the Python wheel's serves too: set
+`GAMUT_LIBRARY` to its path (`gamut.library_path()` prints the wheel's), in
+the environment or in `ENV` before the first call. From a checkout, `julia --project=julia` uses the package in
 place, and without `GAMUT_LIBRARY` it looks in `build/` at the top of the
 checkout.
 

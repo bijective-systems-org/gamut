@@ -32,10 +32,11 @@ if ~any(present)
     error('gamut:usage', 'no gateway in %s; build one with build_mex', here);
 end
 copyfile(fullfile(here, '+gamut'), fullfile(stage, '+gamut'));
+copyfile(fullfile(here, 'gamut_mex.m'), stage);       % a clear error where no gateway fits
 copyfile(fullfile(root, 'licenses'), fullfile(stage, 'licenses'));
 copyfile(fullfile(root, 'LICENSE'), stage);
 mkdir(fullfile(stage, 'doc'));
-copyfile(fullfile(root, 'examples', 'matlab', 'one_mesh.m'), ...
+copyfile(fullfile(root, 'examples', 'matlab', 'sweep.m'), ...
          fullfile(stage, 'doc', 'GettingStarted.m'));
 
 cmake = fileread(fullfile(root, 'CMakeLists.txt'));

@@ -2,8 +2,8 @@
 
 MATLAB reads and writes the same files with the same calls, in MATLAB's
 spelling: methods on a study object in camelCase, options as name–value
-pairs, declarations as structs, and positions counted from 1. Installing
-the package takes one build step ([installing](../install.md#matlab)).
+pairs, declarations as structs, and positions counted from 1. The toolbox, `Gamut.mltbx`, installs it with
+no compiler ([installing](../install.md#matlab)).
 
 There are two examples, from a working folder with `examples/matlab` on
 the path: `sweep`, the [README](../../README.md#example)'s run table, and
@@ -126,9 +126,9 @@ what it can do.
 
 - A file written by MATLAB is the same file Python, Julia and C read: the
   library underneath is one and the same.
-- MATLAB loads its own HDF5. Build the gateway against a core with HDF5
-  linked in, such as the one inside the Python wheel, so the two never
-  meet ([installing](../install.md#matlab)).
+- MATLAB loads its own HDF5. The toolbox's library carries its own HDF5
+  linked in, so the two never meet; a gateway built from a checkout needs
+  such a core too ([installing](../install.md#from-a-checkout-1)).
 - Values arrive in the units they were stored in, which
   `study.describe(name).units` names. Converting them is left to the
   caller; only Python's reads convert, through pint.
