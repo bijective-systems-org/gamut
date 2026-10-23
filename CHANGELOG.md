@@ -15,10 +15,18 @@ A read is refused (E23) before any buffer is sized when it would return
 more than 2³⁰ values (8 GiB at 8 bytes a value); a file declaring billions
 of rows made the Python, Julia and MATLAB layers allocate for them first.
 The threaded reader no longer reads past its arrays when a field has fewer
-axes than its selections. A chunk an uncompressed dataset stores in fewer
-bytes than it holds, as a damaged filter message leaves a compressed one,
-is refused (E23) before HDF5 reads or rewrites it; HDF5 itself read past
-its buffer and returned what lay beyond.
+axes than its selections.
+
+The core reads compressed datasets itself, a chunk at a time, with one
+path for one thread or many, and HDF5 is never handed a chunk it has not
+checked. A chunk that is not stored whole, or that gzip does not inflate
+to its full size, is refused (E23) on reading and before appending
+rewrites it; HDF5 trusts these sizes, and a crafted chunk made it read past
+its memory and return what lay there, or write past it when appending. A
+filter other than gzip and shuffle is not read (E20). Reading a few
+scattered rows or nodes is several times faster, up to twenty times on a
+million-row table, and other reads and writes take the time they did.
+Building the core needs HDF5 1.14 or later (every package carries 1.14.6).
 
 MATLAB installs from a toolbox, `Gamut.mltbx`, attached to each release:
 MATLAB R2023b or later on Linux, Windows or an Apple silicon Mac, and no

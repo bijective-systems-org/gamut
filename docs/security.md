@@ -19,7 +19,11 @@ file or path.
 A file holds no executable code. A model's numbers are plain data, read by
 software the reader has installed and registered. The packaged core loads
 no HDF5 filter plugins: the format allows only gzip and shuffle, which
-HDF5 has built in, and a file naming another filter is refused.
+HDF5 has built in, and a file naming another filter is refused. The core
+reads compressed data itself, chunk by chunk, and a chunk that is not
+stored whole, or does not inflate to its full size, is refused (E23)
+before anything is copied from it; HDF5 trusts these sizes, and a crafted
+file could make it read or write past its own memory.
 
 `gamut validate` reports the rules a file breaks, with where and why,
 within the limits below. A

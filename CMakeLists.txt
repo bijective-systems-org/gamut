@@ -48,9 +48,10 @@ if(GAMUT_SANITIZE)
 endif()
 
 find_package(HDF5 REQUIRED COMPONENTS C HL)
-# 1.12 brought the object-token API the core uses; packages bundle 1.14.
-if(HDF5_VERSION AND HDF5_VERSION VERSION_LESS 1.12)
-  message(FATAL_ERROR "the Gamut core needs HDF5 1.12 or later; found ${HDF5_VERSION}. "
+# 1.14 brought H5Dchunk_iter, which the core's chunk index pass uses;
+# packages bundle 1.14.
+if(HDF5_VERSION AND HDF5_VERSION VERSION_LESS 1.14)
+  message(FATAL_ERROR "the Gamut core needs HDF5 1.14 or later; found ${HDF5_VERSION}. "
                       "Point HDF5_ROOT at a newer HDF5.")
 endif()
 find_package(ZLIB REQUIRED)
@@ -63,10 +64,10 @@ set(GAMUT_CORE_SOURCES
   src/sha256.cpp
   src/h5.cpp
   src/chunk.cpp
+  src/chunks.cpp
   src/schema.cpp
   src/reader.cpp
   src/writer.cpp
-  src/parallel.cpp
   src/validate.cpp
   src/value.cpp
   src/codec.cpp

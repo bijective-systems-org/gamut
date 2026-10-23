@@ -64,102 +64,6 @@ std::string outside_storage(hid_t dset, const std::string& path) {
   return "";
 }
 
-Id open_dataset(hid_t file, const std::string& path) {
-  Id dset(H5Dopen2(file, path.c_str(), H5P_DEFAULT));
-  need(dset.valid(), "cannot open \"" + path + "\"");
-  const std::string outside = outside_storage(dset.get(), path);
-  if (!outside.empty()) throw Error("E22", outside, path);
-  return dset;
-}
-
-// An unfiltered chunk is stored whole, and HDF5 reads or rewrites a stored
-// chunk as that many bytes. A chunk stored in another size (a compressed one
-// whose filter message is damaged looks unfiltered) would take HDF5 past its
-// own buffer, so every stored chunk a call touches is checked first: on each
-// axis, the chunks its runs (start, count; increasing) fall in. That is no
-// more chunks than HDF5 itself then visits.
-using Runs = std::vector<std::pair<std::int64_t, std::int64_t>>;
-
-void check_stored_chunks(hid_t dset, const std::string& path, const std::vector<Runs>& runs) {
-  Id dcpl(H5Dget_create_plist(dset));
-  const std::size_t rank = runs.size();
-  if (rank == 0 || !dcpl.valid() || H5Pget_layout(dcpl.get()) != H5D_CHUNKED ||
-      H5Pget_nfilters(dcpl.get()) != 0) {
-    return;
-  }
-  std::vector<hsize_t> chunk(rank);
-  need(H5Pget_chunk(dcpl.get(), static_cast<int>(rank), chunk.data()) == static_cast<int>(rank),
-       "cannot read the chunks of \"" + path + "\"");
-  Id type(H5Dget_type(dset));
-  hsize_t bytes = H5Tget_size(type.get());
-  for (const hsize_t c : chunk) {
-    if (c == 0 || bytes > kMaxDatasetBytes / c) {
-      throw Error("E23", "a chunk of \"" + path + "\" is larger than this reader reads", path);
-    }
-    bytes *= c;
-  }
-  // On each axis, the touched chunk indices as ranges [first, last].
-  std::vector<std::vector<std::pair<hsize_t, hsize_t>>> ranges(rank);
-  for (std::size_t a = 0; a < rank; ++a) {
-    const auto c = static_cast<std::int64_t>(chunk[a]);
-    for (const auto& r : runs[a]) {
-      if (r.second <= 0) continue;
-      const auto first = static_cast<hsize_t>(r.first / c);
-      const auto last = static_cast<hsize_t>((r.first + r.second - 1) / c);
-      if (!ranges[a].empty() && first <= ranges[a].back().second + 1) {
-        ranges[a].back().second = std::max(ranges[a].back().second, last);
-      } else {
-        ranges[a].emplace_back(first, last);
-      }
-    }
-    if (ranges[a].empty()) return;
-  }
-  std::vector<std::size_t> range(rank, 0);
-  std::vector<hsize_t> at(rank), origin(rank);
-  for (std::size_t a = 0; a < rank; ++a) at[a] = ranges[a][0].first;
-  while (true) {
-    for (std::size_t a = 0; a < rank; ++a) origin[a] = at[a] * chunk[a];
-    // The size the chunk index records, which is what HDF5 reads; the
-    // storage-size call gives the nominal size for an unfiltered dataset.
-    unsigned mask = 0;
-    haddr_t address = HADDR_UNDEF;
-    hsize_t stored = 0;
-    if (H5Dget_chunk_info_by_coord(dset, origin.data(), &mask, &address, &stored) < 0 ||
-        address == HADDR_UNDEF) {
-      stored = 0;   // not written
-    }
-    if (stored != 0 && stored != bytes) {
-      throw Error("E23", "a chunk of \"" + path + "\" is stored in " + std::to_string(stored) +
-                             " bytes and holds " + std::to_string(bytes), path);
-    }
-    std::size_t a = rank;
-    bool done = true;
-    while (a > 0) {
-      --a;
-      if (at[a] < ranges[a][range[a]].second) {
-        ++at[a];
-      } else if (range[a] + 1 < ranges[a].size()) {
-        at[a] = ranges[a][++range[a]].first;
-      } else {
-        range[a] = 0;
-        at[a] = ranges[a][0].first;
-        continue;
-      }
-      done = false;
-      break;
-    }
-    if (done) break;
-  }
-}
-
-// One run, [start, start + count), on each axis.
-std::vector<Runs> box_runs(const std::vector<hsize_t>& start, const std::vector<hsize_t>& count) {
-  std::vector<Runs> runs(start.size());
-  for (std::size_t a = 0; a < start.size(); ++a) {
-    runs[a].emplace_back(static_cast<std::int64_t>(start[a]), static_cast<std::int64_t>(count[a]));
-  }
-  return runs;
-}
 
 std::string token_key(hid_t where, const H5O_token_t& token) {
   char* text = nullptr;
@@ -624,6 +528,19 @@ DsetInfo& with_shape(hid_t dset, DsetInfo& info) {
 
 }  // namespace
 
+Id File::open_dataset(const std::string& path) const {
+  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
+  need(dset.valid(), "cannot open \"" + path + "\"");
+  // How a dataset stores its values is fixed when it is created, so each
+  // is checked once per open file.
+  if (inside_.count(path) == 0) {
+    const std::string outside = outside_storage(dset.get(), path);
+    if (!outside.empty()) throw Error("E22", outside, path);
+    inside_.insert(path);
+  }
+  return dset;
+}
+
 std::string File::stored_outside(const std::string& path) const {
   Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
   need(dset.valid(), "cannot open \"" + path + "\"");
@@ -634,7 +551,7 @@ DsetInfo File::dataset_shape(const std::string& path) const {
   DsetInfo info;
   if (!is_dataset(path)) return info;
   info.is_dataset = true;
-  Id dset(open_dataset(id_.get(), path));
+  Id dset(open_dataset(path));
   return with_shape(dset.get(), info);
 }
 
@@ -645,6 +562,7 @@ std::pair<std::vector<RawAttr>, DsetInfo> File::inspect(const std::string& path)
   if (H5Iget_type(object.get()) == H5I_DATASET) {
     const std::string outside = outside_storage(object.get(), path);
     if (!outside.empty()) throw Error("E22", outside, path);
+    inside_.insert(path);
     info.is_dataset = true;
     with_shape(object.get(), info);
   }
@@ -652,13 +570,23 @@ std::pair<std::vector<RawAttr>, DsetInfo> File::inspect(const std::string& path)
 }
 
 DsetInfo File::dataset_info(const std::string& path, bool scales) const {
+  Id dset;
+  return opened(path, &dset, scales);
+}
+
+DsetInfo File::opened(const std::string& path, Id* dset, bool scales) const {
   DsetInfo info;
   if (!is_dataset(path)) return info;
+  *dset = open_dataset(path);
+  return described(dset->get(), scales);
+}
+
+DsetInfo File::described(hid_t dset, bool scales) const {
+  DsetInfo info;
   info.is_dataset = true;
-  Id dset(open_dataset(id_.get(), path));
-  with_shape(dset.get(), info);
+  with_shape(dset, info);
   const int rank = static_cast<int>(info.shape.size());
-  Id dcpl(H5Dget_create_plist(dset.get()));
+  Id dcpl(H5Dget_create_plist(dset));
   info.chunked = H5Pget_layout(dcpl.get()) == H5D_CHUNKED;
   if (info.chunked && rank > 0) {
     info.chunk.resize(static_cast<std::size_t>(rank));
@@ -693,18 +621,18 @@ DsetInfo File::dataset_info(const std::string& path, bool scales) const {
     info.attr_order_indexed = (crt_order & H5P_CRT_ORDER_INDEXED) != 0;
   }
   if (!scales) return info;
-  info.is_scale = H5DSis_scale(dset.get()) > 0;
+  info.is_scale = H5DSis_scale(dset) > 0;
   info.scales.resize(static_cast<std::size_t>(rank > 0 ? rank : 0));
   if (!info.is_scale) {
     for (int axis = 0; axis < rank; ++axis) {
       ScaleVisit visit{&info.scales[static_cast<std::size_t>(axis)], this};
       int index = 0;
-      H5DSiterate_scales(dset.get(), static_cast<unsigned>(axis), &index,
+      H5DSiterate_scales(dset, static_cast<unsigned>(axis), &index,
                          collect_scale, &visit);
     }
   } else if (rank == 1) {
     // A coordinate variable carries itself as its own scale.
-    info.scales[0].push_back(dataset_link_name(dset.get()));
+    info.scales[0].push_back(dataset_link_name(dset));
   }
   return info;
 }
@@ -714,25 +642,35 @@ namespace {
 // The file-space selection and per-axis counts for `sel` over `shape`.
 // The selection is the cartesian product of each axis's runs; axes
 // beyond `sel` are whole.
-std::vector<hsize_t> select(hid_t space, const std::string& path,
-                            const std::vector<hsize_t>& shape,
-                            const std::vector<Selection>& sel) {
+// The runs `sel` picks on each axis of `shape` and how many positions that
+// is; axes beyond `sel` are whole.
+std::vector<Runs> runs_of(const std::string& path, const std::vector<hsize_t>& shape,
+                          const std::vector<Selection>& sel, std::vector<hsize_t>* count) {
   const std::size_t rank = shape.size();
   need(sel.size() <= rank, "\"" + path + "\" has " + std::to_string(rank) +
                                " axes and was given " +
                                std::to_string(sel.size()) + " selections");
-  std::vector<std::vector<std::pair<std::int64_t, std::int64_t>>> runs(rank);
-  std::vector<hsize_t> count(rank, 0);
+  std::vector<Runs> runs(rank);
+  count->assign(rank, 0);
   for (std::size_t a = 0; a < rank; ++a) {
     const std::int64_t length = static_cast<std::int64_t>(shape[a]);
     if (a < sel.size()) {
-      count[a] = static_cast<hsize_t>(sel[a].count(length, path));
+      (*count)[a] = static_cast<hsize_t>(sel[a].count(length, path));
       runs[a] = sel[a].runs(length, path);
     } else {
-      count[a] = shape[a];
+      (*count)[a] = shape[a];
       if (length > 0) runs[a].emplace_back(0, length);
     }
   }
+  return runs;
+}
+
+std::vector<hsize_t> select(hid_t space, const std::string& path,
+                            const std::vector<hsize_t>& shape,
+                            const std::vector<Selection>& sel) {
+  const std::size_t rank = shape.size();
+  std::vector<hsize_t> count;
+  const std::vector<Runs> runs = runs_of(path, shape, sel, &count);
   for (std::size_t a = 0; a < rank; ++a) {
     if (count[a] == 0) {
       H5Sselect_none(space);
@@ -924,28 +862,37 @@ bool File::read_gathered(const std::string& path, const std::vector<hsize_t>& sh
 
 void File::read(const std::string& path, DType mem,
                 const std::vector<Selection>& sel, void* out,
-                std::size_t out_bytes) const {
+                std::size_t out_bytes, int threads) const {
   need(mem != DType::String, "strings are read with read_strings");
-  const DsetInfo info = dataset_info(path, false);
+  Id dset;
+  const DsetInfo info = opened(path, &dset, false);
   need(info.is_dataset, "\"" + path + "\" is not a dataset");
+  auto need_bytes = [&](std::size_t n) {
+    need(out_bytes == n * dtype_size(mem),
+         "\"" + path + "\": the buffer holds " + std::to_string(out_bytes) +
+             " bytes and the selection needs " + std::to_string(n * dtype_size(mem)));
+  };
+  if (info.chunked && !info.shape.empty()) {
+    check_chunks_touched(path, info, sel);
+    // Filtered chunks, and unfiltered ones not all stored whole, are read
+    // by the core; HDF5 reads the rest (class ChunkStore).
+    if (!chunks_.stored_whole(dset.get(), path, info)) {
+      std::vector<hsize_t> count;
+      const std::vector<Runs> runs = runs_of(path, info.shape, sel, &count);
+      const std::size_t n = checked_product(path, count, kMaxDatasetElements);
+      need_bytes(n);
+      if (n == 0) return;
+      chunks_.read(dset.get(), path, info, memory_type(mem), dtype_size(mem), runs, out, n,
+                   threads);
+      return;
+    }
+  }
   if (read_gathered(path, info.shape, mem, sel, out, out_bytes)) return;
-  check_chunks_touched(path, info, sel);
-  Id dset(open_dataset(id_.get(), path));
   Id space(H5Dget_space(dset.get()));
   const std::vector<hsize_t> count = select(space.get(), path, info.shape, sel);
   const std::size_t n = checked_product(path, count, kMaxDatasetElements);
-  need(out_bytes == n * dtype_size(mem),
-       "\"" + path + "\": the buffer holds " + std::to_string(out_bytes) +
-           " bytes and the selection needs " +
-           std::to_string(n * dtype_size(mem)));
+  need_bytes(n);
   if (n == 0) return;
-  {
-    auto runs = box_runs(std::vector<hsize_t>(info.shape.size(), 0), info.shape);
-    for (std::size_t a = 0; a < sel.size() && a < info.shape.size(); ++a) {
-      runs[a] = sel[a].runs(static_cast<std::int64_t>(info.shape[a]), path);
-    }
-    check_stored_chunks(dset.get(), path, runs);
-  }
   Id memspace = count.empty() ? Id(H5Screate(H5S_SCALAR))
                               : Id(H5Screate_simple(static_cast<int>(count.size()),
                                                     count.data(), nullptr));
@@ -971,7 +918,8 @@ std::vector<std::int64_t> File::read_i64(const std::string& path) const {
 
 std::vector<std::string> File::read_strings(const std::string& path, std::size_t max_entries,
                                             std::size_t max_bytes) const {
-  const DsetInfo info = dataset_info(path, false);
+  Id dset;
+  const DsetInfo info = opened(path, &dset, false);
   need(info.is_dataset && info.type.klass == H5T_STRING,
        "\"" + path + "\" is not a string dataset");
   need(!info.type.variable_length,
@@ -984,14 +932,17 @@ std::vector<std::string> File::read_strings(const std::string& path, std::size_t
     throw Error("E23", "\"" + path + "\" declares more bytes than this reader "
                                      "will read");
   }
-  Id dset(open_dataset(id_.get(), path));
-  check_stored_chunks(dset.get(), path,
-                      box_runs(std::vector<hsize_t>(info.shape.size(), 0), info.shape));
   Id type(H5Dget_type(dset.get()));
   std::string buffer(item * count, '\0');
-  need(H5Dread(dset.get(), type.get(), H5S_ALL, H5S_ALL, H5P_DEFAULT,
-               &buffer[0]) >= 0,
-       "cannot read \"" + path + "\"");
+  if (info.chunked && !info.shape.empty() && !chunks_.stored_whole(dset.get(), path, info)) {
+    std::vector<hsize_t> counts;
+    const std::vector<Runs> runs = runs_of(path, info.shape, {}, &counts);
+    chunks_.read(dset.get(), path, info, type.get(), item, runs, &buffer[0], count, 1);
+  } else {
+    need(H5Dread(dset.get(), type.get(), H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                 &buffer[0]) >= 0,
+         "cannot read \"" + path + "\"");
+  }
   out.reserve(count);
   for (std::size_t i = 0; i < count; ++i) {
     out.push_back(strip_nul(buffer.substr(i * item, item)));
@@ -1111,13 +1062,14 @@ void File::create_dataset(const std::string& path, DType dtype,
   Id dset(H5Dcreate2(id_.get(), path.c_str(), ftype, space.get(), H5P_DEFAULT,
                      dcpl.get(), H5P_DEFAULT));
   need(dset.valid(), "cannot create the dataset \"" + path + "\"");
+  forget(path);
 }
 
 void File::write(const std::string& path, DType mem,
                  const std::vector<hsize_t>& start,
                  const std::vector<hsize_t>& count, const void* data) {
   need(mem != DType::String, "strings are written with write_strings");
-  Id dset(open_dataset(id_.get(), path));
+  Id dset(open_dataset(path));
   Id space(H5Dget_space(dset.get()));
   const int rank = H5Sget_simple_extent_ndims(space.get());
   need(static_cast<std::size_t>(rank) == start.size() &&
@@ -1126,7 +1078,10 @@ void File::write(const std::string& path, DType mem,
   for (const hsize_t c : count) {
     if (c == 0) return;
   }
-  check_stored_chunks(dset.get(), path, box_runs(start, count));
+  std::vector<hsize_t> shape(static_cast<std::size_t>(rank));
+  if (rank > 0) H5Sget_simple_extent_dims(space.get(), shape.data(), nullptr);
+  chunks_.before_write(dset.get(), path, shape, [&] { return described(dset.get(), false); },
+                       start, count);
   Id memspace;
   if (rank == 0) {
     memspace = Id(H5Screate(H5S_SCALAR));
@@ -1139,12 +1094,14 @@ void File::write(const std::string& path, DType mem,
   need(H5Dwrite(dset.get(), memory_type(mem), memspace.get(), space.get(),
                 H5P_DEFAULT, data) >= 0,
        "cannot write \"" + path + "\"");
+  chunks_.after_write(path, start, count);
 }
 
 void File::write_strings(const std::string& path, hsize_t start,
                          const std::vector<std::string>& values) {
   if (values.empty()) return;
-  const DsetInfo info = dataset_info(path, false);
+  Id dset;
+  const DsetInfo info = opened(path, &dset, false);
   need(info.is_dataset && info.type.klass == H5T_STRING &&
            !info.type.variable_length && info.shape.size() == 1,
        "\"" + path + "\" is not a one-dimensional fixed-length string dataset");
@@ -1156,9 +1113,8 @@ void File::write_strings(const std::string& path, hsize_t start,
              " bytes and \"" + values[i] + "\" is longer");
     std::memcpy(&buffer[i * item], values[i].data(), values[i].size());
   }
-  Id dset(open_dataset(id_.get(), path));
   const hsize_t count = values.size();
-  check_stored_chunks(dset.get(), path, box_runs({start}, {count}));
+  chunks_.before_write(dset.get(), path, info.shape, [&] { return info; }, {start}, {count});
   Id type(H5Dget_type(dset.get()));
   Id space(H5Dget_space(dset.get()));
   need(H5Sselect_hyperslab(space.get(), H5S_SELECT_SET, &start, nullptr,
@@ -1168,13 +1124,15 @@ void File::write_strings(const std::string& path, hsize_t start,
   need(H5Dwrite(dset.get(), type.get(), memspace.get(), space.get(),
                 H5P_DEFAULT, buffer.data()) >= 0,
        "cannot write \"" + path + "\"");
+  chunks_.after_write(path, {start}, {count});
 }
 
 void File::set_extent(const std::string& path,
                       const std::vector<hsize_t>& shape) {
-  Id dset(open_dataset(id_.get(), path));
+  Id dset(open_dataset(path));
   need(H5Dset_extent(dset.get(), shape.data()) >= 0,
        "cannot resize \"" + path + "\"");
+  chunks_.resized(path, shape);
 }
 
 void File::make_scale(const std::string& path, hsize_t length, bool unlimited) {
@@ -1194,6 +1152,7 @@ void File::make_scale(const std::string& path, hsize_t length, bool unlimited) {
   Id dset(H5Dcreate2(id_.get(), path.c_str(), H5T_IEEE_F32BE, space.get(),
                      H5P_DEFAULT, dcpl.get(), H5P_DEFAULT));
   need(dset.valid(), "cannot create the dimension scale \"" + path + "\"");
+  forget(path);
   const std::string name = scale_name_attribute(length);
   need(H5DSset_scale(dset.get(), name.c_str()) >= 0,
        "cannot mark \"" + path + "\" as a dimension scale");
@@ -1201,7 +1160,7 @@ void File::make_scale(const std::string& path, hsize_t length, bool unlimited) {
 
 void File::set_scale_length(const std::string& path, hsize_t length) {
   set_extent(path, {length});
-  Id dset(open_dataset(id_.get(), path));
+  Id dset(open_dataset(path));
   const std::string name = scale_name_attribute(length);
   if (H5Aexists(dset.get(), "NAME") > 0) {
     need(H5Adelete(dset.get(), "NAME") >= 0,
@@ -1220,15 +1179,15 @@ void File::set_scale_length(const std::string& path, hsize_t length) {
 
 void File::mark_coordinate_scale(const std::string& path,
                                  const std::string& name) {
-  Id dset(open_dataset(id_.get(), path));
+  Id dset(open_dataset(path));
   need(H5DSset_scale(dset.get(), name.c_str()) >= 0,
        "cannot mark \"" + path + "\" as a dimension scale");
 }
 
 void File::attach_scale(const std::string& dataset, const std::string& scale,
                         unsigned axis) {
-  Id d(open_dataset(id_.get(), dataset));
-  Id s(open_dataset(id_.get(), scale));
+  Id d(open_dataset(dataset));
+  Id s(open_dataset(scale));
   // A failed attachment has already deleted the REFERENCE_LIST it was
   // extending; the file must be discarded, and the message says so.
   need(H5DSattach_scale(d.get(), s.get(), axis) >= 0,
@@ -1239,8 +1198,8 @@ void File::attach_scale(const std::string& dataset, const std::string& scale,
 
 void File::detach_scale(const std::string& dataset, const std::string& scale,
                         unsigned axis) {
-  Id d(open_dataset(id_.get(), dataset));
-  Id s(open_dataset(id_.get(), scale));
+  Id d(open_dataset(dataset));
+  Id s(open_dataset(scale));
   need(H5DSdetach_scale(d.get(), s.get(), axis) >= 0,
        "cannot detach \"" + scale + "\" from \"" + dataset + "\"");
 }
@@ -1298,19 +1257,23 @@ std::string File::dataset_link_name(hid_t object) const {
   return at == std::string::npos ? path : path.substr(at + 1);
 }
 
+void File::forget(const std::string& path) {
+  chunks_.forget(path);
+  const std::string below = path == "/" ? path : path + "/";
+  for (auto it = inside_.begin(); it != inside_.end();) {
+    if (*it == path || it->compare(0, below.size(), below) == 0) {
+      it = inside_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
 void File::remove_link(const std::string& path) {
   need(H5Ldelete(id_.get(), path.c_str(), H5P_DEFAULT) >= 0,
        "cannot remove \"" + path + "\"");
   object_index_built_ = false;
-}
-
-void File::copy_from(const File& src, const std::string& src_path,
-                     const std::string& dst_path) {
-  make_group(parent_of(dst_path));
-  need(H5Ocopy(src.get(), src_path.c_str(), id_.get(), dst_path.c_str(),
-               H5P_DEFAULT, H5P_DEFAULT) >= 0,
-       "cannot copy \"" + src_path + "\"");
-  object_index_built_ = false;
+  forget(path);
 }
 
 }  // namespace internal

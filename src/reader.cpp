@@ -7,7 +7,6 @@
 
 #include "codec.hpp"
 #include "names.hpp"
-#include "parallel.hpp"
 
 namespace gamut_core {
 namespace internal {
@@ -639,10 +638,7 @@ void Reader::read(const std::string& path, const Selection& runs,
   }
   // Shared mesh.
   if (r != nullptr) {
-    if (threads_ > 1 && read_parallel(f, h5, mem, {runs, sites}, out, out_bytes, threads_)) {
-      return;
-    }
-    f.read(h5, mem, {runs, sites}, out, out_bytes);
+    f.read(h5, mem, {runs, sites}, out, out_bytes, threads_);
     return;
   }
   // Mesh labels are fixed; coordinates follow `per`.

@@ -472,7 +472,11 @@ read touches when its chunks are smaller than §11.4's defaults (2²⁰
 recommended: libraries keep state per chunk, so a file of tiny chunks makes
 a small read costly); beyond any, and for an object it
 cannot read, it reports E23 with the path and goes on. Every count taken
-from the file is checked against these caps before it sizes a buffer.
+from the file is checked against these caps before it sizes a buffer. It
+undoes only the filters §11.2 allows (E20 for another), and each stored
+chunk it reads must come to exactly the chunk's size, stored so or once
+inflated (E23): a chunk of another size would take a library past its
+buffer.
 Opening a file reads structure and attributes only, never field values or
 model data.
 
