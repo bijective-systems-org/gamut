@@ -21,8 +21,9 @@ name that marks a run as usable; W1 names the group a split divides.
 The languages agree in more places. `gamut_create` from C, or
 `gamut::create` from C++, with a mesh and no `per` is refused (E6), as
 Python, MATLAB and Julia already refused it, where it took `fixed`. Cell
-offsets of the wrong length are refused (E5) in Python and Julia before the
-core reads them, as the C++ layer already did. A failed Python `evaluate`
+offsets of the wrong length are refused (E5) in Python, MATLAB and Julia
+before the core reads them, as the C++ layer already did, and so are a
+nearest model's inputs of unequal length. A failed Python `evaluate`
 leaves no file behind. In Julia, a `true` note is stored as the integer 1,
 and `related` keys a derivative along each coordinate axis separately, as
 in Python.
