@@ -8,8 +8,8 @@ Cell connectivity holds the stored 0-based node numbers, as in every
 language (VTK's convention).
 
 The core is found at `ENV["GAMUT_LIBRARY"]`, else beside this package in
-`build/` at the top of a checkout. Model plug-ins come later; the built-in
-`Nearest` evaluates.
+`build/` at the top of a checkout. Only the built-in `Nearest` model type
+evaluates here; others are registered in Python or MATLAB.
 """
 module Gamut
 
