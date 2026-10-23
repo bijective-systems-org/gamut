@@ -130,6 +130,22 @@ mktempdir() do tmp
         end
     end
 
+    @testset "a derivative along each axis is its own entry" begin
+        pts, cells = grid(2, 2)
+        p = joinpath(tmp, "derivatives.gamut")
+        Gamut.create(p; writer="t", mesh="shared", per="fixed", coordinates=(units="m", axes=2),
+                      scalars=Dict("cl" => "1"),
+                      fields=Dict(k => (units="m-1", at="node", of="cl", with_respect_to="coordinates", axis=a)
+                                  for (k, a) in ("dcl_dx" => "x", "dcl_dy" => "y"))) do s
+            Gamut.set_mesh!(s; points=pts, cells=cells)
+            Gamut.add_run!(s, Dict("cl" => 1.0); fields=Dict("dcl_dx" => zeros(4), "dcl_dy" => zeros(4)))
+        end
+        Gamut.open(p) do f
+            @test Gamut.related(f, "cl")["derivatives"] ==
+                  Dict("coordinates:x" => "dcl_dx", "coordinates:y" => "dcl_dy")
+        end
+    end
+
     @testset "a Bool note is an integer note" begin
         p = joinpath(tmp, "notes.gamut")
         Gamut.create(p; writer="t") do s

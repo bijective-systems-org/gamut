@@ -769,7 +769,9 @@ function related(s::Study, name)
             st = get(d, "statistic", "")
             st == "std" && (out["std"] = other)
             st == "quantile" && (out["quantiles"][parse(Float64, d["q"])] = other)
-            haskey(d, "with_respect_to") && (out["derivatives"][d["with_respect_to"]] = other)
+            wrt = get(d, "with_respect_to", "")
+            # Along each axis its own entry, as in Python.
+            isempty(wrt) || (out["derivatives"][wrt == "coordinates" ? "coordinates:" * get(d, "axis", "") : wrt] = other)
         end
         if haskey(mine, "vector") && get(d, "vector", "") == mine["vector"] && !haskey(d, "of")
             push!(out["vector"], other)
