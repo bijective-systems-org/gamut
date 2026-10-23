@@ -56,6 +56,9 @@ Leave `units` out to get values in the units they were stored in, which
   is converted to the declared units before it is stored.
 - `gamut.open(path, threads=4)` decompresses large field reads in four
   threads, with the same result as one.
+- Studies can be opened and read from several threads at once. Their calls
+  take turns, because HDF5 holds state for the whole process; `threads` is
+  what makes one large read faster.
 - Opening a file reads its structure and attributes only. Nothing else is
   read until it is asked for.
 

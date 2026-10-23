@@ -9,6 +9,7 @@
 #include <exception>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -58,6 +59,17 @@ namespace {
 
 const char kVersion[] = "1.1.0";
 const char kFormat[] = "gamut/1";
+
+// HDF5 keeps process-wide state and is built without its thread-safety
+// option, so two handles are not independent: every call that reaches a
+// file holds this lock, and calls from several threads take turns.  Never
+// destroyed, so a handle closed during process exit still finds it.
+std::recursive_mutex& hdf5_mutex() {
+  static std::recursive_mutex* m = new std::recursive_mutex();
+  return *m;
+}
+
+using Lock = std::lock_guard<std::recursive_mutex>;
 
 void copy_into(char* dst, std::size_t size, const std::string& src) {
   if (size == 0) return;
@@ -211,6 +223,7 @@ int gamut_units_parse(const char* units) {
 int gamut_create(const char* path, const char* writer, const char* mesh_kind, const char* per,
                gamut_file** out, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(out != nullptr, "out is NULL");
     auto f = std::make_unique<gamut_file>();
@@ -226,6 +239,7 @@ int gamut_create(const char* path, const char* writer, const char* mesh_kind, co
 int gamut_create_model(const char* path, const char* writer, const char* mesh_kind, const char* per,
                      gamut_file** out, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(out != nullptr, "out is NULL");
     auto f = std::make_unique<gamut_file>();
@@ -240,6 +254,7 @@ int gamut_create_model(const char* path, const char* writer, const char* mesh_ki
 
 int gamut_open_append(const char* path, gamut_file** out, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(out != nullptr, "out is NULL");
     auto f = std::make_unique<gamut_file>();
@@ -253,6 +268,7 @@ int gamut_open_append(const char* path, gamut_file** out, gamut_error* err) {
 
 int gamut_set_attribute(gamut_file* f, const char* name, const char* value, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f).set_attribute(str(name), str(value));
     return 0;
@@ -265,6 +281,7 @@ int gamut_declare_parameter(gamut_file* f, const char* name, const char* role, c
                           int dtype_code, int has_bounds, double lower, double upper,
                           const char* run_group, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     gamut_core::internal::Parameter p;
     p.name = str(name);
@@ -287,6 +304,7 @@ int gamut_declare_parameter(gamut_file* f, const char* name, const char* role, c
 int gamut_declare_label(gamut_file* f, const char* name, const char* role,
                       const char* const* categories, int64_t n, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f).declare_label(str(name), str(role), list(categories, n));
     return 0;
@@ -301,6 +319,7 @@ int gamut_declare_result(gamut_file* f, const char* name, const char* where, con
                        const char* axis, const char* vector, int round_bits, const char* model,
                        const char* output, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     gamut_core::internal::Result r;
     r.name = str(name);
@@ -332,6 +351,7 @@ int gamut_declare_result(gamut_file* f, const char* name, const char* where, con
 int gamut_declare_mesh_label(gamut_file* f, const char* name, const char* where,
                            const char* const* categories, int64_t n, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     gamut_core::internal::MeshLabel m;
     m.name = str(name);
@@ -346,6 +366,7 @@ int gamut_declare_mesh_label(gamut_file* f, const char* name, const char* where,
 int gamut_declare_coordinates(gamut_file* f, const char* units, int dtype_code, int axes,
                             const char* model, const char* output, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f).declare_coordinates(str(units),
                                      as_given(dtype_code) ? DType::String : dtype(dtype_code),
@@ -359,6 +380,7 @@ int gamut_declare_coordinates(gamut_file* f, const char* units, int dtype_code, 
 int gamut_set_constant(gamut_file* f, const char* name, const char* units, int dtype_code,
                      double float_value, int64_t integer_value, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     gamut_core::internal::Constant c;
     c.name = str(name);
@@ -375,6 +397,7 @@ int gamut_set_constant(gamut_file* f, const char* name, const char* units, int d
 
 int gamut_set_generalisation_group(gamut_file* f, const char* label, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f).set_generalisation_group(str(label));
     return 0;
@@ -385,6 +408,7 @@ int gamut_set_generalisation_group(gamut_file* f, const char* label, gamut_error
 
 int gamut_set_compression(gamut_file* f, int gzip_level, int shuffle, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(gzip_level >= 0 && gzip_level <= 9, "gzip_level is 0 (off) to 9");
     gamut_core::FilterPipeline p;
@@ -401,6 +425,7 @@ int gamut_set_compression(gamut_file* f, int gzip_level, int shuffle, gamut_erro
 
 int gamut_geometry_begin(gamut_file* f, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f);
     f->geometry = Geometry();
@@ -414,6 +439,7 @@ int gamut_geometry_begin(gamut_file* f, gamut_error* err) {
 int gamut_geometry_points(gamut_file* f, int dtype_code, const void* points, int64_t n_nodes,
                         int axes, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f);
     need(f->geometry_open, "call gamut_geometry_begin first");
@@ -433,6 +459,7 @@ int gamut_geometry_cells(gamut_file* f, const uint8_t* types, int64_t n_cells,
                        const int64_t* offsets, const int64_t* connectivity,
                        int64_t n_connectivity, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f);
     need(f->geometry_open, "call gamut_geometry_begin first");
@@ -451,6 +478,7 @@ int gamut_geometry_cells(gamut_file* f, const uint8_t* types, int64_t n_cells,
 int gamut_geometry_label(gamut_file* f, const char* name, const int64_t* values, int64_t n,
                        gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f);
     need(f->geometry_open, "call gamut_geometry_begin first");
@@ -464,6 +492,7 @@ int gamut_geometry_label(gamut_file* f, const char* name, const int64_t* values,
 
 int gamut_set_mesh(gamut_file* f, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     Writer& w = writer_of(f);
     need(f->geometry_open, "stage the mesh with gamut_geometry_begin first");
@@ -477,6 +506,7 @@ int gamut_set_mesh(gamut_file* f, gamut_error* err) {
 
 int gamut_batch_begin(gamut_file* f, int64_t n_rows, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f);
     need(n_rows >= 0, "a batch has zero or more rows");
@@ -492,6 +522,7 @@ int gamut_batch_begin(gamut_file* f, int64_t n_rows, gamut_error* err) {
 int gamut_batch_values(gamut_file* f, const char* name, int dtype_code, const void* values,
                      int64_t count, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f);
     need(f->batch_open, "call gamut_batch_begin first");
@@ -506,6 +537,7 @@ int gamut_batch_values(gamut_file* f, const char* name, int dtype_code, const vo
 int gamut_batch_names(gamut_file* f, const char* label, const char* const* names, int64_t count,
                     gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f);
     need(f->batch_open, "call gamut_batch_begin first");
@@ -519,6 +551,7 @@ int gamut_batch_names(gamut_file* f, const char* label, const char* const* names
 
 int gamut_batch_geometry_for_row(gamut_file* f, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f);
     need(f->batch_open && f->geometry_open, "begin a batch and stage a geometry first");
@@ -532,6 +565,7 @@ int gamut_batch_geometry_for_row(gamut_file* f, gamut_error* err) {
 
 int gamut_batch_geometry_for_member(gamut_file* f, const char* member, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f);
     need(f->batch_open && f->geometry_open, "begin a batch and stage a geometry first");
@@ -547,6 +581,7 @@ int gamut_batch_geometry_for_member(gamut_file* f, const char* member, gamut_err
 
 int gamut_batch_commit(gamut_file* f, int64_t* first_id, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     Writer& w = writer_of(f);
     need(f->batch_open, "call gamut_batch_begin first");
@@ -567,6 +602,7 @@ int gamut_batch_commit(gamut_file* f, int64_t* first_id, gamut_error* err) {
 
 int gamut_set_note_text(gamut_file* f, const char* key, const char* value, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f).set_note(str(key), gamut_core::AttrValue::text(str(value)));
     return 0;
@@ -577,6 +613,7 @@ int gamut_set_note_text(gamut_file* f, const char* key, const char* value, gamut
 
 int gamut_set_note_int(gamut_file* f, const char* key, int64_t value, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f).set_note(str(key), gamut_core::AttrValue::integer(value));
     return 0;
@@ -587,6 +624,7 @@ int gamut_set_note_int(gamut_file* f, const char* key, int64_t value, gamut_erro
 
 int gamut_set_note_float(gamut_file* f, const char* key, double value, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f).set_note(str(key), gamut_core::AttrValue::real(value));
     return 0;
@@ -597,6 +635,7 @@ int gamut_set_note_float(gamut_file* f, const char* key, double value, gamut_err
 
 int gamut_set_private(gamut_file* f, const char* name, const void* bytes, int64_t n, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(n >= 0 && (n == 0 || bytes != nullptr), "the bytes are NULL");
     const auto* p = static_cast<const unsigned char*>(bytes);
@@ -609,6 +648,7 @@ int gamut_set_private(gamut_file* f, const char* name, const void* bytes, int64_
 
 int gamut_flush(gamut_file* f, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f).flush();
     return 0;
@@ -621,19 +661,21 @@ int gamut_close(gamut_file* f, gamut_error* err) {
   clear(err);
   if (f == nullptr) return 0;
   try {
+    const Lock lock(hdf5_mutex());
     if (f->writer) f->writer->close();
+    delete f;   // a reader's file closes here
   } catch (...) {
     // The handle stays open: fix what the error names and close again, or
     // give up with gamut_abandon.
     return fail(err);
   }
-  delete f;
   return 0;
 }
 
 int gamut_append(const char* dst_path, const char* src_path, int64_t* rows_added,
                gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     const int64_t n = gamut_core::internal::append_file(str(dst_path), str(src_path));
     if (rows_added != nullptr) *rows_added = n;
@@ -646,6 +688,7 @@ int gamut_append(const char* dst_path, const char* src_path, int64_t* rows_added
 int gamut_extract(const char* src_path, const char* dst_path, const gamut_sel* rows,
                 gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     gamut_core::internal::extract_file(str(src_path), str(dst_path), selection(rows));
     return 0;
@@ -656,6 +699,7 @@ int gamut_extract(const char* src_path, const char* dst_path, const gamut_sel* r
 
 int gamut_write_copy(const char* src_path, const char* dst_path, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     gamut_core::internal::write_copy_file(str(src_path), str(dst_path));
     return 0;
@@ -666,6 +710,7 @@ int gamut_write_copy(const char* src_path, const char* dst_path, gamut_error* er
 
 void gamut_abandon(gamut_file* f, int remove_file) {
   if (f == nullptr) return;
+  const Lock lock(hdf5_mutex());
   std::unique_ptr<gamut_file> owned(f);
   try {
     if (owned->writer) owned->writer->abandon(remove_file != 0);
@@ -676,6 +721,7 @@ void gamut_abandon(gamut_file* f, int remove_file) {
 
 int gamut_open(const char* path, gamut_file** out, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(out != nullptr, "out is NULL");
     auto f = std::make_unique<gamut_file>();
@@ -689,6 +735,7 @@ int gamut_open(const char* path, gamut_file** out, gamut_error* err) {
 
 int gamut_set_threads(gamut_file* f, int threads, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(f != nullptr && f->reader != nullptr, "threads apply to a file open to read");
     need(threads >= 1 && threads <= 256, "threads is 1 to 256");
@@ -701,6 +748,7 @@ int gamut_set_threads(gamut_file* f, int threads, gamut_error* err) {
 
 int gamut_info(const gamut_file* f, const char* key, gamut_strings** out, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(out != nullptr, "out is NULL");
     const Schema& s = reader_of(f).schema();
@@ -734,6 +782,7 @@ int gamut_info(const gamut_file* f, const char* key, gamut_strings** out, gamut_
 
 int gamut_names(const gamut_file* f, const char* group, gamut_strings** out, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(out != nullptr, "out is NULL");
     *out = strings(reader_of(f).names(str(group)));
@@ -746,6 +795,7 @@ int gamut_names(const gamut_file* f, const char* group, gamut_strings** out, gam
 int gamut_describe(const gamut_file* f, const char* name, gamut_strings** keys, gamut_strings** values,
                  gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(keys != nullptr && values != nullptr, "keys or values is NULL");
     const Reader& r = reader_of(f);
@@ -784,6 +834,7 @@ int gamut_describe(const gamut_file* f, const char* name, gamut_strings** keys, 
 int gamut_shape(const gamut_file* f, const char* name, const gamut_sel* rows, const gamut_sel* sites,
               int64_t* shape, int* rank, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(shape != nullptr && rank != nullptr, "shape or rank is NULL");
     const Reader& r = reader_of(f);
@@ -800,6 +851,7 @@ int gamut_shape(const gamut_file* f, const char* name, const gamut_sel* rows, co
 int gamut_read(const gamut_file* f, const char* name, const gamut_sel* rows, const gamut_sel* sites,
              int dtype_code, void* out, int64_t out_bytes, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(out_bytes >= 0 && (out_bytes == 0 || out != nullptr), "the output buffer is NULL");
     const Reader& r = reader_of(f);
@@ -814,6 +866,7 @@ int gamut_read(const gamut_file* f, const char* name, const gamut_sel* rows, con
 int gamut_label_names(const gamut_file* f, const char* label, const gamut_sel* rows, gamut_strings** out,
                     gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(out != nullptr, "out is NULL");
     *out = strings(reader_of(f).label_names(str(label), selection(rows)));
@@ -826,6 +879,7 @@ int gamut_label_names(const gamut_file* f, const char* label, const gamut_sel* r
 int gamut_select(const gamut_file* f, const char* where, int64_t* out, int64_t capacity, int64_t* n,
                gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(n != nullptr, "n is NULL");
     const auto rows = gamut_core::internal::select_rows(reader_of(f), str(where));
@@ -843,6 +897,7 @@ int gamut_select(const gamut_file* f, const char* where, int64_t* out, int64_t c
 int gamut_notes(const gamut_file* f, gamut_strings** keys, gamut_strings** kinds, gamut_strings** values,
               gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(keys != nullptr && kinds != nullptr && values != nullptr, "an output is NULL");
     std::vector<std::string> k, t, v;
@@ -872,6 +927,7 @@ int gamut_notes(const gamut_file* f, gamut_strings** keys, gamut_strings** kinds
 
 int gamut_private_names(const gamut_file* f, gamut_strings** out, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(out != nullptr, "out is NULL");
     *out = strings(reader_of(f).private_names());
@@ -884,6 +940,7 @@ int gamut_private_names(const gamut_file* f, gamut_strings** out, gamut_error* e
 int gamut_get_private(const gamut_file* f, const char* name, void* out, int64_t capacity, int64_t* n,
                     gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(n != nullptr, "n is NULL");
     const auto bytes = reader_of(f).private_record(str(name));
@@ -900,6 +957,7 @@ int gamut_get_private(const gamut_file* f, const char* name, void* out, int64_t 
 
 int gamut_table(const gamut_file* f, const char* table, gamut_strings** out, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(out != nullptr, "out is NULL");
     *out = strings(reader_of(f).table(str(table)));
@@ -1087,6 +1145,7 @@ int gamut_tree_array(const gamut_tree* t, const char* key, void* out, int64_t ou
 int gamut_add_model(gamut_file* f, const char* id, const char* type, const char* const* inputs,
                   int64_t n_inputs, const gamut_tree* numbers, const char* repr, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f).add_model(str(id), str(type), list(inputs, n_inputs), tree_of(numbers), str(repr));
     return 0;
@@ -1097,6 +1156,7 @@ int gamut_add_model(gamut_file* f, const char* id, const char* type, const char*
 
 int gamut_model_numbers(const gamut_file* f, const char* id, gamut_tree** out, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(out != nullptr, "out is NULL");
     auto t = std::make_unique<gamut_tree>();
@@ -1157,6 +1217,7 @@ int gamut_nearest_call(const gamut_tree* numbers, const char* const* input_names
 int gamut_evaluate_begin(const gamut_file* model, const char* out_path, gamut_file** out,
                        gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(out != nullptr, "out is NULL");
     auto f = std::make_unique<gamut_file>();
@@ -1170,6 +1231,7 @@ int gamut_evaluate_begin(const gamut_file* model, const char* out_path, gamut_fi
 
 int gamut_validate(const char* path, gamut_report** out, gamut_error* err) {
   try {
+    const Lock lock(hdf5_mutex());
     clear(err);
     need(out != nullptr, "out is NULL");
     need(path != nullptr, "path is NULL");
