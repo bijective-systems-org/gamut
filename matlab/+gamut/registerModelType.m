@@ -7,8 +7,9 @@ function registerModelType(className)
 %   a struct of numbers, text, logicals, arrays and structs.  Registration
 %   lasts for the MATLAB session.
 %
-%   inputs has a field per input the model reads, a column with a value
-%   per row.  wanted is a cell array of {output, 'values'},
+%   inputs has a field per input the model reads, the row first: a
+%   column with a value per row for a parameter or label, rows x nodes x
+%   axes for 'coordinates'.  wanted is a cell array of {output, 'values'},
 %   {output, 'std'}, {output, 'quantile', q} or {output, 'derivative',
 %   name}.  call returns a struct with out.(output).values, .std,
 %   .quantiles (a containers.Map from q to values) or .derivatives.(name),

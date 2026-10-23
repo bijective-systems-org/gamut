@@ -10,12 +10,13 @@ field, one run, a strip of nodes, every run's field in turn) and
 validated. Reads are the median of a few repeats in this process. Set
 GAMUT_LIBRARY to time a particular build of the core, and compare two by
 running this once for each, alternating, on a quiet machine. The studies
-it writes in WORK_DIR are removed at the end.
+are written in a folder of their own inside WORK_DIR, removed at the end.
 """
 import json
 import os
 import statistics
 import sys
+import tempfile
 import time
 
 import numpy as np
@@ -97,7 +98,8 @@ def shared(d, runs, nodes):
         out["read the field"] = best(lambda: s.get_field("p"))
         out["one run"] = best(lambda: s.get_field("p", rows=runs // 2), 5)
         out["100 nodes, every run"] = best(lambda: s.get_field("p", nodes=slice(0, 100)))
-        out["10 scattered runs"] = best(lambda: s.get_field("p", rows=list(range(1, runs, runs // 10))[:10]))
+        picks = list(range(1, runs, max(1, runs // 10)))[:10]
+        out["10 scattered runs"] = best(lambda: s.get_field("p", rows=picks))
     with gamut.open(p, threads=4) as s:
         out["read the field, 4 threads"] = best(lambda: s.get_field("p"))
     out["validate"] = once(lambda: gamut.validate(p))
@@ -133,17 +135,17 @@ def changing(d, runs, nodes):
 
 
 if __name__ == "__main__":
-    d, dest = sys.argv[1], sys.argv[2]
-    os.makedirs(d, exist_ok=True)
+    work, dest = sys.argv[1], sys.argv[2]
+    os.makedirs(work, exist_ok=True)
     result = {}
-    for rows in (10_000, 100_000, 1_000_000):
-        result[f"table {rows} rows"] = table(d, rows)
-    for runs, nodes in ((100, 10_000), (100, 100_000), (1000, 10_000)):
-        result[f"shared mesh {runs} runs x {nodes} nodes"] = shared(d, runs, nodes)
-    for runs, nodes in ((20, 5_000), (100, 5_000), (100, 20_000)):
-        result[f"mesh per run, {runs} runs x ~{nodes} nodes"] = changing(d, runs, nodes)
-    for name in os.listdir(d):   # the studies written here, nothing else
-        if name.startswith(("table-", "shared-", "changing-")) and name.endswith(".gamut"):
-            os.remove(os.path.join(d, name))
+    # A folder of its own inside WORK_DIR, removed with everything in it at
+    # the end; nothing else in WORK_DIR is touched.
+    with tempfile.TemporaryDirectory(prefix="gamut-scaling-", dir=work) as d:
+        for rows in (10_000, 100_000, 1_000_000):
+            result[f"table {rows} rows"] = table(d, rows)
+        for runs, nodes in ((100, 10_000), (100, 100_000), (1000, 10_000)):
+            result[f"shared mesh {runs} runs x {nodes} nodes"] = shared(d, runs, nodes)
+        for runs, nodes in ((20, 5_000), (100, 5_000), (100, 20_000)):
+            result[f"mesh per run, {runs} runs x ~{nodes} nodes"] = changing(d, runs, nodes)
     with open(dest, "w") as fh:
         json.dump({"library": os.environ.get("GAMUT_LIBRARY"), "seconds": result}, fh, indent=1)

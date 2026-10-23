@@ -54,7 +54,10 @@ def _fill(h: ctypes.c_void_p, prefix: str, d: Mapping[str, Any]) -> None:
         elif isinstance(value, (list, tuple)) and value and all(isinstance(x, str) for x in value):
             call("gamut_tree_set_strings", h, b(path), _lib.string_array(list(value)), len(value))
         else:
-            arr = np.asarray(value)
+            try:
+                arr = np.asarray(value)
+            except ValueError as e:   # a ragged list, say
+                raise GamutError("E18", f"{path}: not an array of model data ({e})") from None
             if arr.dtype.kind in "US":
                 items = [str(x) for x in arr.ravel()]
                 call("gamut_tree_set_strings", h, b(path), _lib.string_array(items), len(items))
@@ -233,6 +236,9 @@ class ModelFile(Study):
         keeps the numbers `model.save()` returns; `repr` is an optional
         one-line description."""
         numbers = model.save()
+        if not isinstance(numbers, Mapping):
+            raise GamutError("E18", f"{id}: save() gave {type(numbers).__name__}; it returns a "
+                                     "dictionary of model data")
         handle = _to_tree(numbers)
         try:
             names = list(inputs)

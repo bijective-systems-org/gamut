@@ -3,8 +3,9 @@
 A model fitted to a study, such as a response surface, a reduced-order
 model or a Gaussian process, is saved as a file of the same format with no
 runs in it. The file carries what the model needs to be used correctly:
-the units of its inputs and results, the range of each input it was
-fitted on, and the `file_id` of the study it came from.
+the units of its inputs and results and the range of each input it was
+fitted on, and, when its writer gives `trained_on`, the `file_id` of the
+study it came from.
 
 The file holds no code. The model's numbers are stored as plain data, and
 the software that defines the model's type reads them, so opening a model
