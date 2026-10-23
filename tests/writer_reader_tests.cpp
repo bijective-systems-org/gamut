@@ -383,6 +383,7 @@ void test_refusals() {
   q.relation.of = "p_field";
   CHECK(rule_of([&] { w->declare_result(q); }) == "E12");   // no q
   CHECK(rule_of([] { Writer::create("wr_bad.gamut", "t", "changing", "fixed"); }) == "E6");
+  CHECK(rule_of([] { Writer::create("wr_bad.gamut", "t", "shared", ""); }) == "E6");   // a mesh needs per
   w.reset();
   if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
   std::remove("wr_bad.gamut");

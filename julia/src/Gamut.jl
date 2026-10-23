@@ -350,11 +350,9 @@ function axes_of(kw)
 end
 
 function create(path::AbstractString; writer::AbstractString, mesh=nothing, per=nothing, kw...)
-    mesh !== nothing && per === nothing &&
-        throw(GamutError("E6", "a mesh needs per: \"fixed\", \"run\" or \"group:<label>\""))
     axes_of(kw)                      # before the file exists: a refusal leaves none
     out = Ref{Ptr{Cvoid}}(C_NULL)
-    @mes gamut_create (Cstring, Cstring, Cstring, Cstring, Ref{Ptr{Cvoid}}) cs(path) cs(writer) cs(something(mesh, "")) cs(something(per, "fixed")) out
+    @mes gamut_create (Cstring, Cstring, Cstring, Cstring, Ref{Ptr{Cvoid}}) cs(path) cs(writer) cs(something(mesh, "")) cs(something(per, "")) out
     return started(Study(out[], String(path), true, something(mesh, ""), something(per, "")), kw)
 end
 create(f::Function, path::AbstractString; kw...) = with_study(f, create(path; kw...))

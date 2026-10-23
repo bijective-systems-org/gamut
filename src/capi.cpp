@@ -227,8 +227,7 @@ int gamut_create(const char* path, const char* writer, const char* mesh_kind, co
     clear(err);
     need(out != nullptr, "out is NULL");
     auto f = std::make_unique<gamut_file>();
-    f->writer = Writer::create(str(path), str(writer), str(mesh_kind),
-                               str(per).empty() ? std::string("fixed") : str(per));
+    f->writer = Writer::create(str(path), str(writer), str(mesh_kind), str(per));
     *out = f.release();
     return 0;
   } catch (...) {

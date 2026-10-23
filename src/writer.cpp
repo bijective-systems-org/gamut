@@ -374,6 +374,7 @@ std::unique_ptr<Writer> Writer::create(const std::string& path,
   if (mesh_kind.empty()) {
     need(per.empty() || per == "fixed", "E6", "a file without a mesh has no per");
   } else {
+    need(!per.empty(), "E6", "a mesh needs per: 'fixed', 'run' or 'group:<label>'");
     need(per == "fixed" || per == "run" || group, "E6",
          "per \"" + per + "\" is not fixed, run or group:<label>");
     need(!(mesh_kind == "changing" && per == "fixed"), "E6",

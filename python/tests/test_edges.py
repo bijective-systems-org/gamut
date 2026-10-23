@@ -42,6 +42,14 @@ def test_refused_first_run_fixes_no_precision(tmp_path):
         assert f.get_scalar("s")[0] == 2.123456789
 
 
+def test_a_mesh_without_per_is_refused_by_the_core(tmp_path):
+    p = tmp_path / "m.gamut"
+    with pytest.raises(gamut.GamutError, match="needs per") as e:
+        gamut.create(str(p), writer="t", mesh="shared")
+    assert e.value.rule == "E6"
+    assert not p.exists()
+
+
 def test_run_before_set_mesh_leaves_the_file_writable(tmp_path):
     p = str(tmp_path / "m.gamut")
     pts, cells = grid(3, 2)

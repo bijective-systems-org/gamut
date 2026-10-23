@@ -625,11 +625,9 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
                  studies.
 
     Units use the UDUNITS grammar: "1", "degree", "m s-1", "W m-2"."""
-    if mesh is not None and per is None:
-        raise GamutError("E6", "a mesh needs per: 'fixed', 'run' or 'group:<label>'")
     axes = _axes(coordinates)        # before the file exists: a refusal leaves none
     handle = ctypes.c_void_p()
-    call("gamut_create", b(path), b(writer), b(mesh or ""), b(per or "fixed"), ctypes.byref(handle))
+    call("gamut_create", b(path), b(writer), b(mesh or ""), b(per), ctypes.byref(handle))
     study = Study(handle, path, writing=True)
     study._mesh_kind = mesh or ""
     study._per = per or ""
