@@ -398,10 +398,21 @@ class Study:
         return out
 
     def _site_count(self, name: str, rows: Selection) -> int:
+        # Counted on the first selected row: a shared mesh gives every row
+        # the same sites, and all rows' sites at once can pass the read limit
+        # when only a few sites are wanted.
+        first = None
+        if rows.sel.kind == _lib.SEL_ALL:
+            first = 0 if self.row_count else None
+        elif rows.sel.kind == _lib.SEL_RANGE:
+            first = rows.sel.start if rows.sel.stop > rows.sel.start else None
+        elif rows._keep is not None and len(rows._keep):
+            first = int(rows._keep[0])
+        one = rows if first is None else Selection(first, "rows")
         shape = (ctypes.c_int64 * 4)()
         rank = ctypes.c_int()
         all_sites = Selection(None, "sites")
-        call("gamut_shape", self._handle(), b(name), rows.pointer(), all_sites.pointer(), shape,
+        call("gamut_shape", self._handle(), b(name), one.pointer(), all_sites.pointer(), shape,
              ctypes.byref(rank))
         dims = [shape[i] for i in range(rank.value)]
         if name == "coordinates":
