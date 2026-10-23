@@ -121,7 +121,11 @@ s = gamut.createModel(lp, 'writer', 'matlab tests', ...
     'parameters', struct('x', struct('units', 'm', 'lower', -1, 'upper', 1)), ...
     'scalars', struct('y', struct('units', '1', 'model', 'lin', 'output', 'y'), ...
         'y_std', struct('units', '1', 'model', 'lin', 'output', 'y', 'of', 'y', ...
-                        'statistic', 'std')));
+                        'statistic', 'std'), ...
+        'y_p90', struct('units', '1', 'model', 'lin', 'output', 'y', 'of', 'y', ...
+                        'statistic', 'quantile', 'q', 0.9), ...
+        'dy_dx', struct('units', 'm-1', 'model', 'lin', 'output', 'y', 'of', 'y', ...
+                        'withRespectTo', 'x')));
 lin = testmodels.Linear(); lin.A = 1; lin.B = 2; lin.Std = 0.25; lin.Input = 'x'; lin.Output = 'y';
 s.addModel('lin', lin, {'x'});
 s.close();
@@ -136,6 +140,8 @@ ep = fullfile(tmp, 'evaluated.gamut');
 out = gamut.evaluate(lp, struct('x', [0; 0.5]), 'path', ep);
 ok(isequal(out.getScalar('y'), [1; 2]) && isequal(out.getScalar('y_std'), [0.25; 0.25]), ...
     'plug-in values and std');
+ok(max(abs(out.getScalar('y_p90') - [1.2; 2.2])) < 1e-12, 'plug-in quantile, from a containers.Map');
+ok(isequal(out.getScalar('dy_dx'), [2; 2]), 'plug-in derivative');
 out.close();
 ok(isfile(ep) && isempty(gamut.validate(ep)), 'evaluated file kept and valid');
 
@@ -258,6 +264,40 @@ if isfile(fullfile(examples, 'one_mesh.m'))
         'the MATLAB sweep prints the README''s line');
     ok(prints(run_example(fullfile(examples, 'read_with_ncread.m'), tmp)), ...
         'ncread reads the sweep alike');
+
+    % The model examples/07_models.py fitted in Python, evaluated here with
+    % the MATLAB class of its type: the folder MODEL_FILES names holds the
+    % files that script wrote (CI writes them before this suite runs).
+    models = getenv('MODEL_FILES');
+    if isempty(models)
+        fprintf(['the model example was not run: set MODEL_FILES to a folder where ' ...
+            'examples/07_models.py ran\n']);
+    else
+        copyfile(fullfile(models, 'lift_model.gamut'), tmp);
+        copyfile(fullfile(examples, 'Polynomial.m'), tmp);
+        line = regexp(readme, 'the model''s lift at[^\r\n]*', 'match', 'once');
+        printed = splitlines(string(run_example(fullfile(examples, 'evaluate_model.m'), tmp)));
+        ok(~isempty(line) && any(strcmp(printed, line)), ...
+            'MATLAB evaluates the model fitted in Python and prints the README''s line');
+        % The same class saves a model fitted in MATLAB: its coefficients
+        % are stored as a vector, as numpy.polyfit's are.
+        back = cd(tmp);
+        mp = fullfile(tmp, 'lift_matlab.gamut');
+        alpha = (0:2:10)';
+        s = gamut.createModel(mp, 'writer', 'matlab tests', ...
+            'parameters', struct('alpha', struct('units', 'degree', 'lower', 0, 'upper', 10)), ...
+            'scalars', struct('cl', struct('units', '1', 'model', 'fit', 'output', 'cl')));
+        s.addModel('fit', Polynomial(polyfit(alpha, 0.11 * alpha, 2)), {'alpha'});
+        s.close();
+        r = gamut.open(mp);
+        numbers = r.modelNumbers('fit');
+        r.close();
+        ok(isequal(size(numbers.coefficients), [3 1]), 'MATLAB-fitted coefficients stored as a vector');
+        out = gamut.evaluate(mp, struct('alpha', [2.2; 7.9]));
+        ok(max(abs(out.getScalar('cl') - [0.242; 0.869])) < 1e-12, 'MATLAB-fitted model evaluates');
+        out.close();
+        cd(back);
+    end
 end
 
 fprintf('%d checks, %d failures\n', checks, failures);

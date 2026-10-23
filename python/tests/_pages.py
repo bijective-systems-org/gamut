@@ -16,6 +16,26 @@ def blocks(text: str, language: str) -> list[str]:
     return re.findall(rf"^```{language}\n(.*?)^```$", text, re.M | re.S)
 
 
+def sessions(text: str) -> list[tuple[str, list[str]]]:
+    """(command, expected output lines) for each `$ ` line of a page's
+    console blocks."""
+    steps: list[tuple[str, list[str]]] = []
+    for block in blocks(text, "console"):
+        for line in block.rstrip("\n").split("\n"):
+            if line.startswith("$ "):
+                steps.append((line[2:], []))
+            else:
+                steps[-1][1].append(line)
+    return steps
+
+
+def matches(expected: str, got: str) -> bool:
+    """Whether a printed line is the line shown, where `...` in the shown
+    line stands for text that varies, such as a file's size."""
+    pattern = ".*".join(re.escape(part) for part in expected.split("..."))
+    return re.fullmatch(pattern, got) is not None
+
+
 def contiguous(part: str, whole: str) -> bool:
     """Whether `part` is consecutive lines of `whole`, an excerpt from inside
     a block shown with its indentation removed."""

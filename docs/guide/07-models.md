@@ -1,120 +1,225 @@
 # 7. Models
 
-A model fitted to a study (a surrogate, a reduced-order model, a response
-surface) is a file of the same shape as the data with no runs in it. Its
-parameters carry the bounds the model was fitted on; each of its results
-names the model that computes it. Evaluating it on new inputs gives an
-ordinary data file, read with the same calls as any other.
+A model fitted to a study, such as a response surface, a reduced-order
+model or a Gaussian process, is saved as a file of the same format with no
+runs in it. The file carries what the model needs to be used correctly:
+the units of its inputs and results, the range of each input it was
+fitted on, and the `file_id` of the study it came from.
 
-The file never holds code. A model's own numbers are stored as plain data,
-and the software that owns the model type registers it with the library to
-evaluate it.
+The file holds no code. The model's numbers are stored as plain data, and
+the software that defines the model's type reads them, so opening a model
+file runs nothing from it ([files from outside](../security.md)). A model
+fitted in Python is evaluated in MATLAB with a MATLAB class of the same
+type, and no Python; the built-in nearest-run model is evaluated in every
+language.
+
+Evaluating a model on new inputs gives an ordinary data file: the inputs
+as parameters, the answers as results with their units, read with the same
+calls as any other file and checked by `gamut validate`.
+
+## The pattern
+
+The model here is a quadratic fitted to the runs of the
+[README's sweep](../../README.md#example) that converged. `Polynomial` is
+its type, a class of a few lines [defined below](#a-model-type-of-your-own).
+
+```python
+with gamut.open("sweep.gamut") as study:
+    rows = study.select("status == converged")
+    alpha, cl = study.get_parameter("alpha", rows=rows), study.get_scalar("cl", rows=rows)
+    sweep_id = study.describe()["file_id"]
+
+with gamut.create_model("lift_model.gamut", writer="example fit", trained_on=[sweep_id],
+                         parameters={"alpha": {"units": "degree", "lower": 0.0, "upper": 10.0}},
+                         scalars={"cl": {"units": "1", "model": "fit", "output": "cl"}}) as model:
+    model.add_model("fit", Polynomial(np.polyfit(alpha, cl, 2)), inputs=["alpha"])
+
+with gamut.evaluate("lift_model.gamut", {"alpha": [2.2, 7.9]}, path="lift_answer.gamut") as answer:
+    lift = answer.get_scalar("cl")
+print("the model's lift at 2.2 and 7.9 degrees:", " ".join(f"{v:.2f}" for v in lift))
+print("the answer is a valid study file:", gamut.validate("lift_answer.gamut").ok)
+```
+
+```text
+the model's lift at 2.2 and 7.9 degrees: 0.24 0.87
+the answer is a valid study file: True
+```
+
+- `create_model` declares the file as `create` does. Its parameters need
+  `lower` and `upper`: the domain. An input outside it is evaluated, with
+  a warning (W4); refusing it is the caller's choice.
+- Each result names the model that computes it, `fit`, and that model's
+  output, `cl`. `trained_on` records the `file_id` of each study the model
+  was fitted on.
+- `add_model` stores the numbers the model's `save` returns, and the
+  inputs it reads.
+- `evaluate` takes the inputs, a value per row, and returns the answer, a
+  data file open to read. Without `path` it is a temporary file, removed
+  when closed; with one, it stays. It records the model file it came from
+  in `evaluated_from`.
+
+Whoever receives the file sees what the model takes and gives, with none
+of the model's software installed:
+
+```console
+$ gamut info lift_model.gamut
+lift_model.gamut: model file
+  parameters  alpha [degree] 0 to 10
+  results     cl [1]
+  model       fit: example.polynomial reading alpha
+  file        ... KB
+```
+
+## A model type of your own
+
+A model type is a class with a `type` name and three methods: `load`
+builds the model from its stored numbers, `save` turns it back into
+numbers, and `call` answers. Here is one type, `example.polynomial`, in
+Python and in MATLAB; both store the same numbers, the coefficients.
+
+```python
+@gamut.register_model_type
+class Polynomial:
+    """A polynomial in one input, highest power first, as numpy.polyfit gives it."""
+    type = "example.polynomial"
+
+    def __init__(self, coefficients):
+        self.coefficients = np.asarray(coefficients, dtype=float)
+
+    @classmethod
+    def load(cls, numbers):
+        return cls(numbers["coefficients"])
+
+    def save(self):
+        return {"coefficients": self.coefficients}
+
+    def call(self, inputs, wanted):
+        (x,) = inputs.values()
+        return {output: {"values": np.polyval(self.coefficients, x)} for output, *_ in wanted}
+```
+
+```matlab
+classdef Polynomial
+    %POLYNOMIAL A polynomial in one input, highest power first, as polyfit
+    %   gives it: the MATLAB class of the model type example.polynomial,
+    %   whose Python class is in examples/07_models.py.
+
+    properties (Constant)
+        Type = 'example.polynomial'
+    end
+
+    properties
+        Coefficients
+    end
+
+    methods
+        function m = Polynomial(coefficients)
+            m.Coefficients = coefficients;
+        end
+
+        function numbers = save(m)
+            numbers = struct('coefficients', m.Coefficients);
+        end
+
+        function out = call(m, inputs, wanted)
+            names = fieldnames(inputs);
+            x = inputs.(names{1});
+            out = struct();
+            for k = 1:numel(wanted)
+                out.(wanted{k}{1}).values = polyval(m.Coefficients, x);
+            end
+        end
+    end
+
+    methods (Static)
+        function m = load(numbers)
+            m = Polynomial(numbers.coefficients);
+        end
+    end
+end
+```
+
+In MATLAB the class is registered by name. The file written in Python is
+then evaluated with no Python involved, and
+[`evaluate_model.m`](../../examples/matlab/evaluate_model.m) prints the
+same line:
+
+```matlab
+gamut.registerModelType('Polynomial');
+answer = gamut.evaluate('lift_model.gamut', struct('alpha', [2.2; 7.9]));
+lift = answer.getScalar('cl');
+answer.close();
+```
+
+`call` receives each input the model reads, an array with a value per row,
+and the list of what is wanted. Each item names an output and what is
+wanted of it: its values, its spread, a quantile or a derivative. A model
+file asks for a spread or a derivative by declaring it as a result, as a
+data file does ([uncertainty](06-uncertainty-and-gradients.md)).
+
+| Wanted | Python returns | MATLAB returns |
+|---|---|---|
+| `(output, "values")` | `out[output]["values"]` | `out.(output).values` |
+| `(output, "std")` | `out[output]["std"]` | `out.(output).std` |
+| `(output, "quantile", q)` | `out[output]["quantiles"][q]` | `out.(output).quantiles(q)`, a `containers.Map` keyed by q |
+| `(output, "derivative", name)` | `out[output]["derivatives"][name]` | `out.(output).derivatives.(name)` |
+
+In MATLAB each item is a cell array, `{output, 'values'}`. A scalar's
+values are one per row; a field's are rows × nodes (or cells).
+
+The type's name is what the file records and what a reader looks up, so
+name it after your project: `mylab.polynomial`.
 
 ## The built-in model
 
-`Nearest` answers with the closest stored point. It runs everywhere, in
-every language with the same answers, so model files can be tested without
-other software, and it is a fair baseline: the closest run you have.
+`Nearest` answers with the outputs of the closest stored point. The core
+evaluates it, so it gives the same answers in every language with no
+other software: a way to test a model file anywhere, and a fair baseline,
+the closest run you have.
 
 ```python
-with gamut.create_model("lift_nearest.gamut", writer="example fit",
+with gamut.create_model("lift_nearest.gamut", writer="example fit", trained_on=[sweep_id],
                          parameters={"alpha": {"units": "degree", "lower": 0.0, "upper": 10.0}},
                          scalars={"cl": {"units": "1", "model": "fit", "output": "cl"}}) as model:
     model.add_model("fit", gamut.Nearest(["alpha"], [0.0], [10.0], alpha[:, None], {"cl": cl}),
                     inputs=["alpha"])
 
 with gamut.evaluate("lift_nearest.gamut", {"alpha": [2.2, 7.9]}) as answer:
-    print("nearest:", answer.get_scalar("cl").round(4))
+    lift = answer.get_scalar("cl")
 ```
 
 ```text
-nearest: [0.212 0.752]
+the nearest run's lift at 2.2 and 7.9 degrees: 0.22 0.88
 ```
 
-- A model file's parameters need `lower` and `upper`: the domain. An input
-  outside it is evaluated, with a warning; refusing it is the caller's
-  choice.
-- The result `cl` says it is computed by the model `fit`, output `cl`.
-- `evaluate` returns the answer as a data file, open to read. Without a
-  `path` it is a temporary file, removed when closed; with one, it stays.
+Julia evaluates the same file and prints the same line:
 
-## A model of your own
-
-Any other model is a class with a `type` name and three methods: `load`
-builds it from stored numbers, `save` turns it back into numbers, and
-`call` answers. This one is a straight line with a constant spread.
-
-```python
-@gamut.register_model_type
-class Linear:
-    """cl = a + b alpha, with a standard deviation: the plug-in interface is
-    a type name and three methods."""
-    type = "example_linear"
-
-    def __init__(self, a, b, std):
-        self.a, self.b, self.std = a, b, std
-
-    @classmethod
-    def load(cls, numbers):
-        return cls(numbers["a"], numbers["b"], numbers["std"])
-
-    def save(self):
-        return {"a": self.a, "b": self.b, "std": self.std}
-
-    def call(self, inputs, wanted):
-        x = np.asarray(inputs["alpha"])
-        out = {}
-        for output, kind, *_ in wanted:
-            value = self.a + self.b * x if kind == "values" else np.full_like(x, self.std)
-            out.setdefault(output, {})["values" if kind == "values" else "std"] = value
-        return out
+```julia
+answer = Gamut.evaluate("lift_nearest.gamut", Dict("alpha" => [2.2, 7.9]))
+lift = Gamut.get_scalar(answer, "cl")
+close(answer)
 ```
 
-`call` receives the inputs it declared, an array per name with a value per
-row, and the list of what is wanted, each an output's name and one of:
-
-| Wanted | Returned in |
-|---|---|
-| `(output, "values")` | `out[output]["values"]` |
-| `(output, "std")` | `out[output]["std"]` |
-| `(output, "quantile", q)` | `out[output]["quantiles"][q]` |
-| `(output, "derivative", name)` | `out[output]["derivatives"][name]` |
-
-A scalar's values are one per row; a field's are rows × nodes (or cells).
-The model file declares the spread as a result like any other, so the
-answer carries it:
-
-```python
-with gamut.create_model("lift_linear.gamut", writer="example fit",
-                         parameters={"alpha": {"units": "degree", "lower": 0.0, "upper": 10.0}},
-                         scalars={"cl": {"units": "1", "model": "line", "output": "cl"},
-                                  "cl_std": {"units": "1", "model": "line", "output": "cl",
-                                             "of": "cl", "statistic": "std"}}) as model:
-    model.add_model("line", Linear(a, b, spread), inputs=["alpha"])
-
-with gamut.evaluate("lift_linear.gamut", {"alpha": [2.2, 7.9]}) as answer:
-    print("linear:", answer.get_scalar("cl").round(4), "+/-", answer.get_scalar("cl_std").round(4))
-```
-
-```text
-linear: [0.228 0.741] +/- [0.0177 0.0177]
-```
+Julia evaluates the built-in type only, and gives any model's numbers
+with `Gamut.model_numbers`. C and C++ read a model's numbers and run the
+built-in model through `gamut.h`
+([C++ and C](14-c-and-cpp.md#a-model-file)).
 
 ## Notes
 
 - `save` may return nested dictionaries of numbers, text, booleans and
-  NumPy arrays. Anything else is refused when the file is written, not
+  NumPy arrays of booleans, int32, int64 or float64 (in MATLAB, a struct
+  of the same). Anything else is refused when the file is written, not
   when it is read.
 - A file whose model type is not registered still opens, reads and
-  copies; only evaluating it needs the owning software, and the refusal
-  says which type is missing.
+  copies; only evaluating it needs the type's software, and the refusal
+  names the type.
 - `study.model_numbers("fit")` gives a model's numbers back as its `save`
   returned them, registered or not, for software that rebuilds the model
   itself.
 - A model may read the mesh's coordinates as an input, to predict on new
   geometries, or compute them, as a model of the geometry itself.
-- `create_model(..., trained_on=[...])` records the `file_id` of each
-  study the model was fitted on, and an evaluated file records the model
-  file it came from.
 
-Run it: `python examples/07_models.py`. Next: [reading parts](08-reading-parts.md).
+Run it: `python examples/07_models.py`; then, in the same folder,
+`evaluate_model` in MATLAB with `examples/matlab` on the path, or
+`julia examples/julia/nearest.jl`. Next: [reading parts](08-reading-parts.md).

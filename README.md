@@ -22,9 +22,10 @@ thousands of CFD or FEA runs behind a design sweep, an aerodynamic
 database or a surrogate model. One file holds the run table, each run's
 inputs, results and status, and, when the runs have a mesh, the mesh and
 every field on it, all with units. Python, MATLAB, Julia and C++ read and
-write it with the same calls. Files are HDF5 laid out as netCDF-4, so h5py,
-xarray and the netCDF tools open them too, and a published specification
-says what every array in them means.
+write it with the same calls. A model fitted to the runs is saved the same
+way, as plain numbers with no code, and evaluated on new inputs. Files are
+HDF5 laid out as netCDF-4, so h5py, xarray and the netCDF tools open them
+too, and a published specification says what every array in them means.
 
 <p align="center">
   <picture>
@@ -149,9 +150,44 @@ Each run then brings its fields, `study.add_run({"gamma": gamma},
 fields={"cp": cp})`, and `study.get_field("cp")` returns runs × nodes
 ([one mesh](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/02-one-mesh.md)).
 
+### A model in a file
+
+A model fitted to the sweep is saved in the same format: a file with no
+runs, whose parameter keeps the range of angles the model was fitted on
+and whose result names the model that computes it. Here a quadratic is
+fitted in Python to the angles and lifts of the runs that converged,
+`alpha` and `cl`, and saved:
+
+```python
+with gamut.create_model("lift_model.gamut", writer="example fit", trained_on=[sweep_id],
+                         parameters={"alpha": {"units": "degree", "lower": 0.0, "upper": 10.0}},
+                         scalars={"cl": {"units": "1", "model": "fit", "output": "cl"}}) as model:
+    model.add_model("fit", Polynomial(np.polyfit(alpha, cl, 2)), inputs=["alpha"])
+```
+
+MATLAB evaluates the file with no Python involved:
+
+```matlab
+gamut.registerModelType('Polynomial');
+answer = gamut.evaluate('lift_model.gamut', struct('alpha', [2.2; 7.9]));
+lift = answer.getScalar('cl');
+answer.close();
+```
+
+```text
+the model's lift at 2.2 and 7.9 degrees: 0.24 0.87
+```
+
+The file holds the quadratic's three coefficients, not code. `Polynomial`
+is the model's type: a class of a few lines in each language that saves
+the coefficients and computes with them. `trained_on` records the sweep's
+`file_id`. The answer is an ordinary study file of two runs, and
+`gamut.evaluate` in Python gives the same
+([models](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/07-models.md)).
+
 The [guide](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/README.md)
-starts from these two and goes on to families of shapes on one mesh, a
-mesh per run, time series, uncertainty and fitted models, a page each.
+starts from these three and goes on to families of shapes on one mesh, a
+mesh per run, time series and uncertainty, a page each.
 
 ## What you can do with it
 
@@ -160,7 +196,7 @@ mesh per run, time series, uncertainty and fitted models, a page each.
 | Use one file everywhere | Python, MATLAB, Julia, C++ and C call one core, so a query returns the same values in each, and each reads what another wrote. |
 | Read only what you need | Choose runs by condition (`mach > 0.7 and status == converged`) and nodes by zone. On a shared mesh, one region of every run or one node across thousands of runs is a single read, and Python can convert values to the units you ask for ([reading parts](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/08-reading-parts.md)). |
 | Train models on it | Each field on a shared mesh is one block of runs × nodes (or cells). Labels record status, fidelity or solver, a split says which rows are for training and which for testing, and a file can name the group a fair test must hold out whole ([families](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/03-geometry-families.md)). Standard deviations, quantiles and derivatives are stored beside the results they describe ([run tables](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/01-run-tables.md), [uncertainty](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/06-uncertainty-and-gradients.md)). |
-| Share fitted models | A model is a file in the same format with no runs and no code inside. Evaluating it on new inputs gives an ordinary study; a model type of your own is registered by the software that defines it ([models](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/07-models.md)). |
+| Share fitted models | A model is a file in the same format with no runs and no code inside: its numbers, the units and fitted range of its inputs, and the study it came from. A model type of your own is a short class registered in Python or MATLAB; the built-in nearest-run model evaluates in every language. Evaluating gives an ordinary study ([models](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/07-models.md)). |
 | Hold tables, families and time series | A table of runs with no mesh, one mesh for every run, one geometry per member of a family of shapes on one topology, a mesh per run, or transient runs with a row per saved step ([families](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/03-geometry-families.md), [time series](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/05-time-series.md)). |
 | Check what you receive | Writers require units on parameters, results, constants and coordinates, and `gamut validate` checks the 35 numbered rules of the [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md). A corpus of 67 valid, broken and hostile files runs in CI through the Python, MATLAB and Julia libraries and the C interface under them, and readers check sizes before allocating memory and never follow links ([files from outside](https://github.com/bijective-systems-org/gamut/blob/main/docs/security.md)). |
 

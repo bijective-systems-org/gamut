@@ -122,6 +122,10 @@ jobs:
           # The README's sweep prints the README's line.
           (cd "$RUNNER_TEMP/jexample" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/sweep.jl") | tee "$RUNNER_TEMP/jsweep.txt"
           grep -qxF "$(grep -m1 '^lift of the runs that converged:' README.md)" "$RUNNER_TEMP/jsweep.txt"
+          # The nearest model fitted in Python evaluates in Julia to the guide's line.
+          (cd "$RUNNER_TEMP/jexample" && "$RUNNER_TEMP/venv-3.12/bin/python" "$GITHUB_WORKSPACE/examples/07_models.py" > /dev/null)
+          (cd "$RUNNER_TEMP/jexample" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/nearest.jl") | tee "$RUNNER_TEMP/jnearest.txt"
+          grep -qxF "$(grep -m1 "^the nearest run's lift" docs/guide/07-models.md)" "$RUNNER_TEMP/jnearest.txt"
           julia --project="$RUNNER_TEMP/jcorpus" -e 'using Pkg; Pkg.add(name="JSON", version="1.10"); Pkg.develop(path="julia")'
           julia --project="$RUNNER_TEMP/jcorpus" julia/test/check_corpus.jl "$RUNNER_TEMP/corpus" | tee "$RUNNER_TEMP/jcorpus.txt"
           grep -qE '^[1-9][0-9]* cases' "$RUNNER_TEMP/jcorpus.txt"
@@ -139,7 +143,7 @@ jobs:
   # MATLAB on a GitHub-hosted runner is licensed by MathWorks for public
   # repositories, with no secret and no licence token.
   matlab:
-    name: matlab (suite, example, corpus)
+    name: matlab (suite, examples, corpus)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -160,18 +164,21 @@ jobs:
                 -DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT="$RUNNER_TEMP/deps" -DZLIB_ROOT="$RUNNER_TEMP/deps"
           cmake --build build -j2
 
-      - name: The corpus
+      - name: The corpus, and the model files the MATLAB example evaluates, written by Python
         run: |
           python -m pip install -q numpy h5py
           python corpus/generate.py "$RUNNER_TEMP/corpus"
           echo "CORPUS=$RUNNER_TEMP/corpus" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/models"
+          (cd "$RUNNER_TEMP/models" && PYTHONPATH="$GITHUB_WORKSPACE/python" python "$GITHUB_WORKSPACE/examples/07_models.py")
+          echo "MODEL_FILES=$RUNNER_TEMP/models" >> "$GITHUB_ENV"
 
       - uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d # v3.1.0
         with:
           release: latest
           cache: true
 
-      - name: Build the gateway, then the suite (with the example) and the corpus
+      - name: Build the gateway, then the suite (with the examples) and the corpus
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3.3.0
         with:
           command: "cd matlab; build_mex; addpath(fullfile(pwd, 'tests')); run_tests; corpus = getenv('CORPUS'); run(fullfile(pwd, 'tests', 'check_corpus.m'))"

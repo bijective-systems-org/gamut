@@ -9,11 +9,12 @@ use `gamut.h` directly. Both are installed with the library
 ([installing](../install.md#c-and-c)); with CMake, `find_package(gamut)`
 and `gamut::gamut` are all a project needs.
 
-There are two examples: [`sweep.cpp`](../../examples/cpp/sweep.cpp), the
-[README](../../README.md#example)'s run table, and
+There are three examples: [`sweep.cpp`](../../examples/cpp/sweep.cpp), the
+[README](../../README.md#example)'s run table;
 [`one_mesh.cpp`](../../examples/cpp/one_mesh.cpp) (and its C twin), eight
 runs of flow past a cylinder on one mesh, with a ninth added and one node
-read in every run.
+read in every run; and [`nearest.cpp`](../../examples/cpp/nearest.cpp),
+a model fitted in Python and evaluated in C++.
 
 ## C++
 
@@ -113,6 +114,38 @@ decompresses large reads in four threads.
 
 Model files, notes and private records are written and read through
 `gamut.h`; `study.handle()` gives the open file to pass to it.
+
+### A model file
+
+The built-in nearest model of [models](07-models.md#the-built-in-model),
+fitted in Python, is evaluated here by the core, from the model's stored
+numbers:
+
+```cpp
+const gamut::Study model = gamut::open("lift_nearest.gamut");
+gamut_error err;
+gamut_tree* tree = nullptr;
+if (gamut_model_numbers(model.handle(), "fit", &tree, &err) != 0) throw gamut::Error(err);
+const std::unique_ptr<gamut_tree, void (*)(gamut_tree*)> numbers(tree, gamut_tree_free);
+
+const char* inputs[] = {"alpha"};
+const double alpha[] = {2.2, 7.9};
+const double* columns[] = {alpha};
+double lift[2];
+if (gamut_nearest_call(numbers.get(), inputs, columns, 1, 2, "cl", lift, 2, &err) != 0)
+  throw gamut::Error(err);
+```
+
+```text
+the nearest run's lift at 2.2 and 7.9 degrees: 0.22 0.88
+```
+
+`gamut_model_numbers` gives any model's numbers, whatever its type, as a
+tree read with the `gamut_tree_*` calls, for a program that computes the
+model itself. `gamut_nearest_call` evaluates the built-in model on a
+column of values for each named input, a value per row. It returns values
+only: it neither checks the inputs against the parameters' bounds nor
+writes a data file, as `evaluate` does in Python, MATLAB and Julia.
 
 ## C
 

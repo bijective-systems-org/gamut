@@ -62,7 +62,10 @@ julia --project=<an environment with JSON and Gamut> julia/test/check_corpus.jl 
 ```
 
 In MATLAB, from `matlab/`: `build_mex`, then `run_tests`, then
-`corpus='/tmp/corpus'; run('tests/check_corpus.m')`.
+`corpus='/tmp/corpus'; run('tests/check_corpus.m')`. `run_tests` also
+evaluates the model `examples/07_models.py` writes when the environment
+variable `MODEL_FILES` names the folder that script ran in; the Julia
+example `examples/julia/nearest.jl` runs in such a folder too.
 `package_toolbox('Gamut.mltbx')` packages the gateways built there as the
 toolbox, and `tests/check_toolbox.m` installs it in a clean session and
 runs an example with it. `bash tools/build_core.sh PREFIX DEPS` installs
