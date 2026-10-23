@@ -111,7 +111,7 @@ jobs:
         with:
           version: '1.11'
 
-      - name: Julia, its example, and the corpus from Julia
+      - name: Julia, its examples, and the corpus from Julia
         env:
           GAMUT_LIBRARY: ${{ github.workspace }}/build/libgamut.so
         run: |
@@ -119,6 +119,9 @@ jobs:
           julia --project=julia -e 'include("julia/test/runtests.jl")'
           mkdir -p "$RUNNER_TEMP/jexample"
           (cd "$RUNNER_TEMP/jexample" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/one_mesh.jl")
+          # The README's sweep prints the README's line.
+          (cd "$RUNNER_TEMP/jexample" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/sweep.jl") | tee "$RUNNER_TEMP/jsweep.txt"
+          grep -qxF "$(grep -m1 '^lift of the runs that converged:' README.md)" "$RUNNER_TEMP/jsweep.txt"
           julia --project="$RUNNER_TEMP/jcorpus" -e 'using Pkg; Pkg.add(name="JSON", version="1.10"); Pkg.develop(path="julia")'
           julia --project="$RUNNER_TEMP/jcorpus" julia/test/check_corpus.jl "$RUNNER_TEMP/corpus" | tee "$RUNNER_TEMP/jcorpus.txt"
           grep -qE '^[1-9][0-9]* cases' "$RUNNER_TEMP/jcorpus.txt"
