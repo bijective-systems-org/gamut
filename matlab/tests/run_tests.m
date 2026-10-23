@@ -253,10 +253,11 @@ if isfile(fullfile(examples, 'one_mesh.m'))
         'the MATLAB example writes a valid file');
     readme = fileread(fullfile(fileparts(fileparts(here)), 'README.md'));
     line = regexp(readme, 'lift of the runs that converged:[^\r\n]*', 'match', 'once');
-    out = run_example(fullfile(examples, 'sweep.m'), tmp);
-    ok(~isempty(line) && contains(out, line), 'the MATLAB sweep prints the README''s line');
-    out = run_example(fullfile(examples, 'read_with_ncread.m'), tmp);
-    ok(~isempty(line) && contains(out, line), 'ncread reads the sweep alike');
+    prints = @(out) ~isempty(line) && any(strcmp(splitlines(string(out)), line));
+    ok(prints(run_example(fullfile(examples, 'sweep.m'), tmp)), ...
+        'the MATLAB sweep prints the README''s line');
+    ok(prints(run_example(fullfile(examples, 'read_with_ncread.m'), tmp)), ...
+        'ncread reads the sweep alike');
 end
 
 fprintf('%d checks, %d failures\n', checks, failures);
