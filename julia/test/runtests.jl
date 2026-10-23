@@ -130,6 +130,23 @@ mktempdir() do tmp
         end
     end
 
+    @testset "a Bool note is an integer note" begin
+        p = joinpath(tmp, "notes.gamut")
+        Gamut.create(p; writer="t") do s
+            Gamut.set_note!(s, "flag", true)
+            Gamut.set_note!(s, "n", 3)
+            Gamut.set_note!(s, "x", 1.5)
+        end
+        kinds = Gamut.open(p) do f
+            k, t, v = (Ref{Ptr{Cvoid}}(C_NULL) for _ in 1:3)
+            ccall(Gamut.sym(:gamut_notes), Cint, (Ptr{Cvoid}, Ref{Ptr{Cvoid}}, Ref{Ptr{Cvoid}},
+                  Ref{Ptr{Cvoid}}, Ptr{Cvoid}), f.handle, k, t, v, C_NULL)
+            names, kinds, _ = Gamut.take_strings(k[]), Gamut.take_strings(t[]), Gamut.take_strings(v[])
+            Dict(zip(names, kinds))
+        end
+        @test kinds == Dict("flag" => "int", "n" => "int", "x" => "float")
+    end
+
     @testset "refusals carry rules and add nothing" begin
         p = joinpath(tmp, "bad.gamut")
         e = try Gamut.create(p; writer="t", parameters=Dict("x" => "m//s")); nothing catch x; x end

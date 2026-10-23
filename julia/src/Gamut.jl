@@ -582,7 +582,7 @@ end
 """    set_note!(study, key, value)    Free-form public notes: text, integers, floats."""
 function set_note!(s::Study, key, value)
     h = handle(s)
-    if value isa Integer && !(value isa Bool)
+    if value isa Integer       # a Bool is the integer 1 or 0, as in Python
         @mes gamut_set_note_int (Ptr{Cvoid}, Cstring, Int64) h cs(key) Int64(value)
     elseif value isa Real
         @mes gamut_set_note_float (Ptr{Cvoid}, Cstring, Cdouble) h cs(key) Float64(value)
