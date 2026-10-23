@@ -47,7 +47,7 @@ if cmake -S "$core" -B "$work/system" -G Ninja -DGAMUT_BUILD_TESTS=OFF \
      > "$work/system-configure.log" 2>&1; then
   row "core against the system HDF5" "configured"
 else
-  row "core against the system HDF5" "refused at configure: $(grep -m1 -o 'needs HDF5 1.12 or later; found [0-9.]*' "$work/system-configure.log")"
+  row "core against the system HDF5" "refused at configure: $(grep -m1 -o 'needs HDF5 1.14 or later; found [0-9.]*' "$work/system-configure.log")"
 fi
 
 # HDF5 1.14.6 from source, built twice: static and position independent
