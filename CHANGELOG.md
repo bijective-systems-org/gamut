@@ -18,6 +18,15 @@ an illegal name is refused with what a legal one is; W2 counts the rows
 of each status and says when no status is named `converged`, the one
 name that marks a run as usable; W1 names the group a split divides.
 
+The languages agree in more places. `gamut_create` from C, or
+`gamut::create` from C++, with a mesh and no `per` is refused (E6), as
+Python, MATLAB and Julia already refused it, where it took `fixed`. Cell
+offsets of the wrong length are refused (E5) in Python and Julia before the
+core reads them, as the C++ layer already did. A failed Python `evaluate`
+leaves no file behind. In Julia, a `true` note is stored as the integer 1,
+and `related` keys a derivative along each coordinate axis separately, as
+in Python.
+
 A run table from a spreadsheet goes straight in: Python's `add_runs`
 takes a pandas DataFrame and `add_run` one of its rows, and MATLAB's
 `addRuns` takes a table, as `readtable` gives, with labels as text or
