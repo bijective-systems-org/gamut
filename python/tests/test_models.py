@@ -272,3 +272,13 @@ def test_a_failed_evaluation_leaves_no_file(tmp_path):
     with pytest.raises(gamut.GamutError):
         gamut.evaluate(mp, {"x": [1.0, 2.0]})
     assert {f for f in set(os.listdir(tempfile.gettempdir())) - before if f.endswith(".gamut")} == set()
+
+
+def test_a_model_file_declares_a_bool_label_as_a_data_file_does(tmp_path):
+    mp = str(tmp_path / "flag.gamut")
+    with gamut.create_model(mp, writer="tests", labels={"on": bool},
+                             parameters={"x": {"units": "m", "lower": 0.0, "upper": 1.0}},
+                             scalars={"y": {"units": "1", "model": "m", "output": "y"}}) as m:
+        m.add_model("m", gamut.Nearest(["x"], [0.0], [1.0], [[0.0], [1.0]], {"y": [0.0, 1.0]}), ["x"])
+    with gamut.open(mp) as f:
+        assert f.categories("on") == ["false", "true"]

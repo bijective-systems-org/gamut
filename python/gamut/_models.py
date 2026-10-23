@@ -15,7 +15,7 @@ import numpy as np
 
 from . import _lib
 from ._lib import GamutError, b, call
-from ._study import Study, _axes, _precision, _spec, open as _open
+from ._study import Study, _axes, _label_spec, _precision, _spec, open as _open
 
 # --- dictionaries <-> core trees --------------------------------------------
 
@@ -224,7 +224,7 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
         if trained_on:
             call("gamut_set_attribute", handle, b("trained_on"), b(" ".join(trained_on)))
         for name, value in (labels or {}).items():
-            spec = {"role": value} if isinstance(value, str) else dict(value)
+            spec = _label_spec(value)
             cats = list(spec.get("categories", []))
             call("gamut_declare_label", handle, b(name), b(spec.get("role", "categorical")),
                  _lib.string_array(cats), len(cats))

@@ -41,6 +41,15 @@ def _spec(value: Any, key: str) -> dict:
     return {key: value}
 
 
+def _label_spec(value: Any) -> dict:
+    """A label declared as `bool`, as its role, or as a mapping."""
+    if value is bool:
+        return {"role": "categorical", "categories": ["false", "true"]}
+    if isinstance(value, str):
+        return {"role": value}
+    return dict(value)
+
+
 def _axes(coordinates: Mapping[str, Any] | None) -> int:
     value = (coordinates or {}).get("axes", 3)
     if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
@@ -650,12 +659,7 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
             if value is not None:
                 call("gamut_set_attribute", handle, b(key), b(value))
         for name, value in (labels or {}).items():
-            if value is bool:
-                spec = {"role": "categorical", "categories": ["false", "true"]}
-            elif isinstance(value, str):
-                spec = {"role": value}
-            else:
-                spec = dict(value)
+            spec = _label_spec(value)
             cats = list(spec.get("categories", []))
             call("gamut_declare_label", handle, b(name), b(spec.get("role", "categorical")),
                  _lib.string_array(cats), len(cats))
