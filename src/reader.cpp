@@ -90,9 +90,15 @@ Result result_from(const Attrs& a, const DsetInfo& info, const std::string& name
 
 }  // namespace
 
-Schema load_schema(const File& f) {
+Schema load_schema(const File& f, const std::string& path) {
   Schema s;
   const Attrs root{f.attributes("/")};
+  const std::string format = root.text("format");
+  need(format == "gamut/1", "E1",
+       format.empty() ? "\"" + path + "\" has no format attribute; it is not a "
+                                      "file of this format"
+                      : "\"" + path + "\" is " + format +
+                            ", and this library reads gamut/1");
   s.kind = root.text("kind");
   s.writer = root.text("writer");
   s.created = root.text("created");
@@ -273,14 +279,7 @@ Schema load_schema(const File& f) {
 std::unique_ptr<Reader> Reader::open(const std::string& path) {
   std::unique_ptr<Reader> r(new Reader());
   r->file_.reset(new File(File::open_read(path)));
-  const Attrs root{r->file_->attributes("/")};
-  const std::string format = root.text("format");
-  need(format == "gamut/1", "E1",
-       format.empty() ? "\"" + path + "\" has no format attribute; it is not a "
-                                      "file of this format"
-                      : "\"" + path + "\" is " + format +
-                            ", and this library reads gamut/1");
-  r->schema_ = load_schema(*r->file_);
+  r->schema_ = load_schema(*r->file_, path);
   need(r->schema_.kind == "data" || r->schema_.kind == "model", "E1",
        "kind must be data or model");
   return r;
@@ -314,7 +313,9 @@ std::vector<std::string> Reader::names(const std::string& group) const {
   } else if (group == "models") {
     for (const auto& m : s.models) out.push_back(m.id);
   } else {
-    throw Error("", "no group \"" + group + "\"");
+    throw Error("", "no group \"" + group + "\"; the groups are parameters, labels, scalars, "
+                    "constants, node_fields, cell_fields, node_labels, cell_labels, tables "
+                    "and models");
   }
   std::sort(out.begin(), out.end(), bytes_less);
   return out;

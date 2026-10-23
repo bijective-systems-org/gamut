@@ -24,14 +24,18 @@ Parameters place a run in the study. Their role is `condition` (how it is
 operated: Mach, incidence, altitude), `design` (the shape: a geometry or
 design variable) or `time`. Tools use the role: a geometry model takes the
 design parameters, a viewer animates time. Labels name rather than
-measure; a label with the role `status` says which runs can be trusted,
-and tools that train on the data skip the rest unless told otherwise.
-Scalars are results with one value per run, and constants hold one value
-for the whole study.
+measure; a label with the role `status` says which runs can be trusted.
+A run is usable when its status is `converged`, the one name with that
+meaning (`failed` and `partial` are the usual others), and tools that
+train on the data skip the rest unless told otherwise. Scalars are
+results with one value per run, and constants hold one value for the
+whole study.
 
 Units are required on every number. They use the grammar of UDUNITS, as
 netCDF and CF do: `1` for dimensionless, `degree`, `m s-1`, `W m-2`.
-`"cl": "1"` is short for `{"units": "1"}`.
+`"cl": "1"` is short for `{"units": "1"}`. The grammar is checked when the
+file is written, the names are not: a misspelt `dgree` is stored as given,
+and is caught only when a read converts it ([units](08-reading-parts.md#units)).
 
 Each run then gives every parameter, label and scalar by name, a label by
 one of its category names:
@@ -42,8 +46,11 @@ study.add_run({"mach": mach, "alpha": float(alpha),
                "cl": np.nan if failed else cl, "cd": np.nan if failed else cd})
 ```
 
-A result a run does not have is NaN. Parameters and labels are never
-missing.
+A result a run does not have is NaN, and so is one it leaves out.
+Parameters and labels are never missing. A category name a label has not
+seen is added to its categories, so a misspelt `"convereged"` becomes a
+new category rather than an error; `study.categories("status")` lists
+them.
 
 Leaving the `with` block finishes the file. If the block ends with an
 error, the runs added so far are kept when the file can still be finished,
@@ -75,10 +82,12 @@ file says about a name, or about the file itself.
 ## Notes
 
 - Every row gets an id when it is written, unique in the file and never
-  reused. A run keeps its id when it is copied to another file
-  ([combining files](09-combining-files.md)).
-- `study.table()` returns the whole run table as columns, labels as names,
-  ready for `pandas.DataFrame`.
+  reused. Runs extracted to another file keep their ids; runs appended to
+  another file get new ones there ([combining files](09-combining-files.md)).
+- `study.add_runs(columns)` adds many runs at once from a column per name:
+  a dict of arrays, or a pandas DataFrame such as `pandas.read_csv` gives.
+  `study.table()` goes the other way: the whole run table as columns,
+  labels as names, ready for `pandas.DataFrame`.
 - `gamut validate polar.gamut` reports the failed run and its missing
   results as warnings, so whoever receives the file sees them without
   being told.

@@ -11,6 +11,7 @@
 #
 # Needs cmake 3.20 or later and a C compiler; uses Ninja when present.
 # Sources are checked against their published SHA-256 before use.
+# licenses/ holds their licence texts, which a new version may change.
 set -euo pipefail
 
 prefix=${1:?usage: build_deps.sh PREFIX [DOWNLOAD_DIR]}

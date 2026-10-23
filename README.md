@@ -35,102 +35,123 @@ says what every array in them means.
 
 ## Example
 
-Nine runs of potential flow past a cylinder on one mesh: eight written as
-a sweep, a ninth added after reopening the file, then the pressure at one
-node read back from every run. `points`, `cells` and `solve` stand for
-your mesh and your solver, and the complete programs are in
-[`examples/`](https://github.com/bijective-systems-org/gamut/blob/main/examples).
+A sweep of a wing's angle of attack: six runs written, a seventh added
+later, and the lift of the runs that converged read back, as a model
+fitted to the study would read it. `solve` stands for your solver; the
+complete programs are in [`examples/`](https://github.com/bijective-systems-org/gamut/blob/main/examples).
 
 Python
 
 ```python
-with gamut.create("cylinder.gamut", writer="example sweep", mesh="shared", per="fixed",
-                   coordinates={"units": "m", "axes": 2},
-                   parameters={"gamma": {"units": "m2 s-1", "role": "design"}},
-                   fields={"cp": {"units": "1", "at": "node"}}) as study:
-    study.set_mesh(points, cells)
-    for gamma in np.linspace(0.0, 3.5, 8):
-        study.add_run({"gamma": gamma}, fields={"cp": solve(gamma)})
+with gamut.create("sweep.gamut", writer="example sweep",
+                   parameters={"alpha": {"units": "degree", "role": "condition"}},
+                   labels={"status": {"role": "status", "categories": ["converged", "failed"]}},
+                   scalars={"cl": "1"}) as study:
+    for alpha in range(0, 11, 2):
+        study.add_run({"alpha": alpha, "status": "converged", "cl": solve(alpha)})
 
-with gamut.open("cylinder.gamut", mode="a") as study:
-    study.add_run({"gamma": 4.0}, fields={"cp": solve(4.0)})
+with gamut.open("sweep.gamut", mode="a") as study:
+    study.add_run({"alpha": 12, "status": "failed"})
 
-with gamut.open("cylinder.gamut") as study:
-    cp = study.get_field("cp", nodes=[12])                 # runs x nodes
+with gamut.open("sweep.gamut") as study:
+    cl = study.get_scalar("cl", rows=study.select("status == converged"))
 ```
 
 MATLAB
 
 ```matlab
-study = gamut.create('cylinder.gamut', 'writer', 'example sweep', 'mesh', 'shared', 'per', 'fixed', ...
-    'coordinates', struct('units', 'm', 'axes', 2), ...
-    'parameters', struct('gamma', struct('units', 'm2 s-1', 'role', 'design')), ...
-    'fields', struct('cp', struct('units', '1', 'at', 'node')));
-study.setMesh(points, cells);
-for gamma = linspace(0, 3.5, 8)
-    study.addRun(struct('gamma', gamma), 'fields', struct('cp', solve(gamma)));
+study = gamut.create('sweep.gamut', 'writer', 'example sweep', ...
+    'parameters', struct('alpha', struct('units', 'degree', 'role', 'condition')), ...
+    'labels', struct('status', struct('role', 'status', 'categories', {{'converged', 'failed'}})), ...
+    'scalars', struct('cl', '1'));
+for alpha = 0:2:10
+    study.addRun(struct('alpha', alpha, 'status', 'converged', 'cl', solve(alpha)));
 end
 study.close();
 
-study = gamut.open('cylinder.gamut', 'mode', 'a');
-study.addRun(struct('gamma', 4), 'fields', struct('cp', solve(4)));
+study = gamut.open('sweep.gamut', 'mode', 'a');
+study.addRun(struct('alpha', 12, 'status', 'failed'));
 study.close();
 
-study = gamut.open('cylinder.gamut');
-cp = study.getField('cp', 'nodes', 13);                         % runs x nodes, from 1
+study = gamut.open('sweep.gamut');
+cl = study.getScalar('cl', 'rows', study.select('status == converged'));
 study.close();
 ```
 
 Julia
 
 ```julia
-Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed",
-              coordinates=(units="m", axes=2),
-              parameters=Dict("gamma" => (units="m2 s-1", role="design")),
-              fields=Dict("cp" => (units="1", at="node"))) do study
-    Gamut.set_mesh!(study; points, cells)
-    for gamma in range(0, 3.5; length=8)
-        Gamut.add_run!(study, Dict("gamma" => gamma); fields=Dict("cp" => solve(gamma)))
+Gamut.create("sweep.gamut"; writer="example sweep",
+              parameters=Dict("alpha" => (units="degree", role="condition")),
+              labels=Dict("status" => (role="status", categories=["converged", "failed"])),
+              scalars=Dict("cl" => "1")) do study
+    for alpha in 0.0:2.0:10.0
+        Gamut.add_run!(study, Dict("alpha" => alpha, "status" => "converged", "cl" => solve(alpha)))
     end
 end
 
-Gamut.open("cylinder.gamut"; mode="a") do study
-    Gamut.add_run!(study, Dict("gamma" => 4.0); fields=Dict("cp" => solve(4.0)))
+Gamut.open("sweep.gamut"; mode="a") do study
+    Gamut.add_run!(study, Dict("alpha" => 12.0, "status" => "failed"))
 end
 
-cp = Gamut.open("cylinder.gamut") do study
-    Gamut.get_field(study, "cp"; nodes=[13])                 # runs × nodes, from 1
+cl = Gamut.open("sweep.gamut") do study
+    Gamut.get_scalar(study, "cl"; rows=Gamut.select(study, "status == converged"))
 end
 ```
 
 C++
 
 ```cpp
-auto study = gamut::create("cylinder.gamut", "example sweep", "shared", "fixed");
-study.declare_coordinates("m", 2);
-study.declare_parameter("gamma", "design", "m2 s-1");
-study.declare_field("cp", "node", "1");
-study.set_mesh(points, cells);
-for (double gamma = 0.0; gamma < 3.75; gamma += 0.5)
-  study.add_run({{"gamma", gamma}}, {{"cp", solve(gamma)}});
+auto study = gamut::create("sweep.gamut", "example sweep");
+study.declare_parameter("alpha", "condition", "degree");
+study.declare_label("status", "status", {"converged", "failed"});
+study.declare_scalar("cl", "1");
+for (double alpha = 0.0; alpha <= 10.0; alpha += 2.0)
+  study.add_run({{"alpha", alpha}, {"status", "converged"}, {"cl", solve(alpha)}});
 study.close();
 
-study = gamut::open("cylinder.gamut", "a");
-study.add_run({{"gamma", 4.0}}, {{"cp", solve(4.0)}});
+study = gamut::open("sweep.gamut", "a");
+study.add_run({{"alpha", 12.0}, {"status", "failed"}});
 study.close();
 
-study = gamut::open("cylinder.gamut");
-auto cp = study.get_field("cp", gamut::all, {12});    // runs x nodes
+study = gamut::open("sweep.gamut");
+const std::vector<double> cl = study.get_scalar("cl", study.select("status == converged"));
 ```
 
-All four print the same values:
+All four print the same line:
 
 ```text
-cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
+lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
 ```
 
-MATLAB and Julia count positions from 1, so node 12 in Python and C++ is
-node 13 in MATLAB and Julia.
+Every name is declared once, with its units and role, and each run then
+gives its values; the failed run has no lift, so it is stored as missing.
+`select` returns the positions of the rows it picks, counted from 0 in
+Python and C++ and from 1 in MATLAB and Julia.
+
+### With a mesh
+
+When every run has the same mesh, the file stores the mesh once and each
+field as one block of runs × nodes, so one run, one region of every run or
+one node across all of them is a single read. The declaration adds the
+mesh, its coordinates and its zones, and the fields:
+
+```python
+with gamut.create("cylinder.gamut", writer="example sweep", mesh="shared", per="fixed",
+                   coordinates={"units": "m", "axes": 2},
+                   parameters={"gamma": {"units": "m2 s-1", "role": "design"}},
+                   mesh_labels={"surface": {"at": "node", "categories": ["field", "wall"]}},
+                   fields={"cp": {"units": "1", "at": "node"}}) as study:
+    study.set_mesh(points, cells, labels={"surface": surface})
+```
+
+Each run then brings its fields, `study.add_run({"gamma": gamma},
+fields={"cp": cp})`, and `study.get_field("cp")` returns runs × nodes
+([one mesh](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/02-one-mesh.md)).
+
+The [guide](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/README.md)
+starts from these two and goes on to families of shapes on one mesh, a
+mesh per run, time series, uncertainty and fitted models, a page each.
 
 ## What you can do with it
 
@@ -138,10 +159,10 @@ node 13 in MATLAB and Julia.
 |---|---|
 | Use one file everywhere | Python, MATLAB, Julia, C++ and C call one core, so a query returns the same values in each, and each reads what another wrote. |
 | Read only what you need | Choose runs by condition (`mach > 0.7 and status == converged`) and nodes by zone. On a shared mesh, one region of every run or one node across thousands of runs is a single read, and Python can convert values to the units you ask for ([reading parts](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/08-reading-parts.md)). |
-| Train models on it | Each field on a shared mesh is one block of runs × nodes (or cells). Labels record status, fidelity or solver, a split says which rows are for training and which for testing, and a file can name the group a fair test must hold out whole. Standard deviations, quantiles and derivatives are stored beside the results they describe ([run tables](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/01-run-tables.md), [uncertainty](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/06-uncertainty-and-gradients.md)). |
+| Train models on it | Each field on a shared mesh is one block of runs × nodes (or cells). Labels record status, fidelity or solver, a split says which rows are for training and which for testing, and a file can name the group a fair test must hold out whole ([families](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/03-geometry-families.md)). Standard deviations, quantiles and derivatives are stored beside the results they describe ([run tables](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/01-run-tables.md), [uncertainty](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/06-uncertainty-and-gradients.md)). |
 | Share fitted models | A model is a file in the same format with no runs and no code inside. Evaluating it on new inputs gives an ordinary study; a model type of your own is registered by the software that defines it ([models](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/07-models.md)). |
 | Hold tables, families and time series | A table of runs with no mesh, one mesh for every run, one geometry per member of a family of shapes on one topology, a mesh per run, or transient runs with a row per saved step ([families](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/03-geometry-families.md), [time series](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/05-time-series.md)). |
-| Check what you receive | Writers require units on parameters, results, constants and coordinates, and `gamut validate` checks the 35 numbered rules of the [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md). A corpus of 65 valid, broken and hostile files runs in CI through the Python, MATLAB and Julia libraries and the C interface under them, and readers check sizes before allocating memory and never follow links ([files from outside](https://github.com/bijective-systems-org/gamut/blob/main/docs/security.md)). |
+| Check what you receive | Writers require units on parameters, results, constants and coordinates, and `gamut validate` checks the 35 numbered rules of the [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md). A corpus of 67 valid, broken and hostile files runs in CI through the Python, MATLAB and Julia libraries and the C interface under them, and readers check sizes before allocating memory and never follow links ([files from outside](https://github.com/bijective-systems-org/gamut/blob/main/docs/security.md)). |
 
 ## Performance
 
@@ -184,13 +205,15 @@ custom array layout leaves each producer to maintain.
 | Language | Install |
 |---|---|
 | Python 3.10 or later | `pip install gamut-format` |
-| MATLAB | `build_mex(core)` once in the `matlab` folder of a checkout |
-| Julia 1.9 or later | `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia")` |
+| MATLAB R2023b or later | open `Gamut.mltbx` from the [latest release](https://github.com/bijective-systems-org/gamut/releases/latest) |
+| Julia 1.9 or later | `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v1.1.0")` |
 | C++ and C | CMake build and install, then `find_package(gamut)`; include `gamut/gamut.hpp` (C++17) or `gamut/gamut.h` (C) |
 
-The Python wheels for macOS, Linux and Windows contain the core with HDF5
-linked in. MATLAB and Julia use the same core: the wheel's
-(`gamut.library_path()` prints where it is) or one built with CMake.
+The Python wheels and the MATLAB toolbox carry the core with HDF5 linked
+in, for macOS, Linux and Windows, and need no compiler. Julia, C and C++
+use the same core: each release's `gamut-core-<version>-<platform>`
+archive, the wheel's (`gamut.library_path()` prints where it is), or one
+built with CMake.
 [Installing](https://github.com/bijective-systems-org/gamut/blob/main/docs/install.md) has the details for each language.
 
 ## Documentation
@@ -201,6 +224,10 @@ running one script from `examples/`. The
 implementation, and [how it compares](https://github.com/bijective-systems-org/gamut/blob/main/docs/comparison.md) sets Gamut
 beside VTK, CGNS, Exodus, netCDF-CF and Zarr.
 
+The format is versioned, and every file names its version (`gamut/1`).
+Within version 1 a change only adds, and a reader skips what it does not
+know, so a file written today stays readable; a reader refuses a later
+major version by name ([versions](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md#17-versions-and-additions)).
 Before version 1 the format was called mestra. Its files (`mestra/0`) are
 refused with their version named; its 0.1 releases stay on PyPI under that
 name.

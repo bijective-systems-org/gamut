@@ -182,6 +182,23 @@ def test_missing_values_are_located(tmp_path):
     assert found["node_fields/p"] == "1 value is missing or not finite, the first at row 1, node 3"
 
 
+
+def test_statuses_and_split_groups_are_named(tmp_path):
+    # W2 counts each status a row is not converged with, and says so when no
+    # status is named converged; W1 names the first group a split divides.
+    p = str(tmp_path / "named.gamut")
+    with gamut.create(p, writer="t", parameters={"x": "1"},
+                       labels={"geometry": "group", "split": {"role": "split", "categories": ["train", "test"]},
+                               "status": {"role": "status", "categories": ["yes", "no"]}},
+                       generalisation_group="geometry") as s:
+        s.add_runs({"x": [0.0, 1.0, 2.0, 3.0], "geometry": ["A", "A", "B", "B"],
+                    "split": ["train", "train", "train", "test"], "status": ["yes", "no", "no", "yes"]})
+    found = {f.rule: f.message for f in gamut.validate(p).warnings}
+    assert found["W2"] == ("4 rows are not converged (2 yes, 2 no), the first row 0; no status is "
+                           "named converged, the one name that marks a row as usable")
+    assert found["W1"] == 'the split places rows of one geometry on both sides: "B" (row 3)'
+
+
 def test_meshes_larger_than_a_block_are_checked_whole(tmp_path):
     # The cell checks read 65,536 entries at a time; a defect in a later
     # block is found as one in the first is.

@@ -9,13 +9,42 @@ use `gamut.h` directly. Both are installed with the library
 ([installing](../install.md#c-and-c)); with CMake, `find_package(gamut)`
 and `gamut::gamut` are all a project needs.
 
-The example writes eight runs of flow past a cylinder on one mesh, reopens
-the file to add a ninth, then reads one node in every run: the program of
-the [README](../../README.md#example).
+There are two examples: [`sweep.cpp`](../../examples/cpp/sweep.cpp), the
+[README](../../README.md#example)'s run table, and
+[`one_mesh.cpp`](../../examples/cpp/one_mesh.cpp) (and its C twin), eight
+runs of flow past a cylinder on one mesh, with a ninth added and one node
+read in every run.
 
 ## C++
 
-### Writing
+### A run table
+
+```cpp
+auto study = gamut::create("sweep.gamut", "example sweep");
+study.declare_parameter("alpha", "condition", "degree");
+study.declare_label("status", "status", {"converged", "failed"});
+study.declare_scalar("cl", "1");
+for (double alpha = 0.0; alpha <= 10.0; alpha += 2.0)
+  study.add_run({{"alpha", alpha}, {"status", "converged"}, {"cl", solve(alpha)}});
+study.close();
+
+study = gamut::open("sweep.gamut", "a");
+study.add_run({{"alpha", 12.0}, {"status", "failed"}});
+study.close();
+
+study = gamut::open("sweep.gamut");
+const std::vector<double> cl = study.get_scalar("cl", study.select("status == converged"));
+```
+
+```text
+lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
+```
+
+`solve` stands for the solver. A run left without a result, such as the
+failed one here, stores it as missing (NaN), and `select` returns positions
+counted from 0, which every `get_` call takes as rows.
+
+### Writing on one mesh
 
 ```cpp
 auto study = gamut::create("cylinder.gamut", "example sweep", "shared", "fixed");

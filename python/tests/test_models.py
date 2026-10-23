@@ -77,6 +77,12 @@ def test_nearest_matches_the_written_out_rule_exactly():
     assert got.astype(int).tolist() == reference_nearest(x, lower, upper, q)
     nan = m.call({"a": [np.nan], "b": [0.5], "c": [0.5]}, [("i", "values")])["i"]["values"]
     assert np.isnan(nan[0])
+    # The core reads one value per row from each input, so unequal or
+    # missing inputs are refused first.
+    with pytest.raises(gamut.GamutError, match="300 values of every input"):
+        m.call({"a": q[:, 0], "b": q[:, 1], "c": q[:5, 2]}, [("i", "values")])
+    with pytest.raises(gamut.GamutError, match="needs the inputs c"):
+        m.call({"a": q[:, 0], "b": q[:, 1]}, [("i", "values")])
 
 
 @gamut.register_model_type
@@ -237,3 +243,69 @@ def test_model_numbers_read_back_without_the_type_registered(tmp_path):
             assert f.model_numbers("line")["a"] == 2.0
     finally:
         gamut._models._REGISTRY["tests.line"] = registered
+
+
+@gamut.register_model_type
+class Short:
+    """A model that returns one value too few."""
+
+    type = "tests.short"
+
+    @classmethod
+    def load(cls, numbers):
+        return cls()
+
+    def save(self):
+        return {"k": 1}
+
+    def call(self, inputs, wanted):
+        return {"y": {"values": np.zeros(len(inputs["x"]) - 1)}}
+
+
+def test_a_failed_evaluation_leaves_no_file(tmp_path):
+    import os
+    mp = str(tmp_path / "short.gamut")
+    with gamut.create_model(mp, writer="tests",
+                             parameters={"x": {"units": "m", "lower": 0.0, "upper": 10.0}},
+                             scalars={"y": {"units": "1", "model": "short", "output": "y"}}) as m:
+        m.add_model("short", Short(), ["x"])
+    out = str(tmp_path / "out.gamut")
+    with pytest.raises(gamut.GamutError):
+        gamut.evaluate(mp, {"x": [1.0, 2.0]}, path=out)
+    assert not os.path.exists(out)
+    import tempfile
+    before = set(os.listdir(tempfile.gettempdir()))
+    with pytest.raises(gamut.GamutError):
+        gamut.evaluate(mp, {"x": [1.0, 2.0]})
+    assert {f for f in set(os.listdir(tempfile.gettempdir())) - before if f.endswith(".gamut")} == set()
+    # Refused while the new file is being declared, before any model runs.
+    import h5py
+    with h5py.File(mp, "r+") as f:
+        del f["x"].attrs["units"]
+    with pytest.raises(gamut.GamutError) as e:
+        gamut.evaluate(mp, {"x": [1.0]}, path=out)
+    assert e.value.rule == "E7"
+    assert not os.path.exists(out)
+    with pytest.raises(gamut.GamutError):
+        gamut.evaluate(mp, {"x": [1.0]})
+    assert {f for f in set(os.listdir(tempfile.gettempdir())) - before if f.endswith(".gamut")} == set()
+
+
+def test_one_bound_is_refused(tmp_path):
+    """Neither bound is taken as 0 when only the other is given."""
+    for i, bound in enumerate(({"lower": 0.0}, {"upper": 1.0})):
+        for create in (gamut.create, gamut.create_model):
+            with pytest.raises(gamut.GamutError) as e:
+                create(str(tmp_path / f"{create.__name__}{i}.gamut"), writer="tests",
+                       parameters={"x": {"units": "1", **bound}})
+            assert e.value.rule == "E16" and "give both bounds" in e.value.message
+
+
+def test_a_model_file_declares_a_bool_label_as_a_data_file_does(tmp_path):
+    mp = str(tmp_path / "flag.gamut")
+    with gamut.create_model(mp, writer="tests", labels={"on": bool},
+                             parameters={"x": {"units": "m", "lower": 0.0, "upper": 1.0}},
+                             scalars={"y": {"units": "1", "model": "m", "output": "y"}}) as m:
+        m.add_model("m", gamut.Nearest(["x"], [0.0], [1.0], [[0.0], [1.0]], {"y": [0.0, 1.0]}), ["x"])
+    with gamut.open(mp) as f:
+        assert f.categories("on") == ["false", "true"]

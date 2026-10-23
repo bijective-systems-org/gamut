@@ -42,6 +42,25 @@ def test_refused_first_run_fixes_no_precision(tmp_path):
         assert f.get_scalar("s")[0] == 2.123456789
 
 
+def test_a_mesh_without_per_is_refused_by_the_core(tmp_path):
+    p = tmp_path / "m.gamut"
+    with pytest.raises(gamut.GamutError, match="needs per") as e:
+        gamut.create(str(p), writer="t", mesh="shared")
+    assert e.value.rule == "E6"
+    assert not p.exists()
+
+
+@pytest.mark.parametrize("offsets", [[0], [0, 4, 9]])
+def test_cell_offsets_need_one_more_than_cells(tmp_path, offsets):
+    pts, _ = grid(2, 2)
+    with gamut.create(str(tmp_path / "m.gamut"), writer="t", mesh="shared", per="fixed",
+                       coordinates={"units": "m", "axes": 2}) as s:
+        with pytest.raises(gamut.GamutError, match="one more entry") as e:
+            s.set_mesh(pts, ([9], offsets, [0, 1, 3, 2]))
+        assert e.value.rule == "E5"
+        s.set_mesh(pts, ([9], [0, 4], [0, 1, 3, 2]))
+
+
 def test_run_before_set_mesh_leaves_the_file_writable(tmp_path):
     p = str(tmp_path / "m.gamut")
     pts, cells = grid(3, 2)
@@ -195,6 +214,36 @@ def test_floats_are_not_taken_as_integers(tmp_path):
             _lib.call("gamut_batch_commit", h, ctypes.byref(ctypes.c_int64()))
         assert e.value.rule == "E4"
 
+
+
+def test_a_number_given_as_text_is_named_as_such(tmp_path):
+    # A spreadsheet's "4.0" left as text: the refusal says so, rather than
+    # that the run has no value or that the name is not a label.
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"alpha": "degree"}, scalars={"cl": "1"}) as s:
+        with pytest.raises(gamut.GamutError, match=r'alpha is a parameter, which takes numbers, '
+                                                   r'and was given text \("4.0"\)'):
+            s.add_run({"alpha": "4.0", "cl": 0.1})
+        with pytest.raises(gamut.GamutError, match=r'cl is a result, which takes numbers'):
+            s.add_run({"alpha": 4.0, "cl": "0.15"})
+        s.add_run({"alpha": 4.0, "cl": 0.15})
+
+
+def test_runs_from_a_dataframe(tmp_path):
+    # A run table read from a spreadsheet with pandas goes in as it is, and
+    # comes back out the same way.
+    pd = pytest.importorskip("pandas")
+    df = pd.DataFrame({"alpha": [0.0, 2.0, 4.0], "status": ["converged", "converged", "failed"],
+                       "cl": [0.0, 0.22, np.nan]})
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"alpha": "degree"}, scalars={"cl": "1"},
+                       labels={"status": {"role": "status", "categories": ["converged", "failed"]}}) as s:
+        assert s.add_runs(df) == [0, 1, 2]
+        assert s.add_run(df.iloc[1]) == 3
+    with gamut.open(p) as s:
+        back = pd.DataFrame(s.table())
+    assert back["status"].tolist() == ["converged", "converged", "failed", "converged"]
+    assert np.array_equal(back["cl"].to_numpy(), [0.0, 0.22, np.nan, 0.22], equal_nan=True)
 
 # --- strings and selections -------------------------------------------------------------
 

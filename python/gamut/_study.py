@@ -4,6 +4,7 @@ the shared core."""
 from __future__ import annotations
 
 import ctypes
+import math
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -41,11 +42,37 @@ def _spec(value: Any, key: str) -> dict:
     return {key: value}
 
 
+def _label_spec(value: Any) -> dict:
+    """A label declared as `bool`, as its role, or as a mapping."""
+    if value is bool:
+        return {"role": "categorical", "categories": ["false", "true"]}
+    if isinstance(value, str):
+        return {"role": value}
+    return dict(value)
+
+
 def _axes(coordinates: Mapping[str, Any] | None) -> int:
     value = (coordinates or {}).get("axes", 3)
     if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
         raise GamutError("E24", f"coordinates: axes is 1, 2 or 3, not {value!r}")
     return int(value)
+
+
+class _Declaration(dict):
+    """A concept's attributes as a reader relies on them: an entry the file
+    lacks is refused, rather than a missing key."""
+
+    def __init__(self, name: str, entries: Mapping[str, str]) -> None:
+        super().__init__(entries)
+        self.name = name
+
+    def __missing__(self, key: str) -> str:
+        raise GamutError("", f"{self.name} has no {key}; gamut validate says what the file "
+                              "breaks", self.name)
+
+
+def _declared(study: "Study", name: str) -> _Declaration:
+    return _Declaration(name, study.describe(name))
 
 
 def _precision(value: Any) -> int:
@@ -61,6 +88,13 @@ def _precision(value: Any) -> int:
 
 class Study:
     """A study file open to write (from `create`) or to read (from `open`).
+
+    Writing: `add_run`, `add_runs`, `set_mesh`, `notes`, `set_private`.
+    Reading: `row_count`, `names`, `describe`, `select`, `get_parameter`,
+    `get_label`, `get_scalar`, `get_constant`, `get_field`, `get_points`,
+    `get_cells`, `get_mesh_label`, `categories`, `table`, `related`.
+    Rows are positions counted from 0; a `rows` argument takes a position,
+    a list of them, a slice, or None for every row.
 
     Arrays it returns are the caller's own; it is a context manager, and
     `close()` releases the file."""
@@ -174,6 +208,10 @@ class Study:
             t = np.ascontiguousarray(np.asarray(types, dtype=np.uint8))
             o = np.ascontiguousarray(np.asarray(offsets, dtype=np.int64))
             c = np.ascontiguousarray(np.asarray(conn, dtype=np.int64))
+            # The core reads one more offset than there are cells and cannot see the length.
+            if len(t) and len(o) != len(t) + 1:
+                raise GamutError("E5", f"cells: offsets need one more entry than there are cells "
+                                        f"({len(t) + 1}), not {len(o)}")
             call("gamut_geometry_cells", h, t.ctypes.data_as(ctypes.c_void_p), len(t),
                  o.ctypes.data_as(ctypes.c_void_p), c.ctypes.data_as(ctypes.c_void_p), len(c))
         for name, values in labels.items():
@@ -205,9 +243,11 @@ class Study:
                  points: Sequence[Any] | None = None, cells: Sequence[Any] | None = None,
                  mesh_labels: Sequence[Mapping[str, Any]] | None = None) -> list[int]:
         """Adds many runs at once: `columns` maps each name to one value per
-        run; `fields` to runs x sites (a changing mesh: every run's values
-        end to end); `points`, `cells`, `mesh_labels` one per run (or per new
-        group member) when the geometry changes."""
+        run, as a dict of arrays or a pandas DataFrame does; `fields` to runs
+        x sites (a changing mesh: every run's values end to end); `points`,
+        `cells`, `mesh_labels` one per run (or per new group member) when the
+        geometry changes."""
+        columns = dict(columns.items())
         lengths = {len(v) if _lib.iterable(v) else 1 for v in columns.values()}
         if len(lengths) != 1:
             raise GamutError("E5", "every column needs the same number of runs")
@@ -290,11 +330,13 @@ class Study:
 
     @property
     def kind(self) -> str:
+        """"data" (runs) or "model" (a fitted model)."""
         self._need_reader()
         return self._info("kind")
 
     @property
     def type(self) -> str:
+        """"table" (no mesh), "shared" or "changing", after the mesh."""
         self._need_reader()
         return self._info("type")
 
@@ -305,12 +347,16 @@ class Study:
 
     @property
     def row_count(self) -> int:
+        """The number of rows: runs, or saved steps of transient runs."""
         self._need_reader()
         if self._rows is None:
             self._rows = int(self._info("row_count"))
         return self._rows
 
     def names(self, group: str) -> list[str]:
+        """The names in a group: "parameters", "labels", "scalars",
+        "constants", "node_fields", "cell_fields", "node_labels",
+        "cell_labels", "tables" or "models"."""
         self._need_reader()
         return _lib.strings_out("gamut_names", self._handle(), b(group))
 
@@ -363,15 +409,20 @@ class Study:
         return dims[-1]
 
     def get_row_ids(self, rows: Any = None) -> np.ndarray:
+        """Each row's id, unique in the file and kept when runs are
+        extracted to another; not its position."""
         return self._get("row", rows, dtype=np.int64)
 
     def get_parameter(self, name: str, rows: Any = None, units: str | None = None) -> np.ndarray:
+        """A parameter's value in each row, in `units` if given (which needs
+        the `units` extra, pint)."""
         d = self.describe(name)
         values = self._get(name, rows, dtype=np.int64 if d.get("dtype") == "int64" and units is None
                            else np.float64)
         return self._in_units(name, values, units)
 
     def get_label(self, name: str, rows: Any = None) -> np.ndarray:
+        """A label's category name in each row."""
         self._need_reader()
         r = Selection(rows, "rows")
         r.resolve(self.row_count)
@@ -380,24 +431,31 @@ class Study:
         return out[0] if r.single else out
 
     def get_label_codes(self, name: str, rows: Any = None) -> np.ndarray:
+        """A label's code in each row; `categories(name)[code]` is its name."""
         return self._get(name, rows, dtype=np.int64)
 
     def get_scalar(self, name: str, rows: Any = None, units: str | None = None) -> np.ndarray:
+        """A scalar result in each row, NaN where a run has none."""
         return self._in_units(name, self._get(name, rows, dtype=self._result_dtype(name)), units)
 
     def get_constant(self, name: str, units: str | None = None) -> Any:
+        """A constant's one value for the whole study."""
         d = self.describe(name)
         if d.get("dtype") == "int64" and units is None:
             return int(self._get(name, dtype=np.int64))
         return float(self._in_units(name, self._get(name), units))
 
     def get_cells(self, row: int | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The cells as VTK gives them: a type per cell, offsets (one more
+        than the cells), node numbers. A changing mesh needs the `row`."""
         rows = None if row is None else _one_row(row)
         return (self._get("cells/types", rows, dtype=np.uint8),
                 self._get("cells/offsets", rows, dtype=np.int64),
                 self._get("cells/connectivity", rows, dtype=np.int64))
 
     def get_points(self, row: int | None = None, units: str | None = None) -> np.ndarray:
+        """Node coordinates, nodes x axes. A geometry that changes with the
+        run (per run or per group member) needs the `row`."""
         if row is None and self._per not in ("fixed",):
             raise GamutError("", "this mesh's geometry changes; give the row")
         rows = None if row is None else _one_row(row)
@@ -408,6 +466,9 @@ class Study:
 
     def get_field(self, name: str, rows: Any = None, nodes: Any = None, cells: Any = None,
                   units: str | None = None) -> np.ndarray:
+        """A field: runs x nodes (or cells) on a shared mesh, one row's
+        values on a changing mesh. `nodes` or `cells` choose sites by
+        position, as `rows` chooses rows."""
         sites = nodes if nodes is not None else cells
         if self._mesh_kind == "changing":
             one = isinstance(rows, (list, tuple, np.ndarray)) and len(rows) == 1
@@ -421,6 +482,8 @@ class Study:
                               units)
 
     def get_mesh_label(self, name: str, row: int | None = None) -> np.ndarray:
+        """A mesh label's code per node or cell; `categories(name)` names
+        the codes (a zone, a boundary patch)."""
         rows = None if row is None else _one_row(row)
         return self._get(name, rows, dtype=np.int64, squeeze_row=False)
 
@@ -511,7 +574,7 @@ class Study:
         mine = self.describe(name)
         for group in ("scalars", "node_fields", "cell_fields"):
             for other in self.names(group):
-                d = self.describe(other)
+                d = _declared(self, other)
                 if d.get("of") == name:
                     if d.get("statistic") == "std":
                         out["std"] = other
@@ -560,12 +623,42 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
            title: str | None = None, license: str | None = None, references: str | None = None,
            source: str | None = None, generalisation_group: str | None = None,
            compression: bool = True) -> Study:
-    """Creates a data file and returns it open to add runs."""
-    if mesh is not None and per is None:
-        raise GamutError("E6", "a mesh needs per: 'fixed', 'run' or 'group:<label>'")
+    """Creates a data file and returns it open to add runs: use it in a
+    `with` block, or call `close()`. Everything the file holds is declared
+    here by name; a refused declaration leaves no file.
+
+    parameters   inputs that place a run: {"alpha": {"units": "degree",
+                 "role": "condition"}}. Role "design" (the default),
+                 "condition" or "time"; optional "lower", "upper",
+                 "dtype": "int64".
+    labels       names rather than numbers: {"status": {"role": "status",
+                 "categories": ["converged", "failed"]}}. Role
+                 "categorical" (the default), "group", "status" or
+                 "split". Only the status "converged" marks a run as
+                 usable. A name not yet in "categories" is added to them.
+                 `bool` declares a false/true label.
+    scalars      one number per run: {"cl": "1"} (its units), or a mapping
+                 with "units" and a relation ("of" with "statistic" and
+                 "q", or "with_respect_to").
+    fields       one number per node or cell: {"p": {"units": "Pa",
+                 "at": "node"}}; needs a mesh.
+    constants    one number for the whole study: {"area": (12.5, "m2")}.
+    mesh, per    no mesh (a run table); "shared" (one mesh for every run)
+                 with per "fixed", "run" or "group:<label>"; or
+                 "changing" (a mesh per run) with per "run" or
+                 "group:<label>". With a mesh, `coordinates={"units": "m",
+                 "axes": 2}`.
+    mesh_labels  zones or patches: {"surface": {"at": "node",
+                 "categories": ["field", "wall"]}}.
+    generalisation_group  the group label a fair test holds out whole.
+    title, license, references, source  describe the file.
+    precision, round_bits, compression  storage; the defaults suit most
+                 studies.
+
+    Units use the UDUNITS grammar: "1", "degree", "m s-1", "W m-2"."""
     axes = _axes(coordinates)        # before the file exists: a refusal leaves none
     handle = ctypes.c_void_p()
-    call("gamut_create", b(path), b(writer), b(mesh or ""), b(per or "fixed"), ctypes.byref(handle))
+    call("gamut_create", b(path), b(writer), b(mesh or ""), b(per), ctypes.byref(handle))
     study = Study(handle, path, writing=True)
     study._mesh_kind = mesh or ""
     study._per = per or ""
@@ -584,12 +677,7 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
             if value is not None:
                 call("gamut_set_attribute", handle, b(key), b(value))
         for name, value in (labels or {}).items():
-            if value is bool:
-                spec = {"role": "categorical", "categories": ["false", "true"]}
-            elif isinstance(value, str):
-                spec = {"role": value}
-            else:
-                spec = dict(value)
+            spec = _label_spec(value)
             cats = list(spec.get("categories", []))
             call("gamut_declare_label", handle, b(name), b(spec.get("role", "categorical")),
                  _lib.string_array(cats), len(cats))
@@ -598,7 +686,7 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
             has = "lower" in spec or "upper" in spec
             call("gamut_declare_parameter", handle, b(name), b(spec.get("role", "design")),
                  b(spec.get("units")), _precision(precision.get(name, spec.get("dtype"))),
-                 1 if has else 0, float(spec.get("lower", 0.0)), float(spec.get("upper", 0.0)),
+                 1 if has else 0, float(spec.get("lower", math.nan)), float(spec.get("upper", math.nan)),
                  b(spec.get("run_group", "")))
         if coordinates is not None:
             call("gamut_declare_coordinates", handle, b(coordinates.get("units")),
@@ -643,8 +731,9 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
 
 
 def open(path: str, mode: str = "r", threads: int = 1) -> Study:  # noqa: A001
-    """Opens a file to read (mode "r") or to add runs in place (mode "a").
-    `threads` decompresses field reads in that many threads."""
+    """Opens a file to read (mode "r") or to add runs in place (mode "a"),
+    as a `Study`; use it in a `with` block, or call `close()`. `threads`
+    decompresses large field reads in that many threads."""
     handle = ctypes.c_void_p()
     if mode == "r":
         call("gamut_open", b(path), ctypes.byref(handle))

@@ -36,6 +36,9 @@ if ~strcmp(ext, '.dll')
 else
     linkname = 'gamut';
     implib = fullfile(libdir, 'gamut.lib');
+    if ~isfile(implib)   % an installed core keeps the DLL in bin/ and gamut.lib in lib/
+        implib = fullfile(libdir, '..', 'lib', 'gamut.lib');
+    end
 end
 include = fullfile(here, '..', 'include');
 args = {'-largeArrayDims', ['-I' include], fullfile(here, 'gamut_mex.cpp'), ...
@@ -50,7 +53,7 @@ elseif isunix
             'LDFLAGS=$LDFLAGS -Wl,-rpath,''$ORIGIN'''}];
 else
     if ~isfile(implib)
-        error('gamut:usage', 'no import library %s beside the DLL', implib);
+        error('gamut:usage', 'no import library gamut.lib beside %s or in ..\\lib', library);
     end
     args = [args, {'COMPFLAGS=$COMPFLAGS /std:c++17', implib}];
 end

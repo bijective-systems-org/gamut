@@ -8,11 +8,13 @@ version = "1.1.0"
 description = "An open file format for parametric simulation studies and the models fitted to them"
 readme = "README.md"
 license = "Apache-2.0"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "licenses/*.txt"]
 authors = [{ name = "Bijective Systems" }]
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]
-keywords = ["simulation", "CFD", "FEA", "HDF5", "netCDF", "surrogate model", "dataset"]
+keywords = ["simulation", "parametric study", "design of experiments", "CFD", "FEA", "HDF5",
+            "netCDF", "xarray", "surrogate model", "reduced-order model", "machine learning",
+            "dataset", "MATLAB", "Julia"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
@@ -22,6 +24,8 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: C++",
     "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +42,8 @@ gamut-vtk = "gamut.cli:vtk_main"
 Homepage = "https://github.com/bijective-systems-org/gamut"
 Documentation = "https://github.com/bijective-systems-org/gamut/tree/main/docs"
 Specification = "https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md"
+Changelog = "https://github.com/bijective-systems-org/gamut/blob/main/CHANGELOG.md"
+Issues = "https://github.com/bijective-systems-org/gamut/issues"
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"

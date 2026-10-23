@@ -62,6 +62,9 @@ classdef Nearest
 
     methods (Static)
         function m = load(numbers)
+            % Numbers from a file are checked before any is looked up: a
+            % damaged or foreign file may lack one (E17).
+            gamut_mex('nearest_check', numbers);
             m = gamut.Nearest(numbers.columns, numbers.lower, numbers.upper, numbers.x, ...
                 numbers.outputs);
         end

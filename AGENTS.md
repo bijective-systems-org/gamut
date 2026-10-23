@@ -21,11 +21,12 @@ over that interface; a validator; a command line; VTK conversion.
 | `src/` | the core: writer, reader, validator, selector, copies, units grammar |
 | `tests/` | the core's C++ tests; `two_hdf5_linux.sh`, two HDF5 copies in one process |
 | `python/gamut/` | the Python layer (ctypes), the command line (`cli.py`), VTK conversion (`vtk.py`) |
-| `matlab/`, `julia/` | the MATLAB and Julia layers and their tests |
+| `matlab/`, `julia/` | the MATLAB and Julia layers and their tests; `matlab/package_toolbox.m` packages the MATLAB toolbox |
 | `examples/` | runnable examples; each guide page quotes one, and the README quotes `00_readme.py` and the MATLAB, Julia and C++ examples |
 | `docs/` | install, the guide, reference, security, comparison, benchmarks |
 | `bench/` | benchmark scripts and results; `bench/figures.py` writes the page's tables and figures |
-| `tools/` | `build_deps.sh` (static zlib and HDF5), `damaged_files.py` |
+| `tools/` | `build_deps.sh` (static zlib and HDF5), `build_core.sh` (the core as a release carries it), `damaged_files.py` |
+| `licenses/` | the licences of HDF5 and zlib, which packages link in and carry |
 
 ## Who owns what
 

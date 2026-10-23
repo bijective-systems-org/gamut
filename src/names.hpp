@@ -14,6 +14,11 @@ namespace internal {
 // character a letter, digit or underscore.
 bool legal_netcdf_name(const std::string& name);
 
+// What a legal name is, for messages that refuse one.
+const char kLegalName[] =
+    "a name is letters, digits and _ - . +, starting with a letter, a digit or _ "
+    "(spec section 9.3)";
+
 // The reserved prefix `gamut_`.
 bool reserved_name(const std::string& name);
 

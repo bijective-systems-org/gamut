@@ -4,7 +4,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <functional>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -39,6 +41,7 @@ std::string rule_of(F f) {
   return std::string();
 }
 
+using gamut_core::AttrValue;
 using gamut_core::DType;
 using gamut_core::Selection;
 using namespace gamut_core::internal;
@@ -380,9 +383,35 @@ void test_refusals() {
   q.relation.of = "p_field";
   CHECK(rule_of([&] { w->declare_result(q); }) == "E12");   // no q
   CHECK(rule_of([] { Writer::create("wr_bad.gamut", "t", "changing", "fixed"); }) == "E6");
+  CHECK(rule_of([] { Writer::create("wr_bad.gamut", "t", "shared", ""); }) == "E6");   // a mesh needs per
   w.reset();
   if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
   std::remove("wr_bad.gamut");
+}
+
+std::string file_bytes(const std::string& path) {
+  std::ifstream in(path, std::ios::binary);
+  return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+}
+
+// A file of another major format version is refused by reading and by
+// appending alike (spec section 17), and appending changes nothing first.
+void test_other_major_version() {
+  const std::string path = "wr_major.gamut";
+  {
+    auto w = Writer::create(path, "tests", "", "fixed");
+    w->declare_result(scalar("cl", "1"));
+    w->close();
+  }
+  {
+    File f = File::open_write(path);
+    f.replace_attr("/", "format", AttrValue::text("gamut/2"));
+  }
+  const std::string before = file_bytes(path);
+  CHECK(rule_of([&] { Reader::open(path); }) == "E1");
+  CHECK(rule_of([&] { Writer::open_append(path); }) == "E1");
+  CHECK(file_bytes(path) == before);
+  std::remove(path.c_str());
 }
 
 }  // namespace
@@ -394,6 +423,7 @@ int main() {
       {"shared_group", test_shared_per_group_out_of_order},
       {"changing", test_changing_per_run_and_group},
       {"refusals", test_refusals},
+      {"other_major", test_other_major_version},
   };
   for (const auto& t : tests) {
     try {

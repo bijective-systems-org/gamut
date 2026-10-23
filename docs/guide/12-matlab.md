@@ -2,15 +2,46 @@
 
 MATLAB reads and writes the same files with the same calls, in MATLAB's
 spelling: methods on a study object in camelCase, options as name–value
-pairs, declarations as structs, and positions counted from 1. Installing
-the package takes one build step ([installing](../install.md#matlab)).
+pairs, declarations as structs, and positions counted from 1. The toolbox, `Gamut.mltbx`, installs it with
+no compiler ([installing](../install.md#matlab)).
 
-The example writes eight runs of flow past a cylinder on one mesh, reopens
-the file to add a ninth, then reads one node in every run: the program of the
-[README](../../README.md#example). From a working folder, with
-`examples/matlab` on the path, run `one_mesh`.
+There are two examples, from a working folder with `examples/matlab` on
+the path: `sweep`, the [README](../../README.md#example)'s run table, and
+`one_mesh`, eight runs of flow past a cylinder on one mesh, with a ninth
+added and one node read in every run.
 
-## Writing
+## A run table
+
+```matlab
+study = gamut.create('sweep.gamut', 'writer', 'example sweep', ...
+    'parameters', struct('alpha', struct('units', 'degree', 'role', 'condition')), ...
+    'labels', struct('status', struct('role', 'status', 'categories', {{'converged', 'failed'}})), ...
+    'scalars', struct('cl', '1'));
+for alpha = 0:2:10
+    study.addRun(struct('alpha', alpha, 'status', 'converged', 'cl', solve(alpha)));
+end
+study.close();
+
+study = gamut.open('sweep.gamut', 'mode', 'a');
+study.addRun(struct('alpha', 12, 'status', 'failed'));
+study.close();
+
+study = gamut.open('sweep.gamut');
+cl = study.getScalar('cl', 'rows', study.select('status == converged'));
+study.close();
+```
+
+```text
+lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
+```
+
+`solve` stands for the solver. A run left without a result, such as the
+failed one here, stores it as missing (`NaN`), and `select` returns
+positions counted from 1.
+
+## On one mesh
+
+### Writing
 
 ```matlab
 study = gamut.create('cylinder.gamut', 'writer', 'example sweep', 'mesh', 'shared', 'per', 'fixed', ...
@@ -34,7 +65,7 @@ language: the node numbers inside `connectivity` count from 0. `solve`
 stands for the solver and returns `cp` at every node. `gamut.open(path,
 'mode', 'a')` reopens a file to add runs.
 
-## Reading
+### Reading
 
 ```matlab
 study = gamut.open('cylinder.gamut');
@@ -50,12 +81,36 @@ Node 13 here is node 12 in Python: positions count from 1 in MATLAB and
 from 0 in Python. A label or mesh label's stored codes count from 0 in
 every language, so a zone's code is its place in `categories` minus one.
 
+## Reading without the package
+
+A study file is netCDF-4, so MATLAB's own `ncread` reads it with nothing
+installed; a colleague who only reads can skip the package.
+
+```matlab
+f = 'sweep.gamut';
+cl = ncread(f, 'cl');                                % one value per run
+names = ncread(f, '/categories/status');             % the status names
+status = names(ncread(f, 'status') + 1);             % each run's status
+converged = status == "converged";
+```
+
+A label comes as its codes, counted from 0; its names are the table under
+`/categories` that its `category` attribute names. Values come in the
+units they were stored in (`ncreadatt(f, 'cl', 'units')`). A field on a
+shared mesh is `/mesh/node_fields/<name>` (or `cell_fields`), which
+`ncread` gives as nodes × runs, the axes reversed as for every netCDF
+array MATLAB reads. `ncinfo(f)` lists everything in a file. Writing,
+selecting by condition, models and validation need the package
+([`examples/matlab/read_with_ncread.m`](../../examples/matlab/read_with_ncread.m)
+is the whole program).
+
 ## The same calls
 
 | Python | MATLAB |
 |---|---|
 | `gamut.create(path, writer=w, fields={...})` | `gamut.create(path, 'writer', w, 'fields', struct(...))` |
 | `study.add_run(values, fields=...)` | `study.addRun(values, 'fields', ...)` |
+| `study.add_runs(pandas.read_csv(path))` | `study.addRuns(readtable(path))`, or a struct of columns |
 | `study.get_field("p", rows=r, nodes=n)` | `study.getField('p', 'rows', r, 'nodes', n)` |
 | `study.select("mach > 0.7")` | `study.select('mach > 0.7')`, positions from 1 |
 | `study.row_count` | `study.rowCount()` |
@@ -71,9 +126,9 @@ what it can do.
 
 - A file written by MATLAB is the same file Python, Julia and C read: the
   library underneath is one and the same.
-- MATLAB loads its own HDF5. Build the gateway against a core with HDF5
-  linked in, such as the one inside the Python wheel, so the two never
-  meet ([installing](../install.md#matlab)).
+- MATLAB loads its own HDF5. The toolbox's library carries its own HDF5
+  linked in, so the two never meet; a gateway built from a checkout needs
+  such a core too ([installing](../install.md#from-a-checkout-1)).
 - Values arrive in the units they were stored in, which
   `study.describe(name).units` names. Converting them is left to the
   caller; only Python's reads convert, through pint.

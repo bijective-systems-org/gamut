@@ -130,6 +130,39 @@ mktempdir() do tmp
         end
     end
 
+    @testset "a derivative along each axis is its own entry" begin
+        pts, cells = grid(2, 2)
+        p = joinpath(tmp, "derivatives.gamut")
+        Gamut.create(p; writer="t", mesh="shared", per="fixed", coordinates=(units="m", axes=2),
+                      scalars=Dict("cl" => "1"),
+                      fields=Dict(k => (units="m-1", at="node", of="cl", with_respect_to="coordinates", axis=a)
+                                  for (k, a) in ("dcl_dx" => "x", "dcl_dy" => "y"))) do s
+            Gamut.set_mesh!(s; points=pts, cells=cells)
+            Gamut.add_run!(s, Dict("cl" => 1.0); fields=Dict("dcl_dx" => zeros(4), "dcl_dy" => zeros(4)))
+        end
+        Gamut.open(p) do f
+            @test Gamut.related(f, "cl")["derivatives"] ==
+                  Dict("coordinates:x" => "dcl_dx", "coordinates:y" => "dcl_dy")
+        end
+    end
+
+    @testset "a Bool note is an integer note" begin
+        p = joinpath(tmp, "notes.gamut")
+        Gamut.create(p; writer="t") do s
+            Gamut.set_note!(s, "flag", true)
+            Gamut.set_note!(s, "n", 3)
+            Gamut.set_note!(s, "x", 1.5)
+        end
+        kinds = Gamut.open(p) do f
+            k, t, v = (Ref{Ptr{Cvoid}}(C_NULL) for _ in 1:3)
+            ccall(Gamut.sym(:gamut_notes), Cint, (Ptr{Cvoid}, Ref{Ptr{Cvoid}}, Ref{Ptr{Cvoid}},
+                  Ref{Ptr{Cvoid}}, Ptr{Cvoid}), f.handle, k, t, v, C_NULL)
+            names, kinds, _ = Gamut.take_strings(k[]), Gamut.take_strings(t[]), Gamut.take_strings(v[])
+            Dict(zip(names, kinds))
+        end
+        @test kinds == Dict("flag" => "int", "n" => "int", "x" => "float")
+    end
+
     @testset "refusals carry rules and add nothing" begin
         p = joinpath(tmp, "bad.gamut")
         e = try Gamut.create(p; writer="t", parameters=Dict("x" => "m//s")); nothing catch x; x end
@@ -143,6 +176,21 @@ mktempdir() do tmp
         end
         @test e isa GamutError && e.rule == "E8" && !isfile(p)
         @test_throws GamutError Gamut.create(p; writer="t", parameter=Dict("x" => "m"))
+        e = try Gamut.create(p; writer="t", mesh="shared"); nothing catch x; x end
+        @test e isa GamutError && e.rule == "E6" && !isfile(p)
+        for bound in ((lower=0.0,), (upper=1.0,))
+            e = try Gamut.create(p; writer="t", parameters=Dict("x" => (units="1", bound...))); nothing catch x; x end
+            @test e isa GamutError && e.rule == "E16" && !isfile(p)
+        end
+        pts, cells = grid(2, 2)
+        Gamut.create(joinpath(tmp, "cells.gamut"); writer="t", mesh="shared", per="fixed",
+                      coordinates=(units="m", axes=2)) do s
+            for offsets in (Int64[0], Int64[0, 4, 9])
+                e = try Gamut.set_mesh!(s; points=pts, cells=(cells[1], offsets, cells[3])); nothing catch x; x end
+                @test e isa GamutError && e.rule == "E5"
+            end
+            Gamut.set_mesh!(s; points=pts, cells=cells)
+        end
         e = try
             Gamut.create(p; writer="t", mesh="changing", per="run",
                           coordinates=(units="m", axes="two"))

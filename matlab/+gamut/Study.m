@@ -104,14 +104,16 @@ classdef Study < handle
         end
 
         function ids = addRuns(s, columns, varargin)
-            %ADDRUNS Adds many runs: columns maps each name to one value per run
-            %   (a cell array of names for a label); 'fields' rows x sites.
+            %ADDRUNS Adds many runs: columns maps each name to one value per run,
+            %   as a struct of columns or a table (readtable's) does, with a
+            %   label as names (text or categorical); 'fields' rows x sites.
             p = inputParser;
             p.addParameter('fields', struct());
             p.addParameter('points', {});
             p.addParameter('cells', {});
             p.addParameter('meshLabels', {});
             p.parse(varargin{:});
+            if istable(columns), columns = table2struct(columns, 'ToScalar', true); end
             names = fieldnames(columns);
             n = numel(columns.(names{1}));
             ids = s.commit(n, columns, p.Results.fields, p.Results.points, p.Results.cells, ...
@@ -321,7 +323,7 @@ classdef Study < handle
             groupNames = {};
             for k = 1:numel(names)
                 v = columns.(names{k});
-                if iscell(v) || isstring(v)
+                if iscell(v) || isstring(v) || iscategorical(v)
                     v = cellstr(v);
                     gamut_mex('batch_names', h, names{k}, v);
                     if strcmp(names{k}, s.Group), groupNames = v; end

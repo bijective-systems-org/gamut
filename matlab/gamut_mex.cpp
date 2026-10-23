@@ -590,6 +590,13 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     for (const auto v : t64) types.push_back(static_cast<uint8_t>(v));
     ints(arg(3), &offsets);
     ints(arg(4), &conn);
+    // The core reads one more offset than there are cells and cannot see the length.
+    if (!types.empty() && offsets.size() != types.size() + 1) {
+      const std::string why = "cells: offsets need one more entry than there are cells (" +
+                              std::to_string(types.size() + 1) + "), not " +
+                              std::to_string(offsets.size());
+      mexErrMsgIdAndTxt("gamut:E5", "%s", why.c_str());
+    }
     check(gamut_geometry_cells(file(arg(1)), types.data(), static_cast<int64_t>(types.size()), offsets.data(),
                              conn.data(), static_cast<int64_t>(conn.size()), &e),
           e);

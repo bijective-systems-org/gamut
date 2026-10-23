@@ -15,7 +15,8 @@ circulations.
 ```python
 with gamut.create("family.gamut", writer="example family", mesh="shared", per="group:member",
                    coordinates={"units": "m", "axes": 2},
-                   labels={"member": {"role": "group", "categories": list(members)}},
+                   labels={"member": {"role": "group", "categories": list(members)},
+                           "split": {"role": "split", "categories": ["train", "test"]}},
                    generalisation_group="member",
                    parameters={"gamma": {"units": "m2 s-1", "role": "condition"}},
                    fields={"cp": {"units": "1", "at": "node"}}) as study:
@@ -23,7 +24,8 @@ with gamut.create("family.gamut", writer="example family", mesh="shared", per="g
     for name, radius in members.items():
         points, _, t, r = ring(radius=radius)
         for gamma in (0.0, 2.0, 4.0):
-            study.add_run({"member": name, "gamma": gamma},
+            study.add_run({"member": name, "gamma": gamma,
+                           "split": "test" if name == "wide" else "train"},
                           fields={"cp": pressure(t, r, radius, gamma)}, points=points)
 ```
 
@@ -35,9 +37,12 @@ with gamut.create("family.gamut", writer="example family", mesh="shared", per="g
 - Each run of a member may pass its points; the first sets the member's
   geometry, and a later one must be the same (a different geometry for
   the same member is refused).
+- A label with the role `split` publishes which runs are for training and
+  which for testing, so everyone who uses the file tests the same way.
+  Here the wide cylinder is held out whole.
 - `generalisation_group="member"` records that a fair test of a model
   trained on this study holds out whole members. A published split that
-  puts runs of one member on both sides is reported.
+  puts runs of one member on both sides is reported (W1).
 
 ## Reading
 
@@ -48,6 +53,7 @@ with gamut.open("family.gamut") as study:
         member = study.get_label("member", rows=row)
         print(f"  row {row}: {member}, node 0 at x = {study.get_points(row=row)[0, 0]:.2f} m")
     print("cp at node 0 in every run:", study.get_field("cp", nodes=[0]).ravel().round(2))
+    print("held out for testing:", study.select("split == test"))
 ```
 
 ```text
@@ -56,6 +62,7 @@ with gamut.open("family.gamut") as study:
   row 3: base, node 0 at x = 1.00 m
   row 6: wide, node 0 at x = 1.20 m
 cp at node 0 in every run: [1.   0.84 0.37 1.   0.9  0.59 1.   0.93 0.72]
+held out for testing: [6 7 8]
 ```
 
 `get_points(row=...)` returns the geometry a run used, whatever `per` is.

@@ -1,11 +1,12 @@
 // Tests of the C++ interface, include/gamut/gamut.hpp, linked to the shared
 // library as a program using it would be: every declaration, the three mesh
 // arrangements, appending, reads, selections, the file copies, validation,
-// and the errors.
+// the errors, and calls from several threads at once.
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <gamut/gamut.hpp>
@@ -317,6 +318,51 @@ void test_refusals_before_the_library() {
 
 }  // namespace
 
+// Threads that write and read their own files and read a shared one at the
+// same time: HDF5 is not thread-safe, so the library makes the calls take
+// turns.  Without that, this crashes inside HDF5.
+void test_calls_from_several_threads() {
+  {
+    auto s = gamut::create("threads_shared.gamut", "header tests");
+    s.declare_parameter("x", "design", "1");
+    s.declare_scalar("y", "1");
+    for (int k = 0; k < 50; ++k) s.add_run({{"x", double(k)}, {"y", 2.0 * k}});
+    s.close();
+  }
+  const std::size_t threads = 8;
+  std::vector<int> wrong(threads, 0);
+  std::vector<std::thread> pool;
+  for (std::size_t t = 0; t < threads; ++t) {
+    pool.emplace_back([t, &wrong] {
+      try {
+        const std::string own = "thread" + std::to_string(t) + ".gamut";
+        for (int round = 0; round < 20; ++round) {
+          {
+            auto w = gamut::create(own, "header tests");
+            w.declare_parameter("x", "design", "1");
+            w.declare_scalar("y", "1");
+            for (int k = 0; k < 10; ++k) w.add_run({{"x", double(k)}, {"y", static_cast<double>(t)}});
+            w.close();
+          }
+          const auto mine = gamut::open(own);
+          if (mine.get_scalar("y") != std::vector<double>(10, static_cast<double>(t))) ++wrong[t];
+          const auto shared = gamut::open("threads_shared.gamut");
+          const std::vector<double> y = shared.get_scalar("y");
+          if (y.size() != 50 || y[49] != 98.0) ++wrong[t];
+        }
+      } catch (...) {
+        ++wrong[t];
+      }
+    });
+  }
+  for (auto& th : pool) th.join();
+  for (std::size_t t = 0; t < threads; ++t) {
+    CHECK(wrong[t] == 0);
+    std::remove(("thread" + std::to_string(t) + ".gamut").c_str());
+  }
+  std::remove("threads_shared.gamut");
+}
+
 int main() {
   test_table();
   test_shared_fixed_and_append();
@@ -325,6 +371,7 @@ int main() {
   test_integers_batches_and_reads();
   test_geometry_per_run_and_members();
   test_refusals_before_the_library();
+  test_calls_from_several_threads();
   std::printf("%d checks, %d failures\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }

@@ -193,23 +193,83 @@ catch err
     ok(contains(err.message, 'closed') || strcmp(err.identifier, 'gamut:usage'), 'closed handle');
 end
 
-% The example in examples/matlab runs and writes a valid file.
-example = fullfile(fileparts(fileparts(here)), 'examples', 'matlab', 'one_mesh.m');
-if isfile(example)
-    written = run_example(example, tmp);
-    ok(isempty(gamut.validate(written)), 'the MATLAB example writes a valid file');
+% A table, as readtable gives one, adds its rows as runs, and a study's own
+% table (labels as categorical) adds them again.
+p = fullfile(tmp, 'from_table.gamut');
+runs = table([0; 2; 4], {'converged'; 'converged'; 'failed'}, [0; 0.22; NaN], ...
+    'VariableNames', {'alpha', 'status', 'cl'});
+w = gamut.create(p, 'writer', 'tests', 'parameters', struct('alpha', 'degree'), ...
+    'labels', struct('status', struct('role', 'status', 'categories', {{'converged', 'failed'}})), ...
+    'scalars', struct('cl', '1'));
+ids = w.addRuns(runs);
+ok(isequal(ids(:), [0; 1; 2]), 'a table adds its rows');
+w.close();
+r = gamut.open(p);
+back = r.table();
+r.close();
+w = gamut.open(p, 'mode', 'a');
+w.addRuns(back);
+w.close();
+r = gamut.open(p);
+ok(r.rowCount() == 6 && isequal(cellstr(r.getLabel('status')), ...
+    {'converged'; 'converged'; 'failed'; 'converged'; 'converged'; 'failed'}), 'a study''s table adds again');
+r.close();
+
+% Cell offsets of the wrong length are refused before the core reads them,
+% and a mesh without per is the core's refusal, as in every language.
+p = fullfile(tmp, 'short_offsets.gamut');
+w = gamut.create(p, 'writer', 'tests', 'mesh', 'shared', 'per', 'fixed', ...
+    'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'));
+try
+    w.setMesh([0 0; 1 0; 0 1], {5, 0, [0 1 2]});
+    ok(false, 'short offsets refused');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E5'), 'short offsets refused');
+end
+w.abandon(true);
+try
+    gamut.create(fullfile(tmp, 'no_per.gamut'), 'writer', 'tests', 'mesh', 'shared');
+    ok(false, 'a mesh without per refused');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E6'), 'a mesh without per refused');
+end
+
+for bound = {struct('units', '1', 'lower', 0), struct('units', '1', 'upper', 1)}
+    try
+        gamut.create(fullfile(tmp, 'one_bound.gamut'), 'writer', 'tests', ...
+            'parameters', struct('x', bound{1}));
+        ok(false, 'one bound refused');
+    catch err
+        ok(strcmp(err.identifier, 'gamut:E16'), 'one bound refused');
+    end
+end
+
+% The examples in examples/matlab run: one_mesh writes a valid file, and
+% the README's sweep, and the same file read with ncread, print its line.
+examples = fullfile(fileparts(fileparts(here)), 'examples', 'matlab');
+if isfile(fullfile(examples, 'one_mesh.m'))
+    run_example(fullfile(examples, 'one_mesh.m'), tmp);
+    ok(isempty(gamut.validate(fullfile(tmp, 'cylinder.gamut'))), ...
+        'the MATLAB example writes a valid file');
+    readme = fileread(fullfile(fileparts(fileparts(here)), 'README.md'));
+    line = regexp(readme, 'lift of the runs that converged:[^\r\n]*', 'match', 'once');
+    prints = @(out) ~isempty(line) && any(strcmp(splitlines(string(out)), line));
+    ok(prints(run_example(fullfile(examples, 'sweep.m'), tmp)), ...
+        'the MATLAB sweep prints the README''s line');
+    ok(prints(run_example(fullfile(examples, 'read_with_ncread.m'), tmp)), ...
+        'ncread reads the sweep alike');
 end
 
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end
 end
 
-function written = run_example(example, folder)
-% Runs an example script in its own workspace and folder, quietly.
+function out = run_example(example, folder)
+% Runs an example script in its own workspace and folder; returns what it
+% printed.
 old = cd(folder);
 restore = onCleanup(@() cd(old));
 copyfile(example, folder);
 [~, name] = fileparts(example);
-evalc(name);
-written = fullfile(folder, 'cylinder.gamut');
+out = evalc(name);
 end

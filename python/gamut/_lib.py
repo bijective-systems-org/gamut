@@ -23,7 +23,6 @@ _DTYPE_CODE = {
     np.dtype(np.float32): GAMUT_FLOAT32,
     np.dtype(np.float64): GAMUT_FLOAT64,
 }
-_CODE_DTYPE = {v: k for k, v in _DTYPE_CODE.items()}
 
 
 class GamutError(Exception):

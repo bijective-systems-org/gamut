@@ -2,6 +2,67 @@
 
 ## Unreleased
 
+MATLAB installs from a toolbox, `Gamut.mltbx`, attached to each release:
+MATLAB R2023b or later on Linux, Windows or an Apple silicon Mac, and no
+compiler. Each release also carries the core on its own for each platform
+(`gamut-core-<version>-<platform>`, with its headers and CMake package) for
+Julia, C and C++. Every package now includes the licences of HDF5 and zlib,
+which the core links in.
+
+Evaluating a damaged model file is refused in every language when the file
+lacks what evaluation reads: a nearest model's numbers (`columns`, `lower`,
+`upper`, `x`, `outputs`; E17), or a declaration such as a parameter's
+bounds, a result's model or output, or a model's type or inputs. Python
+and Julia raised a key error and MATLAB a field error instead. In Python
+and Julia, `related` likewise refuses a quantile without its `q`.
+
+Calls from several threads no longer crash. HDF5 keeps state for the whole
+process and is built without its thread-safety option, so two threads each
+reading its own file could bring it down; every call that reaches a file
+now takes its turn. `threads=` remains the way to read one large field
+faster.
+
+Appending from C, C++ or MATLAB refuses a file of another major format
+version, as reading already did, and does so before opening the file to
+write, which leaves it byte for byte as it was.
+
+Messages say more about what to fix. A number left as text (`"4.0"` from
+a spreadsheet) is named as such, rather than reported as a missing value;
+an illegal name is refused with what a legal one is; W2 counts the rows
+of each status and says when no status is named `converged`, the one
+name that marks a run as usable; W1 names the group a split divides.
+
+The languages agree in more places. `gamut_create` from C, or
+`gamut::create` from C++, with a mesh and no `per` is refused (E6), as
+Python, MATLAB and Julia already refused it, where it took `fixed`. Cell
+offsets of the wrong length are refused (E5) in Python, MATLAB and Julia
+before the core reads them, as the C++ layer already did, and so are a
+nearest model's inputs of unequal length. A parameter given only one of
+`lower` and `upper` is refused (E16) in Python, MATLAB and Julia, where the
+other was taken as 0 or the one given was dropped. An evaluation that
+fails leaves no file behind, in every language. In Julia, a `true` note is stored as the integer 1,
+and `related` keys a derivative along each coordinate axis separately, as
+in Python.
+
+A run table from a spreadsheet goes straight in: Python's `add_runs`
+takes a pandas DataFrame and `add_run` one of its rows, and MATLAB's
+`addRuns` takes a table, as `readtable` gives, with labels as text or
+categorical.
+
+The README and the guide start from the simplest study, a table of runs,
+shown in Python, MATLAB, Julia and C++, and step up to a mesh from there;
+the guide opens on the pattern every file follows and lists its pages by
+what a study has. It shows how to publish a train and test split, says
+that only `converged` marks a run as usable, that a new category name
+extends a label's categories, and that unit names are checked only when a
+read converts them. MATLAB can read a file with `ncread` and nothing
+installed. Installing covers xarray, Xcode for MATLAB on macOS, and adds
+the Julia package at the release tag that matches the wheel.
+
+`help(gamut)` opens on the whole pattern, `help(gamut.create)` documents
+every declaration, and `llms.txt` gives coding agents what Gamut is for,
+the pattern, the mistakes that are easy to make, and every page.
+
 The validator holds a mesh's computed coordinates to the writer's rules: a
 computing model only in a model file whose mesh is per run, which must
 name one (E16), and that model existing with its output named (E17). The

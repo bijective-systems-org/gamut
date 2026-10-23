@@ -1,0 +1,64 @@
+# Gamut
+
+> Gamut is an open file format, with one library for Python, MATLAB, Julia, C++ and C, for the results of a parametric simulation study: a sweep, a design of experiments, a CFD or FEA campaign, and the models fitted to it. One `.gamut` file holds every run's inputs, status and results, and the mesh and every field on it, all with units. Files are HDF5 laid out as netCDF-4, so h5py, xarray and the netCDF tools read them without Gamut.
+
+Use Gamut when many runs of one simulation setup should live in one file that people using different languages read the same way, when the runs feed a surrogate, reduced-order or machine-learning model (a field on a shared mesh is one block of runs × nodes; a file can publish its train/test split and the group a fair test holds out), or when whoever receives the file must be able to check it (`gamut validate` names each broken rule). It is not a solver's output or restart format (use CGNS, VTK or Exodus for one run), and not a general array store (use Zarr or HDF5 directly).
+
+Install: `pip install gamut-format`, then `import gamut` (Python 3.10 or later; the wheel carries its own HDF5). The command line is `gamut`. MATLAB R2023b or later: open `Gamut.mltbx` from the latest GitHub release (no compiler). Julia, C and C++ use the same core library, from each release's `gamut-core-<version>-<platform>` archive: see the install page.
+
+## The pattern
+
+```python
+import gamut
+
+with gamut.create("polar.gamut", writer="my sweep",
+                  parameters={"alpha": {"units": "degree", "role": "condition"}},
+                  labels={"status": {"role": "status", "categories": ["converged", "failed"]}},
+                  scalars={"cl": "1"}) as study:
+    for alpha, cl in ((0.0, 0.01), (2.0, 0.23), (4.0, 0.45)):
+        study.add_run({"alpha": alpha, "status": "converged", "cl": cl})
+
+with gamut.open("polar.gamut") as study:
+    rows = study.select("alpha > 1 and status == converged")   # positions, from 0
+    print(study.get_scalar("cl", rows=rows))
+
+print(gamut.validate("polar.gamut").ok)
+```
+
+Every name is declared in `create`, with its units and role; then each run gives a value for each name. A mesh adds `mesh="shared", per="fixed"`, `coordinates`, `study.set_mesh(points, cells)` and `fields={"p": {"units": "Pa", "at": "node"}}`, and `study.get_field("p")` returns runs × nodes. `help(gamut.create)` lists every declaration.
+
+## Easy to get wrong
+
+- Units are required, in the UDUNITS grammar: `"1"` for dimensionless, `"degree"`, `"m s-1"`. The grammar is checked when writing; the unit names only when a read converts them.
+- Only the status category `converged` marks a run as usable; read usable runs with `select("status == converged")`.
+- A label's category name that was not declared is added, so a misspelt name becomes a new category.
+- Values must be numbers: text such as `"4.0"` from a CSV is refused for a parameter or result.
+- Rows are positions counted from 0 in Python and C++ and from 1 in MATLAB and Julia. Row ids (`get_row_ids`) are separate and survive extracting runs to another file.
+- A file from someone else: check it with `gamut validate FILE`, and open files nobody vouches for in a child process.
+
+## Docs
+
+- [README](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/README.md): what Gamut is, one program in Python, MATLAB, Julia and C++, benchmarks, install
+- [Guide](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/README.md): one page per concept, each running one script from `examples/`, and the words used throughout
+- [Run tables](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/01-run-tables.md): inputs, results and status with units, no mesh
+- [One mesh](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/02-one-mesh.md): every run on one mesh, fields as runs × nodes, zones
+- [Geometry families](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/03-geometry-families.md): several shapes on one mesh topology, a published train/test split
+- [Changing meshes](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/04-changing-meshes.md): a mesh per run
+- [Time series](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/05-time-series.md): transient runs, a row per saved step
+- [Uncertainty and gradients](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/06-uncertainty-and-gradients.md): standard deviations, quantiles and derivatives beside a result
+- [Models](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/07-models.md): a fitted model as a file, evaluated on new inputs
+- [Reading parts](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/08-reading-parts.md): runs by condition, nodes by zone, values in other units
+- [Combining files](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/09-combining-files.md): append, extract, rewrite
+- [VTK](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/10-vtk.md): a folder of VTK files as one study, and back
+- [Command line](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/11-command-line.md): inspect, validate, build from CSV and extract without code
+- [MATLAB](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/12-matlab.md), [Julia](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/13-julia.md), [C++ and C](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/14-c-and-cpp.md): the same calls in each language
+- [Selecting rows](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/selecting.md): the grammar of `select`
+- [Installing](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/install.md): every language, and xarray
+
+## Optional
+
+- [Specification](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/SPEC.md): the format, its validation rules (E1-E24, W1-W11) and versions
+- [Files from outside](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/security.md): what a reader protects against, and its limits
+- [How it compares](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/comparison.md): beside VTK, CGNS, Exodus, netCDF-CF and Zarr
+- [Benchmarks](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/benchmarks.md): size and read times against native formats, with method and scripts
+- [Changelog](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/CHANGELOG.md)

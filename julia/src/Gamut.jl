@@ -8,8 +8,8 @@ Cell connectivity holds the stored 0-based node numbers, as in every
 language (VTK's convention).
 
 The core is found at `ENV["GAMUT_LIBRARY"]`, else beside this package in
-`build/` at the top of a checkout. Model plug-ins come later; the built-in
-`Nearest` evaluates.
+`build/` at the top of a checkout. Only the built-in `Nearest` model type
+evaluates here; others are registered in Python or MATLAB.
 """
 module Gamut
 
@@ -34,8 +34,10 @@ function sym(name::Symbol)
         if HANDLE[] == C_NULL
             p = library_path()
             isfile(p) || error("the Gamut core library ($p) was not found; set " *
-                               "GAMUT_LIBRARY to its path, or build it from a checkout: " *
-                               "cmake -S . -B build && cmake --build build")
+                               "GAMUT_LIBRARY to its path: the Python wheel's (pip install " *
+                               "gamut-format, then python -c \"import gamut; " *
+                               "print(gamut.library_path())\"), or one built from a " *
+                               "checkout with cmake -S . -B build && cmake --build build")
             HANDLE[] = Libdl.dlopen(p)
         end
         Libdl.dlsym(HANDLE[], name)
@@ -288,7 +290,7 @@ function declare(h, kw)
     for (name, v) in pairs_of(get(kw, :parameters, nothing))
         d = spec(v, "units")
         has = haskey(d, "lower") || haskey(d, "upper")
-        @mes gamut_declare_parameter (Ptr{Cvoid}, Cstring, Cstring, Cstring, Cint, Cint, Cdouble, Cdouble, Cstring) h cs(name) cs(getstr(d, "role", "design")) cs(getstr(d, "units")) precision_code(get(precision, name, get(d, "dtype", nothing))) (has ? 1 : 0) Float64(get(d, "lower", 0.0)) Float64(get(d, "upper", 0.0)) cs(getstr(d, "run_group"))
+        @mes gamut_declare_parameter (Ptr{Cvoid}, Cstring, Cstring, Cstring, Cint, Cint, Cdouble, Cdouble, Cstring) h cs(name) cs(getstr(d, "role", "design")) cs(getstr(d, "units")) precision_code(get(precision, name, get(d, "dtype", nothing))) (has ? 1 : 0) Float64(get(d, "lower", NaN)) Float64(get(d, "upper", NaN)) cs(getstr(d, "run_group"))
     end
     c = get(kw, :coordinates, nothing)
     if c !== nothing
@@ -348,11 +350,9 @@ function axes_of(kw)
 end
 
 function create(path::AbstractString; writer::AbstractString, mesh=nothing, per=nothing, kw...)
-    mesh !== nothing && per === nothing &&
-        throw(GamutError("E6", "a mesh needs per: \"fixed\", \"run\" or \"group:<label>\""))
     axes_of(kw)                      # before the file exists: a refusal leaves none
     out = Ref{Ptr{Cvoid}}(C_NULL)
-    @mes gamut_create (Cstring, Cstring, Cstring, Cstring, Ref{Ptr{Cvoid}}) cs(path) cs(writer) cs(something(mesh, "")) cs(something(per, "fixed")) out
+    @mes gamut_create (Cstring, Cstring, Cstring, Cstring, Ref{Ptr{Cvoid}}) cs(path) cs(writer) cs(something(mesh, "")) cs(something(per, "")) out
     return started(Study(out[], String(path), true, something(mesh, ""), something(per, "")), kw)
 end
 create(f::Function, path::AbstractString; kw...) = with_study(f, create(path; kw...))
@@ -440,6 +440,10 @@ function stage_geometry(s::Study, points, cells, labels)
         types = Vector{UInt8}(cells[1])
         offsets = Vector{Int64}(cells[2])
         conn = Vector{Int64}(cells[3])
+        # The core reads one more offset than there are cells and cannot see the length.
+        !isempty(types) && length(offsets) != length(types) + 1 &&
+            throw(GamutError("E5", "cells: offsets need one more entry than there are cells " *
+                                    "($(length(types) + 1)), not $(length(offsets))"))
         @mes gamut_geometry_cells (Ptr{Cvoid}, Ptr{UInt8}, Int64, Ptr{Int64}, Ptr{Int64}, Int64) h types length(types) offsets conn length(conn)
     end
     for (name, v) in pairs_of(labels)
@@ -578,7 +582,7 @@ end
 """    set_note!(study, key, value)    Free-form public notes: text, integers, floats."""
 function set_note!(s::Study, key, value)
     h = handle(s)
-    if value isa Integer && !(value isa Bool)
+    if value isa Integer       # a Bool is the integer 1 or 0, as in Python
         @mes gamut_set_note_int (Ptr{Cvoid}, Cstring, Int64) h cs(key) Int64(value)
     elseif value isa Real
         @mes gamut_set_note_float (Ptr{Cvoid}, Cstring, Cdouble) h cs(key) Float64(value)
@@ -628,6 +632,18 @@ function describe(s::Study, name=nothing)
         Dict(zip(take_strings(k[]), take_strings(v[])))
     end |> copy
 end
+
+# A concept's attributes as a reader relies on them: an entry the file lacks
+# is refused, rather than a missing key.
+struct Declaration
+    name::String
+    entries::Dict{String,String}
+end
+declared(s::Study, name) = Declaration(string(name), describe(s, name))
+Base.get(d::Declaration, key, default) = get(d.entries, key, default)
+Base.haskey(d::Declaration, key) = haskey(d.entries, key)
+Base.getindex(d::Declaration, key) = haskey(d.entries, key) ? d.entries[key] :
+    throw(GamutError("", "$(d.name) has no $key; gamut validate says what the file breaks", d.name))
 
 """    model_numbers(study, id)    A model's stored numbers (spec section 12) as a Dict; its type need not be registered."""
 function model_numbers(s::Study, id)
@@ -760,12 +776,14 @@ function related(s::Study, name)
                            "derivatives" => Dict{String,String}(), "vector" => String[])
     mine = describe(s, name)
     for group in ("scalars", "node_fields", "cell_fields"), other in Gamut.names(s, group)
-        d = describe(s, other)
+        d = declared(s, other)
         if get(d, "of", "") == name
             st = get(d, "statistic", "")
             st == "std" && (out["std"] = other)
             st == "quantile" && (out["quantiles"][parse(Float64, d["q"])] = other)
-            haskey(d, "with_respect_to") && (out["derivatives"][d["with_respect_to"]] = other)
+            wrt = get(d, "with_respect_to", "")
+            # Along each axis its own entry, as in Python.
+            isempty(wrt) || (out["derivatives"][wrt == "coordinates" ? "coordinates:" * get(d, "axis", "") : wrt] = other)
         end
         if haskey(mine, "vector") && get(d, "vector", "") == mine["vector"] && !haskey(d, "of")
             push!(out["vector"], other)
@@ -949,23 +967,33 @@ struct Nearest
         m = new(cols, Float64.(collect(lower)), Float64.(collect(upper)),
                 reshape(Float64.(collect(x)), :, length(cols)),
                 Dict{String,Array{Float64}}(string(k) => Float64.(v) for (k, v) in pairs_of(outputs)))
-        t = to_tree(save(m))
-        try
-            @mes gamut_nearest_check (Ptr{Cvoid},) t
-        finally
-            ccall(sym(:gamut_tree_free), Cvoid, (Ptr{Cvoid},), t)
-        end
+        nearest_check(save(m))
         return m
+    end
+end
+function nearest_check(numbers)
+    t = to_tree(numbers)
+    try
+        @mes gamut_nearest_check (Ptr{Cvoid},) t
+    finally
+        ccall(sym(:gamut_tree_free), Cvoid, (Ptr{Cvoid},), t)
     end
 end
 model_type(::Nearest) = "nearest"
 save(m::Nearest) = Dict{String,Any}("columns" => m.columns, "lower" => m.lower, "upper" => m.upper,
                                     "x" => m.x, "outputs" => Dict{String,Any}(m.outputs))
-load_nearest(n) = Nearest(n["columns"], n["lower"], n["upper"], n["x"], n["outputs"])
+# Numbers from a file are checked before any is looked up: a damaged or
+# foreign file may lack one (E17).
+load_nearest(n) = (nearest_check(n); Nearest(n["columns"], n["lower"], n["upper"], n["x"], n["outputs"]))
 
 function call(m::Nearest, inputs, wanted)
-    nrows = isempty(inputs) ? 0 : length(first(values(inputs)))
-    cols = [Vector{Float64}(inputs[c]) for c in m.columns]
+    missing = [c for c in m.columns if !haskey(inputs, c)]
+    isempty(missing) || throw(GamutError("", "nearest needs the inputs $(join(missing, ", "))"))
+    cols = [Vector{Float64}(vec(inputs[c])) for c in m.columns]
+    nrows = !isempty(cols) ? length(cols[1]) : isempty(inputs) ? 0 : length(first(values(inputs)))
+    # The core reads nrows values from each column and cannot see their lengths.
+    all(c -> length(c) == nrows, cols) ||
+        throw(GamutError("E5", "nearest needs $nrows values of every input, one per row"))
     t = to_tree(save(m))
     out = Dict{String,Any}()
     try
@@ -1027,7 +1055,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
         label_names = Dict{String,Vector{String}}()
         for name in params
             haskey(given, name) || throw(GamutError("E2", "the input $name is missing"))
-            d = describe(m, name)
+            d = declared(m, name)
             col = get(d, "dtype", "") == "int64" ? Vector{Int64}(given[name]) : Vector{Float64}(given[name])
             lo, hi = parse(Float64, d["lower"]), parse(Float64, d["upper"])
             i = findfirst(x -> x < lo || x > hi, col)
@@ -1037,7 +1065,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
         for name in labels
             haskey(given, name) || throw(GamutError("E2", "the input $name is missing"))
             out = Ref{Ptr{Cvoid}}(C_NULL)
-            @mes gamut_table (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(m) cs(describe(m, name)["category"]) out
+            @mes gamut_table (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(m) cs(declared(m, name)["category"]) out
             entries = take_strings(out[])
             names_given = String[string(x) for x in given[name]]
             codes = Int64[]
@@ -1059,7 +1087,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
         wanted = Dict{String,Vector{Any}}()
         requests = Any[]
         for name in results
-            d = describe(m, name)
+            d = declared(m, name)
             st, wrt = get(d, "statistic", ""), get(d, "with_respect_to", "")
             req = st == "std" ? (d["output"], "std") :
                   st == "quantile" ? (d["output"], "quantile", parse(Float64, d["q"])) :
@@ -1067,13 +1095,13 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
             push!(get!(wanted, d["model"], Any[]), req)
             push!(requests, (name, d["model"], d["output"], req))
         end
-        coordinate = isempty(m.mesh_kind) ? Dict{String,String}() : describe(m, "coordinates")
+        coordinate = isempty(m.mesh_kind) ? Dict{String,String}() : declared(m, "coordinates")
         if !isempty(get(coordinate, "model", ""))
             push!(get!(wanted, coordinate["model"], Any[]), (coordinate["output"], "values"))
         end
         outputs = Dict{String,Any}()
         for (id, asks) in wanted
-            d = describe(m, "models/$id")
+            d = declared(m, "models/$id")
             loader = get(LOADERS, d["type"], nothing)
             loader === nothing && throw(GamutError("", "the model $id is of type $(repr(d["type"])), " *
                                                         "whose software is not registered here"))

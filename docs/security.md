@@ -44,21 +44,25 @@ time in proportion to what a file declares: a small file that declares two
 billion cells keeps `gamut validate` busy for about a minute before it
 reports what is wrong. To check label codes and missing results,
 `gamut validate` reads every value of an array of up to 2²⁶ values (about
-67 million); in a larger array it checks the structure only, and does not
-yet say that it skipped those checks.
+67 million); in a larger array it checks the structure only, and reports
+the array as unchecked (W11).
 
 ## What it does not protect against
 
 The HDF5 library reads a file's own bookkeeping before any code of this
 repository sees it, and a damaged or crafted file can make HDF5 itself
-fault or spin. `tools/damaged_files.py` measures this: it validates 420
-damaged copies of three valid files, truncated, with single bits flipped,
-or with runs of bytes zeroed, each in a child process.
+fault or spin. `tools/damaged_files.py` measures this: it damages every
+valid file of the [corpus](../corpus) 140 ways (truncated, with single
+bits flipped, or with runs of bytes zeroed), then validates each copy and
+makes every read on it, each in a child process.
 
-Measured on 17 October 2026 with the packaged core (HDF5 1.14.6 linked in):
-419 copies were answered by rule, none crashed, and one hung inside HDF5
-itself, while reading the file's dimension-scale attributes. It has been
-reported to the HDF Group.
+Measured on 23 October 2026 with the core built as the packages are (HDF5
+1.14.6 linked in), and again under the address and undefined-behaviour
+sanitizers: all 840 copies were answered by rule, and every read of them
+returned or was refused. Runs with more copies find the rare one HDF5
+itself cannot meet: in 4,200 copies under the sanitizers, seven crashed and
+three hung, each inside HDF5's own code, most while reading a file's
+dimension-scale attributes. Such a hang has been reported to the HDF Group.
 
 So for a file nobody vouches for, a separate process is the protection.
 Check it with `gamut validate FILE` (or `gamut info`) in a child process

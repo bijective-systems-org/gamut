@@ -138,7 +138,7 @@ if(GAMUT_BUILD_TESTS)
   add_executable(header_tests tests/header_tests.cpp)
   target_include_directories(header_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_compile_options(header_tests PRIVATE ${GAMUT_WARNINGS} ${GAMUT_SANITIZER_FLAGS})
-  target_link_libraries(header_tests PRIVATE gamut)
+  target_link_libraries(header_tests PRIVATE gamut Threads::Threads)
   add_test(NAME header_tests COMMAND header_tests WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
