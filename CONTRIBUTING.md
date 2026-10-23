@@ -63,6 +63,11 @@ julia --project=<an environment with JSON and Gamut> julia/test/check_corpus.jl 
 
 In MATLAB, from `matlab/`: `build_mex`, then `run_tests`, then
 `corpus='/tmp/corpus'; run('tests/check_corpus.m')`.
+`package_toolbox('Gamut.mltbx')` packages the gateways built there as the
+toolbox, and `tests/check_toolbox.m` installs it in a clean session and
+runs an example with it. `bash tools/build_core.sh PREFIX DEPS` installs
+the core as a release carries it, with its headers, CMake package and
+licences.
 
 `tools/damaged_files.py` measures how readers meet damaged files, and
 `bench/` holds the benchmarks (`bench/figures.py` rebuilds the benchmark
