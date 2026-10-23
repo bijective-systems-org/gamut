@@ -1,9 +1,11 @@
 name: publish
 
-# The Python package goes to PyPI when a version tag (v1.2.3) is pushed: one
-# wheel per platform, each with the core and HDF5 linked in and serving
-# every Python 3.10 and later, and the sdist. MATLAB, Julia and C build from
-# the tree, as docs/install.md says.
+# A version tag (v1.2.3) publishes the Python package to PyPI: one wheel per
+# platform, each with the core and HDF5 linked in and serving every Python
+# 3.10 and later, and the sdist. It also attaches to the tag's GitHub release
+# the MATLAB toolbox, Gamut.mltbx, which installs with no compiler, and the
+# core on its own for each platform (gamut-core-<version>-<platform>, with
+# its headers and CMake package), for Julia, C and C++.
 #
 # `conformance` runs the whole of ci.yml at the tagged commit. `wheels`
 # builds on each platform's own runner with cibuildwheel (the settings are
@@ -16,9 +18,18 @@ name: publish
 # repository and this workflow file alone, so there is no API token
 # anywhere. Every action is pinned to a commit, as in ci.yml.
 #
+# `cores` builds the core with tools/build_core.sh on each platform, the
+# Linux one in the manylinux image the Linux wheel is built in, and the
+# MATLAB gateway against it; `toolbox` packages the gateways and their cores
+# with matlab/package_toolbox.m, and `toolbox-test` installs the toolbox in
+# a fresh MATLAB on each platform, runs the MATLAB example with it and
+# validates the file it writes. `release` attaches the toolbox and the cores
+# to the release, or to a draft release when the release is not written yet;
+# it holds the only other permission, to write this repository's releases.
+#
 # A pull request that changes the packaging, or a manual run, builds and
-# tests the wheels and the sdist and uploads nothing: only a tag reaches
-# `conformance` (ci.yml already runs on every pull request) and `publish`.
+# tests the wheels, the sdist, the cores and the toolbox and uploads
+# nothing: only a tag reaches `conformance`, `publish` and `release`.
 
 on:
   push:
@@ -29,6 +40,11 @@ on:
       - pyproject.toml
       - CMakeLists.txt
       - tools/build_deps.sh
+      - tools/build_core.sh
+      - matlab/build_mex.m
+      - matlab/gamut_mex.cpp
+      - matlab/package_toolbox.m
+      - matlab/tests/check_toolbox.m
   workflow_dispatch:
 
 permissions:
@@ -37,6 +53,13 @@ permissions:
 defaults:
   run:
     shell: bash
+
+env:
+  # The MATLAB that builds the gateways and packages them, and so the oldest
+  # release the toolbox claims (package_toolbox.m reads it from the MATLAB it
+  # runs in). From R2026a MATLAB runs on Apple silicon Macs alone.
+  MATLAB_RELEASE: R2026a
+  MANYLINUX: quay.io/pypa/manylinux_2_28_x86_64:2026.10.16-1@sha256:1e7b8460ad8fb3fb0fbe1cd818845159ac896b4fd17452d56e892c291f3b97a8
 
 jobs:
   conformance:
@@ -112,6 +135,153 @@ jobs:
           path: dist/*.tar.gz
           if-no-files-found: error
 
+  cores:
+    name: core and gateway (${{ matrix.platform }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # The Linux gateway is built on the oldest runner: built on glibc
+          # 2.38 or later it would ask for symbols older systems lack.
+          - {platform: linux-x86_64, os: ubuntu-22.04, library: lib/libgamut.so, mex: mexa64}
+          - {platform: macos-arm64, os: macos-15, library: lib/libgamut.dylib, mex: mexmaca64}
+          - {platform: macos-x86_64, os: macos-15-intel}
+          - {platform: windows-x86_64, os: windows-2022, library: bin/gamut.dll, mex: mexw64}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: The core with its headers, CMake package and licences
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '11.0'
+        run: |
+          version=$(sed -n 's/^project(gamut VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          core=gamut-core-$version-${{ matrix.platform }}
+          echo "CORE=$core" >> "$GITHUB_ENV"
+          mkdir dist
+          if [ "$RUNNER_OS" = Linux ]; then
+            # Built where the Linux wheel is, it loads on glibc 2.28 and later.
+            docker run --rm -v "$PWD:/io" -w /io "$MANYLINUX" bash tools/build_core.sh "dist/$core" /tmp/deps \
+              > "$RUNNER_TEMP/core.log" 2>&1 || { tail -50 "$RUNNER_TEMP/core.log"; exit 1; }
+          else
+            deps=$RUNNER_TEMP/deps
+            [ "$RUNNER_OS" = Windows ] && deps="$(cygpath -m "$RUNNER_TEMP")/deps"
+            bash tools/build_core.sh "dist/$core" "$deps" > "$RUNNER_TEMP/core.log" 2>&1 || { tail -50 "$RUNNER_TEMP/core.log"; exit 1; }
+          fi
+          cd dist
+          if [ "$RUNNER_OS" = Windows ]; then 7z a "$core.zip" "$core" > /dev/null; else tar -czf "$core.tar.gz" "$core"; fi
+          ls -l
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: core-${{ matrix.platform }}
+          path: dist/${{ env.CORE }}.*
+          if-no-files-found: error
+
+      - uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d # v3.1.0
+        if: matrix.mex
+        with:
+          release: ${{ env.MATLAB_RELEASE }}
+          cache: true
+
+      - name: The gateway, against that core
+        if: matrix.mex
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3.3.0
+        with:
+          command: "addpath('matlab'); build_mex(fullfile('dist', getenv('CORE'), '${{ matrix.library }}'))"
+
+      - name: The gateway asks for nothing newer than glibc 2.28, as the core
+        if: runner.os == 'Linux'
+        run: |
+          newest=$(objdump -T matlab/gamut_mex.mexa64 | grep -o 'GLIBC_2\.[0-9]*' | sort -uV | tail -1)
+          echo "the gateway needs $newest"
+          [ "$(printf '%s\n' "$newest" GLIBC_2.28 | sort -V | tail -1)" = GLIBC_2.28 ]
+
+      - name: The licences beside the gateway
+        if: matrix.mex
+        run: cp -R "dist/$CORE/licenses" matlab/
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: matrix.mex
+        with:
+          name: gateway-${{ matrix.platform }}
+          path: |
+            matlab/gamut_mex.${{ matrix.mex }}
+            matlab/libgamut.*
+            matlab/gamut.dll
+            matlab/licenses
+          if-no-files-found: error
+
+  toolbox:
+    name: MATLAB toolbox
+    needs: cores
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: gateway-*
+          path: matlab/
+          merge-multiple: true
+
+      - uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d # v3.1.0
+        with:
+          release: ${{ env.MATLAB_RELEASE }}
+          cache: true
+
+      - name: Package the toolbox
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3.3.0
+        with:
+          command: "addpath('matlab'); package_toolbox('Gamut.mltbx')"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: toolbox
+          path: Gamut.mltbx
+          if-no-files-found: error
+
+  toolbox-test:
+    name: toolbox installed (${{ matrix.name }})
+    needs: toolbox
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: Linux, os: ubuntu-22.04}
+          - {name: 'Linux, latest MATLAB', os: ubuntu-24.04, release: latest}
+          - {name: macOS, os: macos-15}
+          - {name: Windows, os: windows-2022}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: toolbox
+          path: ${{ runner.temp }}/toolbox
+
+      - uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d # v3.1.0
+        with:
+          release: ${{ matrix.release || env.MATLAB_RELEASE }}
+          cache: true
+
+      - name: Install the toolbox, run the example with it, validate its file, uninstall
+        # Nothing of the checkout is on the path: the package, the gateway and
+        # the core all come from the toolbox.
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3.3.0
+        with:
+          command: "addpath(fullfile(pwd, 'matlab', 'tests')); check_toolbox(fullfile(getenv('RUNNER_TEMP'), 'toolbox', 'Gamut.mltbx'), fullfile(pwd, 'examples', 'matlab', 'one_mesh.m'))"
+
   publish:
     name: upload to PyPI
     if: github.event_name == 'push' && github.ref_type == 'tag'
@@ -133,3 +303,37 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         # Checks the metadata first, and attaches a provenance attestation
         # to each file.
+
+  release:
+    name: attach to the GitHub release
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [conformance, cores, toolbox-test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      # To attach files to a release, or start a draft one; nothing else.
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: core-*
+          path: release/
+          merge-multiple: true
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: toolbox
+          path: release/
+
+      - name: Attach the toolbox and the cores
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        # The release notes are written by hand, often after this run: until
+        # then a draft release holds the files, to be completed and published.
+        run: |
+          gh release view "$TAG" > /dev/null 2>&1 ||
+            gh release create "$TAG" --draft --verify-tag --title "Gamut ${TAG#v}" --notes ""
+          gh release upload "$TAG" release/* --clobber
+          ls -l release
