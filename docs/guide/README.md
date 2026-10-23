@@ -1,33 +1,41 @@
 # Guide
 
-Each page takes one idea, shows the script in [`examples/`](../../examples)
-that uses it, and what the script prints. Read the first two pages first;
-after that, take the pages in any order.
+Every study file is made and read the same way, in every language:
 
-The scripts run from a checkout with the Python package installed
-([installing](../install.md)); each writes its file in the current
-folder. `gamut info FILE` lists what a file holds and `gamut validate FILE`
-checks it, from any shell.
+1. `create` declares every name the file will hold, with its units and its
+   role: inputs (parameters), names such as a status (labels), and results
+   (scalars, and fields on a mesh).
+2. `add_run` gives each run's values; `open(path, mode="a")` adds runs
+   later.
+3. `open` reads: `select` picks rows by a condition, such as
+   `status == converged`, and a `get_` call reads one name for those rows.
+4. `gamut validate` checks a file against the rules of the specification.
 
-| | Page | The example writes |
+Most studies need only the first two pages. The others each add one idea,
+for when a study has it. Each page runs one script from
+[`examples/`](../../examples), from a checkout with the Python package
+installed ([installing](../install.md)), and shows what it prints.
+`gamut info FILE` lists what a file holds, from any shell.
+
+| | Page | For a study with |
 |---|---|---|
-| 1 | [Run tables](01-run-tables.md) | a wing's polar: inputs, results and status, with units |
-| 2 | [One mesh](02-one-mesh.md) | flow past a cylinder, every run on one mesh |
-| 3 | [Geometry families](03-geometry-families.md) | three shapes on one mesh topology, compared node by node |
-| 4 | [Changing meshes](04-changing-meshes.md) | a refinement study, a mesh per run |
-| 5 | [Time series](05-time-series.md) | two transient runs, a row per saved step |
-| 6 | [Uncertainty and gradients](06-uncertainty-and-gradients.md) | a spread, quantiles and a derivative beside a result |
-| 7 | [Models](07-models.md) | a fitted model as a file, evaluated on new inputs |
-| 8 | [Reading parts](08-reading-parts.md) | runs by condition, nodes by zone, values in other units |
-| 9 | [Combining files](09-combining-files.md) | two days of runs as one file, a subset, a rewrite |
-| 10 | [VTK](10-vtk.md) | a folder of VTK files as one study, and back |
+| 1 | [Run tables](01-run-tables.md) | inputs and results per run, and which runs failed; no mesh |
+| 2 | [One mesh](02-one-mesh.md) | every run on one mesh, with fields at its nodes or cells |
+| 3 | [Geometry families](03-geometry-families.md) | several shapes meshed with one topology, and a train/test split |
+| 4 | [Changing meshes](04-changing-meshes.md) | a different mesh per run |
+| 5 | [Time series](05-time-series.md) | transient runs, a row per saved step |
+| 6 | [Uncertainty and gradients](06-uncertainty-and-gradients.md) | a spread, quantiles or a derivative beside a result |
+| 7 | [Models](07-models.md) | a fitted model to share and evaluate on new inputs |
+| 8 | [Reading parts](08-reading-parts.md) | more data than memory, regions, other units |
+| 9 | [Combining files](09-combining-files.md) | runs from several files, or a subset of one |
+| 10 | [VTK](10-vtk.md) | a folder of VTK files to bring in, or to write back out |
 
 The same files from other places:
 
 | | Page | |
 |---|---|---|
-| 11 | [Command line](11-command-line.md) | inspect, check, build and extract without writing code |
-| 12 | [MATLAB](12-matlab.md) | the same calls, in MATLAB's spelling |
+| 11 | [Command line](11-command-line.md) | inspect, check, build from a spreadsheet and extract without writing code |
+| 12 | [MATLAB](12-matlab.md) | the same calls in MATLAB's spelling, and reading with `ncread` alone |
 | 13 | [Julia](13-julia.md) | the same calls, in Julia's spelling |
 | 14 | [C++ and C](14-c-and-cpp.md) | the same calls in C++, and the C interface under every language |
 

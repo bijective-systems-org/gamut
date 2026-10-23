@@ -6,12 +6,43 @@ declarations as `Dict`s or named tuples, `do` blocks that close the file,
 and positions counted from 1. The package needs the core library
 ([installing](../install.md#julia)).
 
-The example writes eight runs of flow past a cylinder on one mesh, reopens
-the file to add a ninth, then reads one node in every run: the program of the
-[README](../../README.md#example). From a working folder:
-`julia --project=<checkout>/julia <checkout>/examples/julia/one_mesh.jl`.
+There are two examples: `sweep.jl`, the [README](../../README.md#example)'s
+run table, and `one_mesh.jl`, eight runs of flow past a cylinder on one
+mesh, with a ninth added and one node read in every run. From a working
+folder: `julia --project=<checkout>/julia <checkout>/examples/julia/sweep.jl`.
 
-## Writing
+## A run table
+
+```julia
+Gamut.create("sweep.gamut"; writer="example sweep",
+              parameters=Dict("alpha" => (units="degree", role="condition")),
+              labels=Dict("status" => (role="status", categories=["converged", "failed"])),
+              scalars=Dict("cl" => "1")) do study
+    for alpha in 0.0:2.0:10.0
+        Gamut.add_run!(study, Dict("alpha" => alpha, "status" => "converged", "cl" => solve(alpha)))
+    end
+end
+
+Gamut.open("sweep.gamut"; mode="a") do study
+    Gamut.add_run!(study, Dict("alpha" => 12.0, "status" => "failed"))
+end
+
+cl = Gamut.open("sweep.gamut") do study
+    Gamut.get_scalar(study, "cl"; rows=Gamut.select(study, "status == converged"))
+end
+```
+
+```text
+lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
+```
+
+`solve` stands for the solver. A run left without a result, such as the
+failed one here, stores it as missing (`NaN`), and `select` returns
+positions counted from 1.
+
+## On one mesh
+
+### Writing
 
 ```julia
 Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed",
@@ -36,7 +67,7 @@ it ends, and removes it if the block throws and the file cannot be
 finished. `solve` stands for the solver and returns `cp` at every node,
 and `Gamut.open(path; mode="a")` reopens a file to add runs.
 
-## Reading
+### Reading
 
 ```julia
 cp = Gamut.open("cylinder.gamut") do study

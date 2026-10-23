@@ -1,8 +1,8 @@
 /* A sweep on one mesh: eight runs written, a ninth added, then read.
  *
  * Potential flow past a cylinder at nine values of circulation, on one ring
- * of quadrilaterals. examples/00_readme.py and the MATLAB and Julia
- * examples are the same program and print the same line. Every call
+ * of quadrilaterals. The MATLAB, Julia and C++ examples of this name are
+ * the same program and print the same line. Every call
  * returns 0, or fills the error record and returns nonzero.
  *
  *   cc one_mesh.c -I<prefix>/include -L<prefix>/lib -lgamut -lm -o one_mesh

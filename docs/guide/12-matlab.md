@@ -5,12 +5,43 @@ spelling: methods on a study object in camelCase, options as name–value
 pairs, declarations as structs, and positions counted from 1. Installing
 the package takes one build step ([installing](../install.md#matlab)).
 
-The example writes eight runs of flow past a cylinder on one mesh, reopens
-the file to add a ninth, then reads one node in every run: the program of the
-[README](../../README.md#example). From a working folder, with
-`examples/matlab` on the path, run `one_mesh`.
+There are two examples, from a working folder with `examples/matlab` on
+the path: `sweep`, the [README](../../README.md#example)'s run table, and
+`one_mesh`, eight runs of flow past a cylinder on one mesh, with a ninth
+added and one node read in every run.
 
-## Writing
+## A run table
+
+```matlab
+study = gamut.create('sweep.gamut', 'writer', 'example sweep', ...
+    'parameters', struct('alpha', struct('units', 'degree', 'role', 'condition')), ...
+    'labels', struct('status', struct('role', 'status', 'categories', {{'converged', 'failed'}})), ...
+    'scalars', struct('cl', '1'));
+for alpha = 0:2:10
+    study.addRun(struct('alpha', alpha, 'status', 'converged', 'cl', solve(alpha)));
+end
+study.close();
+
+study = gamut.open('sweep.gamut', 'mode', 'a');
+study.addRun(struct('alpha', 12, 'status', 'failed'));
+study.close();
+
+study = gamut.open('sweep.gamut');
+cl = study.getScalar('cl', 'rows', study.select('status == converged'));
+study.close();
+```
+
+```text
+lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
+```
+
+`solve` stands for the solver. A run left without a result, such as the
+failed one here, stores it as missing (`NaN`), and `select` returns
+positions counted from 1.
+
+## On one mesh
+
+### Writing
 
 ```matlab
 study = gamut.create('cylinder.gamut', 'writer', 'example sweep', 'mesh', 'shared', 'per', 'fixed', ...
@@ -34,7 +65,7 @@ language: the node numbers inside `connectivity` count from 0. `solve`
 stands for the solver and returns `cp` at every node. `gamut.open(path,
 'mode', 'a')` reopens a file to add runs.
 
-## Reading
+### Reading
 
 ```matlab
 study = gamut.open('cylinder.gamut');
@@ -49,6 +80,29 @@ cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -
 Node 13 here is node 12 in Python: positions count from 1 in MATLAB and
 from 0 in Python. A label or mesh label's stored codes count from 0 in
 every language, so a zone's code is its place in `categories` minus one.
+
+## Reading without the package
+
+A study file is netCDF-4, so MATLAB's own `ncread` reads it with nothing
+installed; a colleague who only reads can skip the package.
+
+```matlab
+f = 'sweep.gamut';
+cl = ncread(f, 'cl');                                % one value per run
+names = ncread(f, '/categories/status');             % the status names
+status = names(ncread(f, 'status') + 1);             % each run's status
+converged = status == "converged";
+```
+
+A label comes as its codes, counted from 0; its names are the table under
+`/categories` that its `category` attribute names. Values come in the
+units they were stored in (`ncreadatt(f, 'cl', 'units')`). A field on a
+shared mesh is `/mesh/node_fields/<name>` (or `cell_fields`), which
+`ncread` gives as nodes × runs, the axes reversed as for every netCDF
+array MATLAB reads. `ncinfo(f)` lists everything in a file. Writing,
+selecting by condition, models and validation need the package
+([`examples/matlab/read_with_ncread.m`](../../examples/matlab/read_with_ncread.m)
+is the whole program).
 
 ## The same calls
 

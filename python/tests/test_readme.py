@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 
@@ -15,9 +16,9 @@ from _pages import EXAMPLES, ROOT, blocks, contiguous
 
 README = ROOT / "README.md"
 SOURCES = {"python": sorted(EXAMPLES.glob("[0-9][0-9]_*.py")),
-           "matlab": [EXAMPLES / "matlab" / "one_mesh.m"],
-           "julia": [EXAMPLES / "julia" / "one_mesh.jl"],
-           "cpp": [EXAMPLES / "cpp" / "one_mesh.cpp"]}
+           "matlab": [EXAMPLES / "matlab" / "sweep.m"],
+           "julia": [EXAMPLES / "julia" / "sweep.jl"],
+           "cpp": [EXAMPLES / "cpp" / "sweep.cpp"]}
 
 pytestmark = pytest.mark.skipif(not (README.is_file() and EXAMPLES.is_dir()),
                                 reason="the README and examples are not beside this test (an installed package)")
@@ -44,3 +45,20 @@ def test_readme_output_is_what_its_example_prints(tmp_path):
     assert result.returncode == 0, result.stderr
     for block in blocks(README.read_text(encoding="utf-8"), "text"):
         assert contiguous(block, result.stdout), f"the README shows output its example does not print:\n{block}"
+
+
+def test_readme_cpp_example_prints_the_same(tmp_path):
+    # MATLAB and Julia run their copies in their own lanes.
+    if sys.platform.startswith("win") or shutil.which("c++") is None:
+        pytest.skip("needs a compiler named c++")
+    import gamut
+    library = pathlib.Path(gamut.library_path())
+    program = tmp_path / "sweep"
+    subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                    str(EXAMPLES / "cpp" / "sweep.cpp"), f"-I{ROOT / 'include'}",
+                    f"-L{library.parent}", "-lgamut", f"-Wl,-rpath,{library.parent}",
+                    "-o", str(program)], check=True, capture_output=True)
+    result = subprocess.run([str(program)], cwd=tmp_path, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+    for block in blocks(README.read_text(encoding="utf-8"), "text"):
+        assert contiguous(block, result.stdout), f"the C++ example does not print:\n{block}"

@@ -15,41 +15,45 @@ import pytest
 import gamut
 from _pages import EXAMPLES, GUIDE, ROOT, blocks, contiguous
 
-PAGES = {"12-matlab.md": [("matlab", EXAMPLES / "matlab" / "one_mesh.m")],
-         "13-julia.md": [("julia", EXAMPLES / "julia" / "one_mesh.jl")],
-         "14-c-and-cpp.md": [("cpp", EXAMPLES / "cpp" / "one_mesh.cpp"),
-                             ("c", EXAMPLES / "c" / "one_mesh.c")]}
+PAGES = {"12-matlab.md": [("matlab", [EXAMPLES / "matlab" / "sweep.m", EXAMPLES / "matlab" / "one_mesh.m",
+                                      EXAMPLES / "matlab" / "read_with_ncread.m"])],
+         "13-julia.md": [("julia", [EXAMPLES / "julia" / "sweep.jl", EXAMPLES / "julia" / "one_mesh.jl"])],
+         "14-c-and-cpp.md": [("cpp", [EXAMPLES / "cpp" / "sweep.cpp", EXAMPLES / "cpp" / "one_mesh.cpp"]),
+                             ("c", [EXAMPLES / "c" / "one_mesh.c"])]}
 
 
 @pytest.mark.skipif(not GUIDE.is_dir(), reason="the guide is not beside this test (an installed package)")
 @pytest.mark.parametrize("page", sorted(PAGES))
 def test_language_page_quotes_its_example(page):
     text = (GUIDE / page).read_text(encoding="utf-8")
-    for language, example in PAGES[page]:
-        source = example.read_text(encoding="utf-8")
+    for language, examples in PAGES[page]:
+        sources = [e.read_text(encoding="utf-8") for e in examples]
         shown = blocks(text, language)
         assert shown, f"{page} shows {language} code"
         for block in shown:
-            assert contiguous(block, source), f"{page} quotes code not in {example.name}:\n{block}"
+            assert any(contiguous(block, source) for source in sources), \
+                f"{page} quotes {language} code no example has:\n{block}"
 
 
 @pytest.mark.skipif(not GUIDE.is_dir(), reason="the guide is not beside this test (an installed package)")
-@pytest.mark.parametrize("compiler, flags, source",
-                         [("cc", ["-std=c99"], EXAMPLES / "c" / "one_mesh.c"),
-                          ("c++", ["-std=c++17"], EXAMPLES / "cpp" / "one_mesh.cpp")],
-                         ids=["c", "cpp"])
-def test_example_prints_what_its_page_shows(tmp_path, compiler, flags, source):
-    if sys.platform.startswith("win") or shutil.which(compiler) is None:
-        pytest.skip(f"needs a compiler named {compiler}")
+def test_examples_print_what_their_page_shows(tmp_path):
+    if sys.platform.startswith("win") or not (shutil.which("cc") and shutil.which("c++")):
+        pytest.skip("needs compilers named cc and c++")
     library = pathlib.Path(gamut.library_path())
-    program = tmp_path / "one_mesh"
-    subprocess.run([compiler, *flags, "-Wall", "-Wextra", "-Werror", "-pedantic",
-                    str(source), f"-I{ROOT / 'include'}",
-                    f"-L{library.parent}", "-lgamut", "-lm", f"-Wl,-rpath,{library.parent}",
-                    "-o", str(program)], check=True, capture_output=True)
-    result = subprocess.run([str(program)], cwd=tmp_path, capture_output=True, text=True,
-                            timeout=120)
-    assert result.returncode == 0, result.stderr
+    printed = []
+    for compiler, flags, source in [("cc", ["-std=c99"], EXAMPLES / "c" / "one_mesh.c"),
+                                    ("c++", ["-std=c++17"], EXAMPLES / "cpp" / "one_mesh.cpp"),
+                                    ("c++", ["-std=c++17"], EXAMPLES / "cpp" / "sweep.cpp")]:
+        program = tmp_path / f"{source.stem}_{source.suffix[1:]}"
+        subprocess.run([compiler, *flags, "-Wall", "-Wextra", "-Werror", "-pedantic",
+                        str(source), f"-I{ROOT / 'include'}",
+                        f"-L{library.parent}", "-lgamut", "-lm", f"-Wl,-rpath,{library.parent}",
+                        "-o", str(program)], check=True, capture_output=True)
+        result = subprocess.run([str(program)], cwd=tmp_path, capture_output=True, text=True,
+                                timeout=120)
+        assert result.returncode == 0, f"{source.name}: {result.stderr}"
+        printed.append(result.stdout)
     text = (GUIDE / "14-c-and-cpp.md").read_text(encoding="utf-8")
     for block in blocks(text, "text"):
-        assert contiguous(block, result.stdout), f"the page shows output the program does not print:\n{block}"
+        assert any(contiguous(block, out) for out in printed), \
+            f"the page shows output no example prints:\n{block}"

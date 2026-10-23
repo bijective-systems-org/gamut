@@ -61,6 +61,9 @@ CMAKE_ARGS="-DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT=$PWD/deps -DZLIB_ROOT=$PWD/deps" 
 
 ## MATLAB
 
+To read a file only, MATLAB needs nothing installed: its own `ncread`
+reads every array ([reading without the package](guide/12-matlab.md#reading-without-the-package)).
+
 The MATLAB package is the `matlab` folder of a checkout. Its gateway is
 compiled once against a core library; the simplest one to use is the
 Python wheel's, which keeps its HDF5 apart from MATLAB's. Find it with
