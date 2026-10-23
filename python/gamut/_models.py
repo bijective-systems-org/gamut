@@ -230,12 +230,11 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
                  _lib.string_array(cats), len(cats))
         for name, value in (parameters or {}).items():
             spec = _spec(value, "units")
-            if "lower" not in spec or "upper" not in spec:
-                raise GamutError("E16", f"{name}: a model file's parameters need bounds, the "
-                                         "model's domain")
+            has = "lower" in spec or "upper" in spec
             call("gamut_declare_parameter", handle, b(name), b(spec.get("role", "design")),
-                 b(spec.get("units")), _precision(spec.get("dtype")), 1, float(spec["lower"]),
-                 float(spec["upper"]), b(spec.get("run_group", "")))
+                 b(spec.get("units")), _precision(spec.get("dtype")), 1 if has else 0,
+                 float(spec.get("lower", 0.0)), float(spec.get("upper", 0.0)),
+                 b(spec.get("run_group", "")))
         if coordinates is not None:
             call("gamut_declare_coordinates", handle, b(coordinates.get("units")),
                  _precision(coordinates.get("precision")), int(coordinates.get("axes", 3)),
