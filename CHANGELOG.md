@@ -18,11 +18,24 @@ an illegal name is refused with what a legal one is; W2 counts the rows
 of each status and says when no status is named `converged`, the one
 name that marks a run as usable; W1 names the group a split divides.
 
-The guide shows how to publish a train and test split, says that only
-`converged` marks a run as usable, that a new category name extends a
-label's categories, and that unit names are checked only when a read
-converts them. Installing covers xarray and Xcode for MATLAB on macOS,
-and adds the Julia package at the release tag that matches the wheel.
+A run table from a spreadsheet goes straight in: Python's `add_runs`
+takes a pandas DataFrame and `add_run` one of its rows, and MATLAB's
+`addRuns` takes a table, as `readtable` gives, with labels as text or
+categorical.
+
+The README and the guide start from the simplest study, a table of runs,
+shown in Python, MATLAB, Julia and C++, and step up to a mesh from there;
+the guide opens on the pattern every file follows and lists its pages by
+what a study has. It shows how to publish a train and test split, says
+that only `converged` marks a run as usable, that a new category name
+extends a label's categories, and that unit names are checked only when a
+read converts them. MATLAB can read a file with `ncread` and nothing
+installed. Installing covers xarray, Xcode for MATLAB on macOS, and adds
+the Julia package at the release tag that matches the wheel.
+
+`help(gamut)` opens on the whole pattern, `help(gamut.create)` documents
+every declaration, and `llms.txt` gives coding agents what Gamut is for,
+the pattern, the mistakes that are easy to make, and every page.
 
 The validator holds a mesh's computed coordinates to the writer's rules: a
 computing model only in a model file whose mesh is per run, which must
