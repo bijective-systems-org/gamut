@@ -42,3 +42,13 @@ def test_benchmark_page_matches_its_results():
     result = subprocess.run([sys.executable, str(ROOT / "bench" / "figures.py"), "--check"],
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.skipif(not PAGES, reason="the documentation is not beside this test (an installed package)")
+def test_julia_install_names_this_release():
+    # The Julia package is added from a tag, so that its layer matches the
+    # wheel's core; each release moves the tag the pages name.
+    version = re.search(r'^version = "(.+)"', (ROOT / "julia" / "Project.toml").read_text(), re.M)[1]
+    for page in (ROOT / "README.md", ROOT / "docs" / "install.md"):
+        revs = set(re.findall(r'rev="v([^"]+)"', page.read_text(encoding="utf-8")))
+        assert revs == {version}, f"{page.name} adds Julia at {sorted(revs)}, not v{version}"

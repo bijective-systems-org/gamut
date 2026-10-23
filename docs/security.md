@@ -44,8 +44,8 @@ time in proportion to what a file declares: a small file that declares two
 billion cells keeps `gamut validate` busy for about a minute before it
 reports what is wrong. To check label codes and missing results,
 `gamut validate` reads every value of an array of up to 2²⁶ values (about
-67 million); in a larger array it checks the structure only, and does not
-yet say that it skipped those checks.
+67 million); in a larger array it checks the structure only, and reports
+the array as unchecked (W11).
 
 ## What it does not protect against
 

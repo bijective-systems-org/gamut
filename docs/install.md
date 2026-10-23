@@ -24,6 +24,20 @@ gamut --version
 python -c "import gamut; print(gamut.__version__, gamut.FORMAT)"
 ```
 
+### xarray and the netCDF tools
+
+The files are netCDF-4, so xarray and the netCDF tools read them without
+this package. xarray needs a netCDF backend beside it:
+
+```bash
+pip install xarray h5netcdf h5py
+```
+
+`xr.open_dataset("polar.gamut")` gives one `row` per run, with units and
+roles as attributes. Labels arrive as integer codes: code c names entry c
+of the label's table, which `xr.open_dataset("polar.gamut",
+group="categories")` holds.
+
 ### From a checkout
 
 On platforms without a wheel, or to build the core yourself:
@@ -65,19 +79,19 @@ s = gamut.open('cylinder.gamut');   % written by examples/02_one_mesh.py
 s.rowCount()
 ```
 
-`build_mex` needs a C++ compiler MATLAB accepts (`mex -setup C++`). It
-copies the core beside the gateway, so the `matlab` folder is all MATLAB
-needs on its path. Tested with MATLAB R2026a on macOS, and with the
-latest release on Linux.
+`build_mex` needs a C++ compiler MATLAB accepts (`mex -setup C++`; on
+macOS, Xcode). It copies the core beside the gateway, so the `matlab`
+folder is all MATLAB needs on its path. Tested with MATLAB R2026a on
+macOS, and with the latest release on Linux.
 
 ## Julia
 
-Julia 1.9 or later. Add the package from this repository, and point it at
-a core library:
+Julia 1.9 or later. Add the package from this repository, at the release
+that matches the wheel's core, and point it at a core library:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia")
+Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v1.1.0")
 ENV["GAMUT_LIBRARY"] = "/path/to/libgamut.dylib"   # .so on Linux, gamut.dll on Windows
 using Gamut
 Gamut.version()

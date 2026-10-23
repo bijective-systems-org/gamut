@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+Calls from several threads no longer crash. HDF5 keeps state for the whole
+process and is built without its thread-safety option, so two threads each
+reading its own file could bring it down; every call that reaches a file
+now takes its turn. `threads=` remains the way to read one large field
+faster.
+
+Appending from C, C++ or MATLAB refuses a file of another major format
+version, as reading already did, and does so before opening the file to
+write, which leaves it byte for byte as it was.
+
+Messages say more about what to fix. A number left as text (`"4.0"` from
+a spreadsheet) is named as such, rather than reported as a missing value;
+an illegal name is refused with what a legal one is; W2 counts the rows
+of each status and says when no status is named `converged`, the one
+name that marks a run as usable; W1 names the group a split divides.
+
+The guide shows how to publish a train and test split, says that only
+`converged` marks a run as usable, that a new category name extends a
+label's categories, and that unit names are checked only when a read
+converts them. Installing covers xarray and Xcode for MATLAB on macOS,
+and adds the Julia package at the release tag that matches the wheel.
+
 The validator holds a mesh's computed coordinates to the writer's rules: a
 computing model only in a model file whose mesh is per run, which must
 name one (E16), and that model existing with its output named (E17). The

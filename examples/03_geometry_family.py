@@ -16,7 +16,8 @@ members = {"slim": 0.8, "base": 1.0, "wide": 1.2}
 
 with gamut.create("family.gamut", writer="example family", mesh="shared", per="group:member",
                    coordinates={"units": "m", "axes": 2},
-                   labels={"member": {"role": "group", "categories": list(members)}},
+                   labels={"member": {"role": "group", "categories": list(members)},
+                           "split": {"role": "split", "categories": ["train", "test"]}},
                    generalisation_group="member",
                    parameters={"gamma": {"units": "m2 s-1", "role": "condition"}},
                    fields={"cp": {"units": "1", "at": "node"}}) as study:
@@ -24,7 +25,8 @@ with gamut.create("family.gamut", writer="example family", mesh="shared", per="g
     for name, radius in members.items():
         points, _, t, r = ring(radius=radius)
         for gamma in (0.0, 2.0, 4.0):
-            study.add_run({"member": name, "gamma": gamma},
+            study.add_run({"member": name, "gamma": gamma,
+                           "split": "test" if name == "wide" else "train"},
                           fields={"cp": pressure(t, r, radius, gamma)}, points=points)
 
 with gamut.open("family.gamut") as study:
@@ -33,3 +35,4 @@ with gamut.open("family.gamut") as study:
         member = study.get_label("member", rows=row)
         print(f"  row {row}: {member}, node 0 at x = {study.get_points(row=row)[0, 0]:.2f} m")
     print("cp at node 0 in every run:", study.get_field("cp", nodes=[0]).ravel().round(2))
+    print("held out for testing:", study.select("split == test"))
