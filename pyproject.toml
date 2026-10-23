@@ -8,7 +8,7 @@ version = "1.1.0"
 description = "An open file format for parametric simulation studies and the models fitted to them"
 readme = "README.md"
 license = "Apache-2.0"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "licenses/*.txt"]
 authors = [{ name = "Bijective Systems" }]
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]

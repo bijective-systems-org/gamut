@@ -26,5 +26,4 @@ bench/results/raw/
 matlab/libgamut.*
 matlab/gamut.dll
 matlab/gamut.lib
-matlab/licenses/
 *.mltbx

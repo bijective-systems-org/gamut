@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Builds the core as a release carries it: HDF5 and zlib linked in (built by
 # tools/build_deps.sh into DEPS), installed into PREFIX with its headers, its
-# CMake package (find_package(gamut) gives gamut::gamut), its licence and the
-# licences of the libraries linked into it.
+# CMake package (find_package(gamut) gives gamut::gamut), its licence and, from
+# licenses/, those of the libraries linked into it.
 #
 #   bash tools/build_core.sh PREFIX DEPS
 #
@@ -26,8 +26,5 @@ cmake --build "$build" --config Release --parallel "${GAMUT_BUILD_JOBS:-2}"
 cmake --install "$build" --config Release --prefix "$prefix"
 
 cp "$top/LICENSE" "$prefix/"
-mkdir -p "$prefix/licenses"
-cp "$deps"/src/hdf5-*/COPYING "$prefix/licenses/hdf5.txt"
-cp "$deps"/src/hdf5-*/COPYING_LBNL_HDF5 "$prefix/licenses/hdf5-lbnl.txt"
-cp "$deps"/src/zlib-*/LICENSE "$prefix/licenses/zlib.txt"
+cp -R "$top/licenses" "$prefix/"
 echo "build_core: the core, its headers, CMake package and licences in $prefix"
