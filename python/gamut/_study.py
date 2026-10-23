@@ -212,9 +212,11 @@ class Study:
                  points: Sequence[Any] | None = None, cells: Sequence[Any] | None = None,
                  mesh_labels: Sequence[Mapping[str, Any]] | None = None) -> list[int]:
         """Adds many runs at once: `columns` maps each name to one value per
-        run; `fields` to runs x sites (a changing mesh: every run's values
-        end to end); `points`, `cells`, `mesh_labels` one per run (or per new
-        group member) when the geometry changes."""
+        run, as a dict of arrays or a pandas DataFrame does; `fields` to runs
+        x sites (a changing mesh: every run's values end to end); `points`,
+        `cells`, `mesh_labels` one per run (or per new group member) when the
+        geometry changes."""
+        columns = dict(columns.items())
         lengths = {len(v) if _lib.iterable(v) else 1 for v in columns.values()}
         if len(lengths) != 1:
             raise GamutError("E5", "every column needs the same number of runs")

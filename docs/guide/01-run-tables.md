@@ -84,8 +84,10 @@ file says about a name, or about the file itself.
 - Every row gets an id when it is written, unique in the file and never
   reused. Runs extracted to another file keep their ids; runs appended to
   another file get new ones there ([combining files](09-combining-files.md)).
-- `study.table()` returns the whole run table as columns, labels as names,
-  ready for `pandas.DataFrame`.
+- `study.add_runs(columns)` adds many runs at once from a column per name:
+  a dict of arrays, or a pandas DataFrame such as `pandas.read_csv` gives.
+  `study.table()` goes the other way: the whole run table as columns,
+  labels as names, ready for `pandas.DataFrame`.
 - `gamut validate polar.gamut` reports the failed run and its missing
   results as warnings, so whoever receives the file sees them without
   being told.

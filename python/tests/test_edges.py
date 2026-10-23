@@ -209,6 +209,23 @@ def test_a_number_given_as_text_is_named_as_such(tmp_path):
             s.add_run({"alpha": 4.0, "cl": "0.15"})
         s.add_run({"alpha": 4.0, "cl": 0.15})
 
+
+def test_runs_from_a_dataframe(tmp_path):
+    # A run table read from a spreadsheet with pandas goes in as it is, and
+    # comes back out the same way.
+    pd = pytest.importorskip("pandas")
+    df = pd.DataFrame({"alpha": [0.0, 2.0, 4.0], "status": ["converged", "converged", "failed"],
+                       "cl": [0.0, 0.22, np.nan]})
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"alpha": "degree"}, scalars={"cl": "1"},
+                       labels={"status": {"role": "status", "categories": ["converged", "failed"]}}) as s:
+        assert s.add_runs(df) == [0, 1, 2]
+        assert s.add_run(df.iloc[1]) == 3
+    with gamut.open(p) as s:
+        back = pd.DataFrame(s.table())
+    assert back["status"].tolist() == ["converged", "converged", "failed", "converged"]
+    assert np.array_equal(back["cl"].to_numpy(), [0.0, 0.22, np.nan, 0.22], equal_nan=True)
+
 # --- strings and selections -------------------------------------------------------------
 
 
