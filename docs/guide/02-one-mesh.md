@@ -22,7 +22,8 @@ with gamut.create("cylinder.gamut", writer="example sweep", mesh="shared", per="
   geometry; [changing meshes](04-changing-meshes.md) change both.)
 - Coordinates have units and one to three axes.
 - Cells are three arrays in VTK's convention: a cell type per cell
-  (9 is a quadrilateral, 5 a triangle, 12 a hexahedron), offsets where each
+  (9 is a quadrilateral, 5 a triangle, 12 a hexahedron, 3 a line segment
+  for a contour such as an airfoil's surface), offsets where each
   cell's nodes start in the third array (one more entry than there are
   cells, starting at 0), and the node numbers, counted from 0. A mesh
   without cells is a point cloud: pressure taps, probes.

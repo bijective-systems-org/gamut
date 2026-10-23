@@ -7,13 +7,16 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import textwrap
 
 import pytest
 
+import gamut
+
 from _pages import ROOT
 
-PAGES = sorted([*ROOT.glob("*.md"), *(ROOT / "docs").rglob("*.md"), *(ROOT / "bench").glob("*.md")]) \
-    if (ROOT / "docs").is_dir() else []
+PAGES = sorted([*ROOT.glob("*.md"), ROOT / "llms.txt", *(ROOT / "docs").rglob("*.md"),
+                *(ROOT / "bench").glob("*.md")]) if (ROOT / "docs").is_dir() else []
 
 
 @pytest.mark.skipif(not PAGES, reason="the documentation is not beside this test (an installed package)")
@@ -52,3 +55,19 @@ def test_julia_install_names_this_release():
     for page in (ROOT / "README.md", ROOT / "docs" / "install.md"):
         revs = set(re.findall(r'rev="v([^"]+)"', page.read_text(encoding="utf-8")))
         assert revs == {version}, f"{page.name} adds Julia at {sorted(revs)}, not v{version}"
+
+
+def test_the_package_overview_runs(tmp_path, monkeypatch):
+    # help(gamut) opens on the whole pattern; it runs as shown.
+    code = re.search(r"The whole pattern:\n\n(.*?)\n\n\S", gamut.__doc__, re.S)[1]
+    monkeypatch.chdir(tmp_path)
+    exec(textwrap.dedent(code), {})
+    assert gamut.validate(str(tmp_path / "polar.gamut")).ok
+
+
+@pytest.mark.skipif(not PAGES, reason="the documentation is not beside this test (an installed package)")
+def test_llms_txt_shows_the_package_overview(tmp_path, monkeypatch):
+    # llms.txt, for coding agents, opens on the same pattern as help(gamut).
+    shown = re.search(r"```python\n(.*?)```", (ROOT / "llms.txt").read_text(encoding="utf-8"), re.S)[1]
+    overview = re.search(r"The whole pattern:\n\n(.*?)\n\n\S", gamut.__doc__, re.S)[1]
+    assert shown.strip() == textwrap.dedent(overview).strip()

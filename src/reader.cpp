@@ -313,7 +313,9 @@ std::vector<std::string> Reader::names(const std::string& group) const {
   } else if (group == "models") {
     for (const auto& m : s.models) out.push_back(m.id);
   } else {
-    throw Error("", "no group \"" + group + "\"");
+    throw Error("", "no group \"" + group + "\"; the groups are parameters, labels, scalars, "
+                    "constants, node_fields, cell_fields, node_labels, cell_labels, tables "
+                    "and models");
   }
   std::sort(out.begin(), out.end(), bytes_less);
   return out;

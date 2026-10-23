@@ -188,7 +188,16 @@ class Parser {
         if (table[k] == value.text) code = static_cast<std::int64_t>(k);
       }
       if (code < 0) {
-        throw Error("E9", "where: \"" + value.text + "\" is not in the table of " + name.text);
+        // The names it could be, up to a handful, as a choice to correct to.
+        std::string names;
+        for (std::size_t k = 0; k < table.size() && k < 8; ++k) {
+          names += (k == 0 ? "" : ", ") + table[k];
+        }
+        if (table.size() > 8) names += ", ...";
+        throw Error("E9", "where: \"" + value.text + "\" is not in the table of " + name.text +
+                              (table.empty() ? std::string(", which is empty")
+                                             : " (" + names + "); a name with spaces goes "
+                                               "in double quotes"));
       }
       for (std::int64_t a = 0; a < rows_; a += block) {
         const std::int64_t b = std::min(rows_, a + block);
