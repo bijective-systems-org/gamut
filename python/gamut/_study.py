@@ -181,6 +181,10 @@ class Study:
             t = np.ascontiguousarray(np.asarray(types, dtype=np.uint8))
             o = np.ascontiguousarray(np.asarray(offsets, dtype=np.int64))
             c = np.ascontiguousarray(np.asarray(conn, dtype=np.int64))
+            # The core reads one more offset than there are cells and cannot see the length.
+            if len(t) and len(o) != len(t) + 1:
+                raise GamutError("E5", f"cells: offsets need one more entry than there are cells "
+                                        f"({len(t) + 1}), not {len(o)}")
             call("gamut_geometry_cells", h, t.ctypes.data_as(ctypes.c_void_p), len(t),
                  o.ctypes.data_as(ctypes.c_void_p), c.ctypes.data_as(ctypes.c_void_p), len(c))
         for name, values in labels.items():

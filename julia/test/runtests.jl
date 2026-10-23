@@ -143,6 +143,17 @@ mktempdir() do tmp
         end
         @test e isa GamutError && e.rule == "E8" && !isfile(p)
         @test_throws GamutError Gamut.create(p; writer="t", parameter=Dict("x" => "m"))
+        e = try Gamut.create(p; writer="t", mesh="shared"); nothing catch x; x end
+        @test e isa GamutError && e.rule == "E6" && !isfile(p)
+        pts, cells = grid(2, 2)
+        Gamut.create(joinpath(tmp, "cells.gamut"); writer="t", mesh="shared", per="fixed",
+                      coordinates=(units="m", axes=2)) do s
+            for offsets in (Int64[0], Int64[0, 4, 9])
+                e = try Gamut.set_mesh!(s; points=pts, cells=(cells[1], offsets, cells[3])); nothing catch x; x end
+                @test e isa GamutError && e.rule == "E5"
+            end
+            Gamut.set_mesh!(s; points=pts, cells=cells)
+        end
         e = try
             Gamut.create(p; writer="t", mesh="changing", per="run",
                           coordinates=(units="m", axes="two"))

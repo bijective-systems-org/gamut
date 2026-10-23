@@ -50,6 +50,17 @@ def test_a_mesh_without_per_is_refused_by_the_core(tmp_path):
     assert not p.exists()
 
 
+@pytest.mark.parametrize("offsets", [[0], [0, 4, 9]])
+def test_cell_offsets_need_one_more_than_cells(tmp_path, offsets):
+    pts, _ = grid(2, 2)
+    with gamut.create(str(tmp_path / "m.gamut"), writer="t", mesh="shared", per="fixed",
+                       coordinates={"units": "m", "axes": 2}) as s:
+        with pytest.raises(gamut.GamutError, match="one more entry") as e:
+            s.set_mesh(pts, ([9], offsets, [0, 1, 3, 2]))
+        assert e.value.rule == "E5"
+        s.set_mesh(pts, ([9], [0, 4], [0, 1, 3, 2]))
+
+
 def test_run_before_set_mesh_leaves_the_file_writable(tmp_path):
     p = str(tmp_path / "m.gamut")
     pts, cells = grid(3, 2)

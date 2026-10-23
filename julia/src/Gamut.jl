@@ -440,6 +440,10 @@ function stage_geometry(s::Study, points, cells, labels)
         types = Vector{UInt8}(cells[1])
         offsets = Vector{Int64}(cells[2])
         conn = Vector{Int64}(cells[3])
+        # The core reads one more offset than there are cells and cannot see the length.
+        !isempty(types) && length(offsets) != length(types) + 1 &&
+            throw(GamutError("E5", "cells: offsets need one more entry than there are cells " *
+                                    "($(length(types) + 1)), not $(length(offsets))"))
         @mes gamut_geometry_cells (Ptr{Cvoid}, Ptr{UInt8}, Int64, Ptr{Int64}, Ptr{Int64}, Int64) h types length(types) offsets conn length(conn)
     end
     for (name, v) in pairs_of(labels)
