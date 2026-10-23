@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 (2026-10-23)
 
 A file can no longer make a reader or a writer touch another path. A
 dataset whose values HDF5 keeps outside the file, through external storage
@@ -98,7 +98,11 @@ model is evaluated from Julia and C++. `help(gamut.create_model)` and
 `help gamut.registerModelType` in MATLAB says what `call` receives and
 returns. A model's `save` that returns an object which is not model data
 is refused with the object named, where Python reported a
-zero-dimensional array.
+zero-dimensional array; so are a list mixing text with other values and
+text with more than one axis, which Python flattened into strings (E18).
+`gamut info` names the studies a model was trained on, and a model's
+one-line description. `bench/scaling.py` times writes and reads as run
+tables, one mesh and a mesh per run grow.
 
 The validator holds a mesh's computed coordinates to the writer's rules: a
 computing model only in a model file whose mesh is per run, which must

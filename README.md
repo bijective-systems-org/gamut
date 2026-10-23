@@ -242,7 +242,7 @@ custom array layout leaves each producer to maintain.
 |---|---|
 | Python 3.10 or later | `pip install gamut-format` |
 | MATLAB R2023b or later | open `Gamut.mltbx` from the [latest release](https://github.com/bijective-systems-org/gamut/releases/latest) |
-| Julia 1.9 or later | `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v1.1.0")` |
+| Julia 1.9 or later | `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v1.2.0")` |
 | C++ and C | CMake build and install, then `find_package(gamut)`; include `gamut/gamut.hpp` (C++17) or `gamut/gamut.h` (C) |
 
 The Python wheels and the MATLAB toolbox carry the core with HDF5 linked
