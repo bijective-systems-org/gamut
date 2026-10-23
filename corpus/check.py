@@ -113,6 +113,8 @@ def main() -> int:
                     if "refused" in e and exc.rule != e["refused"]:
                         failures.append(f"{name}: refused with {exc.rule!r}, expected "
                                         f"{e['refused']}: {exc}")
+                except Exception as exc:
+                    failures.append(f"{name}: raised {type(exc).__name__}: {exc}")
     total = sum(counts.values())
     print(f"{total} cases ({counts['valid']} valid, {counts['rules']} rule, {counts['hostile']} "
           f"hostile): {total - len({x.split(':')[0] for x in failures})} hold")

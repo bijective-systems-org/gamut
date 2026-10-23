@@ -48,7 +48,7 @@ for k = 1:numel(params)
     else
         col = double(inputs.(name)(:));
     end
-    lo = str2double(d.lower); hi = str2double(d.upper);
+    lo = str2double(declared(d, 'lower', name)); hi = str2double(declared(d, 'upper', name));
     outside = find(col < lo | col > hi, 1);
     if ~isempty(outside)
         warning('gamut:W4', '%s is outside the model''s domain [%g, %g] at row %d', ...
@@ -62,7 +62,7 @@ for k = 1:numel(labels)
         error('gamut:E2', 'the input %s is missing', name);
     end
     d = m.describe(name);
-    entries = gamut_mex('table', m.Handle, d.category);
+    entries = gamut_mex('table', m.Handle, declared(d, 'category', name));
     names = cellstr(inputs.(name));
     [known, at] = ismember(names(:), entries(:));
     if ~all(known)
@@ -91,23 +91,26 @@ for k = 1:numel(results)
     d = m.describe(name);
     statistic = gamut.internal.field(d, 'statistic', '');
     wrt = gamut.internal.field(d, 'with_respect_to', '');
+    output = declared(d, 'output', name);
+    modelId = declared(d, 'model', name);
     if strcmp(statistic, 'std')
-        req = {d.output, 'std'};
+        req = {output, 'std'};
     elseif strcmp(statistic, 'quantile')
-        req = {d.output, 'quantile', str2double(d.q)};
+        req = {output, 'quantile', str2double(declared(d, 'q', name))};
     elseif ~isempty(wrt)
-        req = {d.output, 'derivative', wrt};
+        req = {output, 'derivative', wrt};
     else
-        req = {d.output, 'values'};
+        req = {output, 'values'};
     end
-    wanted = ask(wanted, d.model, req);
-    requests(end + 1, :) = {name, d.model, d.output, req}; %#ok<AGROW>
+    wanted = ask(wanted, modelId, req);
+    requests(end + 1, :) = {name, modelId, output, req}; %#ok<AGROW>
 end
 coordinate = struct();
 if ~isempty(m.MeshKind)
     coordinate = m.describe('coordinates');
     if ~isempty(gamut.internal.field(coordinate, 'model', ''))
-        wanted = ask(wanted, coordinate.model, {coordinate.output, 'values'});
+        wanted = ask(wanted, coordinate.model, {declared(coordinate, 'output', 'coordinates'), ...
+            'values'});
     end
 end
 
@@ -117,14 +120,15 @@ ids = keys(wanted);
 for k = 1:numel(ids)
     id = ids{k};
     dm = m.describe(['models/' id]);
-    cls = gamut.internal.registry(dm.type);
+    modelType = declared(dm, 'type', ['models/' id]);
+    cls = gamut.internal.registry(modelType);
     if isempty(cls)
         error('gamut:error', ['the model %s is of type ''%s'', whose software is not ' ...
-            'registered here (gamut.registerModelType)'], id, dm.type);
+            'registered here (gamut.registerModelType)'], id, modelType);
     end
     numbers = m.modelNumbers(id);
     model = feval([cls '.load'], numbers);
-    reads = strsplit(strtrim(dm.inputs), ' ');
+    reads = strsplit(strtrim(declared(dm, 'inputs', ['models/' id])), ' ');
     in = struct();
     for j = 1:numel(reads)
         if ~isfield(tbl, reads{j})
@@ -207,6 +211,15 @@ if ~isempty(m.MeshKind) && strcmp(m.Per, 'run')
     end
 end
 w.addRuns(columns, 'fields', fields, 'points', points);
+end
+
+function v = declared(d, key, name)
+% An attribute evaluating relies on: one the model file lacks is refused,
+% rather than a missing field.
+if ~isfield(d, key)
+    error('gamut:error', '%s has no %s; gamut validate says what the file breaks', name, key);
+end
+v = d.(key);
 end
 
 function wanted = ask(wanted, id, req)

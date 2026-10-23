@@ -9,6 +9,13 @@ compiler. Each release also carries the core on its own for each platform
 Julia, C and C++. Every package now includes the licences of HDF5 and zlib,
 which the core links in.
 
+Evaluating a damaged model file is refused in every language when the file
+lacks what evaluation reads: a nearest model's numbers (`columns`, `lower`,
+`upper`, `x`, `outputs`; E17), or a declaration such as a parameter's
+bounds, a result's model or output, or a model's type or inputs. Python
+and Julia raised a key error and MATLAB a field error instead. In Python
+and Julia, `related` likewise refuses a quantile without its `q`.
+
 Calls from several threads no longer crash. HDF5 keeps state for the whole
 process and is built without its thread-safety option, so two threads each
 reading its own file could bring it down; every call that reaches a file

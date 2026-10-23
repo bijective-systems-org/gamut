@@ -15,7 +15,7 @@ import numpy as np
 
 from . import _lib
 from ._lib import GamutError, b, call
-from ._study import Study, _axes, _label_spec, _precision, _spec, open as _open
+from ._study import Study, _axes, _declared, _label_spec, _precision, _spec, open as _open
 
 # --- dictionaries <-> core trees --------------------------------------------
 
@@ -127,6 +127,14 @@ def register_model_type(cls: type) -> type:
     return cls
 
 
+def _nearest_check(numbers: Mapping[str, Any]) -> None:
+    handle = _to_tree(numbers)
+    try:
+        call("gamut_nearest_check", handle)
+    finally:
+        _lib._lib.gamut_tree_free(handle)
+
+
 class Nearest:
     """The built-in model: for each input row, the outputs of the closest
     stored point (spec section 7.5).  Evaluated by the core, so every
@@ -141,14 +149,13 @@ class Nearest:
         self.upper = np.asarray(upper, dtype=np.float64)
         self.x = np.asarray(x, dtype=np.float64).reshape(-1, len(self.columns))
         self.outputs = {k: np.asarray(v, dtype=np.float64) for k, v in outputs.items()}
-        handle = _to_tree(self.save())
-        try:
-            call("gamut_nearest_check", handle)
-        finally:
-            _lib._lib.gamut_tree_free(handle)
+        _nearest_check(self.save())
 
     @classmethod
     def load(cls, numbers: Mapping[str, Any]) -> "Nearest":
+        # Numbers from a file are checked before any is looked up: a damaged
+        # or foreign file may lack one (E17).
+        _nearest_check(numbers)
         return cls(numbers["columns"], numbers["lower"], numbers["upper"], numbers["x"],
                    numbers["outputs"])
 
@@ -310,7 +317,7 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
         for name in params:
             if name not in inputs:
                 raise GamutError("E2", f"the input {name} is missing")
-            d = m.describe(name)
+            d = _declared(m, name)
             col = np.atleast_1d(np.asarray(inputs[name],
                                            dtype=np.int64 if d.get("dtype") == "int64" else np.float64))
             lo, hi = float(d["lower"]), float(d["upper"])
@@ -323,7 +330,7 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
         for name in labels:
             if name not in inputs:
                 raise GamutError("E2", f"the input {name} is missing")
-            entries = _lib.strings_out("gamut_table", m._handle(), b(m.describe(name)["category"]))
+            entries = _lib.strings_out("gamut_table", m._handle(), b(_declared(m, name)["category"]))
             given = [str(x) for x in np.atleast_1d(np.asarray(inputs[name]))]
             unknown = [g for g in given if g not in entries]
             if unknown:
@@ -344,7 +351,7 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
         wanted: dict[str, list[tuple]] = {}
         requests: list[tuple[str, str, str, tuple]] = []
         for name, _ in results:
-            d = m.describe(name)
+            d = _declared(m, name)
             request: tuple
             if d.get("statistic") == "std":
                 request = (d["output"], "std")
@@ -356,12 +363,12 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
                 request = (d["output"], "values")
             wanted.setdefault(d["model"], []).append(request)
             requests.append((name, d["model"], d["output"], request))
-        coordinate = m.describe("coordinates") if m._mesh_kind else {}
+        coordinate = _declared(m, "coordinates") if m._mesh_kind else {}
         if coordinate.get("model"):
             wanted.setdefault(coordinate["model"], []).append((coordinate["output"], "values"))
         outputs: dict[str, dict] = {}
         for model_id, asks in wanted.items():
-            d = m.describe(f"models/{model_id}")
+            d = _declared(m, f"models/{model_id}")
             cls = _REGISTRY.get(d["type"])
             if cls is None:
                 raise GamutError("", f"the model {model_id} is of type {d['type']!r}, whose "

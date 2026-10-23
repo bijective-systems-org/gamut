@@ -633,6 +633,18 @@ function describe(s::Study, name=nothing)
     end |> copy
 end
 
+# A concept's attributes as a reader relies on them: an entry the file lacks
+# is refused, rather than a missing key.
+struct Declaration
+    name::String
+    entries::Dict{String,String}
+end
+declared(s::Study, name) = Declaration(string(name), describe(s, name))
+Base.get(d::Declaration, key, default) = get(d.entries, key, default)
+Base.haskey(d::Declaration, key) = haskey(d.entries, key)
+Base.getindex(d::Declaration, key) = haskey(d.entries, key) ? d.entries[key] :
+    throw(GamutError("", "$(d.name) has no $key; gamut validate says what the file breaks", d.name))
+
 """    model_numbers(study, id)    A model's stored numbers (spec section 12) as a Dict; its type need not be registered."""
 function model_numbers(s::Study, id)
     need_reader(s)
@@ -764,7 +776,7 @@ function related(s::Study, name)
                            "derivatives" => Dict{String,String}(), "vector" => String[])
     mine = describe(s, name)
     for group in ("scalars", "node_fields", "cell_fields"), other in Gamut.names(s, group)
-        d = describe(s, other)
+        d = declared(s, other)
         if get(d, "of", "") == name
             st = get(d, "statistic", "")
             st == "std" && (out["std"] = other)
@@ -955,19 +967,24 @@ struct Nearest
         m = new(cols, Float64.(collect(lower)), Float64.(collect(upper)),
                 reshape(Float64.(collect(x)), :, length(cols)),
                 Dict{String,Array{Float64}}(string(k) => Float64.(v) for (k, v) in pairs_of(outputs)))
-        t = to_tree(save(m))
-        try
-            @mes gamut_nearest_check (Ptr{Cvoid},) t
-        finally
-            ccall(sym(:gamut_tree_free), Cvoid, (Ptr{Cvoid},), t)
-        end
+        nearest_check(save(m))
         return m
+    end
+end
+function nearest_check(numbers)
+    t = to_tree(numbers)
+    try
+        @mes gamut_nearest_check (Ptr{Cvoid},) t
+    finally
+        ccall(sym(:gamut_tree_free), Cvoid, (Ptr{Cvoid},), t)
     end
 end
 model_type(::Nearest) = "nearest"
 save(m::Nearest) = Dict{String,Any}("columns" => m.columns, "lower" => m.lower, "upper" => m.upper,
                                     "x" => m.x, "outputs" => Dict{String,Any}(m.outputs))
-load_nearest(n) = Nearest(n["columns"], n["lower"], n["upper"], n["x"], n["outputs"])
+# Numbers from a file are checked before any is looked up: a damaged or
+# foreign file may lack one (E17).
+load_nearest(n) = (nearest_check(n); Nearest(n["columns"], n["lower"], n["upper"], n["x"], n["outputs"]))
 
 function call(m::Nearest, inputs, wanted)
     missing = [c for c in m.columns if !haskey(inputs, c)]
@@ -1038,7 +1055,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
         label_names = Dict{String,Vector{String}}()
         for name in params
             haskey(given, name) || throw(GamutError("E2", "the input $name is missing"))
-            d = describe(m, name)
+            d = declared(m, name)
             col = get(d, "dtype", "") == "int64" ? Vector{Int64}(given[name]) : Vector{Float64}(given[name])
             lo, hi = parse(Float64, d["lower"]), parse(Float64, d["upper"])
             i = findfirst(x -> x < lo || x > hi, col)
@@ -1048,7 +1065,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
         for name in labels
             haskey(given, name) || throw(GamutError("E2", "the input $name is missing"))
             out = Ref{Ptr{Cvoid}}(C_NULL)
-            @mes gamut_table (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(m) cs(describe(m, name)["category"]) out
+            @mes gamut_table (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(m) cs(declared(m, name)["category"]) out
             entries = take_strings(out[])
             names_given = String[string(x) for x in given[name]]
             codes = Int64[]
@@ -1070,7 +1087,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
         wanted = Dict{String,Vector{Any}}()
         requests = Any[]
         for name in results
-            d = describe(m, name)
+            d = declared(m, name)
             st, wrt = get(d, "statistic", ""), get(d, "with_respect_to", "")
             req = st == "std" ? (d["output"], "std") :
                   st == "quantile" ? (d["output"], "quantile", parse(Float64, d["q"])) :
@@ -1078,13 +1095,13 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
             push!(get!(wanted, d["model"], Any[]), req)
             push!(requests, (name, d["model"], d["output"], req))
         end
-        coordinate = isempty(m.mesh_kind) ? Dict{String,String}() : describe(m, "coordinates")
+        coordinate = isempty(m.mesh_kind) ? Dict{String,String}() : declared(m, "coordinates")
         if !isempty(get(coordinate, "model", ""))
             push!(get!(wanted, coordinate["model"], Any[]), (coordinate["output"], "values"))
         end
         outputs = Dict{String,Any}()
         for (id, asks) in wanted
-            d = describe(m, "models/$id")
+            d = declared(m, "models/$id")
             loader = get(LOADERS, d["type"], nothing)
             loader === nothing && throw(GamutError("", "the model $id is of type $(repr(d["type"])), " *
                                                         "whose software is not registered here"))

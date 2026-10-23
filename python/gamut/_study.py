@@ -57,6 +57,23 @@ def _axes(coordinates: Mapping[str, Any] | None) -> int:
     return int(value)
 
 
+class _Declaration(dict):
+    """A concept's attributes as a reader relies on them: an entry the file
+    lacks is refused, rather than a missing key."""
+
+    def __init__(self, name: str, entries: Mapping[str, str]) -> None:
+        super().__init__(entries)
+        self.name = name
+
+    def __missing__(self, key: str) -> str:
+        raise GamutError("", f"{self.name} has no {key}; gamut validate says what the file "
+                              "breaks", self.name)
+
+
+def _declared(study: "Study", name: str) -> _Declaration:
+    return _Declaration(name, study.describe(name))
+
+
 def _precision(value: Any) -> int:
     if value is None:
         return _lib.GAMUT_AS_GIVEN
@@ -556,7 +573,7 @@ class Study:
         mine = self.describe(name)
         for group in ("scalars", "node_fields", "cell_fields"):
             for other in self.names(group):
-                d = self.describe(other)
+                d = _declared(self, other)
                 if d.get("of") == name:
                     if d.get("statistic") == "std":
                         out["std"] = other

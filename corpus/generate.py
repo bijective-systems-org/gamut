@@ -647,6 +647,24 @@ def hostile_cases(out):
         d.dims[0].attach_scale(f["mesh/node"])
         d.dims[1].attach_scale(f["mesh/axis"])
     cases["hostile_points_huge"] = {"rules": ["E23"], "reads": []}
+    # A nearest model without its upper bounds: evaluating checks the stored
+    # numbers before it looks one up, and refuses (E17).
+    p = os.path.join(out, "hostile_nearest_missing.gamut")
+    shutil.copy(os.path.join(out, "model_nearest.gamut"), p)
+    with h5py.File(p, "r+") as f:
+        g = f["models/fit"]
+        g["upper"].dims[0].detach_scale(g["gamut_upper_d0"])
+        del g["upper"], g["gamut_upper_d0"]
+    cases["hostile_nearest_missing"] = {"rules": ["E17"],
+                                        "reads": [{"evaluate": {"mach": [0.4], "alpha": [1.0]}}]}
+    # A model that does not say what it reads: evaluating refuses the
+    # declaration it lacks rather than look it up.
+    p = os.path.join(out, "hostile_model_undeclared.gamut")
+    shutil.copy(os.path.join(out, "model_nearest.gamut"), p)
+    with h5py.File(p, "r+") as f:
+        del f["models/fit"].attrs["inputs"]
+    cases["hostile_model_undeclared"] = {"rules": ["E17"],
+                                         "reads": [{"evaluate": {"mach": [0.4], "alpha": [1.0]}}]}
     return cases
 
 
