@@ -51,14 +51,17 @@ the array as unchecked (W11).
 
 The HDF5 library reads a file's own bookkeeping before any code of this
 repository sees it, and a damaged or crafted file can make HDF5 itself
-fault or spin. `tools/damaged_files.py` measures this: it validates 420
-damaged copies of three valid files, truncated, with single bits flipped,
-or with runs of bytes zeroed, each in a child process.
+fault or spin. `tools/damaged_files.py` measures this: it damages every
+valid file of the [corpus](../corpus) 140 ways (truncated, with single
+bits flipped, or with runs of bytes zeroed), then validates each copy and
+makes every read on it, each in a child process.
 
-Measured on 17 October 2026 with the packaged core (HDF5 1.14.6 linked in):
-419 copies were answered by rule, none crashed, and one hung inside HDF5
-itself, while reading the file's dimension-scale attributes. It has been
-reported to the HDF Group.
+Measured on 23 October 2026 with the core built as the packages are (HDF5
+1.14.6 linked in), and again under the address and undefined-behaviour
+sanitizers: all 840 copies were answered by rule, and every read of them
+returned or was refused. An earlier measurement found a copy that hung
+inside HDF5 itself, while reading the file's dimension-scale attributes;
+it has been reported to the HDF Group.
 
 So for a file nobody vouches for, a separate process is the protection.
 Check it with `gamut validate FILE` (or `gamut info`) in a child process
