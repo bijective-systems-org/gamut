@@ -193,6 +193,28 @@ catch err
     ok(contains(err.message, 'closed') || strcmp(err.identifier, 'gamut:usage'), 'closed handle');
 end
 
+% A table, as readtable gives one, adds its rows as runs, and a study's own
+% table (labels as categorical) adds them again.
+p = fullfile(tmp, 'from_table.gamut');
+runs = table([0; 2; 4], {'converged'; 'converged'; 'failed'}, [0; 0.22; NaN], ...
+    'VariableNames', {'alpha', 'status', 'cl'});
+w = gamut.create(p, 'writer', 'tests', 'parameters', struct('alpha', 'degree'), ...
+    'labels', struct('status', struct('role', 'status', 'categories', {{'converged', 'failed'}})), ...
+    'scalars', struct('cl', '1'));
+ids = w.addRuns(runs);
+ok(isequal(ids(:), [0; 1; 2]), 'a table adds its rows');
+w.close();
+r = gamut.open(p);
+back = r.table();
+r.close();
+w = gamut.open(p, 'mode', 'a');
+w.addRuns(back);
+w.close();
+r = gamut.open(p);
+ok(r.rowCount() == 6 && isequal(cellstr(r.getLabel('status')), ...
+    {'converged'; 'converged'; 'failed'; 'converged'; 'converged'; 'failed'}), 'a study''s table adds again');
+r.close();
+
 % The example in examples/matlab runs and writes a valid file.
 example = fullfile(fileparts(fileparts(here)), 'examples', 'matlab', 'one_mesh.m');
 if isfile(example)

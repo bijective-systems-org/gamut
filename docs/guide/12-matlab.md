@@ -110,6 +110,7 @@ is the whole program).
 |---|---|
 | `gamut.create(path, writer=w, fields={...})` | `gamut.create(path, 'writer', w, 'fields', struct(...))` |
 | `study.add_run(values, fields=...)` | `study.addRun(values, 'fields', ...)` |
+| `study.add_runs(pandas.read_csv(path))` | `study.addRuns(readtable(path))`, or a struct of columns |
 | `study.get_field("p", rows=r, nodes=n)` | `study.getField('p', 'rows', r, 'nodes', n)` |
 | `study.select("mach > 0.7")` | `study.select('mach > 0.7')`, positions from 1 |
 | `study.row_count` | `study.rowCount()` |
