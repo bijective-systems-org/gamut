@@ -28,6 +28,17 @@ the same comparison.
 Run one benchmark at a time on an otherwise quiet machine, with the work
 directory on the machine's own disk.
 
+## Scaling
+
+`scaling.py` times Gamut alone as studies grow: run tables to a million
+rows, one shared mesh to 1,000 runs or 100,000 nodes, and a mesh per run.
+It writes each study, reads it the common ways and validates it, and saves
+the times as JSON. Run it once for each build of the core you compare.
+
+```bash
+python bench/scaling.py WORK_DIR bench/results/scaling-NAME.json
+```
+
 ## Native simulation formats
 
 `study_formats.py` adds native Exodus II and CGNS result files, official
