@@ -37,6 +37,7 @@ import tempfile
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from typing import Callable
 
 KINDS = ("answered", "crashed", "hung", "escaped", "oversized")
 
@@ -175,7 +176,20 @@ def resident_mib(pid: int) -> int:
     return int(out.stdout.strip() or 0) >> 10
 
 
-def run_child(argv: list[str], timeout: float, memory: int) -> tuple[str, str]:
+def validate_answered(code: int, out: dict) -> bool:
+    """`gamut validate --json` answered: a report (exit 0 when the file is
+    valid, 1 when not) or a refusal by rule (exit 1)."""
+    return ((code == 0 and out.get("ok") is True)
+            or (code == 1 and (out.get("ok") is False or "error" in out)))
+
+
+def read_answered(code: int, out: dict) -> bool:
+    """The reading child answered: it ran to the end and listed its reads."""
+    return code == 0 and "reads" in out
+
+
+def run_child(argv: list[str], timeout: float, memory: int,
+              answered: Callable[[int, dict], bool]) -> tuple[str, str]:
     """The outcome of a child and, when it was not answered, why."""
     start = time.monotonic()
     p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -196,13 +210,16 @@ def run_child(argv: list[str], timeout: float, memory: int) -> tuple[str, str]:
               if ("ERROR: " in ln and "Sanitizer" in ln) or "runtime error" in ln]
     if p.returncode < 0 or report:
         return "crashed", report[0] if report else f"signal {-p.returncode}"
+    last = stderr.strip().splitlines()
     try:
         out = json.loads(stdout)
     except ValueError:
-        last = stderr.strip().splitlines()
-        return "escaped", last[-1] if last else f"exit {p.returncode}, no report"
+        out = None
     if isinstance(out, dict) and out.get("escaped"):
         return "escaped", "; ".join(out["escaped"][:3])
+    if not isinstance(out, dict) or not answered(p.returncode, out):
+        report = "an unexpected report" if isinstance(out, dict) else "no report"
+        return "escaped", last[-1] if last else f"exit {p.returncode}, {report}"
     return "answered", ""
 
 
@@ -213,9 +230,9 @@ def check(job: tuple[str, int, str, bytes], work: str, timeout: float,
     with open(path, "wb") as fh:
         fh.write(content)
     validated = run_child([sys.executable, "-m", "gamut.cli", "validate", "--json", path],
-                          timeout, memory)
+                          timeout, memory, validate_answered)
     read = run_child([sys.executable, os.path.abspath(__file__), "--exercise", path],
-                     timeout, memory)
+                     timeout, memory, read_answered)
     if validated[0] == "answered" and read[0] == "answered":
         os.remove(path)
     return validated, read
