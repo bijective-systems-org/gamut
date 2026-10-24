@@ -92,7 +92,8 @@ class Study:
     Writing: `add_run`, `add_runs`, `set_mesh`, `notes`, `set_private`.
     Reading: `row_count`, `names`, `describe`, `select`, `get_parameter`,
     `get_label`, `get_scalar`, `get_constant`, `get_field`, `get_points`,
-    `get_cells`, `get_mesh_label`, `categories`, `table`, `related`.
+    `get_cells`, `get_mesh_label`, `categories`, `table`, `related`,
+    `outside`.
     Rows are positions counted from 0; a `rows` argument takes a position,
     a list of them, a slice, or None for every row.
 
@@ -431,6 +432,20 @@ class Study:
         values = self._get(name, rows, dtype=np.int64 if d.get("dtype") == "int64" and units is None
                            else np.float64)
         return self._in_units(name, values, units)
+
+    def outside(self, name: str, rows: Any = None) -> np.ndarray:
+        """How far each row's value of the parameter `name` lies outside the
+        bounds the file declares for it, in the parameter's units: 0 inside
+        or on a bound, `value - lower` (negative) below, `value - upper`
+        (positive) above, NaN where the value is missing.  A parameter with
+        no bounds is refused.  The answer of `evaluate` keeps the model's
+        bounds, so this says which of its rows lie outside the range the
+        model was fitted on, and how far."""
+        self._need_reader()
+        r = Selection(rows, "rows")
+        r.resolve(self.row_count)
+        out = _lib.outside(self._handle(), name, r)
+        return out[0] if r.single else out
 
     def get_label(self, name: str, rows: Any = None) -> np.ndarray:
         """A label's category name in each row."""

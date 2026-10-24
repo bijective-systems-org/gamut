@@ -51,6 +51,13 @@ class Reader {
   // A label's values as names, for the selected runs.
   std::vector<std::string> label_names(const std::string& name,
                                        const Selection& runs) const;
+  // How far each selected run's value of a parameter lies outside the
+  // bounds the file declares for it, in its units: 0 inside or on a bound,
+  // value - lower below, value - upper above, NaN where the value is
+  // missing.  A parameter without bounds is refused.  `out` is a capacity,
+  // as in read; the shape of a read of the parameter says what it needs.
+  void outside(const std::string& name, const Selection& runs, double* out,
+               std::size_t out_bytes) const;
   std::vector<std::string> table(const std::string& name) const;
   // A model's numbers (spec section 12).
   Dict model_numbers(const std::string& id) const;

@@ -395,6 +395,89 @@ void test_refusals() {
   std::remove("wr_bad.gamut");
 }
 
+// How far each row lies outside its parameter's bounds: zero inside and on
+// a bound, the signed distance past the bound outside, NaN for a missing
+// value.  A parameter without bounds, or with bounds the validator rejects,
+// is refused rather than reported as inside; so are other names and bad
+// selections.
+void test_outside_bounds() {
+  const std::string path = "wr_bounds.gamut";
+  {
+    auto w = Writer::create(path, "tests", "", "fixed");
+    Parameter x = param("x", "design", "m");
+    x.lower = 0.0;
+    x.upper = 1.0;
+    w->declare_parameter(x);
+    Parameter n = param("n", "design", "1");
+    n.dtype = DType::Int64;
+    n.lower = 2.0;
+    n.upper = 4.0;
+    w->declare_parameter(n);
+    w->declare_parameter(param("mach", "condition", "1"));
+    w->declare_result(scalar("cl", "1"));
+    const std::vector<std::int64_t> counts = {1, 2, 3, 4, 5, 6};
+    Batch b;
+    b.runs = 6;
+    b.values["x"] = f64({-0.5, 0.0, 0.25, 1.0, 1.5, 0.5});
+    b.values["n"] = Column::of(DType::Int64, counts.data(), 6);
+    b.values["mach"] = f64({0.1, 0.2, 0.3, 0.4, 0.5, 0.6});
+    b.values["cl"] = f64({0, 0, 0, 0, 0, 0});
+    w->add_runs(b);
+    w->close();
+  }
+  {
+    // The writer never stores a missing parameter (E5); a file may hold one.
+    File f = File::open_write(path);
+    const double missing = std::nan("");
+    f.write("/x", DType::Float64, {5}, {1}, &missing);
+  }
+  auto r = Reader::open(path);
+  auto outside = [&](const std::string& name, const Selection& rows) {
+    std::vector<double> out(static_cast<std::size_t>(r->shape(name, rows, Selection::all()).at(0)));
+    r->outside(name, rows, out.data(), out.size() * sizeof(double));
+    return out;
+  };
+  const auto x = outside("x", Selection::all());
+  CHECK(x.size() == 6 && x[0] == -0.5 && x[1] == 0.0 && x[2] == 0.0 && x[3] == 0.0 &&
+        x[4] == 0.5 && std::isnan(x[5]));
+  CHECK(outside("x", Selection::list({0, 4})) == std::vector<double>({-0.5, 0.5}));
+  CHECK(outside("x", Selection::range(1, 4)) == std::vector<double>({0.0, 0.0, 0.0}));
+  CHECK(outside("x", Selection::range(2, 2)).empty());
+  CHECK(outside("n", Selection::all()) == std::vector<double>({-1, 0, 0, 0, 1, 2}));
+  double buf[8] = {};
+  auto refused = [&](const std::string& name, const Selection& rows, std::size_t bytes) {
+    try {
+      r->outside(name, rows, buf, bytes);
+    } catch (const gamut_core::Error& e) {
+      return (e.rule().empty() ? std::string("error") : e.rule()) + ": " + e.what();
+    }
+    return std::string();
+  };
+  CHECK(refused("mach", Selection::all(), sizeof buf).find("mach declares no bounds") !=
+        std::string::npos);
+  CHECK(refused("cl", Selection::all(), sizeof buf).find("no parameter \"cl\"") != std::string::npos);
+  CHECK(refused("nothing", Selection::all(), sizeof buf).find("no parameter") != std::string::npos);
+  CHECK(refused("x", Selection::list({6}), sizeof buf).find("outside the 6 positions") !=
+        std::string::npos);
+  CHECK(refused("x", Selection::list({3, 1}), sizeof buf).find("strictly increasing") !=
+        std::string::npos);
+  CHECK(refused("x", Selection::range(4, 9), sizeof buf).find("outside the 6 positions") !=
+        std::string::npos);
+  CHECK(refused("x", Selection::all(), sizeof(double)).find("the buffer holds 8 bytes") !=
+        std::string::npos);
+  r.reset();
+  {
+    File f = File::open_write(path);
+    f.replace_attr("/x", "upper", AttrValue::real(-1.0));     // below lower
+    f.replace_attr("/n", "upper", AttrValue::text("4"));      // a bound that is not a number
+  }
+  r = Reader::open(path);
+  CHECK(refused("x", Selection::all(), sizeof buf).compare(0, 5, "E16: ") == 0);
+  CHECK(refused("n", Selection::all(), sizeof buf).compare(0, 5, "E16: ") == 0);
+  r.reset();
+  if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
+}
+
 std::string file_bytes(const std::string& path) {
   std::ifstream in(path, std::ios::binary);
   return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
@@ -923,6 +1006,7 @@ int main() {
       {"shared_group", test_shared_per_group_out_of_order},
       {"changing", test_changing_per_run_and_group},
       {"refusals", test_refusals},
+      {"bounds", test_outside_bounds},
       {"other_major", test_other_major_version},
       {"outside", test_values_stored_outside},
       {"growable", test_append_needs_growable_columns},

@@ -740,5 +740,29 @@ std::vector<std::string> Reader::label_names(const std::string& name,
   return out;
 }
 
+void Reader::outside(const std::string& name, const Selection& runs, double* out,
+                     std::size_t out_bytes) const {
+  const Parameter* p = schema_.parameter(name);
+  need(p != nullptr, "", "no parameter \"" + name + "\"", name);
+  need(p->lower || p->upper, "",
+       name + " declares no bounds; outside needs a parameter with lower and upper", name);
+  // The validator reports these (E16); measuring against them would mislead.
+  need(p->lower && p->upper && std::isfinite(*p->lower) && std::isfinite(*p->upper) &&
+           *p->lower <= *p->upper,
+       "E16", name + ": its bounds are not two finite numbers with lower <= upper", name);
+  const std::int64_t n = shape(name, runs, Selection::all()).at(0);
+  read(name, runs, Selection::all(), DType::Float64, out, out_bytes);
+  for (std::int64_t i = 0; i < n; ++i) {
+    double& v = out[i];
+    if (v < *p->lower) {
+      v -= *p->lower;
+    } else if (v > *p->upper) {
+      v -= *p->upper;
+    } else if (!std::isnan(v)) {
+      v = 0.0;
+    }
+  }
+}
+
 }  // namespace internal
 }  // namespace gamut_core

@@ -156,6 +156,7 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "gamut_shape": (_I, [_P, _S, _SEL, _SEL, ctypes.POINTER(_L), ctypes.POINTER(_I), _E]),
     "gamut_read": (_I, [_P, _S, _SEL, _SEL, _I, _P, _L, _E]),
     "gamut_label_names": (_I, [_P, _S, _SEL, _PP, _E]),
+    "gamut_outside": (_I, [_P, _S, _SEL, _P, _L, _E]),
     "gamut_table": (_I, [_P, _S, _PP, _E]),
     "gamut_select": (_I, [_P, _S, ctypes.POINTER(_L), _L, ctypes.POINTER(_L), _E]),
     "gamut_validate": (_I, [_S, _PP, _E]),
@@ -297,6 +298,17 @@ def read(handle: Any, name: str, rows: Selection, sites: Selection, dtype: np.dt
     out = np.empty(dims, dtype=dtype)
     call("gamut_read", handle, b(name), rows.pointer(), sites.pointer(), _DTYPE_CODE[np.dtype(dtype)],
          out.ctypes.data_as(ctypes.c_void_p), out.nbytes)
+    return out
+
+
+def outside(handle: Any, name: str, rows: Selection) -> np.ndarray:
+    shape = (ctypes.c_int64 * 4)()
+    rank = ctypes.c_int()
+    call("gamut_shape", handle, b(name), rows.pointer(), None, shape, ctypes.byref(rank))
+    # Sized as a read of the parameter; for any other name the core refuses.
+    out = np.empty(shape[0] if rank.value == 1 else 0, dtype=np.float64)
+    call("gamut_outside", handle, b(name), rows.pointer(), out.ctypes.data_as(ctypes.c_void_p),
+         out.nbytes)
     return out
 
 

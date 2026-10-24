@@ -399,7 +399,8 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
     table, all of one length; `coordinates` (rows x nodes x axes) when a
     model reads geometry the file does not store.  Each model's type must
     be registered (`register_model_type`; `Nearest` is built in).  An
-    input outside a parameter's bounds is evaluated, with a warning (W4).
+    input outside a parameter's bounds is evaluated, with a warning (W4),
+    and the answer's `outside(name)` says how far each row lies outside.
     Without `path` the data file is temporary and removed when closed:
     read it in a `with` block, or give `path` to keep it."""
     with _open(model_path) as m:

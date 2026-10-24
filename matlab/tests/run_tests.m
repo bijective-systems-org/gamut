@@ -78,6 +78,29 @@ r = gamut.open(p);
 ok(r.rowCount() == 4 && isequal(r.getField('pf', 'rows', 4), 100:105), 'append');
 r.close();
 
+% How far each row lies outside its parameter's bounds, rows from 1, and
+% the core's refusals: no bounds, not a parameter, a row that does not exist.
+p = fullfile(tmp, 'bounds.gamut');
+s = gamut.create(p, 'writer', 'matlab tests', ...
+    'parameters', struct('x', struct('units', 'm', 'lower', 0, 'upper', 1), 'mach', '1'), ...
+    'scalars', struct('cl', '1'));
+s.addRuns(struct('x', [-0.5; 0; 0.25; 1; 1.5], 'mach', 0.5 * ones(5, 1), 'cl', zeros(5, 1)));
+s.close();
+r = gamut.open(p);
+ok(isequal(r.outside('x'), [-0.5; 0; 0; 0; 0.5]), 'outside: below, on a bound, inside, above');
+ok(isequal(r.outside('x', 'rows', [1 5]), [-0.5; 0.5]), 'outside: rows from 1');
+for refusal = {{'mach', [], 'mach declares no bounds'}, {'cl', [], 'no parameter'}, ...
+               {'x', 6, 'outside the 5 positions'}}
+    [name, rows, says] = refusal{1}{:};
+    try
+        r.outside(name, 'rows', rows);
+        ok(false, ['outside refused: ' says]);
+    catch err
+        ok(contains(err.message, says), ['outside refused: ' err.message]);
+    end
+end
+r.close();
+
 % Model files: the built-in nearest model with one input (MATLAB cannot tell
 % a one-element array from a number; the gateway keeps the ranks), and a
 % registered plug-in serving values and std.
@@ -110,6 +133,12 @@ ok(isequal(out.getParameter('alpha'), [1; 4; 9]), 'inputs kept');
 tmpPath = out.Path;
 out.close();
 ok(~isfile(tmpPath), 'temporary evaluated file removed on close');
+lastwarn('');
+out = gamut.evaluate(mp, struct('alpha', [-2; 5; 12]));
+[~, id] = lastwarn();
+ok(strcmp(id, 'gamut:W4'), 'an input outside the domain warns');
+ok(isequal(out.outside('alpha'), [-2; 0; 2]), 'the answer marks each input outside the domain');
+out.close();
 r = gamut.open(mp);
 numbers = r.modelNumbers('fit');
 r.close();

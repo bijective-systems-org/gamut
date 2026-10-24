@@ -687,6 +687,32 @@ get_parameter(s::Study, name; rows=nothing) =
 get_label_codes(s::Study, name; rows=nothing) = read(s, name, rows, nothing, Int64)
 get_scalar(s::Study, name; rows=nothing) = read(s, name, rows, nothing, result_type(s, name))
 
+"""
+    outside(study, name; rows=nothing)
+
+How far each row's value of the parameter `name` lies outside the bounds
+the file declares for it, in the parameter's units: 0 inside or on a bound,
+`value - lower` (negative) below, `value - upper` (positive) above, `NaN`
+where the value is missing. A parameter with no bounds is refused. The
+answer of `evaluate` keeps the model's bounds, so this says which of its
+rows lie outside the range the model was fitted on, and how far.
+"""
+function outside(s::Study, name; rows=nothing)
+    need_reader(s)
+    r = selection(rows, "rows")
+    shape = zeros(Int64, 4)
+    rank = Ref{Cint}(0)
+    rsel = Ref(r.sel)
+    rk = r.keep
+    GC.@preserve rk begin
+        @mes gamut_shape (Ptr{Cvoid}, Cstring, Ref{CSel}, Ptr{CSel}, Ptr{Int64}, Ref{Cint}) handle(s) cs(name) rsel C_NULL shape rank
+        # Sized as a read of the parameter; for any other name the core refuses.
+        out = Vector{Float64}(undef, rank[] == 1 ? shape[1] : 0)
+        @mes gamut_outside (Ptr{Cvoid}, Cstring, Ref{CSel}, Ptr{Float64}, Int64) handle(s) cs(name) rsel out sizeof(out)
+    end
+    return r.single ? out[1] : out
+end
+
 function get_label(s::Study, name; rows=nothing)
     need_reader(s)
     r = selection(rows, "rows")

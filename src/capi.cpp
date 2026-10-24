@@ -876,6 +876,19 @@ int gamut_label_names(const gamut_file* f, const char* label, const gamut_sel* r
   }
 }
 
+int gamut_outside(const gamut_file* f, const char* name, const gamut_sel* rows, double* out,
+                int64_t out_bytes, gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    need(out_bytes >= 0 && (out_bytes == 0 || out != nullptr), "the output buffer is NULL");
+    reader_of(f).outside(str(name), selection(rows), out, static_cast<std::size_t>(out_bytes));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
 int gamut_select(const gamut_file* f, const char* where, int64_t* out, int64_t capacity, int64_t* n,
                gamut_error* err) {
   try {

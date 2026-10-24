@@ -479,6 +479,19 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
           e);
     if (dims.size() == 1) dims.push_back(1);   // a column per run
     plhs[0] = from_c_order(buf.data(), dims, code);
+  } else if (cmd == "outside") {
+    gamut_file* f = file(arg(1));
+    const std::string name = text(arg(2), "name");
+    const Sel rows = selection(arg(3));
+    int64_t shape[4];
+    int rank = 0;
+    check(gamut_shape(f, name.c_str(), rows.ptr(), nullptr, shape, &rank, &e), e);
+    // Sized as a read of the parameter; for any other name the core refuses.
+    const mwSize n = rank == 1 ? static_cast<mwSize>(shape[0]) : 0;
+    plhs[0] = mxCreateDoubleMatrix(n, 1, mxREAL);
+    check(gamut_outside(f, name.c_str(), rows.ptr(), mxGetPr(plhs[0]),
+                        static_cast<int64_t>(n * sizeof(double)), &e),
+          e);
   } else if (cmd == "label_names") {
     gamut_strings* s = nullptr;
     const Sel rows = selection(arg(3));
