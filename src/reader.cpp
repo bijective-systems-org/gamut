@@ -742,20 +742,42 @@ std::vector<std::string> Reader::label_names(const std::string& name,
 
 namespace {
 
-// v - b for an int64 v and a finite bound b, exact until the result is
-// rounded once to double, so its sign is always right: a double holds
-// every int64 only to 2^53.
+// a + b exactly, as s + e (Knuth's two-sum).
+void two_sum(double a, double b, double* s, double* e) {
+  *s = a + b;
+  const double v = *s - a;
+  *e = (a - (*s - v)) + (b - v);
+}
+
+// -1, 0 or 1 as the int64 v is below, at or above the finite b, exactly.
+int compare(std::int64_t v, double b) {
+  if (b >= 9223372036854775808.0) return -1;
+  if (b < -9223372036854775808.0) return 1;
+  const double whole = std::trunc(b);
+  const auto i = static_cast<std::int64_t>(whole);   // exact: |whole| <= 2^63, -2^63 included
+  if (v != i) return v < i ? -1 : 1;
+  const double fraction = b - whole;                  // exact
+  return fraction > 0 ? -1 : fraction < 0 ? 1 : 0;
+}
+
+// v - b for an int64 v and a finite b, rounded once to the nearest double
+// (a double holds every int64 only to 2^53). v is split into its bits above
+// the lowest ten and those ten, each exact as a double, and the sum is
+// carried as exact pairs: v - b = r + w + u exactly at the end.
 double minus(std::int64_t v, double b) {
-  const double whole = std::floor(b);
-  if (whole < -9223372036854775808.0 || whole >= 9223372036854775808.0) {
-    return static_cast<double>(v) - b;   // beyond every int64
+  const std::int64_t low = v & 1023;
+  double s1, e1, s2, e2, s, e, t, u, r, w;
+  two_sum(static_cast<double>(v - low), -b, &s1, &e1);
+  two_sum(e1, static_cast<double>(low), &s2, &e2);
+  two_sum(s1, s2, &s, &e);
+  two_sum(e, e2, &t, &u);
+  two_sum(s, t, &r, &w);
+  // r is nearest to r + w; when that was a tie, u says which way it goes.
+  if (w != 0 && u != 0 && (w > 0) == (u > 0)) {
+    const double next = std::nextafter(r, w > 0 ? HUGE_VAL : -HUGE_VAL);
+    if (std::fabs(w) == std::fabs(next - r) / 2) r = next;
   }
-  const auto w = static_cast<std::int64_t>(whole);
-  const bool negative = v < w;
-  const auto uv = static_cast<std::uint64_t>(v), uw = static_cast<std::uint64_t>(w);
-  const std::uint64_t gap = negative ? uw - uv : uv - uw;   // exact, as unsigned
-  const double d = negative ? -static_cast<double>(gap) : static_cast<double>(gap);
-  return d - (b - whole);
+  return r;
 }
 
 }  // namespace
@@ -774,14 +796,17 @@ void Reader::outside(const std::string& name, const Selection& runs, double* out
   if (p->dtype == DType::Int64) {
     // Integers are measured as integers: as doubles they lose bits past 2^53.
     const std::size_t want = static_cast<std::size_t>(n) * sizeof(double);
-    need(out_bytes == want, "",
+    need(out_bytes >= want, "",
          name + ": the buffer holds " + std::to_string(out_bytes) +
              " bytes and the selection needs " + std::to_string(want), name);
     std::vector<std::int64_t> values(static_cast<std::size_t>(n));
     read(name, runs, Selection::all(), DType::Int64, values.data(), values.size() * 8);
+    // Inside or outside is decided exactly; then how far.
     for (std::size_t i = 0; i < values.size(); ++i) {
-      const double below = minus(values[i], *p->lower), above = minus(values[i], *p->upper);
-      out[i] = below < 0 ? below : above > 0 ? above : 0.0;
+      const std::int64_t v = values[i];
+      out[i] = compare(v, *p->lower) < 0   ? minus(v, *p->lower)
+               : compare(v, *p->upper) > 0 ? minus(v, *p->upper)
+                                           : 0.0;
     }
     return;
   }

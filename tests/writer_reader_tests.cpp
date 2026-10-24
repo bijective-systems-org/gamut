@@ -414,17 +414,34 @@ void test_outside_large_integers() {
       p.upper = upper;
       w->declare_parameter(p);
     };
+    const double top = 9223372036854775808.0;   // 2^63, past every int64
     declare("up", static_cast<double>(big), static_cast<double>(big));
     declare("down", -static_cast<double>(big), -static_cast<double>(big));
     declare("half", 0.5, 10.0);
+    declare("edge", top, top + 2048);
+    declare("floor", -top - 2048, -top - 2048);
+    declare("tiny", -1e-20, -1e-20);
+    declare("tenth", -0.1, -0.1);
+    declare("gap", 0.5, 0.5);
+    const std::int64_t max = INT64_MAX, min = INT64_MIN;
     const std::vector<std::int64_t> up = {big - 1, big, big + 1, big + 3};
     const std::vector<std::int64_t> down = {-big - 3, -big, -big + 1, -big};
     const std::vector<std::int64_t> half = {0, 1, 10, 11};
+    const std::vector<std::int64_t> edge = {max, max - 1, 0, max};
+    const std::vector<std::int64_t> floor = {min + 1, min, 0, min + 1};
+    const std::vector<std::int64_t> tiny = {0, -1, 0, 1};
+    const std::vector<std::int64_t> tenth = {0, 0, 0, 0};
+    const std::vector<std::int64_t> gap = {big + 3, 0, 1, big + 3};
     Batch b;
     b.runs = 4;
     b.values["up"] = Column::of(DType::Int64, up.data(), 4);
     b.values["down"] = Column::of(DType::Int64, down.data(), 4);
     b.values["half"] = Column::of(DType::Int64, half.data(), 4);
+    b.values["edge"] = Column::of(DType::Int64, edge.data(), 4);
+    b.values["floor"] = Column::of(DType::Int64, floor.data(), 4);
+    b.values["tiny"] = Column::of(DType::Int64, tiny.data(), 4);
+    b.values["tenth"] = Column::of(DType::Int64, tenth.data(), 4);
+    b.values["gap"] = Column::of(DType::Int64, gap.data(), 4);
     w->add_runs(b);
     w->close();
   }
@@ -437,6 +454,21 @@ void test_outside_large_integers() {
   CHECK(outside("up") == std::vector<double>({-1, 0, 1, 3}));
   CHECK(outside("down") == std::vector<double>({-3, 0, 1, 0}));
   CHECK(outside("half") == std::vector<double>({-0.5, 0, 0, 1}));
+  // Bounds past every int64, and fractions far below one.
+  CHECK(outside("edge") == std::vector<double>({-1, -2, -9223372036854775808.0, -1}));
+  CHECK(outside("floor") == std::vector<double>({2049, 2048, 9223372036854777856.0, 2049}));
+  CHECK(outside("tiny") == std::vector<double>({1e-20, -1 + 1e-20, 1e-20, 1 + 1e-20}));
+  CHECK(outside("tenth") == std::vector<double>({0.1, 0.1, 0.1, 0.1}));
+  // A large gap from a fractional bound: 2^53 + 3 - 0.5 lies between the
+  // doubles 2^53 + 2 and 2^53 + 4, nearer the first.
+  CHECK(outside("gap") == std::vector<double>({9007199254740994.0, -0.5, 0.5, 9007199254740994.0}));
+  // A buffer larger than the selection is filled as far as it needs, as
+  // every read does; an empty selection writes nothing.
+  std::vector<double> roomy(6, 7.0);
+  r->outside("up", Selection::all(), roomy.data(), roomy.size() * sizeof(double));
+  CHECK(roomy[2] == 1 && roomy[4] == 7.0 && roomy[5] == 7.0);
+  r->outside("up", Selection::range(1, 1), roomy.data(), roomy.size() * sizeof(double));
+  CHECK(roomy[0] == -1);
   r.reset();
   std::remove(path.c_str());
 }
