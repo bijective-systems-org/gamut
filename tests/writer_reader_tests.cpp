@@ -400,6 +400,47 @@ void test_refusals() {
 // value.  A parameter without bounds, or with bounds the validator rejects,
 // is refused rather than reported as inside; so are other names and bad
 // selections.
+// An int64 parameter is measured as an integer: as a double it loses bits
+// past 2^53, which would mark a row one past its bound as inside.
+void test_outside_large_integers() {
+  const std::string path = "wr_bounds_int.gamut";
+  const std::int64_t big = std::int64_t(1) << 53;
+  {
+    auto w = Writer::create(path, "tests", "", "fixed");
+    auto declare = [&](const char* name, double lower, double upper) {
+      Parameter p = param(name, "design", "1");
+      p.dtype = DType::Int64;
+      p.lower = lower;
+      p.upper = upper;
+      w->declare_parameter(p);
+    };
+    declare("up", static_cast<double>(big), static_cast<double>(big));
+    declare("down", -static_cast<double>(big), -static_cast<double>(big));
+    declare("half", 0.5, 10.0);
+    const std::vector<std::int64_t> up = {big - 1, big, big + 1, big + 3};
+    const std::vector<std::int64_t> down = {-big - 3, -big, -big + 1, -big};
+    const std::vector<std::int64_t> half = {0, 1, 10, 11};
+    Batch b;
+    b.runs = 4;
+    b.values["up"] = Column::of(DType::Int64, up.data(), 4);
+    b.values["down"] = Column::of(DType::Int64, down.data(), 4);
+    b.values["half"] = Column::of(DType::Int64, half.data(), 4);
+    w->add_runs(b);
+    w->close();
+  }
+  auto r = Reader::open(path);
+  auto outside = [&](const std::string& name) {
+    std::vector<double> out(4);
+    r->outside(name, Selection::all(), out.data(), out.size() * sizeof(double));
+    return out;
+  };
+  CHECK(outside("up") == std::vector<double>({-1, 0, 1, 3}));
+  CHECK(outside("down") == std::vector<double>({-3, 0, 1, 0}));
+  CHECK(outside("half") == std::vector<double>({-0.5, 0, 0, 1}));
+  r.reset();
+  std::remove(path.c_str());
+}
+
 void test_outside_bounds() {
   const std::string path = "wr_bounds.gamut";
   {
@@ -1007,6 +1048,7 @@ int main() {
       {"changing", test_changing_per_run_and_group},
       {"refusals", test_refusals},
       {"bounds", test_outside_bounds},
+      {"bounds_int", test_outside_large_integers},
       {"other_major", test_other_major_version},
       {"outside", test_values_stored_outside},
       {"growable", test_append_needs_growable_columns},

@@ -740,6 +740,26 @@ std::vector<std::string> Reader::label_names(const std::string& name,
   return out;
 }
 
+namespace {
+
+// v - b for an int64 v and a finite bound b, exact until the result is
+// rounded once to double, so its sign is always right: a double holds
+// every int64 only to 2^53.
+double minus(std::int64_t v, double b) {
+  const double whole = std::floor(b);
+  if (whole < -9223372036854775808.0 || whole >= 9223372036854775808.0) {
+    return static_cast<double>(v) - b;   // beyond every int64
+  }
+  const auto w = static_cast<std::int64_t>(whole);
+  const bool negative = v < w;
+  const auto uv = static_cast<std::uint64_t>(v), uw = static_cast<std::uint64_t>(w);
+  const std::uint64_t gap = negative ? uw - uv : uv - uw;   // exact, as unsigned
+  const double d = negative ? -static_cast<double>(gap) : static_cast<double>(gap);
+  return d - (b - whole);
+}
+
+}  // namespace
+
 void Reader::outside(const std::string& name, const Selection& runs, double* out,
                      std::size_t out_bytes) const {
   const Parameter* p = schema_.parameter(name);
@@ -751,6 +771,20 @@ void Reader::outside(const std::string& name, const Selection& runs, double* out
            *p->lower <= *p->upper,
        "E16", name + ": its bounds are not two finite numbers with lower <= upper", name);
   const std::int64_t n = shape(name, runs, Selection::all()).at(0);
+  if (p->dtype == DType::Int64) {
+    // Integers are measured as integers: as doubles they lose bits past 2^53.
+    const std::size_t want = static_cast<std::size_t>(n) * sizeof(double);
+    need(out_bytes == want, "",
+         name + ": the buffer holds " + std::to_string(out_bytes) +
+             " bytes and the selection needs " + std::to_string(want), name);
+    std::vector<std::int64_t> values(static_cast<std::size_t>(n));
+    read(name, runs, Selection::all(), DType::Int64, values.data(), values.size() * 8);
+    for (std::size_t i = 0; i < values.size(); ++i) {
+      const double below = minus(values[i], *p->lower), above = minus(values[i], *p->upper);
+      out[i] = below < 0 ? below : above > 0 ? above : 0.0;
+    }
+    return;
+  }
   read(name, runs, Selection::all(), DType::Float64, out, out_bytes);
   for (std::int64_t i = 0; i < n; ++i) {
     double& v = out[i];
