@@ -308,6 +308,10 @@ if isfile(fullfile(examples, 'one_mesh.m'))
         printed = splitlines(string(run_example(fullfile(examples, 'evaluate_model.m'), tmp)));
         ok(~isempty(line) && any(strcmp(printed, line)), ...
             'MATLAB evaluates the model fitted in Python and prints the README''s line');
+        page = fileread(fullfile(fileparts(fileparts(here)), 'docs', 'guide', '12-matlab.md'));
+        marks = regexp(page, 'degrees outside the fitted range:[^\r\n]*', 'match', 'once');
+        ok(~isempty(marks) && any(strcmp(printed, marks)), ...
+            'the answer marks the angle outside the fitted range as the MATLAB page shows');
         % The same class saves a model fitted in MATLAB: its coefficients
         % are stored as a vector, as numpy.polyfit's are.
         back = cd(tmp);

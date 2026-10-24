@@ -104,6 +104,17 @@ text with more than one axis, which Python flattened into strings (E18).
 one-line description. `bench/scaling.py` times writes and reads as run
 tables, one mesh and a mesh per run grow.
 
+An answer from `evaluate` says, row by row, which inputs lie outside the
+range the model was fitted on, and how far. The answer already kept the
+model's bounds on its parameters; `outside(name)` measures each row's
+value against them, in the parameter's units: 0 inside or on a bound,
+negative below, positive above, NaN for a missing value. A parameter with
+no bounds is refused rather than reported as inside. The core computes it
+once (`gamut_outside` in C) for any data file, and it is `study.outside`
+in Python, MATLAB and C++ and `Gamut.outside` in Julia. `evaluate` still
+warns as well (W4). The models page and the MATLAB, Julia and C++ pages
+show the call.
+
 The validator holds a mesh's computed coordinates to the writer's rules: a
 computing model only in a model file whose mesh is per run, which must
 name one (E16), and that model existing with its output named (E17). The

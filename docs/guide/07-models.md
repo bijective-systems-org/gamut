@@ -48,7 +48,9 @@ the answer is a valid study file: True
 
 - `create_model` declares the file as `create` does. Its parameters need
   `lower` and `upper`: the domain. An input outside it is evaluated, with
-  a warning (W4); refusing it is the caller's choice.
+  a warning (W4), and the answer marks it
+  ([below](#inputs-outside-the-fitted-range)); refusing it is the caller's
+  choice.
 - Each result names the model that computes it, `fit`, and that model's
   output, `cl`. `trained_on` records the `file_id` of each study the model
   was fitted on.
@@ -71,6 +73,34 @@ lift_model.gamut: model file
   trained on  ...
   file        ... KB
 ```
+
+## Inputs outside the fitted range
+
+The quadratic was fitted on angles from 0 to 10 degrees. Asked about 5
+and 12 degrees, `evaluate` answers both and warns that 12 lies outside
+that range (W4). A warning can be filtered and lost, so the answer keeps
+the model's bounds on its parameters, and `outside` reads from them, row
+by row, which inputs lie outside and how far:
+
+```python
+with gamut.evaluate("lift_model.gamut", {"alpha": [5.0, 12.0]}) as answer:
+    lift, outside = answer.get_scalar("cl"), answer.outside("alpha")
+print("the model's lift at 5 and 12 degrees:", " ".join(f"{v:.2f}" for v in lift))
+print("degrees outside the fitted range:", " ".join(f"{v:g}" for v in outside))
+```
+
+```text
+the model's lift at 5 and 12 degrees: 0.55 1.32
+degrees outside the fitted range: 0 2
+```
+
+`outside(name)` gives a number per row, in the parameter's units: 0
+inside the bounds or on one, the distance below the lower bound as a
+negative number, above the upper as a positive one. For a model of
+several inputs, ask it of each of `answer.names("parameters")`. It reads
+any data file whose parameters have bounds, which `gamut validate` checks
+the same way (W4), and refuses a parameter with none rather than call it
+inside.
 
 ## A model type of your own
 

@@ -341,7 +341,9 @@ coordinates (a model that reads `coordinates` evaluated on new
 geometries); otherwise they are the model file's stored coordinates, and a
 model that reads `coordinates` receives those. The data file records the model file's `file_id` in
 `evaluated_from`. An input outside its bounds is reported (W4) and
-evaluated; refusing is the caller's choice.
+evaluated; refusing is the caller's choice. The data file keeps the
+model's bounds on its parameters, so a reader can tell which rows lie
+outside them and by how much (W4).
 
 The input table maps names to columns of one length n: a parameter by its
 values (an int64 parameter accepts integers), a label by its names, each in

@@ -9,7 +9,8 @@ The model here is a quadratic of a type of our own, `Polynomial`.
 examples/matlab/evaluate_model.m evaluates the same file in MATLAB, with
 a MATLAB class of the same type, and prints the same line. The built-in
 `Nearest` model answers with the closest run; examples/julia/nearest.jl
-and examples/cpp/nearest.cpp evaluate it too.
+and examples/cpp/nearest.cpp evaluate it too. Last, the model is asked
+about an angle outside the range it was fitted on, and the answer says so.
 """
 import numpy as np
 
@@ -70,3 +71,10 @@ with gamut.create_model("lift_nearest.gamut", writer="example fit", trained_on=[
 with gamut.evaluate("lift_nearest.gamut", {"alpha": [2.2, 7.9]}) as answer:
     lift = answer.get_scalar("cl")
 print("the nearest run's lift at 2.2 and 7.9 degrees:", " ".join(f"{v:.2f}" for v in lift))
+
+# Inputs outside the range the model was fitted on are evaluated, with a
+# warning (W4), and the answer says for each row how far outside it lies.
+with gamut.evaluate("lift_model.gamut", {"alpha": [5.0, 12.0]}) as answer:
+    lift, outside = answer.get_scalar("cl"), answer.outside("alpha")
+print("the model's lift at 5 and 12 degrees:", " ".join(f"{v:.2f}" for v in lift))
+print("degrees outside the fitted range:", " ".join(f"{v:g}" for v in outside))

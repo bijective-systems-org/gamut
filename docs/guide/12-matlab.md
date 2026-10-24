@@ -104,6 +104,28 @@ selecting by condition, models and validation need the package
 ([`examples/matlab/read_with_ncread.m`](../../examples/matlab/read_with_ncread.m)
 is the whole program).
 
+## Inputs outside a model's range
+
+`gamut.evaluate` evaluates a [model file](07-models.md) and returns its
+answer, a study open to read. An input outside the range the model was
+fitted on is evaluated with a warning (`gamut:W4`), and the answer keeps
+the model's bounds, so it can say which rows lie outside and how far.
+[`evaluate_model.m`](../../examples/matlab/evaluate_model.m) asks the
+models page's quadratic about 5 and 12 degrees:
+
+```matlab
+answer = gamut.evaluate('lift_model.gamut', struct('alpha', [5; 12]));
+outside = answer.outside('alpha');
+answer.close();
+```
+
+```text
+degrees outside the fitted range: 0 2
+```
+
+`outside` gives a number per row in the parameter's units: 0 inside the
+bounds or on one, negative below them, positive above.
+
 ## The same calls
 
 | Python | MATLAB |
@@ -113,6 +135,7 @@ is the whole program).
 | `study.add_runs(pandas.read_csv(path))` | `study.addRuns(readtable(path))`, or a struct of columns |
 | `study.get_field("p", rows=r, nodes=n)` | `study.getField('p', 'rows', r, 'nodes', n)` |
 | `study.select("mach > 0.7")` | `study.select('mach > 0.7')`, positions from 1 |
+| `study.outside("alpha", rows=r)` | `study.outside('alpha', 'rows', r)` |
 | `study.row_count` | `study.rowCount()` |
 | `study.table()` | `study.table()`: a MATLAB `table`, labels as `categorical` |
 | `gamut.register_model_type(cls)` | `gamut.registerModelType(className)` |
