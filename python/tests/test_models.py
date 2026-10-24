@@ -163,6 +163,8 @@ def test_refusals(tmp_path):
                           (object(), "save\\(\\) gave object"),
                           ([1.0], "save\\(\\) gave list"),
                           ({"w": [[1], [2, 3]]}, "w: not an array of model data"),
+                          ({"w": [1.0, "a"]}, "w: text is stored as one list"),
+                          ({"w": [["a"], ["b"]]}, "w: text is stored as one list"),
                           ({"w": np.zeros(2, np.float32)}, "not float32")):
         Foreign.save = lambda self, numbers=numbers: numbers
         with pytest.raises(gamut.GamutError, match=says) as e:
@@ -324,3 +326,56 @@ def test_a_model_file_declares_a_bool_label_as_a_data_file_does(tmp_path):
         m.add_model("m", gamut.Nearest(["x"], [0.0], [1.0], [[0.0], [1.0]], {"y": [0.0, 1.0]}), ["x"])
     with gamut.open(mp) as f:
         assert f.categories("on") == ["false", "true"]
+
+
+def test_outside_measures_each_row_against_the_bounds(tmp_path):
+    """Zero inside and on a bound, value - lower below, value - upper above,
+    NaN for a missing value; a parameter without bounds is refused, not
+    reported as inside."""
+    import h5py
+    p = str(tmp_path / "bounded.gamut")
+    with gamut.create(p, writer="tests",
+                       parameters={"x": {"units": "m", "lower": 0.0, "upper": 1.0},
+                                   "n": {"units": "1", "lower": 2, "upper": 4}, "mach": "1"},
+                       scalars={"cl": "1"}) as s:
+        s.add_runs({"x": [-0.5, 0.0, 0.25, 1.0, 1.5, 0.5], "n": [1, 2, 3, 4, 5, 6],
+                    "mach": [0.5] * 6, "cl": [0.0] * 6})
+    with h5py.File(p, "r+") as f:       # the writer never stores a missing parameter (E5)
+        f["x"][5] = np.nan
+    with gamut.open(p) as s:
+        np.testing.assert_array_equal(s.outside("x"), [-0.5, 0.0, 0.0, 0.0, 0.5, np.nan])
+        np.testing.assert_array_equal(s.outside("x", rows=[0, 4]), [-0.5, 0.5])
+        np.testing.assert_array_equal(s.outside("x", rows=slice(1, 4)), [0.0, 0.0, 0.0])
+        assert s.outside("x", rows=4) == 0.5
+        assert s.outside("x", rows=[]).shape == (0,)
+        np.testing.assert_array_equal(s.outside("n"), [-1.0, 0.0, 0.0, 0.0, 1.0, 2.0])
+        with pytest.raises(gamut.GamutError, match="mach declares no bounds"):
+            s.outside("mach")
+        with pytest.raises(gamut.GamutError, match='no parameter "cl"'):
+            s.outside("cl")
+        with pytest.raises(gamut.GamutError, match='nothing is called "y"'):
+            s.outside("y")
+        for rows, says in (([6], "outside the 6 positions"), ([3, 1], "strictly increasing"),
+                           ([1.5], "positions are integers")):
+            with pytest.raises(gamut.GamutError, match=says):
+                s.outside("x", rows=rows)
+
+
+def test_an_answer_marks_the_inputs_outside_the_fitted_range(tmp_path):
+    """The answer of evaluate keeps the model's bounds: each row says which
+    input lies outside the range the model was fitted on, and how far."""
+    mp = str(tmp_path / "lift.gamut")
+    with gamut.create_model(mp, writer="tests",
+                             parameters={"mach": {"units": "1", "lower": 0.25, "upper": 0.75},
+                                         "alpha": {"units": "degree", "lower": 0.0, "upper": 4.0}},
+                             scalars={"cl": {"units": "1", "model": "fit", "output": "cl"}}) as m:
+        m.add_model("fit", gamut.Nearest(["mach", "alpha"], [0.25, 0.0], [0.75, 4.0],
+                                         [[0.25, 0.0], [0.75, 4.0]], {"cl": [0.0, 1.0]}),
+                    inputs=["mach", "alpha"])
+    out = str(tmp_path / "answer.gamut")
+    with pytest.warns(UserWarning, match="W4"):
+        answer = gamut.evaluate(mp, {"mach": [0.125, 0.5, 0.75], "alpha": [2.0, 5.5, -1.0]}, path=out)
+    with answer:
+        np.testing.assert_array_equal(answer.outside("mach"), [-0.125, 0.0, 0.0])
+        np.testing.assert_array_equal(answer.outside("alpha"), [0.0, 1.5, -1.0])
+    assert gamut.validate(out).warning_ids == ["W4"]

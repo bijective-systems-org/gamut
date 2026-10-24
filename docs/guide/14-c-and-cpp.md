@@ -109,6 +109,7 @@ decompresses large reads in four threads.
 | `study.add_run(values, fields=...)` | `study.add_run({{"gamma", 0.5}}, {{"cp", cp}})` |
 | `gamut.open(path, mode="a")` | `gamut::open(path, "a")` |
 | `study.get_field("p", rows=r, nodes=n)` | `study.get_field("p", r, n)` |
+| `study.outside("alpha", rows=r)` | `study.outside("alpha", r)` |
 | `study.select("mach > 0.7")`, `study.get_label(...)`, `study.describe(...)` | the same names |
 | `gamut.append`, `extract`, `write_copy`, `validate` | `gamut::append`, `extract`, `write_copy`, `validate` |
 

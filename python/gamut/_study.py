@@ -92,7 +92,8 @@ class Study:
     Writing: `add_run`, `add_runs`, `set_mesh`, `notes`, `set_private`.
     Reading: `row_count`, `names`, `describe`, `select`, `get_parameter`,
     `get_label`, `get_scalar`, `get_constant`, `get_field`, `get_points`,
-    `get_cells`, `get_mesh_label`, `categories`, `table`, `related`.
+    `get_cells`, `get_mesh_label`, `categories`, `table`, `related`,
+    `outside`.
     Rows are positions counted from 0; a `rows` argument takes a position,
     a list of them, a slice, or None for every row.
 
@@ -398,10 +399,21 @@ class Study:
         return out
 
     def _site_count(self, name: str, rows: Selection) -> int:
+        # Counted on the first selected row: a shared mesh gives every row
+        # the same sites, and all rows' sites at once can pass the read limit
+        # when only a few sites are wanted.
+        first = None
+        if rows.sel.kind == _lib.SEL_ALL:
+            first = 0 if self.row_count else None
+        elif rows.sel.kind == _lib.SEL_RANGE:
+            first = rows.sel.start if rows.sel.stop > rows.sel.start else None
+        elif rows._keep is not None and len(rows._keep):
+            first = int(rows._keep[0])
+        one = rows if first is None else Selection(first, "rows")
         shape = (ctypes.c_int64 * 4)()
         rank = ctypes.c_int()
         all_sites = Selection(None, "sites")
-        call("gamut_shape", self._handle(), b(name), rows.pointer(), all_sites.pointer(), shape,
+        call("gamut_shape", self._handle(), b(name), one.pointer(), all_sites.pointer(), shape,
              ctypes.byref(rank))
         dims = [shape[i] for i in range(rank.value)]
         if name == "coordinates":
@@ -420,6 +432,20 @@ class Study:
         values = self._get(name, rows, dtype=np.int64 if d.get("dtype") == "int64" and units is None
                            else np.float64)
         return self._in_units(name, values, units)
+
+    def outside(self, name: str, rows: Any = None) -> np.ndarray:
+        """How far each row's value of the parameter `name` lies outside the
+        bounds the file declares for it, in the parameter's units: 0 inside
+        or on a bound, `value - lower` (negative) below, `value - upper`
+        (positive) above, NaN where the value is missing.  A parameter with
+        no bounds is refused.  The answer of `evaluate` keeps the model's
+        bounds, so this says which of its rows lie outside the range the
+        model was fitted on, and how far."""
+        self._need_reader()
+        r = Selection(rows, "rows")
+        r.resolve(self.row_count)
+        out = _lib.outside(self._handle(), name, r)
+        return out[0] if r.single else out
 
     def get_label(self, name: str, rows: Any = None) -> np.ndarray:
         """A label's category name in each row."""
@@ -560,7 +586,8 @@ class Study:
         """The positions of the rows `where` selects, e.g.
         "mach > 0.5 and status == converged" (docs/reference/selecting.md)."""
         self._need_reader()
-        out = np.empty(max(self.row_count, 1), dtype=np.int64)
+        rows = self.row_count
+        out = np.empty(rows if 0 < rows <= _lib.MAX_ROWS_SCANNED else 1, dtype=np.int64)
         n = ctypes.c_int64()
         call("gamut_select", self._handle(), b(where), out.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
              out.size, ctypes.byref(n))

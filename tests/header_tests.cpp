@@ -109,6 +109,33 @@ void test_table() {
   CHECK(!r.warnings.empty());                                     // the failed run is reported
 }
 
+// How far each row lies outside its parameter's bounds, and the core's
+// refusals: no bounds, not a parameter, a row that does not exist.
+void test_outside_bounds() {
+  {
+    auto s = gamut::create("bounds.gamut", "header tests");
+    s.declare_parameter("x", "design", "m", 0.0, 1.0);
+    s.declare_parameter("mach", "condition", "1");
+    s.declare_scalar("cl", "1");
+    for (double x : {-0.5, 0.0, 0.25, 1.0, 1.5}) s.add_run({{"x", x}, {"mach", 0.5}, {"cl", 0.0}});
+    s.close();
+  }
+  const auto s = gamut::open("bounds.gamut");
+  CHECK(s.outside("x") == (std::vector<double>{-0.5, 0.0, 0.0, 0.0, 0.5}));
+  CHECK(s.outside("x", {0, 4}) == (std::vector<double>{-0.5, 0.5}));
+  CHECK(s.outside("x", gamut::Selection::range(1, 4)) == (std::vector<double>{0.0, 0.0, 0.0}));
+  std::string why;
+  try {
+    s.outside("mach");
+  } catch (const gamut::Error& e) {
+    why = e.what();
+  }
+  CHECK(why.find("mach declares no bounds") != std::string::npos);
+  CHECK(refused([&] { s.outside("cl"); }) == "error");
+  CHECK(refused([&] { s.outside("x", {5}); }) == "error");
+  std::remove("bounds.gamut");
+}
+
 void test_shared_fixed_and_append() {
   const std::vector<double> points = ring_points(8, 1.0);
   const gamut::Cells cells = ring_cells(8);
@@ -365,6 +392,7 @@ void test_calls_from_several_threads() {
 
 int main() {
   test_table();
+  test_outside_bounds();
   test_shared_fixed_and_append();
   test_family_and_changing();
   test_copies_and_errors();

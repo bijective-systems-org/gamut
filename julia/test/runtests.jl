@@ -233,6 +233,29 @@ mktempdir() do tmp
         @test isempty(Gamut.validate(e)) && isempty(Gamut.validate(w))
     end
 
+    @testset "how far each row lies outside its parameter's bounds" begin
+        p = joinpath(tmp, "bounds.gamut")
+        Gamut.create(p; writer="tests",
+                      parameters=Dict("x" => (units="m", lower=0.0, upper=1.0), "mach" => "1"),
+                      scalars=Dict("cl" => "1")) do s
+            Gamut.add_runs!(s, Dict("x" => [-0.5, 0.0, 0.25, 1.0, 1.5], "mach" => fill(0.5, 5),
+                                     "cl" => zeros(5)))
+        end
+        Gamut.open(p) do f
+            @test Gamut.outside(f, "x") == [-0.5, 0.0, 0.0, 0.0, 0.5]
+            @test Gamut.outside(f, "x"; rows=[1, 5]) == [-0.5, 0.5]          # 1-based
+            @test Gamut.outside(f, "x"; rows=2:4) == [0.0, 0.0, 0.0]
+            @test Gamut.outside(f, "x"; rows=5) == 0.5
+            e = try Gamut.outside(f, "mach"); nothing catch x; x end
+            @test e isa GamutError && occursin("mach declares no bounds", e.message)
+            e = try Gamut.outside(f, "cl"); nothing catch x; x end
+            @test e isa GamutError && occursin("no parameter", e.message)
+            e = try Gamut.outside(f, "x"; rows=[6]); nothing catch x; x end
+            @test e isa GamutError && occursin("outside the 5 positions", e.message)
+            @test_throws GamutError Gamut.outside(f, "x"; rows=[1.5])
+        end
+    end
+
     @testset "the built-in nearest model" begin
         mp = joinpath(tmp, "nearest.gamut")
         Gamut.create_model(mp; writer="tests",
@@ -247,6 +270,10 @@ mktempdir() do tmp
         path = out.path
         close(out)
         @test !isfile(path)
+        # The answer keeps the model's bounds and marks each row against them.
+        out = @test_logs (:warn, r"W4") Gamut.evaluate(mp, Dict("alpha" => [-2.0, 5.0, 12.0]))
+        @test Gamut.outside(out, "alpha") == [-2.0, 0.0, 2.0]
+        close(out)
         numbers = Gamut.open(s -> Gamut.model_numbers(s, "fit"), mp)
         @test numbers["lower"] == [0.0] && numbers["columns"] == ["alpha"]
     end

@@ -57,7 +57,7 @@ struct gamut_tree {
 
 namespace {
 
-const char kVersion[] = "1.1.0";
+const char kVersion[] = "1.2.0";
 const char kFormat[] = "gamut/1";
 
 // HDF5 keeps process-wide state and is built without its thread-safety
@@ -870,6 +870,19 @@ int gamut_label_names(const gamut_file* f, const char* label, const gamut_sel* r
     clear(err);
     need(out != nullptr, "out is NULL");
     *out = strings(reader_of(f).label_names(str(label), selection(rows)));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int gamut_outside(const gamut_file* f, const char* name, const gamut_sel* rows, double* out,
+                int64_t out_bytes, gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    need(out_bytes >= 0 && (out_bytes == 0 || out != nullptr), "the output buffer is NULL");
+    reader_of(f).outside(str(name), selection(rows), out, static_cast<std::size_t>(out_bytes));
     return 0;
   } catch (...) {
     return fail(err);

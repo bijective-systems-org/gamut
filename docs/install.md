@@ -48,7 +48,7 @@ cd gamut
 pip install .
 ```
 
-This builds the core, so it needs a C++17 compiler and HDF5 1.12 or later
+This builds the core, so it needs a C++17 compiler and HDF5 1.14 or later
 (pip fetches CMake if yours is older than 3.20). HDF5 can come from conda,
 Homebrew or your system's packages; point CMake at it with
 `CMAKE_ARGS="-DHDF5_ROOT=/path/to/hdf5"`. To build the core with its own
@@ -104,7 +104,7 @@ that matches the wheel's core, and point it at a core library:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v1.1.0")
+Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v1.2.0")
 ENV["GAMUT_LIBRARY"] = "/path/to/libgamut.dylib"   # .so on Linux, gamut.dll on Windows
 using Gamut
 Gamut.version()
@@ -119,7 +119,7 @@ checkout.
 
 ## C++ and C
 
-With CMake 3.16 or later, a C++17 compiler and HDF5 1.12 or later:
+With CMake 3.16 or later, a C++17 compiler and HDF5 1.14 or later:
 
 ```bash
 cmake -S . -B build -DHDF5_ROOT=/path/to/hdf5

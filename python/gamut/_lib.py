@@ -14,6 +14,9 @@ import numpy as np
 GAMUT_AS_GIVEN = 0
 GAMUT_UINT8, GAMUT_INT8, GAMUT_INT32, GAMUT_INT64, GAMUT_FLOAT32, GAMUT_FLOAT64 = 1, 2, 3, 4, 5, 6
 SEL_ALL, SEL_RANGE, SEL_INDEX = 0, 1, 2
+# The most rows a selection scans (docs/security.md); the core refuses a
+# larger file before it fills a buffer, so none larger is allocated.
+MAX_ROWS_SCANNED = 1 << 27
 
 _DTYPE_CODE = {
     np.dtype(np.uint8): GAMUT_UINT8,
@@ -153,6 +156,7 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "gamut_shape": (_I, [_P, _S, _SEL, _SEL, ctypes.POINTER(_L), ctypes.POINTER(_I), _E]),
     "gamut_read": (_I, [_P, _S, _SEL, _SEL, _I, _P, _L, _E]),
     "gamut_label_names": (_I, [_P, _S, _SEL, _PP, _E]),
+    "gamut_outside": (_I, [_P, _S, _SEL, _P, _L, _E]),
     "gamut_table": (_I, [_P, _S, _PP, _E]),
     "gamut_select": (_I, [_P, _S, ctypes.POINTER(_L), _L, ctypes.POINTER(_L), _E]),
     "gamut_validate": (_I, [_S, _PP, _E]),
@@ -294,6 +298,17 @@ def read(handle: Any, name: str, rows: Selection, sites: Selection, dtype: np.dt
     out = np.empty(dims, dtype=dtype)
     call("gamut_read", handle, b(name), rows.pointer(), sites.pointer(), _DTYPE_CODE[np.dtype(dtype)],
          out.ctypes.data_as(ctypes.c_void_p), out.nbytes)
+    return out
+
+
+def outside(handle: Any, name: str, rows: Selection) -> np.ndarray:
+    shape = (ctypes.c_int64 * 4)()
+    rank = ctypes.c_int()
+    call("gamut_shape", handle, b(name), rows.pointer(), None, shape, ctypes.byref(rank))
+    # Sized as a read of the parameter; for any other name the core refuses.
+    out = np.empty(shape[0] if rank.value == 1 else 0, dtype=np.float64)
+    call("gamut_outside", handle, b(name), rows.pointer(), out.ctypes.data_as(ctypes.c_void_p),
+         out.nbytes)
     return out
 
 

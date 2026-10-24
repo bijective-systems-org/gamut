@@ -11,7 +11,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
+#include <set>
 #include <initializer_list>
 #include <string>
 #include <utility>
@@ -63,6 +65,12 @@ const std::size_t kMaxFilterParameters = 1024;
 // before it sizes a buffer: E23 above them.
 std::size_t checked_count(const std::string& path, std::size_t item,
                           std::initializer_list<std::int64_t> factors);
+
+// The element count of `shape`, a shape taken from the file: E23 above
+// `limit`.
+std::size_t checked_product(const std::string& path,
+                            const std::vector<hsize_t>& shape,
+                            std::size_t limit);
 
 // A read touching more chunks than this is refused (E23): HDF5 keeps state
 // per chunk touched, so a file of tiny chunks would make a small read cost
@@ -117,6 +125,73 @@ struct DsetInfo {
   bool has_fill_value_set = false;
 };
 
+// Positions along one axis as increasing (start, count) runs.
+using Runs = std::vector<std::pair<std::int64_t, std::int64_t>>;
+
+// A stored chunk of a dataset, as its chunk index records it.
+struct StoredChunk {
+  std::uint64_t cell;   // its place in the dataset's grid of chunks, leading axis first
+  hsize_t size;         // bytes the index records; 0 once HDF5 has rewritten it
+  bool checked;         // known to decode to the whole chunk
+};
+
+// The core's own reading of chunked datasets (spec sections 9.6 and
+// 11.2), one per open file. HDF5 is never handed a stored chunk this has
+// not checked. On first use of a dataset, one pass over its chunk index
+// records each stored chunk and its size. A filtered dataset is read here:
+// each chunk a read touches is fetched raw and its filters undone, and one
+// whose stored or decoded size is not the chunk's is refused (E23), where
+// HDF5 would read or write past its buffer; before a write, each stored
+// chunk HDF5 is about to rewrite is decoded here first. An unfiltered
+// dataset whose stored chunks are all whole is left to HDF5; one that is
+// not is read here too, and the chunks not stored whole are refused.
+class ChunkStore {
+ public:
+  // True when HDF5 may read and write the chunked dataset `dset` itself.
+  bool stored_whole(hid_t dset, const std::string& path, const DsetInfo& info);
+  // Reads `runs` (one list per axis) of the chunked dataset `dset` into
+  // `out`, `elements` values of `mem_type` (`mem_size` bytes each),
+  // decoding in up to `threads` threads.
+  void read(hid_t dset, const std::string& path, const DsetInfo& info, hid_t mem_type,
+            std::size_t mem_size, const std::vector<Runs>& runs, void* out,
+            std::size_t elements, int threads);
+  // Before and after HDF5 writes the block [start, start + count) of the
+  // dataset `dset`, whose extent is now `shape`; `describe` gives its
+  // dataset_info when this does not yet know it.
+  void before_write(hid_t dset, const std::string& path, const std::vector<hsize_t>& shape,
+                    const std::function<DsetInfo()>& describe,
+                    const std::vector<hsize_t>& start, const std::vector<hsize_t>& count);
+  void after_write(const std::string& path, const std::vector<hsize_t>& start,
+                   const std::vector<hsize_t>& count);
+  // After the extent changes; after a dataset (or a group of them) is
+  // created or removed.
+  void resized(const std::string& path, const std::vector<hsize_t>& shape);
+  void forget(const std::string& path);
+
+ private:
+  struct Dataset {
+    std::vector<hsize_t> shape, chunk, grid;   // grid: chunks along each axis
+    std::size_t item = 0, whole = 0;           // bytes of an element, of a chunk
+    bool chunked = true;                       // false: known, and left to HDF5
+    bool filtered = false;
+    bool all_whole = false;                    // unfiltered, every stored chunk whole
+    std::vector<int> filter_ids;
+    std::vector<StoredChunk> stored;           // by cell
+  };
+  Dataset& state(hid_t dset, const std::string& path, const DsetInfo& info);
+  static StoredChunk* find(Dataset& d, std::uint64_t cell);
+  // Fetches a stored chunk raw into `raw`, its size checked against the
+  // chunk's before anything is read.
+  static void fetch(hid_t dset, const std::string& path, const Dataset& d, StoredChunk& c,
+                    const std::vector<hsize_t>& offset, std::vector<unsigned char>& raw,
+                    unsigned* mask);
+  // Buffers kept between reads, so a read of one chunk allocates nothing.
+  std::vector<unsigned char> take();
+  void give(std::vector<unsigned char>&& v);
+  std::map<std::string, Dataset> datasets_;
+  std::vector<std::vector<unsigned char>> spare_;
+};
+
 enum class LinkKind { Missing, Hard, Soft, External, Other };
 const char* link_kind_name(LinkKind kind);
 
@@ -142,6 +217,10 @@ class File {
   bool exists(const std::string& path) const;
   bool is_group(const std::string& path) const;
   bool is_dataset(const std::string& path) const;
+  // Why the dataset at `path` keeps its values outside the file (external
+  // storage, a virtual dataset), or "" when it does not; such a dataset is
+  // never read (E22).
+  std::string stored_outside(const std::string& path) const;
   std::vector<Member> members(const std::string& path) const;
 
   std::vector<RawAttr> attributes(const std::string& path) const;
@@ -156,10 +235,11 @@ class File {
   // Reads the selection into `out`, converting to `mem`.  `sel` gives
   // one selection per leading axis; axes beyond it are read whole.
   // `out_bytes` must equal the selected element count times the size of
-  // `mem`.  Strings are read with read_strings.
+  // `mem`.  A chunked dataset's chunks are decoded in up to `threads`
+  // threads.  Strings are read with read_strings.
   void read(const std::string& path, DType mem,
             const std::vector<Selection>& sel, void* out,
-            std::size_t out_bytes) const;
+            std::size_t out_bytes, int threads = 1) const;
   // The selected element count and per-axis counts, without reading.
   std::vector<std::int64_t> selected_shape(
       const std::string& path, const std::vector<Selection>& sel) const;
@@ -214,12 +294,18 @@ class File {
 
   std::string dataset_link_name(hid_t object) const;
   void remove_link(const std::string& path);
-  // Copies an object and everything under it from another open file.
-  void copy_from(const File& src, const std::string& src_path,
-                 const std::string& dst_path);
 
  private:
   void build_object_index() const;
+  // dataset_info of `path`, leaving the dataset open in `dset` (invalid
+  // when `path` is not a dataset), so a read or write opens it once.
+  DsetInfo opened(const std::string& path, Id* dset, bool scales) const;
+  DsetInfo described(hid_t dset, bool scales) const;
+  // Opens the dataset at `path`, refusing one whose values are stored
+  // outside the file (E22) before its extent or values are touched.
+  Id open_dataset(const std::string& path) const;
+  // After a dataset, or a group of them, is created or removed.
+  void forget(const std::string& path);
   // Reads a selection of many scattered blocks as its bounding box and
   // gathers; false (nothing read) when the plain path should read it.
   bool read_gathered(const std::string& path, const std::vector<hsize_t>& shape, DType mem,
@@ -227,6 +313,8 @@ class File {
   std::string dataset_path(hid_t object) const;
 
   Id id_;
+  mutable ChunkStore chunks_;
+  mutable std::set<std::string> inside_;   // datasets checked to hold their own values
   mutable std::map<std::string, std::string> object_paths_;
   mutable bool object_index_built_ = false;
 };

@@ -479,6 +479,19 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
           e);
     if (dims.size() == 1) dims.push_back(1);   // a column per run
     plhs[0] = from_c_order(buf.data(), dims, code);
+  } else if (cmd == "outside") {
+    gamut_file* f = file(arg(1));
+    const std::string name = text(arg(2), "name");
+    const Sel rows = selection(arg(3));
+    int64_t shape[4];
+    int rank = 0;
+    check(gamut_shape(f, name.c_str(), rows.ptr(), nullptr, shape, &rank, &e), e);
+    // Sized as a read of the parameter; for any other name the core refuses.
+    const mwSize n = rank == 1 ? static_cast<mwSize>(shape[0]) : 0;
+    plhs[0] = mxCreateDoubleMatrix(n, 1, mxREAL);
+    check(gamut_outside(f, name.c_str(), rows.ptr(), mxGetPr(plhs[0]),
+                        static_cast<int64_t>(n * sizeof(double)), &e),
+          e);
   } else if (cmd == "label_names") {
     gamut_strings* s = nullptr;
     const Sel rows = selection(arg(3));
@@ -490,7 +503,10 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     check(gamut_info(f, "row_count", &s, &e), e);
     const int64_t rows = std::stoll(gamut_strings_get(s, 0));
     gamut_strings_free(s);
-    std::vector<int64_t> out(static_cast<std::size_t>(rows > 0 ? rows : 1));
+    // The core refuses a file of more rows than a selection scans (2^27,
+    // docs/security.md) before it fills a buffer, so none larger is made.
+    const bool scanned = rows > 0 && rows <= (int64_t(1) << 27);
+    std::vector<int64_t> out(static_cast<std::size_t>(scanned ? rows : 1));
     int64_t n = 0;
     check(gamut_select(f, text(arg(2), "where").c_str(), out.data(), static_cast<int64_t>(out.size()), &n, &e), e);
     plhs[0] = mxCreateNumericMatrix(static_cast<mwSize>(n), 1, mxINT64_CLASS, mxREAL);

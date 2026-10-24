@@ -62,11 +62,9 @@ struct Strings {
   }
 };
 
-// The limits of docs/security.md that the core applies to a read and to a
-// selection, checked here too so that nothing that would be refused is
-// allocated first.
-constexpr int64_t kMaxReadElements = int64_t(1) << 31;
-constexpr int64_t kMaxReadBytes = int64_t(1) << 33;
+// The limit of docs/security.md on the rows a selection scans, checked here
+// too so that a buffer the core would refuse is not allocated first.  (The
+// core checks a read's size in gamut_shape, before any buffer exists.)
 constexpr int64_t kMaxRowsSelected = int64_t(1) << 27;
 
 inline std::vector<const char*> pointers(const std::vector<std::string>& items) {
@@ -417,6 +415,22 @@ class Study {
     detail::check(gamut_label_names(need_reader(), name.c_str(), &r, &s.s, &e), e);
     return s.take();
   }
+  // How far each row's value of a parameter lies outside the bounds the
+  // file declares for it, in its units: 0 inside or on a bound, value -
+  // lower below, value - upper above, NaN where the value is missing.  A
+  // parameter without bounds is refused.
+  std::vector<double> outside(const std::string& name, const Selection& rows = all) const {
+    gamut_error e{};
+    const gamut_sel r = rows.c();
+    int64_t shape[4] = {0, 0, 0, 0};
+    int rank = 0;
+    detail::check(gamut_shape(need_reader(), name.c_str(), &r, nullptr, shape, &rank, &e), e);
+    std::vector<double> out(rank == 1 ? static_cast<size_t>(shape[0]) : 0);
+    detail::check(gamut_outside(f_, name.c_str(), &r, out.data(),
+                                static_cast<int64_t>(out.size() * sizeof(double)), &e),
+                  e);
+    return out;
+  }
   double get_constant(const std::string& name) const { return read<double>(name, all, all).values.at(0); }
   std::vector<int64_t> get_row_ids(const Selection& rows = all) const {
     return read<int64_t>("row", rows, all).values;
@@ -448,15 +462,8 @@ class Study {
     Array<T> a;
     a.shape.assign(shape, shape + rank);
     int64_t n = 1;
-    for (int64_t d : a.shape) {
-      if (d < 0 || (d > 0 && n > detail::kMaxReadElements / d))
-        throw Error("E23", name + ": a read of more than " + std::to_string(detail::kMaxReadElements) +
-                           " elements is refused; read a part at a time");
-      n *= d;
-    }
+    for (int64_t d : a.shape) n *= d;
     const int64_t bytes = n * static_cast<int64_t>(sizeof(T));
-    if (n > detail::kMaxReadElements || bytes > detail::kMaxReadBytes)
-      throw Error("E23", name + ": a read of " + std::to_string(bytes) + " bytes is refused; read a part at a time");
     a.values.resize(static_cast<size_t>(n));
     detail::check(gamut_read(f_, name.c_str(), &r, &s, detail::dtype<T>(), a.values.data(), bytes, &e), e);
     return a;

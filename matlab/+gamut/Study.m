@@ -172,6 +172,19 @@ classdef Study < handle
             v = gamut_mex('read', s.Handle, name, s.pos(o.rows), [], code);
         end
 
+        function v = outside(s, name, varargin)
+            %OUTSIDE How far each row's value of the parameter NAME lies
+            %   outside the bounds the file declares for it, in its units: 0
+            %   inside or on a bound, value - lower (negative) below, value -
+            %   upper (positive) above, NaN where the value is missing.  A
+            %   parameter without bounds is refused.  'rows' selects (1-based).
+            %   The answer of gamut.evaluate keeps the model's bounds, so this
+            %   says which of its rows lie outside the range the model was
+            %   fitted on, and how far.
+            o = s.opts(varargin);
+            v = gamut_mex('outside', s.Handle, name, s.pos(o.rows));
+        end
+
         function v = getLabel(s, name, varargin)
             o = s.opts(varargin);
             v = gamut_mex('label_names', s.Handle, name, s.pos(o.rows));

@@ -77,6 +77,7 @@ with gamut.evaluate("lift.gamut", {"alpha": [1.0, 5.0]}) as answer:   # an ordin
 - `save` returns numbers, text, booleans, NumPy arrays of bool, int32, int64 or float64, and dictionaries of those. float32 arrays (such as most neural-network weights) and arbitrary objects are refused (E18): cast to float64, store plain arrays. The top level may not use the keys `type`, `inputs` or `repr`.
 - `call(inputs, wanted)` gets one array per input the model reads, a value per row, and returns `{output: {"values": array}}`; a scalar has a value per row, a field rows × nodes. `wanted` holds tuples `(output, "values")`, `(output, "std")`, `(output, "quantile", q)`, `(output, "derivative", name)`.
 - `evaluate` without `path=` returns a temporary file, removed when it closes: read inside the `with` block, or pass `path=` to keep it. An input outside the bounds is evaluated with a warning (W4), not refused.
+- A warning can be filtered and lost, so the answer also keeps the model's bounds: `answer.outside("alpha")` gives each row's distance outside them in the parameter's units, 0 inside or on a bound, negative below, positive above. A parameter with no bounds is refused, not reported as inside.
 
 ## Docs
 

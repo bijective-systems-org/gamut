@@ -11,13 +11,19 @@ Opening a file reads its groups and attributes, never field values or
 model data; values are read when asked for. Every count taken from a file
 is checked against a limit before a buffer is sized, so a file that claims
 a billion rows cannot make a reader allocate for them. A soft or external
-link in a file is an error (E22) and is never followed, so a file cannot
-make a reader open another file or path.
+link in a file is an error (E22) and is never followed, and so is a
+dataset whose values HDF5 would fetch from elsewhere (external storage, a
+virtual dataset): a file cannot make a reader or a writer open another
+file or path.
 
 A file holds no executable code. A model's numbers are plain data, read by
 software the reader has installed and registered. The packaged core loads
 no HDF5 filter plugins: the format allows only gzip and shuffle, which
-HDF5 has built in, and a file naming another filter is refused.
+HDF5 has built in, and a file naming another filter is refused. The core
+reads compressed data itself, chunk by chunk, and a chunk that is not
+stored whole, or does not inflate to its full size, is refused (E23)
+before anything is copied from it; HDF5 trusts these sizes, and a crafted
+file could make it read or write past its own memory.
 
 `gamut validate` reports the rules a file breaks, with where and why,
 within the limits below. A
@@ -28,7 +34,7 @@ path of what it concerns.
 
 | A reader refuses | Above |
 |---|---|
-| a read of one array into memory | 2³¹ elements or 8 GiB |
+| a read of one array into memory | 2³⁰ values (8 GiB at 8 bytes a value) |
 | a read touching small chunks | 2²⁰ chunks |
 | a selection scanning rows | 2²⁷ rows |
 | label names read at once | 2²⁵ rows |

@@ -123,6 +123,8 @@ format() = unsafe_string(ccall(sym(:gamut_format), Cstring, ()))
 
 const DTYPE = Dict(UInt8 => 1, Int8 => 2, Int32 => 3, Int64 => 4, Float32 => 5, Float64 => 6)
 const AS_GIVEN = 0
+# The most rows a selection scans (docs/security.md).
+const MAX_ROWS_SCANNED = Int64(1) << 27
 
 function precision_code(v)
     v === nothing && return AS_GIVEN
@@ -685,6 +687,32 @@ get_parameter(s::Study, name; rows=nothing) =
 get_label_codes(s::Study, name; rows=nothing) = read(s, name, rows, nothing, Int64)
 get_scalar(s::Study, name; rows=nothing) = read(s, name, rows, nothing, result_type(s, name))
 
+"""
+    outside(study, name; rows=nothing)
+
+How far each row's value of the parameter `name` lies outside the bounds
+the file declares for it, in the parameter's units: 0 inside or on a bound,
+`value - lower` (negative) below, `value - upper` (positive) above, `NaN`
+where the value is missing. A parameter with no bounds is refused. The
+answer of `evaluate` keeps the model's bounds, so this says which of its
+rows lie outside the range the model was fitted on, and how far.
+"""
+function outside(s::Study, name; rows=nothing)
+    need_reader(s)
+    r = selection(rows, "rows")
+    shape = zeros(Int64, 4)
+    rank = Ref{Cint}(0)
+    rsel = Ref(r.sel)
+    rk = r.keep
+    GC.@preserve rk begin
+        @mes gamut_shape (Ptr{Cvoid}, Cstring, Ref{CSel}, Ptr{CSel}, Ptr{Int64}, Ref{Cint}) handle(s) cs(name) rsel C_NULL shape rank
+        # Sized as a read of the parameter; for any other name the core refuses.
+        out = Vector{Float64}(undef, rank[] == 1 ? shape[1] : 0)
+        @mes gamut_outside (Ptr{Cvoid}, Cstring, Ref{CSel}, Ptr{Float64}, Int64) handle(s) cs(name) rsel out sizeof(out)
+    end
+    return r.single ? out[1] : out
+end
+
 function get_label(s::Study, name; rows=nothing)
     need_reader(s)
     r = selection(rows, "rows")
@@ -764,7 +792,9 @@ end
 """    select(study, where)    the 1-based row positions matching, e.g. "mach > 0.5 and status == converged"."""
 function select(s::Study, where)
     need_reader(s)
-    out = Vector{Int64}(undef, max(s.row_count, 1))
+    # The core refuses a larger file before it fills a buffer, so none
+    # larger is allocated.
+    out = Vector{Int64}(undef, 0 < s.row_count <= MAX_ROWS_SCANNED ? s.row_count : 1)
     n = Ref{Int64}(0)
     @mes gamut_select (Ptr{Cvoid}, Cstring, Ptr{Int64}, Int64, Ref{Int64}) handle(s) cs(where) out length(out) n
     return out[1:n[]] .+ 1

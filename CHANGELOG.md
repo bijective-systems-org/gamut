@@ -1,6 +1,32 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 (2026-10-23)
+
+A file can no longer make a reader or a writer touch another path. A
+dataset whose values HDF5 keeps outside the file, through external storage
+or as a virtual dataset, passed validation and was read from that other
+file (a constant as soon as the file opened), and appending wrote to it,
+creating it if need be. Such a dataset is now an error (E22): the
+validator reports it, opening refuses the file, and appending refuses it
+before the file is opened to write. Appending also refuses a run-table
+column that cannot grow (E20), before writing anything.
+
+A read is refused (E23) before any buffer is sized when it would return
+more than 2³⁰ values (8 GiB at 8 bytes a value); a file declaring billions
+of rows made the Python, Julia and MATLAB layers allocate for them first.
+The threaded reader no longer reads past its arrays when a field has fewer
+axes than its selections.
+
+The core reads compressed datasets itself, a chunk at a time, with one
+path for one thread or many, and HDF5 is never handed a chunk it has not
+checked. A chunk that is not stored whole, or that gzip does not inflate
+to its full size, is refused (E23) on reading and before appending
+rewrites it; HDF5 trusts these sizes, and a crafted chunk made it read past
+its memory and return what lay there, or write past it when appending. A
+filter other than gzip and shuffle is not read (E20). Reading a few
+scattered rows or nodes is several times faster, up to twenty times on a
+million-row table, and other reads and writes take the time they did.
+Building the core needs HDF5 1.14 or later (every package carries 1.14.6).
 
 MATLAB installs from a toolbox, `Gamut.mltbx`, attached to each release:
 MATLAB R2023b or later on Linux, Windows or an Apple silicon Mac, and no
@@ -72,7 +98,22 @@ model is evaluated from Julia and C++. `help(gamut.create_model)` and
 `help gamut.registerModelType` in MATLAB says what `call` receives and
 returns. A model's `save` that returns an object which is not model data
 is refused with the object named, where Python reported a
-zero-dimensional array.
+zero-dimensional array; so are a list mixing text with other values and
+text with more than one axis, which Python flattened into strings (E18).
+`gamut info` names the studies a model was trained on, and a model's
+one-line description. `bench/scaling.py` times writes and reads as run
+tables, one mesh and a mesh per run grow.
+
+An answer from `evaluate` says, row by row, which inputs lie outside the
+range the model was fitted on, and how far. The answer already kept the
+model's bounds on its parameters; `outside(name)` measures each row's
+value against them, in the parameter's units: 0 inside or on a bound,
+negative below, positive above, NaN for a missing value. A parameter with
+no bounds is refused rather than reported as inside. The core computes it
+once (`gamut_outside` in C) for any data file, and it is `study.outside`
+in Python, MATLAB and C++ and `Gamut.outside` in Julia. `evaluate` still
+warns as well (W4). The models page and the MATLAB, Julia and C++ pages
+show the call.
 
 The validator holds a mesh's computed coordinates to the writer's rules: a
 computing model only in a model file whose mesh is per run, which must

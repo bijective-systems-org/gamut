@@ -83,6 +83,28 @@ Node 13 here is node 12 in Python: positions count from 1 in Julia and
 from 0 in Python. Arrays come back with the axes in their logical order,
 `cp[run, node]`.
 
+## Inputs outside a model's range
+
+`Gamut.evaluate` evaluates a [model file](07-models.md) and returns its
+answer, a study open to read. An input outside the range the model was
+fitted on is evaluated with a warning (W4), and the answer keeps the
+model's bounds, so it can say which rows lie outside and how far.
+[`nearest.jl`](../../examples/julia/nearest.jl) asks the models page's
+nearest-run model about 5 and 12 degrees:
+
+```julia
+answer = Gamut.evaluate("lift_nearest.gamut", Dict("alpha" => [5.0, 12.0]))
+outside = Gamut.outside(answer, "alpha")
+close(answer)
+```
+
+```text
+degrees outside the fitted range: 0 2
+```
+
+`outside` gives a number per row in the parameter's units: 0 inside the
+bounds or on one, negative below them, positive above.
+
 ## The same calls
 
 | Python | Julia |
@@ -91,6 +113,7 @@ from 0 in Python. Arrays come back with the axes in their logical order,
 | `study.add_run(values, fields=...)` | `Gamut.add_run!(study, values; fields=...)` |
 | `study.get_field("p", rows=r, nodes=n)` | `Gamut.get_field(study, "p"; rows=r, nodes=n)` |
 | `study.select("mach > 0.7")` | `Gamut.select(study, "mach > 0.7")`, positions from 1 |
+| `study.outside("alpha", rows=r)` | `Gamut.outside(study, "alpha"; rows=r)` |
 | `study.row_count`, `study.type` | `study.row_count`, `study.type` |
 | `study.model_numbers("fit")` | `Gamut.model_numbers(study, "fit")` |
 | `gamut.append`, `extract`, `write_copy`, `validate` | `Gamut.append!`, `extract`, `write_copy`, `validate` |

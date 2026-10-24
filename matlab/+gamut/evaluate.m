@@ -7,7 +7,9 @@ function out = evaluate(modelPath, inputs, varargin)
 %   array) from the model file's table, all of one length n.  C (n x nodes
 %   x axes) is needed when a model reads geometry the file does not store.
 %   Returns the resulting data file open to read; without 'path' it lives
-%   in a temporary file removed when it is closed.
+%   in a temporary file removed when it is closed.  An input outside a
+%   parameter's bounds is evaluated, with a warning (gamut:W4), and
+%   out.outside(name) says how far each row lies outside.
 p = inputParser;
 p.addParameter('path', '');
 p.addParameter('coordinates', []);

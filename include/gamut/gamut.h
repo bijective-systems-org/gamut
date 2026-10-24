@@ -61,7 +61,7 @@ typedef struct {
   int64_t count;
 } gamut_sel;
 
-/* The library's version ("1.1.0") and the format string it writes
+/* The library's version ("1.2.0") and the format string it writes
  * ("gamut/1").  Static strings; never freed. */
 GAMUT_API const char* gamut_version(void);
 GAMUT_API const char* gamut_format(void);
@@ -200,6 +200,13 @@ GAMUT_API int gamut_read(const gamut_file* f, const char* name, const gamut_sel*
                      gamut_error* err);
 GAMUT_API int gamut_label_names(const gamut_file* f, const char* label, const gamut_sel* rows,
                             gamut_strings** out, gamut_error* err);
+/* How far each selected row's value of the parameter `name` lies outside
+ * the bounds the file declares for it, in the parameter's units: 0 inside
+ * or on a bound, value - lower below, value - upper above, NaN where the
+ * value is missing.  A parameter without bounds is refused.  out has the
+ * shape gamut_shape gives the parameter; out_bytes is its capacity. */
+GAMUT_API int gamut_outside(const gamut_file* f, const char* name, const gamut_sel* rows,
+                        double* out, int64_t out_bytes, gamut_error* err);
 GAMUT_API int gamut_table(const gamut_file* f, const char* table, gamut_strings** out,
                       gamut_error* err);
 /* The positions of the rows `where` selects (docs/reference/selecting.md),
