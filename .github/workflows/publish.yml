@@ -283,7 +283,11 @@ jobs:
   publish:
     name: upload to PyPI
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    needs: [conformance, wheels, sdist]
+    # After toolbox-test too, so every MATLAB in the run has finished before
+    # this job waits for the environment's approval: a hosted MATLAB that
+    # started during that wait got no licence in the 1.2.0 and 1.3.0 tag
+    # runs. A toolbox that fails its test holds the upload as well.
+    needs: [conformance, wheels, sdist, toolbox-test]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment:
