@@ -86,6 +86,11 @@ target_include_directories(gamut_core_objects
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src
          ${HDF5_INCLUDE_DIRS})
 target_compile_definitions(gamut_core_objects PRIVATE GAMUT_BUILDING ${HDF5_DEFINITIONS})
+# HDF5's CMake package puts its compile definitions on its imported targets,
+# not in HDF5_DEFINITIONS.  On Windows a DLL build's H5_BUILT_AS_DYNAMIC_LIB
+# declares the data HDF5 exports (H5T_NATIVE_INT and the like) dllimport;
+# without it the core does not link against a shared HDF5 such as conda's.
+target_link_libraries(gamut_core_objects PRIVATE ${HDF5_HL_LIBRARIES} ${HDF5_C_LIBRARIES})
 if(GAMUT_STATIC_HDF5)
   # The core owns its HDF5, and so may set it up (no filter plugins).
   set(GAMUT_OWN_HDF5 GAMUT_OWN_HDF5)
