@@ -27,6 +27,31 @@ def reference_nearest(x, lower, upper, q):
     return out
 
 
+def test_portion_marking_is_copied_into_every_answer(tmp_path):
+    """Spec section 7.4: the answer carries the model file's marking; a model
+    file without one gives an answer without one."""
+    marked, plain = str(tmp_path / "marked.gamut"), str(tmp_path / "plain.gamut")
+    marking = "Example marking \u2014 for the study team only"      # free text, UTF-8
+    for path, mark in ((marked, marking), (plain, None)):
+        with gamut.create_model(path, writer="t", portion_marking=mark,
+                                 parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
+                                 scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as mf:
+            mf.add_model("fit", gamut.Nearest(["x"], [0.0], [1.0], [[0.1], [0.9]], {"y": [1.0, 2.0]}),
+                         ["x"])
+        assert not gamut.validate(path).findings
+    with gamut.open(marked) as f:
+        assert f.describe()["portion_marking"] == marking
+    with gamut.open(plain) as f:
+        assert "portion_marking" not in f.describe()
+    out = str(tmp_path / "answer.gamut")
+    with gamut.evaluate(marked, {"x": [0.2, 0.8]}, path=out) as a:
+        assert a.describe()["portion_marking"] == marking
+        assert a.get_scalar("y").tolist() == [1.0, 2.0]
+    assert not gamut.validate(out).findings
+    with gamut.evaluate(plain, {"x": [0.2]}) as a:
+        assert "portion_marking" not in a.describe()
+
+
 def test_nearest_model_file_and_evaluation(tmp_path):
     mp = str(tmp_path / "cl_model.gamut")
     pts = np.array([[0.0], [1.0], [2.0]])

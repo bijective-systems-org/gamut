@@ -15,6 +15,7 @@
 #include <zlib.h>
 
 #include "chunk.hpp"
+#include "copy.hpp"
 #include "h5.hpp"
 #include "reader.hpp"
 #include "types.hpp"
@@ -393,6 +394,59 @@ void test_refusals() {
   w.reset();
   if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
   std::remove("wr_bad.gamut");
+}
+
+// The portion marking (spec section 8): a root attribute read as written,
+// absent when not set, kept by extract and write_copy, and accepted by the
+// validator.  HDF5 holds a root attribute in compact storage at the
+// writer's libver bounds, so one of 64 KiB or more is refused and nothing
+// is written.
+void test_portion_marking() {
+  const std::string path = "wr_marked.gamut", plain = "wr_plain.gamut";
+  const std::string copy = "wr_marked_copy.gamut", part = "wr_marked_part.gamut";
+  const std::string marking = "Example marking: for the study team only";
+  for (const std::string& p : {path, plain}) {
+    auto w = Writer::create(p, "tests", "", "fixed");
+    if (p == path) w->set_attribute("portion_marking", marking);
+    CHECK(rule_of([&] { w->set_attribute("marking", "x"); }) == "error");   // not a root attribute
+    w->declare_parameter(param("x", "design", "1"));
+    w->declare_result(scalar("y", "1"));
+    for (int i = 0; i < 3; ++i) {
+      Batch b;
+      b.runs = 1;
+      b.values["x"] = f64({static_cast<double>(i)});
+      b.values["y"] = f64({2.0 * i});
+      w->add_runs(b);
+    }
+    w->close();
+  }
+  CHECK(Reader::open(path)->schema().portion_marking == marking);
+  CHECK(Reader::open(plain)->schema().portion_marking.empty());
+  CHECK(validate_file(path).findings.empty());
+  write_copy_file(path, copy);
+  CHECK(Reader::open(copy)->schema().portion_marking == marking);
+  extract_file(path, part, Selection::list({1}));
+  CHECK(Reader::open(part)->schema().portion_marking == marking);
+  CHECK(Reader::open(part)->schema().rows == 1);
+  {
+    auto w = Writer::create("wr_long.gamut", "tests", "", "fixed");
+    w->set_attribute("portion_marking", std::string(60000, 'm'));
+    CHECK(rule_of([&] { w->set_attribute("portion_marking", std::string(65536, 'm')); }) == "error");
+    w->set_attribute("portion_marking", "short again");
+    w->declare_parameter(param("x", "design", "1"));
+    Batch b;
+    b.runs = 1;
+    b.values["x"] = f64({1.0});
+    w->add_runs(b);
+    w->close();
+    CHECK(Reader::open("wr_long.gamut")->schema().portion_marking == "short again");
+  }
+  if (!std::getenv("GAMUT_KEEP")) {
+    for (const char* p : {"wr_marked.gamut", "wr_plain.gamut", "wr_marked_copy.gamut",
+                          "wr_marked_part.gamut", "wr_long.gamut"}) {
+      std::remove(p);
+    }
+  }
 }
 
 // How far each row lies outside its parameter's bounds: zero inside and on
@@ -1079,6 +1133,7 @@ int main() {
       {"shared_group", test_shared_per_group_out_of_order},
       {"changing", test_changing_per_run_and_group},
       {"refusals", test_refusals},
+      {"portion_marking", test_portion_marking},
       {"bounds", test_outside_bounds},
       {"bounds_int", test_outside_large_integers},
       {"other_major", test_other_major_version},

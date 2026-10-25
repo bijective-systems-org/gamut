@@ -259,7 +259,7 @@ class Study {
     detail::check(gamut_set_constant(need_writer(), name.c_str(), units.c_str(), GAMUT_FLOAT64, value, 0,
                                      &e), e);
   }
-  // title, license, references or source.
+  // title, license, references, source or portion_marking.
   void set_attribute(const std::string& name, const std::string& value) {
     gamut_error e{};
     detail::check(gamut_set_attribute(need_writer(), name.c_str(), value.c_str(), &e), e);

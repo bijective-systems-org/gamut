@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0 (2026-10-25)
+
+A file may carry a portion marking: a new optional root attribute,
+`portion_marking`, holding free text the model's author set, which the
+format does not interpret (specification sections 8 and 10.1). `evaluate`
+copies it into every file evaluated from a model file that has one
+(section 7.4), and `extract` and `write_copy` keep it. It is set with
+`create` and `create_model` in Python (`portion_marking`), MATLAB
+(`'portionMarking'`) and Julia (`portion_marking`), with `set_attribute`
+in C and C++, and with the `portion_marking` key of a `gamut build`
+document; `gamut info` shows it. Readers of earlier versions report it as
+an attribute this version does not define (W5) and go on; they do not copy
+it into an evaluation or a copy, and their writers refuse it.
+
 ## 1.2.0 (2026-10-23)
 
 A file can no longer make a reader or a writer touch another path. A

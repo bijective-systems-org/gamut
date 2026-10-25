@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 
 import numpy as np
 
@@ -21,13 +22,32 @@ import gamut  # noqa: E402
 from gamut import _lib  # noqa: E402
 
 
+def described(f, p: dict) -> str | None:
+    """A file-level attribute as `describe` gives it: None when absent."""
+    got = f.describe().get(p["describe"])
+    return None if got == p["value"] else f"describe {p['describe']}: {got!r} != {p['value']!r}"
+
+
 def probe(path: str, p: dict) -> str | None:
     """None when the probe holds, else what differed."""
     if "evaluate" in p:
         with gamut.evaluate(path, p["evaluate"]) as out:
+            if "describe" in p:
+                return described(out, p)
             got = out.get_scalar(p["scalar"]).tolist()
         return None if got == p["values"] else f"evaluate {p['scalar']}: {got} != {p['values']}"
+    if "copy" in p:
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = os.path.join(tmp, "copy.gamut")
+            if p["copy"] == "extract":
+                gamut.extract(path, dst, p["rows"])
+            else:
+                gamut.write_copy(path, dst)
+            with gamut.open(dst) as f:
+                return described(f, p)
     with gamut.open(path) as f:
+        if "describe" in p:
+            return described(f, p)
         if "info" in p:
             got = getattr(f, p["info"])
             return None if got == p["value"] else f"{p['info']}: {got!r} != {p['value']!r}"

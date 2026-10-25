@@ -110,7 +110,7 @@ struct Model {
 struct Schema {
   std::string kind = "data";      // data | model
   std::string writer, created, file_id;
-  std::string title, license, references, source;
+  std::string title, license, references, source, portion_marking;
   std::string generalisation_group, trained_on, evaluated_from;
   std::int64_t rows = 0;
   std::vector<Parameter> parameters;

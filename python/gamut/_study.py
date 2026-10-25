@@ -648,8 +648,8 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
            per: str | None = None, coordinates: Mapping[str, Any] | None = None,
            precision: Mapping[str, Any] | None = None, round_bits: Mapping[str, int] | None = None,
            title: str | None = None, license: str | None = None, references: str | None = None,
-           source: str | None = None, generalisation_group: str | None = None,
-           compression: bool = True) -> Study:
+           source: str | None = None, portion_marking: str | None = None,
+           generalisation_group: str | None = None, compression: bool = True) -> Study:
     """Creates a data file and returns it open to add runs: use it in a
     `with` block, or call `close()`. Everything the file holds is declared
     here by name; a refused declaration leaves no file.
@@ -679,6 +679,9 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
                  "categories": ["field", "wall"]}}.
     generalisation_group  the group label a fair test holds out whole.
     title, license, references, source  describe the file.
+    portion_marking  a marking the author set, as free text; `evaluate`
+                 copies it into every answer, `extract` and `write_copy`
+                 keep it.
     precision, round_bits, compression  storage; the defaults suit most
                  studies.
 
@@ -700,7 +703,8 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
         if not compression:
             call("gamut_set_compression", handle, 0, 0)
         for key, value in (("title", title), ("license", license),
-                           ("references", references), ("source", source)):
+                           ("references", references), ("source", source),
+                           ("portion_marking", portion_marking)):
             if value is not None:
                 call("gamut_set_attribute", handle, b(key), b(value))
         for name, value in (labels or {}).items():

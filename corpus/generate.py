@@ -268,6 +268,7 @@ def case_table(path):
         {"select": "(mach>0.35)and(run==b)", "positions": [2, 3]},
         {"info": "addons", "value": ["time", "gradients", "uncertainty"]},
         {"info": "type", "value": "table"},
+        {"describe": "portion_marking", "value": None},
     ]}
 
 
@@ -414,13 +415,50 @@ def case_model_nearest(path):
     s.finish()
     return {"probes": [
         {"evaluate": {"mach": [0.31, 0.58], "alpha": [3.9, 0.1]}, "scalar": "cl", "values": [0.4, 0.0]},
+        {"evaluate": {"mach": [0.31, 0.58], "alpha": [3.9, 0.1]}, "describe": "portion_marking",
+         "value": None},
         {"info": "kind", "value": "model"},
     ]}
 
 
+MARKING = "Example marking: for the study team only"
+
+
+def case_marked_table(path):
+    """A data file carrying `portion_marking` (spec section 8): read as given,
+    kept by extract and write_copy."""
+    e = case_table(path)
+    with h5py.File(path, "r+") as f:
+        sattr(f, "portion_marking", MARKING)
+    e["probes"] = [
+        {"describe": "portion_marking", "value": MARKING},
+        {"copy": "extract", "rows": [1, 3], "describe": "portion_marking", "value": MARKING},
+        {"copy": "write_copy", "describe": "portion_marking", "value": MARKING},
+        {"read": "cl", "rows": [1, 3], "dtype": "float64", "values": [0.2, 0.4]},
+    ]
+    return e
+
+
+def case_marked_model(path):
+    """A model file carrying `portion_marking`: copied into every file
+    evaluated from it (spec section 7.4), kept by write_copy."""
+    e = case_model_nearest(path)
+    with h5py.File(path, "r+") as f:
+        sattr(f, "portion_marking", MARKING)
+    e["probes"] = [
+        {"describe": "portion_marking", "value": MARKING},
+        {"evaluate": {"mach": [0.31, 0.58], "alpha": [3.9, 0.1]}, "scalar": "cl", "values": [0.4, 0.0]},
+        {"evaluate": {"mach": [0.31, 0.58], "alpha": [3.9, 0.1]},
+         "describe": "portion_marking", "value": MARKING},
+        {"copy": "write_copy", "describe": "portion_marking", "value": MARKING},
+    ]
+    return e
+
+
 VALID = {"table": case_table, "shared_fixed": case_shared_fixed, "point_cloud": case_point_cloud,
          "shared_group": case_shared_group, "changing": case_changing,
-         "model_nearest": case_model_nearest}
+         "model_nearest": case_model_nearest, "marked_table": case_marked_table,
+         "marked_model": case_marked_model}
 
 
 # --- rule cases: a valid file broken to break one rule ---------------------------------

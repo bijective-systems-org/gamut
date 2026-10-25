@@ -53,8 +53,8 @@ using AttrSpec = std::map<std::string, Kind>;
 const AttrSpec kRootAttrs = {
     {"format", Kind::S}, {"kind", Kind::S}, {"writer", Kind::S}, {"created", Kind::S},
     {"file_id", Kind::S}, {"title", Kind::S}, {"license", Kind::S}, {"references", Kind::S},
-    {"source", Kind::S}, {"generalisation_group", Kind::S}, {"trained_on", Kind::S},
-    {"evaluated_from", Kind::S}};
+    {"source", Kind::S}, {"portion_marking", Kind::S}, {"generalisation_group", Kind::S},
+    {"trained_on", Kind::S}, {"evaluated_from", Kind::S}};
 const AttrSpec kParameterAttrs = {{"role", Kind::S}, {"units", Kind::S}, {"lower", Kind::F},
                                   {"upper", Kind::F}, {"run_group", Kind::S}};
 const AttrSpec kLabelAttrs = {{"role", Kind::S}, {"category", Kind::S}};

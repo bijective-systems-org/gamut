@@ -59,7 +59,9 @@ the answer is a valid study file: True
 - `evaluate` takes the inputs, a value per row, and returns the answer, a
   data file open to read. Without `path` it is a temporary file, removed
   when closed; with one, it stays. It records the model file it came from
-  in `evaluated_from`.
+  in `evaluated_from`, and carries the model file's `portion_marking` when
+  its author set one (free text with `create_model`; `extract` and
+  `write_copy` keep it).
 
 Whoever receives the file sees what the model takes and gives, with none
 of the model's software installed:

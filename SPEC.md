@@ -340,7 +340,8 @@ run in the result when a model computes them or when the caller supplies
 coordinates (a model that reads `coordinates` evaluated on new
 geometries); otherwise they are the model file's stored coordinates, and a
 model that reads `coordinates` receives those. The data file records the model file's `file_id` in
-`evaluated_from`. An input outside its bounds is reported (W4) and
+`evaluated_from`, and carries its `portion_marking` when it has one (§8).
+An input outside its bounds is reported (W4) and
 evaluated; refusing is the caller's choice. The data file keeps the
 model's bounds on its parameters, so a reader can tell which rows lie
 outside them and by how much (W4).
@@ -388,6 +389,10 @@ that dataset catalogues can read them. `/notes` holds any other free-form
 public attributes; nothing depends on them. `/private` holds a producer's
 own records in any form; readers copy it and never interpret it. Public
 information is never only in `/notes` or `/private`.
+
+The root may also carry `portion_marking`: a marking the model's author
+set, copied into every file evaluated from this one and kept by `extract`
+and `write_copy`. It is free text; the format does not interpret it.
 
 ---
 
@@ -491,6 +496,7 @@ model data.
     /                          format = "gamut/1", kind (data | model),
                                writer, created, file_id,
                                title?, license?, references?, source?,
+                               portion_marking?,
                                generalisation_group? (data), trained_on? (model),
                                evaluated_from? (data)
     /row                       (row) int64, unlimited: the row ids

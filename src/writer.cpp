@@ -522,11 +522,11 @@ void Writer::check_new_root_name(const std::string& name) const {
 
 void Writer::set_attribute(const std::string& name, const std::string& value) {
   need_open();
-  static const std::set<std::string> allowed = {"title", "license",
-                                                "references", "source"};
+  static const std::set<std::string> allowed = {"title", "license", "references", "source",
+                                                "portion_marking"};
   const bool special = (name == "trained_on" && model_) || (name == "evaluated_from" && !model_);
   need(allowed.count(name) == 1 || special, "",
-       "\"" + name + "\" is not one of title, license, references, source" +
+       "\"" + name + "\" is not one of title, license, references, source, portion_marking" +
            std::string(model_ ? ", trained_on" : ", evaluated_from"));
   need(valid_utf8(value), "E3", name + " is not valid UTF-8");
   file_->replace_attr("/", name, AttrValue::text(value));
@@ -534,6 +534,7 @@ void Writer::set_attribute(const std::string& name, const std::string& value) {
   if (name == "license") schema_.license = value;
   if (name == "references") schema_.references = value;
   if (name == "source") schema_.source = value;
+  if (name == "portion_marking") schema_.portion_marking = value;
   if (name == "trained_on") schema_.trained_on = value;
   if (name == "evaluated_from") schema_.evaluated_from = value;
 }

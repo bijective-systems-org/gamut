@@ -5,7 +5,7 @@ function s = create(path, varargin)
 %       'mesh', 'shared'|'changing', 'per', 'fixed'|'run'|'group:<label>', ...
 %       'coordinates', struct('units', 'm', 'axes', 3), 'precision', struct(...), ...
 %       'title', t, 'license', l, 'references', r, 'source', src, ...
-%       'generalisationGroup', label, 'compression', true)
+%       'portionMarking', m, 'generalisationGroup', label, 'compression', true)
 p = inputParser;
 p.addParameter('writer', '');
 p.addParameter('parameters', struct());
@@ -22,6 +22,7 @@ p.addParameter('title', []);
 p.addParameter('license', []);
 p.addParameter('references', []);
 p.addParameter('source', []);
+p.addParameter('portionMarking', []);
 p.addParameter('generalisationGroup', []);
 p.addParameter('compression', true);
 p.parse(varargin{:});

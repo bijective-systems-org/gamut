@@ -61,7 +61,7 @@ typedef struct {
   int64_t count;
 } gamut_sel;
 
-/* The library's version ("1.2.0") and the format string it writes
+/* The library's version ("1.3.0") and the format string it writes
  * ("gamut/1").  Static strings; never freed. */
 GAMUT_API const char* gamut_version(void);
 GAMUT_API const char* gamut_format(void);
@@ -85,7 +85,8 @@ GAMUT_API int gamut_open_append(const char* path, gamut_file** out, gamut_error*
 GAMUT_API int gamut_create_model(const char* path, const char* writer, const char* mesh_kind,
                              const char* per, gamut_file** out, gamut_error* err);
 
-/* title, license, references or source; trained_on in a model file. */
+/* title, license, references, source or portion_marking; trained_on in a
+ * model file. */
 GAMUT_API int gamut_set_attribute(gamut_file* f, const char* name, const char* value,
                               gamut_error* err);
 GAMUT_API int gamut_declare_parameter(gamut_file* f, const char* name, const char* role,
@@ -176,8 +177,8 @@ GAMUT_API int gamut_open(const char* path, gamut_file** out, gamut_error* err);
 GAMUT_API int gamut_set_threads(gamut_file* f, int threads, gamut_error* err);
 /* key: "format", "kind", "type", "addons", "row_count", or a file-level
  * attribute ("writer", "created", "file_id", "title", "license",
- * "references", "source", "generalisation_group", "trained_on",
- * "evaluated_from", "support_id", "per", "mesh_kind").  One string, or
+ * "references", "source", "portion_marking", "generalisation_group",
+ * "trained_on", "evaluated_from", "support_id", "per", "mesh_kind").  One string, or
  * several for "addons". */
 GAMUT_API int gamut_info(const gamut_file* f, const char* key, gamut_strings** out, gamut_error* err);
 /* group: "parameters", "labels", "scalars", "constants", "node_fields",

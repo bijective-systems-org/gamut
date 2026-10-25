@@ -90,11 +90,26 @@ catch err
 end
 end
 
+function why = described(f, p)
+% A file-level attribute as describe gives it; absent when the probe's
+% value is null (an empty array from jsondecode).
+why = '';
+d = f.describe();
+if isfield(d, p.describe), got = d.(p.describe); else, got = []; end
+if ~isequal(got, p.value)
+    why = sprintf('describe %s: %s ~= %s', p.describe, mat2str(got), mat2str(p.value));
+end
+end
+
 function why = probe(path, p)
 why = '';
 if isfield(p, 'evaluate')
     out = gamut.evaluate(path, p.evaluate);
     c = onCleanup(@() out.close());
+    if isfield(p, 'describe')
+        why = described(out, p);
+        return
+    end
     got = out.getScalar(p.scalar);
     want = p.values(:);
     if ~isequal(got(:), want)
@@ -102,8 +117,26 @@ if isfield(p, 'evaluate')
     end
     return
 end
+if isfield(p, 'copy')
+    tmp = tempname; mkdir(tmp);
+    ct = onCleanup(@() rmdir(tmp, 's'));
+    dst = fullfile(tmp, 'copy.gamut');
+    if strcmp(p.copy, 'extract')
+        gamut.extract(path, dst, p.rows(:)' + 1);
+    else
+        gamut.writeCopy(path, dst);
+    end
+    f = gamut.open(dst);
+    cf = onCleanup(@() f.close());
+    why = described(f, p);
+    return
+end
 r = gamut.open(path);
 c = onCleanup(@() r.close());
+if isfield(p, 'describe')
+    why = described(r, p);
+    return
+end
 if isfield(p, 'info')
     switch p.info
         case 'type', got = r.type();

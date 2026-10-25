@@ -57,7 +57,7 @@ struct gamut_tree {
 
 namespace {
 
-const char kVersion[] = "1.2.0";
+const char kVersion[] = "1.3.0";
 const char kFormat[] = "gamut/1";
 
 // HDF5 keeps process-wide state and is built without its thread-safety
@@ -766,6 +766,7 @@ int gamut_info(const gamut_file* f, const char* key, gamut_strings** out, gamut_
     else if (k == "license") v = {s.license};
     else if (k == "references") v = {s.references};
     else if (k == "source") v = {s.source};
+    else if (k == "portion_marking") v = {s.portion_marking};
     else if (k == "generalisation_group") v = {s.generalisation_group};
     else if (k == "trained_on") v = {s.trained_on};
     else if (k == "evaluated_from") v = {s.evaluated_from};
@@ -808,6 +809,7 @@ int gamut_describe(const gamut_file* f, const char* name, gamut_strings** keys, 
           {"row_count", std::to_string(s.rows)}, {"writer", s.writer},
           {"created", s.created}, {"file_id", s.file_id}, {"title", s.title},
           {"license", s.license}, {"references", s.references}, {"source", s.source},
+          {"portion_marking", s.portion_marking},
           {"generalisation_group", s.generalisation_group}, {"trained_on", s.trained_on},
           {"evaluated_from", s.evaluated_from}, {"mesh", s.mesh.kind},
           {"per", s.mesh.kind.empty() ? std::string() : s.mesh.per},

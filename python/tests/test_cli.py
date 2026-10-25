@@ -43,6 +43,7 @@ def test_build_info_validate_get(tmp_path, capsys):
     doc = json.loads(out)
     assert "runs.csv" in doc["runs"] and "mesh.npz" in err
     make_inputs(tmp_path)
+    doc["portion_marking"] = "Example marking"
     (tmp_path / "doc.json").write_text(json.dumps(doc))
     target = str(tmp_path / "study.gamut")
     code, out, _ = run(capsys, "build", str(tmp_path / "doc.json"), "-o", target, "--json")
@@ -52,11 +53,13 @@ def test_build_info_validate_get(tmp_path, capsys):
     code, out, _ = run(capsys, "info", target, "--json")
     info = json.loads(out)
     assert info["type"] == "shared" and info["row_count"] == 4
+    assert info["metadata"]["portion_marking"] == "Example marking"
     assert info["mesh"]["nodes"] == 6 and info["mesh"]["cells"] == 2
     assert [p["name"] for p in info["parameters"]] == ["alpha", "mach"]
     assert info["labels"][0]["counts"] == {"converged": 3, "failed": 1}
     code, text, _ = run(capsys, "info", target)
     assert "shared mesh, 4 runs" in text and "p [Pa] at nodes" in text
+    assert "  marking     Example marking" in text
 
     code, out, _ = run(capsys, "validate", target, "--json")
     v = json.loads(out)

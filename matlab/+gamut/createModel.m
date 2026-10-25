@@ -5,7 +5,7 @@ function s = createModel(path, varargin)
 %       'constants', C, 'mesh', 'shared', 'per', 'fixed'|'run', ...
 %       'coordinates', struct('units', 'm', 'axes', 3), ...
 %       'trainedOn', {fileIds}, 'title', t, 'license', l, ...
-%       'references', r, 'source', src)
+%       'references', r, 'source', src, 'portionMarking', m)
 %   Parameters carry bounds (lower, upper); every scalar and field names
 %   the model and output that computes it.  Then s.setMesh(...) when there
 %   is a mesh, s.addModel(id, model, inputs) for each model, s.close().
@@ -26,6 +26,7 @@ p.addParameter('title', []);
 p.addParameter('license', []);
 p.addParameter('references', []);
 p.addParameter('source', []);
+p.addParameter('portionMarking', []);
 p.parse(varargin{:});
 o = p.Results;
 if isempty(o.writer)

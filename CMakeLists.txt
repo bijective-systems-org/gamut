@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(gamut VERSION 1.2.0 LANGUAGES C CXX)
+project(gamut VERSION 1.3.0 LANGUAGES C CXX)
 
 # The shared core of spec version 1: one C++ library behind a plain C
 # interface (include/gamut/gamut.h).  Python, MATLAB and Julia bind to

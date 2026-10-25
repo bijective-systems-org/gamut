@@ -220,6 +220,19 @@ def test_write_copy_restores_the_layout_and_keeps_identity(tmp_path):
     assert not gamut.validate(c).findings             # the default chunks again
 
 
+def test_extract_and_write_copy_keep_the_portion_marking(tmp_path):
+    a, e, c = (str(tmp_path / n) for n in ("a.gamut", "e.gamut", "c.gamut"))
+    with gamut.create(a, writer="t", parameters={"x": "m"}, scalars={"y": "1"},
+                       portion_marking="Example marking") as s:
+        s.add_runs({"x": [1.0, 2.0, 3.0], "y": [1.0, 4.0, 9.0]})
+    gamut.extract(a, e, [0, 2])
+    gamut.write_copy(a, c)
+    for path in (e, c):
+        with gamut.open(path) as f:
+            assert f.describe()["portion_marking"] == "Example marking"
+        assert not gamut.validate(path).findings
+
+
 def test_write_copy_of_a_model_file_evaluates_the_same(tmp_path):
     m, c = str(tmp_path / "m.gamut"), str(tmp_path / "c.gamut")
     with gamut.create_model(m, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
