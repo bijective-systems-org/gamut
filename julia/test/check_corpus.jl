@@ -18,19 +18,36 @@ const DTYPES = Dict("float64" => Float64, "float32" => Float32, "int64" => Int64
 
 positions(x) = x === nothing ? nothing : Int.(x) .+ 1
 
+# A file-level attribute as `describe` gives it: nothing when absent.
+function described(f, p)
+    got = get(Gamut.describe(f), p["describe"], nothing)
+    return got == p["value"] ? nothing : "describe $(p["describe"]): $(repr(got)) != $(repr(p["value"]))"
+end
+
 function probe(path, p)
     if haskey(p, "evaluate")
         inputs = Dict(k => (v[1] isa AbstractString ? String.(v) : Float64.(v)) for (k, v) in p["evaluate"])
         out = Gamut.evaluate(path, inputs)
         try
+            haskey(p, "describe") && return described(out, p)
             got = Gamut.get_scalar(out, p["scalar"])
             return got == Float64.(p["values"]) ? nothing : "evaluate $(p["scalar"]): $got != $(p["values"])"
         finally
             close(out)
         end
     end
+    if haskey(p, "copy")
+        return mktempdir() do tmp
+            dst = joinpath(tmp, "copy.gamut")
+            p["copy"] == "extract" ? Gamut.extract(path, dst, positions(p["rows"])) :
+                                     Gamut.write_copy(path, dst)
+            Gamut.open(f -> described(f, p), dst)
+        end
+    end
     Gamut.open(path) do f
-        if haskey(p, "info")
+        if haskey(p, "describe")
+            return described(f, p)
+        elseif haskey(p, "info")
             got = getproperty(f, Symbol(p["info"]))
             return got == p["value"] ? nothing : "$(p["info"]): $(repr(got)) != $(repr(p["value"]))"
         elseif haskey(p, "label")

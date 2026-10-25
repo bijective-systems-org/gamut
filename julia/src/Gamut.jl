@@ -275,7 +275,7 @@ function declare(h, kw)
     if !get(kw, :compression, true)
         @mes gamut_set_compression (Ptr{Cvoid}, Cint, Cint) h 0 0
     end
-    for key in (:title, :license, :references, :source, :trained_on)
+    for key in (:title, :license, :references, :source, :portion_marking, :trained_on)
         v = get(kw, key, nothing)
         v === nothing && continue
         value = v isa AbstractVector ? join(string.(v), " ") : string(v)
@@ -336,7 +336,8 @@ end
 """
     Gamut.create(path; writer, parameters, labels, scalars, fields, mesh_labels,
                   constants, mesh, per, coordinates, precision, round_bits, title,
-                  license, references, source, generalisation_group, compression)
+                  license, references, source, portion_marking, generalisation_group,
+                  compression)
 
 Creates a data file and returns it open to add runs.
 Declarations are Dicts (or NamedTuples) from a name to its units text or
@@ -362,7 +363,7 @@ create(f::Function, path::AbstractString; kw...) = with_study(f, create(path; kw
 """
     Gamut.create_model(path; writer, parameters, labels, scalars, fields, constants,
                         mesh, per, coordinates, trained_on, title, license,
-                        references, source)
+                        references, source, portion_marking)
 
 Creates a model file (spec section 7): parameters with bounds, every result
 naming the model and output that computes it; then `add_model!`.
@@ -377,7 +378,7 @@ create_model(f::Function, path::AbstractString; kw...) = with_study(f, create_mo
 
 const DECLARATIONS = (:parameters, :labels, :scalars, :fields, :mesh_labels, :constants,
                       :coordinates, :precision, :round_bits, :title, :license, :references,
-                      :source, :generalisation_group, :compression, :trained_on)
+                      :source, :portion_marking, :generalisation_group, :compression, :trained_on)
 
 function started(s::Study, kw)
     unknown = setdiff(keys(kw), DECLARATIONS)

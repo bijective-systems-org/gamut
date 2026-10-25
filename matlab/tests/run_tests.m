@@ -105,13 +105,16 @@ r.close();
 % a one-element array from a number; the gateway keeps the ranks), and a
 % registered plug-in serving values and std.
 mp = fullfile(tmp, 'nearest.gamut');
-s = gamut.createModel(mp, 'writer', 'matlab tests', ...
+s = gamut.createModel(mp, 'writer', 'matlab tests', 'portionMarking', 'Example marking', ...
     'parameters', struct('alpha', struct('units', 'degree', 'lower', 0, 'upper', 10)), ...
     'scalars', struct('cl', struct('units', '1', 'model', 'fit', 'output', 'cl')));
 s.addModel('fit', gamut.Nearest({'alpha'}, 0, 10, [0; 5; 10], struct('cl', [0.1; 0.5; 1.0])), ...
     {'alpha'});
 s.close();
 ok(isempty(gamut.validate(mp)), 'nearest model file validates');
+r = gamut.open(mp);
+ok(strcmp(r.describe().portion_marking, 'Example marking'), 'portion marking read as written');
+r.close();
 
 % A refused close keeps the file open to fix and close again.
 rp = fullfile(tmp, 'refused.gamut');
@@ -130,6 +133,7 @@ ok(isempty(gamut.validate(rp)), 'closed after the fix');
 out = gamut.evaluate(mp, struct('alpha', [1; 4; 9]));
 ok(isequal(out.getScalar('cl'), [0.1; 0.5; 1.0]), 'nearest evaluated');
 ok(isequal(out.getParameter('alpha'), [1; 4; 9]), 'inputs kept');
+ok(strcmp(out.describe().portion_marking, 'Example marking'), 'portion marking copied into the answer');
 tmpPath = out.Path;
 out.close();
 ok(~isfile(tmpPath), 'temporary evaluated file removed on close');
@@ -194,7 +198,19 @@ gamut.writeCopy(ca, cw);
 r = gamut.open(cw); q = gamut.open(ca);
 ok(strcmp(r.describe().file_id, q.describe().file_id) && isequal(r.getParameter('x'), [1; 2; 3; 4]), ...
     'writeCopy keeps identity and values');
+ok(~isfield(r.describe(), 'portion_marking'), 'no marking unless set');
 r.close(); q.close();
+mm = fullfile(tmp, 'marked.gamut'); me = fullfile(tmp, 'marked_part.gamut'); mw = fullfile(tmp, 'marked_copy.gamut');
+s = gamut.create(mm, 'writer', 't', 'parameters', struct('x', 'm'), 'portionMarking', 'Example marking');
+s.addRuns(struct('x', [1; 2]));
+s.close();
+gamut.extract(mm, me, 2);
+gamut.writeCopy(mm, mw);
+for p = {mm, me, mw}
+    r = gamut.open(p{1});
+    ok(strcmp(r.describe().portion_marking, 'Example marking'), ['portion marking kept in ' p{1}]);
+    r.close();
+end
 try
     gamut.append(ca, ca);
     ok(false, 'append to itself refused');

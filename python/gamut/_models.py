@@ -260,11 +260,12 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
                  coordinates: Mapping[str, Any] | None = None,
                  trained_on: Sequence[str] | None = None, title: str | None = None,
                  license: str | None = None, references: str | None = None,
-                 source: str | None = None) -> ModelFile:
+                 source: str | None = None, portion_marking: str | None = None) -> ModelFile:
     """Creates a model file and returns it open to add models: use it in a
     `with` block, or call `close()`. A model file holds no runs. It is
     declared as `create` declares a data file (labels, constants, mesh,
-    per, coordinates, title, license, references, source), except:
+    per, coordinates, title, license, references, source,
+    portion_marking), except:
 
     parameters   each needs "lower" and "upper", the range the model was
                  fitted on: {"alpha": {"units": "degree", "lower": 0.0,
@@ -277,6 +278,8 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
                  the model's `call` is asked for it.
     trained_on   the file_id (`study.describe()["file_id"]`) of each
                  study the model was fitted on.
+    portion_marking  a marking the model's author set, as free text;
+                 `evaluate` copies it into every answer file.
 
     Then `add_model(id, model, inputs)` stores each model: an object of a
     type registered with `register_model_type`, or the built-in `Nearest`.
@@ -325,7 +328,7 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
     study._axes = axes
     try:
         for key, value in (("title", title), ("license", license), ("references", references),
-                           ("source", source)):
+                           ("source", source), ("portion_marking", portion_marking)):
             if value is not None:
                 call("gamut_set_attribute", handle, b(key), b(value))
         if trained_on:

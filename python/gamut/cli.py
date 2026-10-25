@@ -99,8 +99,9 @@ def _summary(path: str) -> dict:
             "addons": f.addons, "row_count": f.row_count,
             "file_bytes": os.path.getsize(path),
             "metadata": {k: d[k] for k in ("writer", "created", "file_id", "title", "license",
-                                           "references", "source", "generalisation_group",
-                                           "trained_on", "evaluated_from") if k in d},
+                                           "references", "source", "portion_marking",
+                                           "generalisation_group", "trained_on",
+                                           "evaluated_from") if k in d},
             "parameters": [], "labels": [], "scalars": [], "constants": [],
         }
         for name in f.names("parameters"):
@@ -250,6 +251,8 @@ def _human(doc: dict) -> str:
         lines.append(f"  model       {m['id']}: {m.get('type')} reading {m.get('inputs')}{about}")
     if doc["metadata"].get("trained_on"):
         lines.append(f"  trained on  {doc['metadata']['trained_on']}")
+    if doc["metadata"].get("portion_marking"):
+        lines.append(f"  marking     {doc['metadata']['portion_marking']}")
     size = doc["file_bytes"]
     unit = "KB" if size < 1e6 else ("MB" if size < 1e9 else "GB")
     scale = 1e3 if unit == "KB" else (1e6 if unit == "MB" else 1e9)
@@ -294,8 +297,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
 # --- build and append ----------------------------------------------------------------------
 
 
-_KNOWN_KEYS = {"writer", "title", "license", "references", "source", "mesh", "parameters",
-               "labels", "scalars", "fields", "mesh_labels", "constants", "runs",
+_KNOWN_KEYS = {"writer", "title", "license", "references", "source", "portion_marking", "mesh",
+               "parameters", "labels", "scalars", "fields", "mesh_labels", "constants", "runs",
                "generalisation_group"}
 
 
@@ -406,6 +409,7 @@ def cmd_build(args: argparse.Namespace) -> int:
                        if mesh else None,
                        title=doc.get("title"), license=doc.get("license"),
                        references=doc.get("references"), source=doc.get("source"),
+                       portion_marking=doc.get("portion_marking"),
                        generalisation_group=doc.get("generalisation_group"))
         with study:
             if mesh.get("kind") == "shared":

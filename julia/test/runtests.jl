@@ -229,6 +229,17 @@ mktempdir() do tmp
         ida = Gamut.open(f -> Gamut.describe(f)["file_id"], a)
         idw = Gamut.open(f -> Gamut.describe(f)["file_id"], w)
         @test ida == idw
+        # The portion marking (spec section 8) is kept by extract and write_copy.
+        m, me, mw = (joinpath(tmp, n) for n in ("jm.gamut", "jme.gamut", "jmw.gamut"))
+        Gamut.create(m; writer="t", parameters=Dict("x" => "m"), portion_marking="Example marking") do s
+            Gamut.add_runs!(s, Dict("x" => [1.0, 2.0]))
+        end
+        Gamut.extract(m, me, [2])
+        Gamut.write_copy(m, mw)
+        for p in (m, me, mw)
+            @test Gamut.open(f -> Gamut.describe(f)["portion_marking"], p) == "Example marking"
+        end
+        @test !haskey(Gamut.open(Gamut.describe, a), "portion_marking")
         @test_throws GamutError Gamut.append!(a, a)
         @test isempty(Gamut.validate(e)) && isempty(Gamut.validate(w))
     end
@@ -258,15 +269,17 @@ mktempdir() do tmp
 
     @testset "the built-in nearest model" begin
         mp = joinpath(tmp, "nearest.gamut")
-        Gamut.create_model(mp; writer="tests",
+        Gamut.create_model(mp; writer="tests", portion_marking="Example marking",
                             parameters=Dict("alpha" => (units="degree", lower=0.0, upper=10.0)),
                             scalars=Dict("cl" => (units="1", model="fit", output="cl"))) do s
             Gamut.add_model!(s, "fit", Gamut.Nearest(["alpha"], [0.0], [10.0], [0.0; 5.0; 10.0;;],
                                                        Dict("cl" => [0.1, 0.5, 1.0])), ["alpha"])
         end
         @test isempty(Gamut.validate(mp))
+        @test Gamut.open(f -> Gamut.describe(f)["portion_marking"], mp) == "Example marking"
         out = Gamut.evaluate(mp, Dict("alpha" => [1.0, 4.0, 9.0]))
         @test Gamut.get_scalar(out, "cl") == [0.1, 0.5, 1.0]
+        @test Gamut.describe(out)["portion_marking"] == "Example marking"   # copied into the answer
         path = out.path
         close(out)
         @test !isfile(path)

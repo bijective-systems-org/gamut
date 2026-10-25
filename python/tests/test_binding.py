@@ -303,6 +303,25 @@ def test_library_path_names_the_loaded_core():
     assert path.is_file() and path.name == gamut._lib._library_name()
 
 
+def test_portion_marking_is_free_text_under_64_kib(tmp_path):
+    """The root attribute is read as written; one of 64 KiB or more is refused
+    (HDF5's compact attribute storage at the writer's libver bounds) and the
+    refusal leaves no file."""
+    def write(path, marking):
+        with gamut.create(path, writer="t", parameters={"x": "1"}, scalars={"y": "1"},
+                           portion_marking=marking) as s:
+            s.add_run({"x": 1.0, "y": 2.0})
+    long_path = str(tmp_path / "long.gamut")
+    write(long_path, "m" * 60000)
+    with gamut.open(long_path) as f:
+        assert f.describe()["portion_marking"] == "m" * 60000
+    assert not gamut.validate(long_path).findings
+    refused = str(tmp_path / "refused.gamut")
+    with pytest.raises(gamut.GamutError, match="portion_marking"):
+        write(refused, "m" * 65536)
+    assert not os.path.exists(refused)
+
+
 def test_package_and_core_versions_agree():
     from importlib import metadata
     try:

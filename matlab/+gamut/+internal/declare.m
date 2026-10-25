@@ -3,10 +3,11 @@ function declare(h, o)
 if isfield(o, 'compression') && ~o.compression
     gamut_mex('set_compression', h, 0, 0);
 end
-attrs = {'title', 'license', 'references', 'source'};
+attrs = {'title', 'license', 'references', 'source', 'portionMarking'};
+names = {'title', 'license', 'references', 'source', 'portion_marking'};
 for k = 1:numel(attrs)
     if isfield(o, attrs{k}) && ~isempty(o.(attrs{k}))
-        gamut_mex('set_attribute', h, attrs{k}, o.(attrs{k}));
+        gamut_mex('set_attribute', h, names{k}, o.(attrs{k}));
     end
 end
 if isfield(o, 'trainedOn') && ~isempty(o.trainedOn)
