@@ -104,7 +104,7 @@ that matches the wheel's core, and point it at a core library:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v1.2.0")
+Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v1.3.0")
 ENV["GAMUT_LIBRARY"] = "/path/to/libgamut.dylib"   # .so on Linux, gamut.dll on Windows
 using Gamut
 Gamut.version()

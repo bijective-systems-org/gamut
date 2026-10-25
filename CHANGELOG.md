@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 (2026-10-25)
 
 A file may carry a portion marking: a new optional root attribute,
 `portion_marking`, holding free text the model's author set, which the
