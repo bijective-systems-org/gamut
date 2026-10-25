@@ -259,7 +259,7 @@ void test_integers_batches_and_reads() {
     CHECK(s.handle() != nullptr);
     gamut::Study moved = std::move(s);                            // the file moves with the study
     CHECK(s.handle() == nullptr);
-    CHECK(moved.add_run({{"run", "a"}, {"t", 0.0}, {"n", 3}, {"cl", 0.5}}) == 0);
+    CHECK(moved.add_run({{"run", "a"}, {"t", 0.0}, {"n", int64_t{3}}, {"cl", 0.5}}) == 0);
     const std::vector<int64_t> ids = moved.add_runs(
         {{"run", std::vector<std::string>{"a", "b", "b"}}, {"t", std::vector<double>{1.0, 0.0, 1.0}},
          {"n", std::vector<int64_t>{3, 4, 4}}, {"cl", std::vector<double>{0.6, 0.7, 0.8}}});
@@ -269,7 +269,7 @@ void test_integers_batches_and_reads() {
   }
   {
     auto s = gamut::open("batches.gamut", "a");                    // a table, no mesh
-    s.add_run({{"run", "c"}, {"t", 0.0}, {"n", 5}, {"cl", 0.9}});
+    s.add_run({{"run", "c"}, {"t", 0.0}, {"n", int64_t{5}}, {"cl", 0.9}});
     s.close();
   }
   const auto s = gamut::open("batches.gamut");
