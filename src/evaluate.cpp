@@ -12,7 +12,8 @@ std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string&
   try {
     for (const auto& kv : {std::make_pair("title", s.title), std::make_pair("license", s.license),
                            std::make_pair("references", s.references),
-                           std::make_pair("source", s.source)}) {
+                           std::make_pair("source", s.source),
+                           std::make_pair("portion_marking", s.portion_marking)}) {
       if (!kv.second.empty()) w->set_attribute(kv.first, kv.second);
     }
     if (!s.file_id.empty()) w->set_attribute("evaluated_from", s.file_id);

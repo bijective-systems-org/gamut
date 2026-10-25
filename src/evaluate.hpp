@@ -18,7 +18,8 @@ namespace internal {
 // codes agree), results (stored, at the precision of the model file's
 // datasets), constants, and the mesh (its stored coordinates when fixed;
 // cells only when a model or the caller gives coordinates per run).  The
-// file records the model file's id in `evaluated_from`.
+// file records the model file's id in `evaluated_from` and carries its
+// `portion_marking` when it has one.
 std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string& out_path);
 
 }  // namespace internal

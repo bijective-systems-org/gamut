@@ -106,6 +106,7 @@ Schema load_schema(const File& f, const std::string& path) {
   s.license = root.text("license");
   s.references = root.text("references");
   s.source = root.text("source");
+  s.portion_marking = root.text("portion_marking");
   s.generalisation_group = root.text("generalisation_group");
   s.trained_on = root.text("trained_on");
   s.evaluated_from = root.text("evaluated_from");

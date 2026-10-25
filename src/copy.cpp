@@ -218,6 +218,7 @@ std::unique_ptr<Writer> declare_like(const Reader& src, const std::string& dst) 
     for (const auto& kv : {std::make_pair("title", s.title), std::make_pair("license", s.license),
                            std::make_pair("references", s.references),
                            std::make_pair("source", s.source),
+                           std::make_pair("portion_marking", s.portion_marking),
                            std::make_pair(model ? "trained_on" : "evaluated_from",
                                           model ? s.trained_on : s.evaluated_from)}) {
       if (!kv.second.empty()) w->set_attribute(kv.first, kv.second);
