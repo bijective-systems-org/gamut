@@ -1,10 +1,19 @@
-# Gamut
+# Gamut: the simulation study file format by Bijective Systems
 
 > Gamut is an open file format, with one library for Python, MATLAB, Julia, C++ and C, for the results of a parametric simulation study: a sweep, a design of experiments, a CFD or FEA campaign, and the models fitted to it. One `.gamut` file holds every run's inputs, status and results, and the mesh and every field on it, all with units. Files are HDF5 laid out as netCDF-4, so h5py, xarray and the netCDF tools read them without Gamut.
 
 Use Gamut when many runs of one simulation setup should live in one file that people using different languages read the same way, when the runs feed a surrogate, reduced-order or machine-learning model (a field on a shared mesh is one block of runs × nodes; a file can publish its train/test split and the group a fair test holds out), when a fitted model should travel as a file with its units, input bounds and provenance and no code (rather than a pickle), or when whoever receives the file must be able to check it (`gamut validate` names each broken rule). It is not a solver's output or restart format (use CGNS, VTK or Exodus for one run), and not a general array store (use Zarr or HDF5 directly).
 
 Install: `pip install gamut-format`, then `import gamut` (Python 3.10 or later; the wheel carries its own HDF5). The command line is `gamut`. MATLAB R2023b or later: open `Gamut.mltbx` from the latest GitHub release (no compiler). Julia, C and C++ use the same core library, from each release's `gamut-core-<version>-<platform>` archive: see the install page.
+
+## Identity and authoritative sources
+
+- [PyPI distribution: gamut-format](https://pypi.org/project/gamut-format/): install `gamut-format`, import `gamut`, command line `gamut`. The PyPI project named `gamut` is a different package.
+- [Canonical repository](https://github.com/bijective-systems-org/gamut): maintained by Bijective Systems.
+- [Documentation index](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/README.md): installation, guide and reference.
+- [Specification](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/SPEC.md): authoritative file layout and validation rules. The format version `gamut/1` is separate from the package version.
+- [Python API](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/python/gamut/__init__.py) and [C API](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/include/gamut/gamut.h): supported public interfaces; Python docstrings are also available through `help(gamut)`.
+- [Citation metadata](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/CITATION.cff): software identity and release citation.
 
 ## The pattern
 
@@ -98,9 +107,8 @@ with gamut.evaluate("lift.gamut", {"alpha": [1.0, 5.0]}) as answer:   # an ordin
 - [Selecting rows](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/selecting.md): the grammar of `select`
 - [Installing](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/install.md): every language, and xarray
 
-## Optional
+## Further reading
 
-- [Specification](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/SPEC.md): the format, its validation rules (E1-E24, W1-W11) and versions
 - [Files from outside](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/security.md): what a reader protects against, and its limits
 - [How it compares](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/comparison.md): beside VTK, CGNS, Exodus, netCDF-CF and Zarr
 - [Benchmarks](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/benchmarks.md): size and read times against native formats, with method and scripts
