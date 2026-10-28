@@ -180,6 +180,243 @@ void test_h5_roundtrip() {
 #endif
 }
 
+void test_attribute_replacement() {
+  using gamut_core::AttrValue;
+  const std::string path = "core_replace_attr.gamut";
+  const auto text_is = [](const File& f, const std::string& name,
+                          const std::string& value) {
+    for (const auto& a : f.attributes("/")) {
+      if (a.name == name) {
+        return a.value.kind() == AttrValue::Kind::Str &&
+               a.value.as_text() == value &&
+               gamut_core::internal::is_spec_string(a.type);
+      }
+    }
+    return false;
+  };
+  const std::string old(60000, 'm');
+  {
+    File f = File::create(path);
+    for (const std::string value : {std::string("first"), std::string(1000, 'x'),
+                                    std::string("short"), std::string("\xc2\xb5"),
+                                    std::string(), old}) {
+      f.replace_attr("/", "title", AttrValue::text(value));
+      CHECK(text_is(f, "title", value));
+      CHECK(f.attributes("/").size() == 1);
+    }
+    for (int i = 0; i < 2; ++i) {
+      CHECK(!raises([&] {
+        f.replace_attr("/", "title", AttrValue::text(std::string(65536, 'x')));
+      }).empty());
+      CHECK(text_is(f, "title", old));
+      CHECK(f.attributes("/").size() == 1);
+    }
+    CHECK(!raises([&] { f.replace_attr("/", "", AttrValue::text("bad")); }).empty());
+    CHECK(!raises([&] {
+      f.replace_attr("/missing", "title", AttrValue::text("bad"));
+    }).empty());
+    CHECK(text_is(f, "title", old));
+    CHECK(f.attributes("/").size() == 1);
+    CHECK(!raises([&] {
+      f.replace_attr("/", "source", AttrValue::text(std::string(65536, 'x')));
+    }).empty());
+    CHECK(text_is(f, "title", old));
+    CHECK(f.attributes("/").size() == 1);
+  }
+  {
+    File f = File::open_read(path);
+    CHECK(text_is(f, "title", old));
+    CHECK(f.attributes("/").size() == 1);
+  }
+  {
+    File f = File::open_write(path);
+    // Temporary names must never overwrite an existing user attribute.
+    f.write_attr("/", "_", AttrValue::text("keep new"));
+    f.write_attr("/", "__", AttrValue::text("keep old"));
+    for (const auto& value : {AttrValue::integer(42), AttrValue::real(1.25),
+                              AttrValue::boolean(true)}) {
+      f.replace_attr("/", "title", value);
+      bool found = false;
+      for (const auto& a : f.attributes("/")) {
+        if (a.name == "title") found = a.value == value;
+      }
+      CHECK(found);
+    }
+    f.replace_attr("/", "_", AttrValue::text("keep new"));
+    f.replace_attr("/", "__", AttrValue::text("keep old"));
+    f.replace_attr("/", "title", AttrValue::text("final"));
+    CHECK(text_is(f, "title", "final"));
+    CHECK(text_is(f, "_", "keep new"));
+    CHECK(text_is(f, "__", "keep old"));
+    CHECK(f.attributes("/").size() == 3);
+  }
+  {
+    File f = File::open_read(path);
+    CHECK(text_is(f, "title", "final"));
+    CHECK(!raises([&] {
+      f.replace_attr("/", "title", AttrValue::text("read only"));
+    }).empty());
+    CHECK(text_is(f, "title", "final"));
+    CHECK(f.attributes("/").size() == 3);
+  }
+  std::remove(path.c_str());
+}
+
+void test_attribute_replacement_boundaries() {
+  using gamut_core::AttrValue;
+  const auto text_is = [](const File& f, const std::string& object,
+                          const std::string& name, const std::string& text) {
+    for (const auto& a : f.attributes(object)) {
+      if (a.name == name) return a.value == AttrValue::text(text);
+    }
+    return false;
+  };
+  for (const std::string object : {std::string("/"), std::string("/notes")}) {
+    // HDF5 1.14.6 loses the original if it is renamed to a longer backup
+    // name at these compact-message sizes.
+    for (int size = 65496; size <= 65503; ++size) {
+      const std::string path = "core_replace_boundary.gamut";
+      {
+        File f = File::create(path);
+        f.make_group(object);
+        f.write_attr(object, "title", AttrValue::text(std::string(size, 'm')));
+        for (int i = 1; i <= 8; ++i) {
+          f.write_attr(object, std::string(i, '_'), AttrValue::integer(i));
+        }
+        CHECK(!raises([&] {
+          f.replace_attr(object, "title", AttrValue::text(std::string(65536, 'x')));
+        }).empty());
+        CHECK(text_is(f, object, "title", std::string(size, 'm')));
+        CHECK(f.attributes(object).size() == 9);
+        f.replace_attr(object, "title", AttrValue::text("new"));
+        CHECK(text_is(f, object, "title", "new"));
+        CHECK(!raises([&] {
+          f.replace_attr(object, "title", AttrValue::text(std::string(65536, 'x')));
+        }).empty());
+        CHECK(text_is(f, object, "title", "new"));
+        CHECK(f.attributes(object).size() == 9);
+      }
+      {
+        File f = File::open_read(path);
+        CHECK(text_is(f, object, "title", "new"));
+        const auto attrs = f.attributes(object);
+        CHECK(attrs.size() == 9);
+        for (int i = 1; i <= 8; ++i) {
+          bool found = false;
+          for (const auto& a : attrs) {
+            if (a.name == std::string(i, '_')) found = a.value == AttrValue::integer(i);
+          }
+          CHECK(found);
+        }
+      }
+      std::remove(path.c_str());
+    }
+    // This tight-boundary seed is readable before any replacement. Larger
+    // raw seeds above can already be unreadable after close without replacing.
+    const std::string tight_path = "core_replace_tight.gamut";
+    const std::string tight(65496, 'm');
+    {
+      File f = File::create(tight_path);
+      f.make_group(object);
+      f.write_attr(object, "title", AttrValue::text(tight));
+      for (int i = 1; i <= 8; ++i) f.write_attr(object, std::string(i, '_'), AttrValue::integer(i));
+    }
+    {
+      File f = File::open_write(tight_path);
+      CHECK(text_is(f, object, "title", tight));
+      CHECK(!raises([&] {
+        f.replace_attr(object, "title", AttrValue::text(std::string(65536, 'x')));
+      }).empty());
+      CHECK(text_is(f, object, "title", tight));
+    }
+    {
+      File f = File::open_read(tight_path);
+      CHECK(text_is(f, object, "title", tight));
+      CHECK(f.attributes(object).size() == 9);
+    }
+    std::remove(tight_path.c_str());
+    // If every one-byte recovery name is occupied, refuse before touching
+    // the original rather than making a compact attribute's name longer.
+    const std::string path = "core_replace_no_backup.gamut";
+    const std::string names = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const std::string old = "unchanged";
+    {
+      File f = File::create(path);
+      f.make_group(object);
+      f.write_attr(object, "title", AttrValue::text(old));
+      for (const char name : names) f.write_attr(object, std::string(1, name), AttrValue::integer(7));
+      CHECK(!raises([&] { f.replace_attr(object, "title", AttrValue::text("new")); }).empty());
+      CHECK(text_is(f, object, "title", old));
+      CHECK(f.attributes(object).size() == names.size() + 1);
+    }
+    {
+      File f = File::open_read(path);
+      CHECK(text_is(f, object, "title", old));
+      CHECK(f.attributes(object).size() == names.size() + 1);
+    }
+    std::remove(path.c_str());
+  }
+}
+
+void test_attribute_replacement_metadata() {
+  using gamut_core::AttrValue;
+  using gamut_core::internal::Id;
+  const std::string path = "core_replace_metadata.gamut";
+  {
+    File f = File::create(path);
+    Id object(H5Oopen(f.get(), "/", H5P_DEFAULT));
+    const hsize_t count = 3;
+    Id space(H5Screate_simple(1, &count, nullptr));
+    {
+      Id attr(H5Acreate2(object.get(), "array", H5T_STD_I64LE, space.get(),
+                         H5P_DEFAULT, H5P_DEFAULT));
+      const std::int64_t values[] = {3, 5, 8};
+      CHECK(attr.valid() && H5Awrite(attr.get(), H5T_NATIVE_INT64, values) >= 0);
+    }
+    CHECK(!raises([&] {
+      f.replace_attr("/", "array", AttrValue::text(std::string(65536, 'x')));
+    }).empty());
+    {
+      Id attr(H5Aopen(object.get(), "array", H5P_DEFAULT));
+      Id type(H5Aget_type(attr.get()));
+      Id stored(H5Aget_space(attr.get()));
+      CHECK(attr.valid() && H5Tequal(type.get(), H5T_STD_I64LE) > 0);
+      CHECK(H5Sextent_equal(space.get(), stored.get()) > 0);
+      std::int64_t values[3] = {};
+      CHECK(H5Aread(attr.get(), H5T_NATIVE_INT64, values) >= 0);
+      CHECK(values[0] == 3 && values[1] == 5 && values[2] == 8);
+    }
+    // Pointer-bearing types are refused before any original mutation.
+    Id variable(H5Tcopy(H5T_C_S1));
+    CHECK(H5Tset_size(variable.get(), H5T_VARIABLE) >= 0);
+    Id scalar(H5Screate(H5S_SCALAR));
+    {
+      Id attr(H5Acreate2(object.get(), "variable", variable.get(), scalar.get(),
+                         H5P_DEFAULT, H5P_DEFAULT));
+      const char* value = "original variable string";
+      CHECK(attr.valid() && H5Awrite(attr.get(), variable.get(), &value) >= 0);
+    }
+    CHECK(!raises([&] { f.replace_attr("/", "variable", AttrValue::text("new")); }).empty());
+    CHECK(f.attributes("/").size() == 2);
+  }
+  {
+    File f = File::open_read(path);
+    Id attr(H5Aopen(f.get(), "array", H5P_DEFAULT));
+    std::int64_t values[3] = {};
+    CHECK(attr.valid() && H5Aread(attr.get(), H5T_NATIVE_INT64, values) >= 0);
+    CHECK(values[0] == 3 && values[1] == 5 && values[2] == 8);
+    Id variable(H5Aopen(f.get(), "variable", H5P_DEFAULT));
+    Id type(H5Aget_type(variable.get()));
+    CHECK(H5Tis_variable_str(type.get()) > 0);
+    char* value = nullptr;
+    CHECK(H5Aread(variable.get(), type.get(), &value) >= 0);
+    CHECK(value != nullptr && std::string(value) == "original variable string");
+    if (value != nullptr) H5free_memory(value);
+    CHECK(f.attributes("/").size() == 2);
+  }
+  std::remove(path.c_str());
+}
+
 }  // namespace
 
 int main() {
@@ -190,6 +427,9 @@ int main() {
       {"names", test_names},
       {"capi", test_capi_basics},
       {"h5", test_h5_roundtrip},
+      {"attribute_replacement", test_attribute_replacement},
+      {"attribute_replacement_boundaries", test_attribute_replacement_boundaries},
+      {"attribute_replacement_metadata", test_attribute_replacement_metadata},
   };
   for (const auto& t : tests) {
     try {
