@@ -6,10 +6,18 @@
   </picture>
 </p>
 
-<p align="center">
-An open file format for parametric simulation studies,<br>
-with libraries for Python, MATLAB, Julia, C++ and C.
-</p>
+# Gamut: an open file format for parametric simulation studies
+
+By [Bijective Systems](https://github.com/bijective-systems-org), with
+libraries for Python, MATLAB, Julia, C++ and C.
+
+[PyPI: gamut-format](https://pypi.org/project/gamut-format/) ·
+[Documentation](https://github.com/bijective-systems-org/gamut/blob/main/docs/README.md) ·
+[Specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md) ·
+[Releases](https://github.com/bijective-systems-org/gamut/releases)
+
+For Python, install `gamut-format`, then `import gamut`; the command line
+is `gamut`. The PyPI project named `gamut` is a different package.
 
 <p align="center">
   <a href="https://github.com/bijective-systems-org/gamut/actions/workflows/ci.yml"><img src="https://github.com/bijective-systems-org/gamut/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
@@ -253,6 +261,11 @@ built with CMake.
 [Installing](https://github.com/bijective-systems-org/gamut/blob/main/docs/install.md) has the details for each language.
 
 ## Documentation
+
+The [documentation index](https://github.com/bijective-systems-org/gamut/blob/main/docs/README.md)
+links installation, examples and reference material. For coding agents,
+[llms.txt](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/llms.txt)
+provides a plain-text overview with runnable Python patterns and source links.
 
 The [guide](https://github.com/bijective-systems-org/gamut/blob/main/docs/guide/README.md) has one short page per concept, each
 running one script from `examples/`. The

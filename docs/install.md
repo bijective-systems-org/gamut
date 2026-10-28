@@ -1,4 +1,9 @@
-# Installing
+# Installing Gamut (gamut-format)
+
+Gamut is published by Bijective Systems as
+[`gamut-format` on PyPI](https://pypi.org/project/gamut-format/).
+Install `gamut-format`, then `import gamut`; the command line is `gamut`.
+The PyPI project named `gamut` is a different package.
 
 Every language uses the same core library, written in C++. The Python
 wheels include it, with HDF5 linked inside, so it never meets another HDF5
