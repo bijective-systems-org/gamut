@@ -385,12 +385,14 @@ def import_folder(folder: str, out: str, parameters: str | None = None,
     if times:
         for t in times:
             param_spec[t]["run_group"] = groups[0]
+    # Outside the try: a refused create (an existing output) must not remove that file.
+    study = gamut.create(out, writer="gamut-vtk", parameters=param_spec, labels=label_spec,
+                         fields=field_decl, mesh_labels=mesh_labels,
+                         mesh="shared" if one_mesh else "changing",
+                         per="fixed" if fixed_geometry else "run",
+                         coordinates={"units": coordinate_units, "axes": 3})
     try:
-        with gamut.create(out, writer="gamut-vtk", parameters=param_spec, labels=label_spec,
-                           fields=field_decl, mesh_labels=mesh_labels,
-                           mesh="shared" if one_mesh else "changing",
-                           per="fixed" if fixed_geometry else "run",
-                           coordinates={"units": coordinate_units, "axes": 3}) as study:
+        with study:
             if one_mesh:
                 study.set_mesh(first["points"] if fixed_geometry else None, first["cells"],
                                labels={k: arrays[label_source[k]] for k in mesh_labels},
