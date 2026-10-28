@@ -197,7 +197,7 @@ void test_attribute_replacement() {
   const std::string old(60000, 'm');
   {
     File f = File::create(path);
-    for (const std::string value : {std::string("first"), std::string(1000, 'x'),
+    for (const std::string& value : {std::string("first"), std::string(1000, 'x'),
                                     std::string("short"), std::string("\xc2\xb5"),
                                     std::string(), old}) {
       f.replace_attr("/", "title", AttrValue::text(value));
@@ -271,17 +271,17 @@ void test_attribute_replacement_boundaries() {
     }
     return false;
   };
-  for (const std::string object : {std::string("/"), std::string("/notes")}) {
+  for (const std::string& object : {std::string("/"), std::string("/notes")}) {
     // HDF5 1.14.6 loses the original if it is renamed to a longer backup
     // name at these compact-message sizes.
-    for (int size = 65496; size <= 65503; ++size) {
+    for (std::size_t size = 65496; size <= 65503; ++size) {
       const std::string path = "core_replace_boundary.gamut";
       {
         File f = File::create(path);
         f.make_group(object);
         f.write_attr(object, "title", AttrValue::text(std::string(size, 'm')));
         for (int i = 1; i <= 8; ++i) {
-          f.write_attr(object, std::string(i, '_'), AttrValue::integer(i));
+          f.write_attr(object, std::string(static_cast<std::size_t>(i), '_'), AttrValue::integer(i));
         }
         CHECK(!raises([&] {
           f.replace_attr(object, "title", AttrValue::text(std::string(65536, 'x')));
@@ -304,7 +304,7 @@ void test_attribute_replacement_boundaries() {
         for (int i = 1; i <= 8; ++i) {
           bool found = false;
           for (const auto& a : attrs) {
-            if (a.name == std::string(i, '_')) found = a.value == AttrValue::integer(i);
+            if (a.name == std::string(static_cast<std::size_t>(i), '_')) found = a.value == AttrValue::integer(i);
           }
           CHECK(found);
         }
@@ -319,7 +319,7 @@ void test_attribute_replacement_boundaries() {
       File f = File::create(tight_path);
       f.make_group(object);
       f.write_attr(object, "title", AttrValue::text(tight));
-      for (int i = 1; i <= 8; ++i) f.write_attr(object, std::string(i, '_'), AttrValue::integer(i));
+      for (int i = 1; i <= 8; ++i) f.write_attr(object, std::string(static_cast<std::size_t>(i), '_'), AttrValue::integer(i));
     }
     {
       File f = File::open_write(tight_path);
@@ -417,6 +417,27 @@ void test_attribute_replacement_metadata() {
   std::remove(path.c_str());
 }
 
+void test_create_preserves_existing_file() {
+  const std::string path = "core_existing.gamut";
+  const char original[] = "existing study bytes";
+  std::FILE* output = std::fopen(path.c_str(), "wb");
+  CHECK(output != nullptr);
+  if (output == nullptr) return;
+  CHECK(std::fwrite(original, 1, sizeof(original), output) == sizeof(original));
+  std::fclose(output);
+  CHECK(!raises([&] { File::create(path); }).empty());
+  std::FILE* input = std::fopen(path.c_str(), "rb");
+  CHECK(input != nullptr);
+  if (input != nullptr) {
+    char actual[sizeof(original)] = {};
+    CHECK(std::fread(actual, 1, sizeof(actual), input) == sizeof(original));
+    CHECK(std::memcmp(original, actual, sizeof(original)) == 0);
+    CHECK(std::fgetc(input) == EOF);
+    std::fclose(input);
+  }
+  std::remove(path.c_str());
+}
+
 }  // namespace
 
 int main() {
@@ -427,6 +448,7 @@ int main() {
       {"names", test_names},
       {"capi", test_capi_basics},
       {"h5", test_h5_roundtrip},
+      {"existing_file", test_create_preserves_existing_file},
       {"attribute_replacement", test_attribute_replacement},
       {"attribute_replacement_boundaries", test_attribute_replacement_boundaries},
       {"attribute_replacement_metadata", test_attribute_replacement_metadata},

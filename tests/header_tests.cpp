@@ -2,7 +2,10 @@
 // library as a program using it would be: every declaration, the three mesh
 // arrangements, appending, reads, selections, the file copies, validation,
 // the errors, and calls from several threads at once.
+#include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <stdexcept>
 #include <cstdint>
 #include <cstdio>
 #include <string>
@@ -362,8 +365,9 @@ void test_calls_from_several_threads() {
   for (std::size_t t = 0; t < threads; ++t) {
     pool.emplace_back([t, &wrong] {
       try {
-        const std::string own = "thread" + std::to_string(t) + ".gamut";
         for (int round = 0; round < 20; ++round) {
+          const std::string own = "thread" + std::to_string(t) + "_" +
+                                  std::to_string(round) + ".gamut";
           {
             auto w = gamut::create(own, "header tests");
             w.declare_parameter("x", "design", "1");
@@ -385,12 +389,20 @@ void test_calls_from_several_threads() {
   for (auto& th : pool) th.join();
   for (std::size_t t = 0; t < threads; ++t) {
     CHECK(wrong[t] == 0);
-    std::remove(("thread" + std::to_string(t) + ".gamut").c_str());
+    for (int round = 0; round < 20; ++round)
+      std::remove(("thread" + std::to_string(t) + "_" +
+                   std::to_string(round) + ".gamut").c_str());
   }
   std::remove("threads_shared.gamut");
 }
 
 int main() {
+  namespace fs = std::filesystem;
+  const auto original = fs::current_path();
+  const auto directory = fs::temp_directory_path() /
+      ("gamut-header-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  if (!fs::create_directory(directory)) throw std::runtime_error("test directory already exists");
+  fs::current_path(directory);
   test_table();
   test_outside_bounds();
   test_shared_fixed_and_append();
@@ -401,5 +413,7 @@ int main() {
   test_refusals_before_the_library();
   test_calls_from_several_threads();
   std::printf("%d checks, %d failures\n", g_checks, g_failures);
+  fs::current_path(original);
+  fs::remove_all(directory);
   return g_failures == 0 ? 0 : 1;
 }

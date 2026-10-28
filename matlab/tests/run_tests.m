@@ -299,15 +299,16 @@ end
 % the README's sweep, and the same file read with ncread, print its line.
 examples = fullfile(fileparts(fileparts(here)), 'examples', 'matlab');
 if isfile(fullfile(examples, 'one_mesh.m'))
-    run_example(fullfile(examples, 'one_mesh.m'), tmp);
-    ok(isempty(gamut.validate(fullfile(tmp, 'cylinder.gamut'))), ...
+    exampleDir = fullfile(tmp, 'examples'); mkdir(exampleDir);
+    run_example(fullfile(examples, 'one_mesh.m'), exampleDir);
+    ok(isempty(gamut.validate(fullfile(exampleDir, 'cylinder.gamut'))), ...
         'the MATLAB example writes a valid file');
     readme = fileread(fullfile(fileparts(fileparts(here)), 'README.md'));
     line = regexp(readme, 'lift of the runs that converged:[^\r\n]*', 'match', 'once');
     prints = @(out) ~isempty(line) && any(strcmp(splitlines(string(out)), line));
-    ok(prints(run_example(fullfile(examples, 'sweep.m'), tmp)), ...
+    ok(prints(run_example(fullfile(examples, 'sweep.m'), exampleDir)), ...
         'the MATLAB sweep prints the README''s line');
-    ok(prints(run_example(fullfile(examples, 'read_with_ncread.m'), tmp)), ...
+    ok(prints(run_example(fullfile(examples, 'read_with_ncread.m'), exampleDir)), ...
         'ncread reads the sweep alike');
 
     % The model examples/07_models.py fitted in Python, evaluated here with
@@ -318,10 +319,10 @@ if isfile(fullfile(examples, 'one_mesh.m'))
         fprintf(['the model example was not run: set MODEL_FILES to a folder where ' ...
             'examples/07_models.py ran\n']);
     else
-        copyfile(fullfile(models, 'lift_model.gamut'), tmp);
-        copyfile(fullfile(examples, 'Polynomial.m'), tmp);
+        copyfile(fullfile(models, 'lift_model.gamut'), exampleDir);
+        copyfile(fullfile(examples, 'Polynomial.m'), exampleDir);
         line = regexp(readme, 'the model''s lift at[^\r\n]*', 'match', 'once');
-        printed = splitlines(string(run_example(fullfile(examples, 'evaluate_model.m'), tmp)));
+        printed = splitlines(string(run_example(fullfile(examples, 'evaluate_model.m'), exampleDir)));
         ok(~isempty(line) && any(strcmp(printed, line)), ...
             'MATLAB evaluates the model fitted in Python and prints the README''s line');
         page = fileread(fullfile(fileparts(fileparts(here)), 'docs', 'guide', '12-matlab.md'));
@@ -330,8 +331,8 @@ if isfile(fullfile(examples, 'one_mesh.m'))
             'the answer marks the angle outside the fitted range as the MATLAB page shows');
         % The same class saves a model fitted in MATLAB: its coefficients
         % are stored as a vector, as numpy.polyfit's are.
-        back = cd(tmp);
-        mp = fullfile(tmp, 'lift_matlab.gamut');
+        back = cd(exampleDir);
+        mp = fullfile(exampleDir, 'lift_matlab.gamut');
         alpha = (0:2:10)';
         s = gamut.createModel(mp, 'writer', 'matlab tests', ...
             'parameters', struct('alpha', struct('units', 'degree', 'lower', 0, 'upper', 10)), ...

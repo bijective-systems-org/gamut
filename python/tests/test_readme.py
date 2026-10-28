@@ -52,7 +52,9 @@ def test_readme_output_is_what_its_examples_print(tmp_path):
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(package), env.get("PYTHONPATH")]))
     printed = []
     for script in ("00_readme.py", "07_models.py"):
-        result = subprocess.run([sys.executable, str(EXAMPLES / script)], cwd=tmp_path, env=env,
+        directory = tmp_path / pathlib.Path(script).stem
+        directory.mkdir()
+        result = subprocess.run([sys.executable, str(EXAMPLES / script)], cwd=directory, env=env,
                                 capture_output=True, text=True, timeout=300)
         assert result.returncode == 0, result.stderr
         printed.append(result.stdout)

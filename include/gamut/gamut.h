@@ -73,6 +73,7 @@ typedef struct gamut_file gamut_file;        /* a file open to write or to read 
 typedef struct gamut_strings gamut_strings;  /* a list of UTF-8 strings */
 
 /* --- Writing a data file ------------------------------------------------
+ * The output path must not exist; creation never replaces an existing file.
  * mesh_kind: NULL or "" (no mesh), "shared", "changing".
  * per: "fixed", "run" or "group:<label>" (NULL or "" without a mesh). */
 GAMUT_API int gamut_create(const char* path, const char* writer, const char* mesh_kind,
