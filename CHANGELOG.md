@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+Creating a Gamut file never replaces an existing one. `create`,
+`create_model`, `evaluate`, `extract` and `write_copy`, in every language
+and in C, `gamut build` and `gamut-vtk import` refuse a destination that
+exists and leave it as it was; 1.3.0 and earlier replaced it. A script that
+writes the same name on each run now stops at that refusal on its second
+run: choose a new name, or remove the previous output yourself first. To
+add runs to an existing file in Python, open it with
+`gamut.open(path, mode="a")`. A `gamut build` that failed part way used to
+delete the file it had replaced.
+
+A refused replacement of an attribute (a value of about 64 KiB or more)
+keeps the attribute's previous value. Before, the previous value was
+deleted first, so the refusal lost it.
+
 ## 1.3.0 (2026-10-25)
 
 A file may carry a portion marking: a new optional root attribute,

@@ -103,6 +103,17 @@ def test_import_reads_back_and_round_trips(tmp_path):
             np.testing.assert_array_equal(x, y)
 
 
+def test_rerun_refuses_and_keeps_the_existing_output(tmp_path):
+    folder = str(tmp_path / "runs")
+    fill_tables(folder, write_runs(folder))
+    out = tmp_path / "s.gamut"
+    assert gamut_vtk.import_folder(folder, str(out))["ok"]
+    before = out.read_bytes()
+    with pytest.raises(gamut.GamutError):
+        gamut_vtk.import_folder(folder, str(out))
+    assert out.read_bytes() == before
+
+
 def test_morphing_geometry_is_stored_per_run(tmp_path):
     folder = str(tmp_path / "runs")
     files = write_runs(folder, morph=True)
