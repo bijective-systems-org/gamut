@@ -64,7 +64,13 @@ def test_examples_print_what_their_page_shows(tmp_path):
                         str(source), f"-I{ROOT / 'include'}",
                         f"-L{library.parent}", "-lgamut", "-lm", f"-Wl,-rpath,{library.parent}",
                         "-o", str(program)], check=True, capture_output=True)
-        result = subprocess.run([str(program)], cwd=tmp_path, capture_output=True, text=True,
+        directory = tmp_path / program.name
+        directory = directory.with_name(directory.name + "_files")
+        directory.mkdir()
+        if source.stem == "nearest":
+            for model in tmp_path.glob("*.gamut"):
+                shutil.copy2(model, directory / model.name)
+        result = subprocess.run([str(program)], cwd=directory, capture_output=True, text=True,
                                 timeout=120)
         assert result.returncode == 0, f"{source.name}: {result.stderr}"
         printed.append(result.stdout)

@@ -476,13 +476,6 @@ def _report_problems(args: argparse.Namespace, problems: list[tuple[str, str]]) 
     return 1
 
 
-def _cleanup(path: str) -> None:
-    try:
-        os.remove(path)
-    except OSError:
-        pass
-
-
 # --- get -------------------------------------------------------------------------------------
 
 

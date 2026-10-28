@@ -362,8 +362,9 @@ void test_calls_from_several_threads() {
   for (std::size_t t = 0; t < threads; ++t) {
     pool.emplace_back([t, &wrong] {
       try {
-        const std::string own = "thread" + std::to_string(t) + ".gamut";
         for (int round = 0; round < 20; ++round) {
+          const std::string own = "thread" + std::to_string(t) + "_" +
+                                  std::to_string(round) + ".gamut";
           {
             auto w = gamut::create(own, "header tests");
             w.declare_parameter("x", "design", "1");
@@ -385,7 +386,9 @@ void test_calls_from_several_threads() {
   for (auto& th : pool) th.join();
   for (std::size_t t = 0; t < threads; ++t) {
     CHECK(wrong[t] == 0);
-    std::remove(("thread" + std::to_string(t) + ".gamut").c_str());
+    for (int round = 0; round < 20; ++round)
+      std::remove(("thread" + std::to_string(t) + "_" +
+                   std::to_string(round) + ".gamut").c_str());
   }
   std::remove("threads_shared.gamut");
 }
