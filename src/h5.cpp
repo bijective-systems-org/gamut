@@ -1019,14 +1019,116 @@ void File::write_attr(const std::string& path, const std::string& name,
 
 void File::replace_attr(const std::string& path, const std::string& name,
                         const AttrValue& value) {
-  {
-    Id object = open_object(id_.get(), path);
-    if (H5Aexists(object.get(), name.c_str()) > 0) {
-      need(H5Adelete(object.get(), name.c_str()) >= 0,
-           "cannot replace the attribute \"" + name + "\"");
+  Id object = open_object(id_.get(), path);
+  const htri_t exists = H5Aexists(object.get(), name.c_str());
+  need(exists >= 0, "cannot inspect the attribute \"" + name + "\"");
+  if (exists == 0) {
+    write_attr(path, name, value);
+    return;
+  }
+  // Keep a separate copy: H5Arename can delete its source before failing.
+  // A backup name must not grow a compact attribute past its message limit.
+  std::string backup;
+  for (const char candidate : std::string("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")) {
+    const std::string next(1, candidate);
+    const htri_t found = H5Aexists(object.get(), next.c_str());
+    need(found >= 0, "cannot inspect the recovery attribute \"" + next + "\"");
+    if (found == 0) {
+      backup = next;
+      break;
     }
   }
-  write_attr(path, name, value);
+  need(!backup.empty(),
+       "cannot replace \"" + name + "\": no short unused recovery attribute name");
+  Id type, space, properties;
+  std::vector<unsigned char> bytes;
+  {
+    Id attr(H5Aopen(object.get(), name.c_str(), H5P_DEFAULT));
+    need(attr.valid(), "cannot open the attribute \"" + name + "\"");
+    type = Id(H5Aget_type(attr.get()));
+    space = Id(H5Aget_space(attr.get()));
+    properties = Id(H5Aget_create_plist(attr.get()));
+    need(type.valid() && space.valid() && properties.valid(),
+         "cannot inspect the attribute \"" + name + "\" for recovery");
+    const H5T_class_t kind = H5Tget_class(type.get());
+    need(kind == H5T_INTEGER || kind == H5T_FLOAT ||
+             (kind == H5T_STRING && H5Tis_variable_str(type.get()) == 0),
+         "cannot replace \"" + name + "\": its type cannot be copied safely for recovery");
+    const hssize_t count = H5Sget_simple_extent_npoints(space.get());
+    const std::size_t item = H5Tget_size(type.get());
+    need(count >= 0 && item > 0, "cannot size the attribute \"" + name + "\"");
+    const std::size_t size = checked_product(name,
+        {static_cast<hsize_t>(count), static_cast<hsize_t>(item)}, kMaxAttributeBytes);
+    bytes.resize(size == 0 ? 1 : size);
+    need(H5Aread(attr.get(), type.get(), bytes.data()) >= 0,
+         "cannot read the attribute \"" + name + "\" for recovery");
+  }
+  const auto copy_saved = [&](const std::string& target) {
+    Id attr(H5Acreate2(object.get(), target.c_str(), type.get(), space.get(),
+                       properties.get(), H5P_DEFAULT));
+    need(attr.valid(), "cannot create recovery attribute \"" + target + "\"");
+    need(H5Awrite(attr.get(), type.get(), bytes.data()) >= 0,
+         "cannot write recovery attribute \"" + target + "\"");
+  };
+  const auto remove_copy = [&] {
+    const htri_t present = H5Aexists(object.get(), backup.c_str());
+    need(present >= 0 && (present == 0 ||
+             H5Adelete(object.get(), backup.c_str()) >= 0 ||
+             H5Aexists(object.get(), backup.c_str()) == 0),
+         "cannot clean up recovery attribute \"" + backup + "\" on \"" + path + "\"");
+  };
+  const auto restore_saved = [&] {
+    const htri_t target = H5Aexists(object.get(), name.c_str());
+    need(target >= 0 && (target == 0 ||
+             H5Adelete(object.get(), name.c_str()) >= 0 ||
+             H5Aexists(object.get(), name.c_str()) == 0),
+         "cannot remove the failed replacement");
+    copy_saved(name);
+  };
+  try {
+    copy_saved(backup);
+  } catch (...) {
+    // Nothing has touched the original, even if creating/writing the copy
+    // changed the file before reporting failure.
+    remove_copy();
+    throw;
+  }
+  try {
+    need(H5Adelete(object.get(), name.c_str()) >= 0,
+         "cannot replace the attribute \"" + name + "\"");
+    write_attr(path, name, value);
+    need(H5Adelete(object.get(), backup.c_str()) >= 0,
+         "cannot remove recovery attribute \"" + backup + "\"");
+  } catch (...) {
+    // A failed delete may already have removed the copy. Re-establish it
+    // from the bounded snapshot before attempting any recovery mutation.
+    const htri_t present = H5Aexists(object.get(), backup.c_str());
+    if (present <= 0) {
+      try {
+        need(present >= 0, "cannot inspect recovery attribute \"" + backup + "\"");
+        copy_saved(backup);
+      } catch (...) {
+        // Even if recreating the on-file copy fails, the original bytes and
+        // metadata are still in memory. Try restoring them directly.
+        try {
+          restore_saved();
+        } catch (...) {
+          throw Error("", "cannot recreate recovery attribute or restore \"" + name +
+                              "\" on \"" + path + "\"; replacement state is uncertain");
+        }
+        remove_copy();
+        throw;
+      }
+    }
+    try {
+      restore_saved();
+    } catch (...) {
+      throw Error("", "cannot restore \"" + name + "\"; previous value is in \"" +
+                          backup + "\" on \"" + path + "\"");
+    }
+    remove_copy();
+    throw;
+  }
 }
 
 void File::create_dataset(const std::string& path, DType dtype,
