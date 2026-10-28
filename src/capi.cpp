@@ -117,6 +117,13 @@ DType dtype(int code) {
 // GAMUT_AS_GIVEN (0) in a declaration: the dtype of the first values.
 bool as_given(int code) { return code == 0; }
 
+// Points, cells and mesh labels equal value for value.
+bool same_geometry(const Geometry& a, const Geometry& b) {
+  return a.points.dtype == b.points.dtype && a.points.bytes == b.points.bytes &&
+         a.n_nodes == b.n_nodes && a.axes == b.axes && a.types == b.types &&
+         a.offsets == b.offsets && a.connectivity == b.connectivity && a.labels == b.labels;
+}
+
 Writer& writer_of(gamut_file* f) {
   need(f != nullptr, "the handle is NULL");
   need(f->writer != nullptr, "this handle was opened for reading; writing needs gamut_create "
@@ -519,13 +526,17 @@ int gamut_batch_begin(gamut_file* f, int64_t n_rows, gamut_error* err) {
 }
 
 int gamut_batch_values(gamut_file* f, const char* name, int dtype_code, const void* values,
-                     int64_t count, gamut_error* err) {
+                     int64_t first_axis, int64_t count, gamut_error* err) {
   try {
     const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f);
     need(f->batch_open, "call gamut_batch_begin first");
     need(f->batch.values.count(str(name)) == 0, str(name) + " was given twice in this batch");
+    need(first_axis == 0 || first_axis == f->batch.runs,
+         str(name) + ": the array's first axis has " + std::to_string(first_axis) +
+             " entries but the batch has " + std::to_string(f->batch.runs) +
+             " runs; give runs first (a field is runs x sites), transposed if need be");
     f->batch.values[str(name)] = column(dtype_code, values, count);
     return 0;
   } catch (...) {
@@ -568,8 +579,10 @@ int gamut_batch_geometry_for_member(gamut_file* f, const char* member, gamut_err
     clear(err);
     writer_of(f);
     need(f->batch_open && f->geometry_open, "begin a batch and stage a geometry first");
-    need(f->batch.member_geometry.count(str(member)) == 0,
-         "\"" + str(member) + "\" was given a geometry twice in this batch");
+    // A member given its geometry again in one batch must give the same one.
+    const auto given = f->batch.member_geometry.find(str(member));
+    need(given == f->batch.member_geometry.end() || same_geometry(given->second, f->geometry),
+         "\"" + str(member) + "\" is given two different geometries in one batch");
     f->batch.member_geometry[str(member)] = f->geometry;
     f->geometry_open = false;
     return 0;

@@ -16,6 +16,27 @@ A refused replacement of an attribute (a value of about 64 KiB or more)
 keeps the attribute's previous value. Before, the previous value was
 deleted first, so the refusal lost it.
 
+A field given the wrong way round, sites × runs instead of runs × sites,
+is refused. It was stored scrambled, each run holding a mix of every run's
+values. The C interface's `gamut_batch_values` takes a new `first_axis`
+argument, the length of the caller's first axis or 0 for a flat array,
+and the core refuses a first axis that is not the batch's runs. A square
+array cannot be told apart and is taken as runs × sites.
+
+A label given as `None` or NaN in Python is refused (E5); it used to
+become a category named "None" or "nan". A category name that is not valid
+UTF-8 is refused when the file opens (E4), in every language, where Python
+raised `UnicodeDecodeError`. A position above 2⁶³ − 1 is reported as given
+rather than wrapped to a negative number. `get_points` on a file with no
+mesh says so, in every language, instead of asking for a row.
+
+A group member given two different geometries in one batch is refused by
+the core, in every language. MATLAB kept the first geometry silently.
+
+`open` with a refused `threads` value closes the file it opened, in Python
+and MATLAB; the file stayed open, and a later append to it failed. MATLAB's
+`'compression', false` works; it always failed with an unknown command.
+
 ## 1.3.0 (2026-10-25)
 
 A file may carry a portion marking: a new optional root attribute,

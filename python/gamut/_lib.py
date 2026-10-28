@@ -130,7 +130,7 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "gamut_geometry_label": (_I, [_P, _S, _P, _L, _E]),
     "gamut_set_mesh": (_I, [_P, _E]),
     "gamut_batch_begin": (_I, [_P, _L, _E]),
-    "gamut_batch_values": (_I, [_P, _S, _I, _P, _L, _E]),
+    "gamut_batch_values": (_I, [_P, _S, _I, _P, _L, _L, _E]),
     "gamut_batch_names": (_I, [_P, _S, _SS, _L, _E]),
     "gamut_batch_geometry_for_row": (_I, [_P, _E]),
     "gamut_batch_geometry_for_member": (_I, [_P, _S, _E]),
@@ -273,6 +273,9 @@ class Selection:
             if given.size and given.dtype.kind not in "iu":
                 raise GamutError("", f"{what}: positions are integers, a slice or None; "
                                       f"got {given.dtype} values")
+            if given.dtype.kind == "u" and given.size and given.max() > np.iinfo(np.int64).max:
+                raise GamutError("", f"{what}: position {given.max()}, counting from 0, "
+                                      "is outside the positions")
             self._keep = np.ascontiguousarray(given.astype(np.int64).ravel())
             self.sel.kind = SEL_INDEX
         self._slice = sel if isinstance(sel, slice) else None

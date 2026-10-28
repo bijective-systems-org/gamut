@@ -294,9 +294,9 @@ class Study {
     std::optional<std::string> member;
     for (const auto& [name, value] : values) {
       if (const double* number = std::get_if<double>(&value)) {
-        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, number, 1, &e), e);
+        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, number, 0, 1, &e), e);
       } else if (const int64_t* integer = std::get_if<int64_t>(&value)) {
-        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_INT64, integer, 1, &e), e);
+        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_INT64, integer, 0, 1, &e), e);
       } else {
         const char* label = std::get<std::string>(value).c_str();
         detail::check(gamut_batch_names(f_, name.c_str(), &label, 1, &e), e);
@@ -332,9 +332,9 @@ class Study {
     detail::check(gamut_batch_begin(need_writer(), n, &e), e);
     for (const auto& [name, column] : columns) {
       if (const auto* numbers = std::get_if<std::vector<double>>(&column)) {
-        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, numbers->data(), n, &e), e);
+        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, numbers->data(), 0, n, &e), e);
       } else if (const auto* integers = std::get_if<std::vector<int64_t>>(&column)) {
-        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_INT64, integers->data(), n, &e), e);
+        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_INT64, integers->data(), 0, n, &e), e);
       } else {
         const std::vector<const char*> names = detail::pointers(std::get<std::vector<std::string>>(column));
         detail::check(gamut_batch_names(f_, name.c_str(), names.data(), n, &e), e);
@@ -437,7 +437,7 @@ class Study {
   }
   // The points a run used (nodes x axes); no row for a fixed geometry.
   Array<double> get_points(std::optional<int64_t> row = std::nullopt) const {
-    if (!row && info("per") != "fixed") throw Error("", "this mesh's geometry changes; give the row");
+    if (const std::string per = info("per"); !row && per != "fixed" && !per.empty()) throw Error("", "this mesh's geometry changes; give the row");
     Array<double> a = read<double>("coordinates", one(row), all);
     if (row && a.shape.size() == 3) a.shape.erase(a.shape.begin());   // the one row asked for
     return a;
@@ -538,7 +538,7 @@ class Study {
   void stage_fields(const Fields& fields) {
     gamut_error e{};
     for (const auto& [name, field] : fields)
-      detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, field.data(),
+      detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, field.data(), 0,
                                        static_cast<int64_t>(field.size()), &e), e);
   }
 

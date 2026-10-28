@@ -350,6 +350,49 @@ if isfile(fullfile(examples, 'one_mesh.m'))
     end
 end
 
+% A field given nodes x runs, a refused threads value, compression off,
+% and one member given two geometries in a batch.
+p = fullfile(tmp, 'refusals.gamut');
+cells = {uint8([9 9]), [0 4 8], [0 2 3 1 2 4 5 3]};
+s = gamut.create(p, 'writer', 'matlab tests', 'mesh', 'shared', 'per', 'fixed', ...
+    'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'), ...
+    'fields', struct('pf', struct('units', 'Pa', 'at', 'node')), 'compression', false);
+s.setMesh(pts, cells);
+try
+    s.addRuns(struct('k', [1; 2; 3]), 'fields', struct('pf', P'));
+    ok(false, 'a field given nodes x runs refused');
+catch err
+    ok(contains(err.message, 'first axis has 6 entries but the batch has 3 runs'), ...
+        ['transposed field: ' err.message]);
+end
+s.addRuns(struct('k', [1; 2; 3]), 'fields', struct('pf', P));
+s.close();
+r = gamut.open(p);
+ok(isequal(r.getField('pf'), P), 'a file written with compression off reads back');
+r.close();
+try
+    gamut.open(p, 'threads', 0);
+    ok(false, 'threads 0 refused');
+catch err
+    ok(contains(err.message, 'threads'), ['threads 0: ' err.message]);
+end
+s = gamut.open(p, 'mode', 'a');      % the refused open left no handle behind
+s.addRuns(struct('k', 4), 'fields', struct('pf', P(1, :)));
+s.close();
+fp = fullfile(tmp, 'members.gamut');
+s = gamut.create(fp, 'writer', 'matlab tests', 'mesh', 'shared', 'per', 'group:member', ...
+    'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'), ...
+    'labels', struct('member', 'group'));
+s.setMesh([], cells, struct(), 6);
+try
+    s.addRuns(struct('k', [1; 2], 'member', {{'a'; 'a'}}), 'points', {pts, 2 * pts});
+    ok(false, 'one member given two geometries refused');
+catch err
+    ok(contains(err.message, 'two different geometries'), ['two geometries: ' err.message]);
+end
+s.addRuns(struct('k', [1; 2], 'member', {{'a'; 'a'}}), 'points', {pts, pts});
+s.close();
+
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end
 end

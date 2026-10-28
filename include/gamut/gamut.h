@@ -139,9 +139,12 @@ GAMUT_API int gamut_set_mesh(gamut_file* f, gamut_error* err);
 /* Rows are staged in a batch and committed all or nothing. */
 GAMUT_API int gamut_batch_begin(gamut_file* f, int64_t n_rows, gamut_error* err);
 /* Parameters, label codes, scalars, and fields (rows x sites, or for a
- * changing mesh every row's values end to end). */
+ * changing mesh every row's values end to end). first_axis is the length of
+ * the first axis of the caller's array when it has more than one axis, and 0
+ * for a flat array; an array whose first axis is not the batch's rows (a
+ * field given sites x rows) is refused. */
 GAMUT_API int gamut_batch_values(gamut_file* f, const char* name, int dtype, const void* values,
-                             int64_t count, gamut_error* err);
+                             int64_t first_axis, int64_t count, gamut_error* err);
 GAMUT_API int gamut_batch_names(gamut_file* f, const char* label, const char* const* names,
                             int64_t count, gamut_error* err);
 /* The staged geometry belongs to the next row of the batch (per = run) or

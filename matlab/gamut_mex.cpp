@@ -511,6 +511,10 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     check(gamut_select(f, text(arg(2), "where").c_str(), out.data(), static_cast<int64_t>(out.size()), &n, &e), e);
     plhs[0] = mxCreateNumericMatrix(static_cast<mwSize>(n), 1, mxINT64_CLASS, mxREAL);
     if (n) std::memcpy(mxGetData(plhs[0]), out.data(), static_cast<std::size_t>(n) * 8);
+  } else if (cmd == "set_compression") {
+    check(gamut_set_compression(file(arg(1)), static_cast<int>(scalar(arg(2), "gzip level")),
+                                static_cast<int>(scalar(arg(3), "shuffle")), &e),
+          e);
   } else if (cmd == "set_threads") {
     check(gamut_set_threads(file(arg(1)), static_cast<int>(scalar(arg(2), "threads")), &e), e);
   } else if (cmd == "validate") {
@@ -633,7 +637,9 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     if (code < 0 || mxIsLogical(v)) usage("values are numeric");
     std::vector<int64_t> dims;
     const auto bytes = to_c_order(v, mxGetNumberOfDimensions(v), &dims);
-    check(gamut_batch_values(file(arg(1)), text(arg(2), "name").c_str(), code, bytes.data(),
+    // dims has lost its trailing ones: a vector is flat, anything else has a first axis.
+    const int64_t first = dims.size() > 1 ? dims[0] : 0;
+    check(gamut_batch_values(file(arg(1)), text(arg(2), "name").c_str(), code, bytes.data(), first,
                            static_cast<int64_t>(mxGetNumberOfElements(v)), &e),
           e);
   } else if (cmd == "batch_names") {

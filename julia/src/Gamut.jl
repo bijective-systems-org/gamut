@@ -525,12 +525,14 @@ function commit!(s::Study, n, columns, fields, points, cells, mesh_labels)
         end
         buf = numbers(v)
         push!(keep, buf)
-        @mes gamut_batch_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64) h cs(name) DTYPE[eltype(buf)] pointer(buf) length(buf)
+        first = ndims(v) > 1 ? size(v, 1) : 0
+        @mes gamut_batch_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64, Int64) h cs(name) DTYPE[eltype(buf)] pointer(buf) first length(buf)
     end
     for (name, vals) in fields
         buf = numbers(c_order(vals))
         push!(keep, buf)
-        @mes gamut_batch_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64) h cs(name) DTYPE[eltype(buf)] pointer(buf) length(buf)
+        first = ndims(vals) > 1 ? size(vals, 1) : 0
+        @mes gamut_batch_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64, Int64) h cs(name) DTYPE[eltype(buf)] pointer(buf) first length(buf)
     end
     if points !== nothing
         pts = collect(points)
@@ -539,17 +541,8 @@ function commit!(s::Study, n, columns, fields, points, cells, mesh_labels)
         if !isempty(s.group)
             group_names === nothing && throw(GamutError("E2", "give $(s.group) by name so " *
                                                                "geometry can be matched to members"))
-            first_run = Dict{String,Int}()
             for (i, member) in enumerate(group_names)
                 pts[i] === nothing && continue
-                if haskey(first_run, member)
-                    j = first_run[member]
-                    (pts[i] == pts[j] && cls[i] == cls[j] && mls[i] == mls[j]) ||
-                        throw(GamutError("", "$(s.group) \"$member\" is given two different " *
-                                              "geometries in one batch (runs $j and $i)", s.group))
-                    continue
-                end
-                first_run[member] = i
                 @mes gamut_geometry_begin (Ptr{Cvoid},) h
                 stage_geometry(s, pts[i], cls[i], mls[i])
                 @mes gamut_batch_geometry_for_member (Ptr{Cvoid}, Cstring) h cs(member)
@@ -747,7 +740,7 @@ end
 
 """    get_points(study; row=nothing)    nodes × axes; a row is needed unless per = fixed."""
 function get_points(s::Study; row=nothing)
-    row === nothing && s.per != "fixed" && throw(GamutError("", "this mesh's geometry changes; give the row"))
+    row === nothing && s.per ∉ ("fixed", "") && throw(GamutError("", "this mesh's geometry changes; give the row"))
     T = get(describe(s, "coordinates"), "dtype", "") == "float32" ? Float32 : Float64
     out = read(s, "coordinates", one_row(row), nothing, T; squeeze=false)
     return row !== nothing && s.mesh_kind == "shared" ? out[1, :, :] : out

@@ -220,7 +220,7 @@ classdef Study < handle
 
         function v = getPoints(s, row)
             if nargin < 2, row = []; end
-            if isempty(row) && ~strcmp(s.Per, 'fixed')
+            if isempty(row) && ~any(strcmp(s.Per, {'fixed', ''}))
                 error('gamut:usage', 'this mesh''s geometry changes; give the row');
             end
             code = 6;
@@ -353,10 +353,8 @@ classdef Study < handle
             end
             if ~isempty(points)
                 if ~isempty(s.Group)
-                    seen = {};
                     for i = 1:numel(groupNames)
-                        if isempty(points{i}) || any(strcmp(seen, groupNames{i})), continue; end
-                        seen{end + 1} = groupNames{i}; %#ok<AGROW>
+                        if isempty(points{i}), continue; end
                         gamut_mex('geometry_begin', h);
                         gamut_mex('geometry_points', h, points{i});
                         s.stageCells(cellAt(cells, i), labelsAt(meshLabels, i));

@@ -207,9 +207,9 @@ def test_floats_are_not_taken_as_integers(tmp_path):
         h = s._handle()
         _lib.call("gamut_batch_begin", h, 1)
         _lib.call("gamut_batch_values", h, b"n", _lib.GAMUT_INT64,
-                  np.array([2], np.int64).ctypes.data_as(ctypes.c_void_p), 1)
+                  np.array([2], np.int64).ctypes.data_as(ctypes.c_void_p), 0, 1)
         _lib.call("gamut_batch_values", h, b"status", _lib.GAMUT_FLOAT64,
-                  np.array([1.0]).ctypes.data_as(ctypes.c_void_p), 1)
+                  np.array([1.0]).ctypes.data_as(ctypes.c_void_p), 0, 1)
         with pytest.raises(gamut.GamutError) as e:
             _lib.call("gamut_batch_commit", h, ctypes.byref(ctypes.c_int64()))
         assert e.value.rule == "E4"
@@ -305,7 +305,7 @@ def test_counts_that_overflow_are_refused(tmp_path):
         one = np.zeros(1)
         with pytest.raises(gamut.GamutError, match="too large"):
             _lib.call("gamut_batch_values", h, b"x", _lib.GAMUT_FLOAT64,
-                      one.ctypes.data_as(ctypes.c_void_p), (1 << 61) + 1)
+                      one.ctypes.data_as(ctypes.c_void_p), 0, (1 << 61) + 1)
         s.add_run({"x": 1.0})
 
 
@@ -529,3 +529,74 @@ def test_select_sizes_nothing_from_a_declared_row_count(tmp_path):
         tracemalloc.stop()
     assert e.value.rule == "E23"
     assert peak < 1 << 20
+
+
+def test_a_field_given_sites_by_runs_is_refused(tmp_path):
+    pts = np.array([[0, 0], [1, 0], [1, 1], [0, 1.], [2, 0], [2, 1]])
+    cells = (np.array([9, 9], np.uint8), np.array([0, 4, 8]), np.array([0, 1, 2, 3, 1, 4, 5, 2]))
+    runs = np.arange(6.0) + np.array([[0.], [100.], [200.]])        # 3 runs x 6 nodes
+    with gamut.create(str(tmp_path / "t.gamut"), writer="t", mesh="shared", per="fixed",
+                      coordinates={"units": "m", "axes": 2}, parameters={"x": "m"},
+                      fields={"q": {"units": "1", "at": "node"}}) as s:
+        s.set_mesh(pts, cells)
+        with pytest.raises(gamut.GamutError, match="q: the array's first axis has 6 entries but "
+                                                   "the batch has 3 runs"):
+            s.add_runs({"x": [1., 2., 3.]}, fields={"q": runs.T})
+        s.add_runs({"x": [1., 2., 3.]}, fields={"q": runs})
+    with gamut.open(str(tmp_path / "t.gamut")) as f:
+        assert f.get_field("q", rows=1).tolist() == runs[1].tolist()
+
+
+def _labelled(path):
+    return gamut.create(path, writer="t", parameters={"x": "m"}, scalars={"y": "1"},
+                        labels={"status": {"role": "status", "categories": ["converged", "failed"]}})
+
+
+@pytest.mark.parametrize("missing", [None, float("nan")])
+def test_a_missing_label_is_refused(tmp_path, missing):
+    with _labelled(str(tmp_path / "t.gamut")) as s:
+        with pytest.raises(gamut.GamutError) as e:
+            s.add_runs({"x": [1., 2.], "y": [1., 2.], "status": ["converged", missing]})
+        assert e.value.rule == "E5" and "status: a label is never missing" in str(e.value)
+        s.add_runs({"x": [1., 2.], "y": [1., 2.], "status": ["converged", "failed"]})
+    with gamut.open(str(tmp_path / "t.gamut")) as f:
+        assert f.categories("status") == ["converged", "failed"]
+
+
+def test_a_category_name_that_is_not_utf8_is_refused_at_open(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    with _labelled(p) as s:
+        s.add_runs({"x": [1.], "y": [1.], "status": ["converged"]})
+    with h5py.File(p, "r+") as f:
+        f["categories/status"][0] = b"\xff"
+    with pytest.raises(gamut.GamutError) as e:
+        gamut.open(p)
+    assert e.value.rule == "E4" and "/categories/status" in str(e.value)
+
+
+def test_a_position_past_int64_is_reported_as_given(tmp_path):
+    with _labelled(str(tmp_path / "t.gamut")) as s:
+        s.add_runs({"x": [1.], "y": [1.], "status": ["converged"]})
+    with gamut.open(str(tmp_path / "t.gamut")) as f:
+        with pytest.raises(gamut.GamutError, match=f"position {2**63 + 1}, counting from 0"):
+            f.get_parameter("x", rows=np.array([2**63 + 1], dtype=np.uint64))
+
+
+def test_points_of_a_file_without_a_mesh_say_so(tmp_path):
+    with _labelled(str(tmp_path / "t.gamut")) as s:
+        s.add_runs({"x": [1.], "y": [1.], "status": ["converged"]})
+    with gamut.open(str(tmp_path / "t.gamut")) as f:
+        with pytest.raises(gamut.GamutError, match="the file has no mesh"):
+            f.get_points()
+
+
+def test_a_refused_threads_value_leaves_the_file_closed(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="w", parameters={"x": "m"}) as s:
+        s.add_run({"x": 1.0})
+    with pytest.raises(gamut.GamutError, match="threads"):
+        gamut.open(p, threads=0)
+    with gamut.open(p, mode="a") as s:
+        s.add_run({"x": 2.0})
+    with gamut.open(p) as f:
+        assert f.row_count == 2

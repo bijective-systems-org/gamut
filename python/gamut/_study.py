@@ -13,21 +13,6 @@ from . import _lib, _units
 from ._lib import GamutError, Selection, b, call
 
 
-def _same_geometry(a: tuple, b_: tuple) -> bool:
-    """Points, cells and mesh labels equal value for value."""
-    (pa, ca, la), (pb, cb, lb) = a, b_
-    if not np.array_equal(np.asarray(pa), np.asarray(pb)):
-        return False
-    if (ca is None) != (cb is None):
-        return False
-    if ca is not None and not all(np.array_equal(np.asarray(x), np.asarray(y))
-                                  for x, y in zip(ca, cb)):
-        return False
-    la, lb = la or {}, lb or {}
-    return la.keys() == lb.keys() and all(np.array_equal(np.asarray(la[k]), np.asarray(lb[k]))
-                                          for k in la)
-
-
 def _one_row(row: Any) -> list[int]:
     """One row position, as the one-element list the core reads."""
     if isinstance(row, (bool, np.bool_)) or not isinstance(row, (int, np.integer)):
@@ -271,45 +256,40 @@ class Study:
                     b(x)
             arr = np.asarray(vals)
             if arr.dtype.kind in "US" or arr.dtype == object or arr.dtype == np.bool_:
+                # Checked as given: NumPy turns None and NaN beside text into "None" and "nan".
+                given = vals if isinstance(vals, (list, tuple)) else arr.ravel().tolist()
+                if any(x is None or (isinstance(x, float) and x != x) for x in given):
+                    raise GamutError("E5", f"{name}: a label is never missing", name)
                 names = ["true" if x is True or x is np.True_ else
                          "false" if x is False or x is np.False_ else str(x) for x in arr.tolist()]
                 call("gamut_batch_names", h, b(name), _lib.string_array(names), len(names))
                 if name == self._group:
                     group_names = names
                 continue
-            a = _lib.as_array(arr).ravel()
+            given = _lib.as_array(arr)
+            a = given.ravel()
             keep.append(a)
             call("gamut_batch_values", h, b(name), _lib.dtype_code(a), a.ctypes.data_as(ctypes.c_void_p),
-                 a.size)
+                 given.shape[0] if given.ndim > 1 else 0, a.size)
         for name, vals in fields.items():
-            a = _lib.as_array(vals).ravel()
+            given = _lib.as_array(vals)
+            a = given.ravel()
             keep.append(a)
             call("gamut_batch_values", h, b(name), _lib.dtype_code(a), a.ctypes.data_as(ctypes.c_void_p),
-                 a.size)
+                 given.shape[0] if given.ndim > 1 else 0, a.size)
         if points is not None:
             points = list(points)
             cells = list(cells) if cells is not None else [None] * len(points)
             mesh_labels = list(mesh_labels) if mesh_labels is not None else [None] * len(points)
             if self._group is not None:
-                # One geometry per group member's first run: in run order,
-                # keyed by the member's name.  A repeat must be the same
-                # geometry; a different one is refused, not dropped.
+                # Every run's geometry, keyed by its member: the core refuses a
+                # member given two different geometries in one batch.
                 if group_names is None:
                     raise GamutError("E2", f"give {self._group} by name so geometry can be "
                                             "matched to members")
-                first: dict[str, int] = {}
                 for i, member in enumerate(group_names):
                     if points[i] is None:
                         continue
-                    if member in first:
-                        j = first[member]
-                        if not _same_geometry((points[i], cells[i], mesh_labels[i]),
-                                              (points[j], cells[j], mesh_labels[j])):
-                            raise GamutError("", f"{self._group} \"{member}\" is given two "
-                                                  f"different geometries in one batch (runs {j} "
-                                                  f"and {i})", self._group)
-                        continue
-                    first[member] = i
                     call("gamut_geometry_begin", h)
                     self._stage_geometry(points[i], cells[i], mesh_labels[i] or {}, None)
                     call("gamut_batch_geometry_for_member", h, b(member))
@@ -482,7 +462,7 @@ class Study:
     def get_points(self, row: int | None = None, units: str | None = None) -> np.ndarray:
         """Node coordinates, nodes x axes. A geometry that changes with the
         run (per run or per group member) needs the `row`."""
-        if row is None and self._per not in ("fixed",):
+        if row is None and self._per not in ("fixed", ""):
             raise GamutError("", "this mesh's geometry changes; give the row")
         rows = None if row is None else _one_row(row)
         out = self._get("coordinates", rows, dtype=self._coordinate_dtype(), squeeze_row=False)
@@ -769,9 +749,14 @@ def open(path: str, mode: str = "r", threads: int = 1) -> Study:  # noqa: A001
     handle = ctypes.c_void_p()
     if mode == "r":
         call("gamut_open", b(path), ctypes.byref(handle))
+        study = Study(handle, path, writing=False)   # owns the handle, so a refusal closes it
         if threads != 1:
-            call("gamut_set_threads", handle, int(threads))
-        return Study(handle, path, writing=False)
+            try:
+                call("gamut_set_threads", handle, int(threads))
+            except BaseException:
+                study.close()
+                raise
+        return study
     if mode == "a":
         reader = open(path, "r")
         kind, per = reader._mesh_kind, reader._per
