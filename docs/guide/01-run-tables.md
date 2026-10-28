@@ -1,5 +1,11 @@
 # 1. Run tables
 
+Creating a file requires a new path. An existing destination is refused and
+left unchanged, even when the new declaration or input is invalid. Choose
+another name, or deliberately remove the previous output yourself. To add
+runs to an existing study, use `gamut.open(path, mode="a")`.
+
+
 The simplest study has no mesh: a list of runs, each with the inputs that
 define it and the numbers it produced. A wing's polar is one. The example
 sweeps Mach number and angle of attack, records whether each run

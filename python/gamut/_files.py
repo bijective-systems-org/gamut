@@ -27,7 +27,7 @@ def append(dst: str, src: str) -> int:
 
 def extract(src: str, dst: str, rows: Any) -> None:
     """Writes the selected rows of `src` (positions, a slice, or a strictly
-    increasing array) as a new file `dst`: ids kept, every table whole, a
+    increasing array) as a new file `dst` (which must not exist): ids kept, every table whole, a
     changing mesh's instances reduced to those the rows use."""
     sel = Selection(rows, "rows")
     if isinstance(rows, slice):
@@ -40,5 +40,5 @@ def extract(src: str, dst: str, rows: Any) -> None:
 def write_copy(src: str, dst: str) -> None:
     """Rewrites `src` as `dst` with the default layout (chunks and
     compression), as for a file another writer chunked finely; the copy
-    keeps the file's identity (file_id, created)."""
+    keeps the file's identity (file_id, created). The destination must not exist."""
     call("gamut_write_copy", _path(src), _path(dst))

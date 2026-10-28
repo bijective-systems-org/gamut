@@ -5,7 +5,6 @@ driven from Python with the core writing the result."""
 
 from __future__ import annotations
 
-import contextlib
 import ctypes
 import math
 import os
@@ -262,7 +261,8 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
                  license: str | None = None, references: str | None = None,
                  source: str | None = None, portion_marking: str | None = None) -> ModelFile:
     """Creates a model file and returns it open to add models: use it in a
-    `with` block, or call `close()`. A model file holds no runs. It is
+    `with` block, or call `close()`. The destination must not exist.
+    A model file holds no runs. It is
     declared as `create` declares a data file (labels, constants, mesh,
     per, coordinates, title, license, references, source,
     portion_marking), except:
@@ -386,18 +386,20 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
 class _Temporary(Study):
     """An evaluated file in memory: a temporary file removed on close."""
 
+    def __init__(self, handle, path, directory):
+        super().__init__(handle, path, writing=False)
+        self._directory = directory
+
     def close(self) -> None:
         super().close()
-        try:
-            os.remove(self.path)
-        except OSError:
-            pass
+        self._directory.cleanup()
 
 
 def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None,
              coordinates: Any = None) -> Study:
     """Evaluates a model file on a table of inputs (spec section 7.4) and
-    returns the resulting data file, open to read.  `inputs` maps each
+    returns the resulting data file, open to read. An explicit `path` must
+    not exist. `inputs` maps each
     parameter to values and each label to names from the model file's
     table, all of one length; `coordinates` (rows x nodes x axes) when a
     model reads geometry the file does not store.  Each model's type must
@@ -486,17 +488,15 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
         # The data file.
         out_path = path
         temporary = path is None
-        if temporary:
-            fd, out_path = tempfile.mkstemp(suffix=".gamut")
-            os.close(fd)
+        directory = tempfile.TemporaryDirectory(prefix="gamut-evaluate-") if temporary else None
+        if directory is not None:
+            out_path = os.path.join(directory.name, "result.gamut")
         writer = ctypes.c_void_p()
         try:
             call("gamut_evaluate_begin", m._handle(), b(out_path), ctypes.byref(writer))
         except BaseException:
-            # The core removes a file it created; this is the name reserved above.
-            if temporary:
-                with contextlib.suppress(FileNotFoundError):
-                    os.remove(out_path)
+            if directory is not None:
+                directory.cleanup()
             raise
         w = Study(writer, out_path, writing=True)
         w._mesh_kind, w._per = m._mesh_kind, m._per
@@ -539,9 +539,11 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
         except BaseException:
             # A failed evaluation leaves no file behind.
             w._abandon(remove=True)
+            if directory is not None:
+                directory.cleanup()
             raise
     if temporary:
         handle = ctypes.c_void_p()
         call("gamut_open", b(out_path), ctypes.byref(handle))
-        return _Temporary(handle, out_path, writing=False)
+        return _Temporary(handle, out_path, directory)
     return _open(out_path)

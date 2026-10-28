@@ -366,8 +366,8 @@ File File::create(const std::string& path) {
   Id fapl(H5Pcreate(H5P_FILE_ACCESS));
   need(H5Pset_libver_bounds(fapl.get(), H5F_LIBVER_EARLIEST, H5F_LIBVER_V110) >= 0,
        "cannot set the library version bounds");
-  f.id_ = Id(H5Fcreate(path.c_str(), H5F_ACC_TRUNC, fcpl.get(), fapl.get()));
-  if (!f.id_.valid()) throw Error("", "cannot create \"" + path + "\"");
+  f.id_ = Id(H5Fcreate(path.c_str(), H5F_ACC_EXCL, fcpl.get(), fapl.get()));
+  if (!f.id_.valid()) throw Error("", "cannot create new file \"" + path + "\"; an existing file is never replaced");
   return f;
 }
 

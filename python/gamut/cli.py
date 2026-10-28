@@ -399,6 +399,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     if problems:
         return _report_problems(args, problems)
     mesh = doc.get("mesh") or {}
+    study = None
     try:
         study = create(args.output, writer=doc["writer"], parameters=doc.get("parameters"),
                        labels=doc.get("labels"), scalars=doc.get("scalars"),
@@ -411,22 +412,23 @@ def cmd_build(args: argparse.Namespace) -> int:
                        references=doc.get("references"), source=doc.get("source"),
                        portion_marking=doc.get("portion_marking"),
                        generalisation_group=doc.get("generalisation_group"))
-        with study:
-            if mesh.get("kind") == "shared":
-                z = np.load(os.path.join(base, mesh["file"]))
-                cells = (z["types"], z["offsets"], z["connectivity"]) if "types" in z else None
-                labels = {k: z[k] for k in (doc.get("mesh_labels") or {})}
-                if mesh["per"] == "fixed":
-                    study.set_mesh(z["points"], cells, labels)
-                else:
-                    study.set_mesh(cells=cells, labels=labels, n_nodes=int(z["n_nodes"]))
-            n = _add_rows(study, doc, base, set(doc.get("fields") or {}), set(doc.get("labels") or {}))
+        if mesh.get("kind") == "shared":
+            z = np.load(os.path.join(base, mesh["file"]))
+            cells = (z["types"], z["offsets"], z["connectivity"]) if "types" in z else None
+            labels = {k: z[k] for k in (doc.get("mesh_labels") or {})}
+            if mesh["per"] == "fixed":
+                study.set_mesh(z["points"], cells, labels)
+            else:
+                study.set_mesh(cells=cells, labels=labels, n_nodes=int(z["n_nodes"]))
+        n = _add_rows(study, doc, base, set(doc.get("fields") or {}), set(doc.get("labels") or {}))
+        study.close()
     except Problems as e:
-        _cleanup(args.output)
         return _report_problems(args, e.problems)
     except GamutError as e:
-        _cleanup(args.output)
         return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
+    finally:
+        if study is not None:
+            study._abandon(remove=True)
     _emit(args, {"wrote": args.output, "rows": n, "problems": []},
           f"wrote {args.output}: {_counted(n, 'run')}")
     return 0

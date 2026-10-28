@@ -652,7 +652,8 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
            generalisation_group: str | None = None, compression: bool = True) -> Study:
     """Creates a data file and returns it open to add runs: use it in a
     `with` block, or call `close()`. Everything the file holds is declared
-    here by name; a refused declaration leaves no file.
+    here by name. The destination must not exist; a refused declaration
+    removes only the new file, leaving any existing destination unchanged.
 
     parameters   inputs that place a run: {"alpha": {"units": "degree",
                  "role": "condition"}}. Role "design" (the default),
