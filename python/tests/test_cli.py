@@ -346,7 +346,8 @@ def test_damaged_files_deep_documents_and_missing_folders(tmp_path, capsys):
     deep = tmp_path / "deep.json"
     deep.write_text('{"writer":' + "[" * 1100 + "0" + "]" * 1100 + "}")
     code, out, _ = run(capsys, "build", str(deep), "-o", str(tmp_path / "n.gamut"), "--json")
-    assert code == 1 and "nests deeper" in json.loads(out)["problems"][0]["message"]
+    # Too deep for this Python's parser, or parsed and refused as a list: a document error either way.
+    assert code == 1 and json.loads(out)["problems"], out
 
     for argv in (["get", p, "-o", str(tmp_path / "no" / "x.gamut")],
                  ["build", str(deep), "-o", str(tmp_path / "no" / "y.gamut")]):
@@ -419,9 +420,10 @@ def test_documents_paths_and_permissions_have_their_exit_status(tmp_path, capsys
     assert code == 1 and json.loads(out)["problems"], out
     code, out, _ = run(capsys, "get", str(tmp_path / "none.gamut"), "-o", p, "--json")   # output first
     assert code == 2 and "never replaced" in json.loads(out)["problems"][0]["message"]
-    odd = str(tmp_path / "bad\udcff.gamut")                            # a name not UTF-8, as argv gives it
-    code, out, _ = run(capsys, "validate", odd, "--json")
-    assert code == 1 and json.loads(out)["findings"][0]["rule"] == "E1", out
+    if os.name != "nt":                      # argv carries bytes that are not UTF-8 as surrogates on POSIX
+        odd = str(tmp_path / "bad\udcff.gamut")
+        code, out, _ = run(capsys, "validate", odd, "--json")
+        assert code == 1 and json.loads(out)["findings"][0]["rule"] == "E1", out
     os.chmod(p, 0o444)
     try:
         if not os.access(p, os.W_OK):                                   # not as root
