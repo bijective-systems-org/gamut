@@ -204,8 +204,8 @@ class Study:
             t = np.ascontiguousarray(np.asarray(types, dtype=np.uint8))
             o = np.ascontiguousarray(np.asarray(offsets, dtype=np.int64))
             c = np.ascontiguousarray(np.asarray(conn, dtype=np.int64))
-            call("gamut_geometry_cells", h, t.ctypes.data_as(ctypes.c_void_p), len(t),
-                 o.ctypes.data_as(ctypes.c_void_p), len(o), c.ctypes.data_as(ctypes.c_void_p), len(c))
+            call("gamut_geometry_cells", h, t.ctypes.data_as(ctypes.c_void_p), t.size,
+                 o.ctypes.data_as(ctypes.c_void_p), o.size, c.ctypes.data_as(ctypes.c_void_p), c.size)
         for name, values in labels.items():
             v = np.ascontiguousarray(np.asarray(values, dtype=np.int64))
             call("gamut_geometry_label", h, b(name), v.ctypes.data_as(ctypes.c_void_p), len(v))

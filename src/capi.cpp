@@ -474,6 +474,7 @@ int gamut_geometry_cells(gamut_file* f, const uint8_t* types, int64_t n_cells,
     writer_of(f);
     need(f->geometry_open, "call gamut_geometry_begin first");
     need(n_cells >= 0 && n_offsets >= 0 && n_connectivity >= 0, "a negative count");
+    need(n_cells < std::numeric_limits<int64_t>::max(), "too many cells");
     need(n_cells == 0 ? n_offsets <= 1 : n_offsets == n_cells + 1, "E5",
          "cells: offsets need one more entry than there are cells (" + std::to_string(n_cells + 1) +
              "), not " + std::to_string(n_offsets));
@@ -861,13 +862,14 @@ int gamut_shape(const gamut_file* f, const char* name, const gamut_sel* rows, co
   try {
     const Lock lock(hdf5_mutex());
     clear(err);
-    need(shape != nullptr && rank != nullptr, "shape or rank is NULL");
+    need(rank != nullptr, "rank is NULL");
     const Reader& r = reader_of(f);
     const auto s = r.shape(path_of(r.schema(), str(name)), selection(rows), selection(sites));
     *rank = static_cast<int>(s.size());
     need(static_cast<int>(s.size()) <= capacity,
          "the shape has " + std::to_string(s.size()) + " axes and room was given for " +
              std::to_string(capacity));
+    need(shape != nullptr || s.empty(), "shape is NULL");
     for (std::size_t i = 0; i < s.size(); ++i) shape[i] = s[i];
     return 0;
   } catch (...) {
@@ -1158,7 +1160,7 @@ int gamut_tree_array_info(const gamut_tree* t, const char* key, int* dtype_out, 
                         int64_t* shape, int capacity, gamut_error* err) {
   try {
     clear(err);
-    need(dtype_out != nullptr && rank != nullptr && shape != nullptr, "an output is NULL");
+    need(dtype_out != nullptr && rank != nullptr, "an output is NULL");
     const auto& v = value_at(t, key);
     need(v.kind() == gamut_core::internal::Value::Kind::Numbers, "\"" + str(key) + "\" is not an array");
     *dtype_out = static_cast<int>(v.dtype());
@@ -1166,6 +1168,7 @@ int gamut_tree_array_info(const gamut_tree* t, const char* key, int* dtype_out, 
     need(static_cast<int>(v.shape().size()) <= capacity,
          "the array has " + std::to_string(v.shape().size()) + " axes and room was given for " +
              std::to_string(capacity));
+    need(shape != nullptr || v.shape().empty(), "shape is NULL");
     for (std::size_t i = 0; i < v.shape().size(); ++i) shape[i] = v.shape()[i];
     return 0;
   } catch (...) {

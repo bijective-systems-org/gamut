@@ -1108,3 +1108,26 @@ def test_the_c_interface_checks_every_length_it_is_given(tmp_path):
         assert (rank.value, out[0], out[1]) == (2, 2, 3)
     finally:
         _lib._lib.gamut_tree_free(t)
+
+
+def test_cell_arrays_are_counted_by_their_elements_and_rank_is_always_given(tmp_path):
+    pts = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    with gamut.create(str(tmp_path / "m.gamut"), writer="t", mesh="shared", per="fixed",
+                      coordinates={"units": "m", "axes": 2}) as s:
+        # Two rows of no offsets are no offsets, not two.
+        with pytest.raises(gamut.GamutError, match=r"one more entry than there are cells \(2\), not 0") as e:
+            s.set_mesh(pts, ([5], np.empty((2, 0), dtype=np.int64), [0, 1, 2]))
+        assert e.value.rule == "E5"
+        s.set_mesh(pts, ([5], [0, 3], [0, 1, 2]))
+    t = ctypes.c_void_p()
+    _lib.call("gamut_tree_new", ctypes.byref(t))
+    try:
+        data, dims = np.zeros(6), (ctypes.c_int64 * 2)(2, 3)
+        _lib.call("gamut_tree_set_array", t, b"a", _lib.GAMUT_FLOAT64,
+                  data.ctypes.data_as(ctypes.c_void_p), 6, 2, dims)
+        dtype, rank = ctypes.c_int(), ctypes.c_int(-123)
+        with pytest.raises(gamut.GamutError, match="room was given for 0"):
+            _lib.call("gamut_tree_array_info", t, b"a", ctypes.byref(dtype), ctypes.byref(rank), None, 0)
+        assert rank.value == 2                              # asked with no room, the rank is still given
+    finally:
+        _lib._lib.gamut_tree_free(t)

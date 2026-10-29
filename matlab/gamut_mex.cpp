@@ -744,8 +744,9 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
       if (code != GAMUT_FLOAT64 && code != GAMUT_FLOAT32) usage("points are double or single");
       std::vector<int64_t> dims;
       const auto bytes = to_c_order(p, 2, &dims);
-      check(gamut_geometry_points(f, code, bytes.data(), dims[0] * dims[1], dims[0], static_cast<int>(dims[1]),
-                                &e), e);
+      // The count is the array's own, so an array of more axes than two is refused.
+      check(gamut_geometry_points(f, code, bytes.data(), static_cast<int64_t>(mxGetNumberOfElements(p)),
+                                dims[0], static_cast<int>(dims[1]), &e), e);
     }
   } else if (cmd == "geometry_cells") {
     // types (uint8), offsets (int64), connectivity (int64, 0-based as VTK)
