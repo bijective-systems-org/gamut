@@ -552,7 +552,7 @@ def _labelled(path):
                         labels={"status": {"role": "status", "categories": ["converged", "failed"]}})
 
 
-@pytest.mark.parametrize("missing", [None, float("nan")])
+@pytest.mark.parametrize("missing", [None, float("nan"), np.float32("nan")])
 def test_a_missing_label_is_refused(tmp_path, missing):
     with _labelled(str(tmp_path / "t.gamut")) as s:
         with pytest.raises(gamut.GamutError) as e:
@@ -599,4 +599,16 @@ def test_a_refused_threads_value_leaves_the_file_closed(tmp_path):
     with gamut.open(p, mode="a") as s:
         s.add_run({"x": 2.0})
     with gamut.open(p) as f:
+        assert f.row_count == 2
+
+
+def test_a_member_repeated_with_equal_points_in_another_dtype_is_accepted(tmp_path):
+    pts, cells = grid(2, 2)
+    with gamut.create(str(tmp_path / "fam.gamut"), writer="t", mesh="shared", per="group:member",
+                      coordinates={"units": "m", "axes": 2}, labels={"member": "group"},
+                      parameters={"mach": "1"}, precision={"coordinates": "float64"}) as s:
+        s.set_mesh(cells=cells, n_nodes=4)
+        s.add_runs({"member": ["a", "a"], "mach": [1.0, 2.0]},
+                   points=[pts.astype(np.float32), pts.astype(np.float64)])
+    with gamut.open(str(tmp_path / "fam.gamut")) as f:
         assert f.row_count == 2

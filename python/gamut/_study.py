@@ -258,7 +258,7 @@ class Study:
             if arr.dtype.kind in "US" or arr.dtype == object or arr.dtype == np.bool_:
                 # Checked as given: NumPy turns None and NaN beside text into "None" and "nan".
                 given = vals if isinstance(vals, (list, tuple)) else arr.ravel().tolist()
-                if any(x is None or (isinstance(x, float) and x != x) for x in given):
+                if any(x is None or (isinstance(x, (float, np.floating)) and x != x) for x in given):
                     raise GamutError("E5", f"{name}: a label is never missing", name)
                 names = ["true" if x is True or x is np.True_ else
                          "false" if x is False or x is np.False_ else str(x) for x in arr.tolist()]

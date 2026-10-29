@@ -637,8 +637,10 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     if (code < 0 || mxIsLogical(v)) usage("values are numeric");
     std::vector<int64_t> dims;
     const auto bytes = to_c_order(v, mxGetNumberOfDimensions(v), &dims);
-    // dims has lost its trailing ones: a vector is flat, anything else has a first axis.
-    const int64_t first = dims.size() > 1 ? dims[0] : 0;
+    // A vector, row or column, is flat; anything else has a first axis.
+    const mwSize* md = mxGetDimensions(v);
+    const bool vector = mxGetNumberOfDimensions(v) == 2 && (md[0] == 1 || md[1] == 1);
+    const int64_t first = vector ? 0 : static_cast<int64_t>(md[0]);
     check(gamut_batch_values(file(arg(1)), text(arg(2), "name").c_str(), code, bytes.data(), first,
                            static_cast<int64_t>(mxGetNumberOfElements(v)), &e),
           e);

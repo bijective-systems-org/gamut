@@ -392,6 +392,16 @@ catch err
 end
 s.addRuns(struct('k', [1; 2], 'member', {{'a'; 'a'}}), 'points', {pts, pts});
 s.close();
+cp = fullfile(tmp, 'changing.gamut');
+s = gamut.create(cp, 'writer', 'matlab tests', 'mesh', 'changing', 'per', 'run', ...
+    'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'), ...
+    'fields', struct('q', struct('units', '1', 'at', 'node')));
+s.addRun(struct('k', 1), 'fields', struct('q', (1:6)'), 'points', pts, 'cells', cells);
+s.close();
+r = gamut.open(cp);
+q = r.getField('q', 'rows', 1);
+ok(isequal(q(:), (1:6)'), 'a changing mesh takes a field as a column');
+r.close();
 
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end

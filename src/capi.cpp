@@ -117,13 +117,6 @@ DType dtype(int code) {
 // GAMUT_AS_GIVEN (0) in a declaration: the dtype of the first values.
 bool as_given(int code) { return code == 0; }
 
-// Points, cells and mesh labels equal value for value.
-bool same_geometry(const Geometry& a, const Geometry& b) {
-  return a.points.dtype == b.points.dtype && a.points.bytes == b.points.bytes &&
-         a.n_nodes == b.n_nodes && a.axes == b.axes && a.types == b.types &&
-         a.offsets == b.offsets && a.connectivity == b.connectivity && a.labels == b.labels;
-}
-
 Writer& writer_of(gamut_file* f) {
   need(f != nullptr, "the handle is NULL");
   need(f->writer != nullptr, "this handle was opened for reading; writing needs gamut_create "
@@ -581,7 +574,8 @@ int gamut_batch_geometry_for_member(gamut_file* f, const char* member, gamut_err
     need(f->batch_open && f->geometry_open, "begin a batch and stage a geometry first");
     // A member given its geometry again in one batch must give the same one.
     const auto given = f->batch.member_geometry.find(str(member));
-    need(given == f->batch.member_geometry.end() || same_geometry(given->second, f->geometry),
+    need(given == f->batch.member_geometry.end() ||
+             writer_of(f).geometry_print(given->second) == writer_of(f).geometry_print(f->geometry),
          "\"" + str(member) + "\" is given two different geometries in one batch");
     f->batch.member_geometry[str(member)] = f->geometry;
     f->geometry_open = false;
