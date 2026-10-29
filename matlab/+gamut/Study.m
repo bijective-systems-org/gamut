@@ -161,15 +161,15 @@ classdef Study < handle
         end
 
         function v = getRowIds(s, rows)
-            if nargin < 2, rows = []; end
-            v = gamut_mex('read', s.Handle, 'row', s.pos(rows), [], 4);
+            if nargin < 2, rows = ':'; end
+            v = gamut_mex('read', s.Handle, 'row', s.pos(rows), ':', 4);
         end
 
         function v = getParameter(s, name, varargin)
             o = s.opts(varargin);
             code = 6;
             if strcmp(gamut.internal.field(s.describe(name), 'dtype', ''), 'int64'), code = 4; end
-            v = gamut_mex('read', s.Handle, name, s.pos(o.rows), [], code);
+            v = gamut_mex('read', s.Handle, name, s.pos(o.rows), ':', code);
         end
 
         function v = outside(s, name, varargin)
@@ -192,25 +192,29 @@ classdef Study < handle
 
         function v = getScalar(s, name, varargin)
             o = s.opts(varargin);
-            v = gamut_mex('read', s.Handle, name, s.pos(o.rows), [], s.resultCode(name));
+            v = gamut_mex('read', s.Handle, name, s.pos(o.rows), ':', s.resultCode(name));
         end
 
         function v = getConstant(s, name)
             d = s.describe(name);
             if strcmp(d.dtype, 'int64')
-                v = gamut_mex('read', s.Handle, name, [], [], 4);
+                v = gamut_mex('read', s.Handle, name, ':', ':', 4);
             else
-                v = gamut_mex('read', s.Handle, name, [], [], 6);
+                v = gamut_mex('read', s.Handle, name, ':', ':', 6);
             end
         end
 
         function v = getField(s, name, varargin)
             %GETFIELD A field: 'rows', 'nodes' or 'cells' select (1-based);
             %   rows x sites on a shared mesh, one row's values on a changing one.
-            o = s.opts(varargin);
-            sites = o.nodes;
-            if isempty(sites), sites = o.cells; end
-            if strcmp(s.MeshKind, 'changing') && numel(o.rows) ~= 1
+            [o, given] = s.opts(varargin);
+            if ismember('nodes', given) && ismember('cells', given)
+                error('gamut:usage', 'give nodes or cells, not both');
+            end
+            sites = ':';
+            if ismember('nodes', given), sites = o.nodes; end
+            if ismember('cells', given), sites = o.cells; end
+            if strcmp(s.MeshKind, 'changing') && (s.isall(o.rows) || numel(o.rows) ~= 1)
                 error('gamut:usage', ['%s: a changing mesh is read one row at a time; ' ...
                     'reads across rows need a shared mesh'], name);
             end
@@ -219,28 +223,32 @@ classdef Study < handle
         end
 
         function v = getPoints(s, row)
-            if nargin < 2, row = []; end
-            if isempty(row) && ~any(strcmp(s.Per, {'fixed', ''}))
+            if nargin < 2, row = ':'; end
+            if isnumeric(row) && isempty(row)       % no row: no points
+                v = zeros(0, str2double(gamut.internal.field(s.describe('coordinates'), 'axes', '3')));
+                return
+            end
+            if s.isall(row) && ~any(strcmp(s.Per, {'fixed', ''}))
                 error('gamut:usage', 'this mesh''s geometry changes; give the row');
             end
             code = 6;
             if strcmp(gamut.internal.field(s.describe('coordinates'), 'dtype', ''), 'float32'), code = 5; end
-            v = gamut_mex('read', s.Handle, 'coordinates', s.pos(row), [], code);
-            if ~isempty(row) && strcmp(s.MeshKind, 'shared')
+            v = gamut_mex('read', s.Handle, 'coordinates', s.pos(row), ':', code);
+            if ~s.isall(row) && strcmp(s.MeshKind, 'shared')
                 v = reshape(v(1, :, :), size(v, 2), size(v, 3));
             end
         end
 
         function [types, offsets, connectivity] = getCells(s, row)
-            if nargin < 2, row = []; end
-            types = gamut_mex('read', s.Handle, 'cells/types', s.pos(row), [], 1);
-            offsets = gamut_mex('read', s.Handle, 'cells/offsets', s.pos(row), [], 4);
-            connectivity = gamut_mex('read', s.Handle, 'cells/connectivity', s.pos(row), [], 4);
+            if nargin < 2, row = ':'; end
+            types = gamut_mex('read', s.Handle, 'cells/types', s.pos(row), ':', 1);
+            offsets = gamut_mex('read', s.Handle, 'cells/offsets', s.pos(row), ':', 4);
+            connectivity = gamut_mex('read', s.Handle, 'cells/connectivity', s.pos(row), ':', 4);
         end
 
         function v = getMeshLabel(s, name, row)
-            if nargin < 3, row = []; end
-            v = gamut_mex('read', s.Handle, name, s.pos(row), [], 4);
+            if nargin < 3, row = ':'; end
+            v = gamut_mex('read', s.Handle, name, s.pos(row), ':', 4);
         end
 
         function v = categories(s, name)
@@ -295,20 +303,32 @@ classdef Study < handle
             if strcmp(gamut.internal.field(s.describe(name), 'dtype', ''), 'float32'), code = 5; end
         end
 
-        function o = opts(~, args)
+        function [o, given] = opts(~, args)
             p = inputParser;
-            p.addParameter('rows', []);
-            p.addParameter('nodes', []);
-            p.addParameter('cells', []);
+            p.addParameter('rows', ':');    % ':' every row; [] none, as select may return
+            p.addParameter('nodes', ':');
+            p.addParameter('cells', ':');
             p.parse(args{:});
             o = p.Results;
+            given = setdiff(p.Parameters, p.UsingDefaults);
+        end
+
+        function tf = isall(~, x)
+            % ':' (as char or string) is every position.
+            tf = (ischar(x) || isstring(x)) && isscalar(string(x)) && string(x) == ":";
         end
 
         function p = pos(~, x)
-            % 1-based MATLAB positions to the core's 0-based ones.  Only
-            % whole-number positions; a logical mask is find(mask).
-            if isempty(x)
-                p = [];
+            % 1-based MATLAB positions to the core's 0-based ones: ':' is every
+            % position and [] none.  Only whole-number positions; a logical
+            % mask is find(mask).
+            if ischar(x) || isstring(x)
+                if ~(isscalar(string(x)) && string(x) == ":")
+                    error('gamut:usage', 'positions are '':'' or numbers');
+                end
+                p = ':';
+            elseif isempty(x)
+                p = zeros(0, 1);
             else
                 if islogical(x) || ~isnumeric(x) || any(x(:) ~= fix(x(:)))
                     error('gamut:usage', 'positions are whole numbers (for a mask, use find)');
@@ -318,13 +338,15 @@ classdef Study < handle
         end
 
         function stageCells(s, cells, labels)
+            % As given: the gateway reads each integer class exactly, and a
+            % double conversion would round int64 codes above 2^53.
             if ~isempty(cells)
-                gamut_mex('geometry_cells', s.Handle, double(cells{1}), double(cells{2}), double(cells{3}));
+                gamut_mex('geometry_cells', s.Handle, cells{1}, cells{2}, cells{3});
             end
             if isstruct(labels)
                 ln = fieldnames(labels);
                 for k = 1:numel(ln)
-                    gamut_mex('geometry_label', s.Handle, ln{k}, double(labels.(ln{k})));
+                    gamut_mex('geometry_label', s.Handle, ln{k}, labels.(ln{k}));
                 end
             end
         end

@@ -287,8 +287,9 @@ int gamut_declare_parameter(gamut_file* f, const char* name, const char* role, c
     p.name = str(name);
     p.role = str(role).empty() ? std::string("design") : str(role);
     p.units = str(units);
-    p.auto_dtype = as_given(dtype_code);
-    if (!p.auto_dtype) p.dtype = dtype(dtype_code);
+    // A parameter's dtype never comes from its values: integers passed to an
+    // undeclared one are float64, so a sweep begun at 0, 2, 4 can take 2.5.
+    p.dtype = as_given(dtype_code) ? DType::Float64 : dtype(dtype_code);
     if (has_bounds) {
       p.lower = lower;
       p.upper = upper;

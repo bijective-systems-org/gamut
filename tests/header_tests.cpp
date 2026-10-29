@@ -257,7 +257,7 @@ void test_integers_batches_and_reads() {
     auto s = gamut::create("batches.gamut", "header tests");
     s.declare_label("run", "group");
     s.declare_parameter("t", "time", "s", "run");
-    s.declare_parameter("n", "design", "1");
+    s.declare_parameter<int64_t>("n", "design", "1");
     s.declare_scalar("cl", "1");
     CHECK(s.handle() != nullptr);
     gamut::Study moved = std::move(s);                            // the file moves with the study
@@ -271,6 +271,17 @@ void test_integers_batches_and_reads() {
     moved.close();
   }
   {
+    // Integers given to an undeclared parameter are float64: it takes 2.5 later.
+    auto w = gamut::create("whole.gamut", "header tests");
+    w.declare_parameter("k", "design", "1");
+    w.add_run({{"k", int64_t{2}}});
+    w.add_run({{"k", 2.5}});
+    w.close();
+    const auto r = gamut::open("whole.gamut");
+    CHECK(r.describe("k")["dtype"] == "float64");
+    CHECK((r.get_parameter("k", gamut::all) == std::vector<double>{2.0, 2.5}));
+  }
+  {
     auto s = gamut::open("batches.gamut", "a");                    // a table, no mesh
     s.add_run({{"run", "c"}, {"t", 0.0}, {"n", int64_t{5}}, {"cl", 0.9}});
     s.close();
@@ -278,6 +289,7 @@ void test_integers_batches_and_reads() {
   const auto s = gamut::open("batches.gamut");
   CHECK(s.row_count() == 5);
   CHECK(s.describe("n")["dtype"] == "int64");
+  CHECK(s.describe("t")["dtype"] == "float64");
   CHECK((s.read<int64_t>("n", gamut::all, gamut::all).values == std::vector<int64_t>{3, 3, 4, 4, 5}));
   CHECK((s.read<int32_t>("n", {4}, gamut::all).values == std::vector<int32_t>{5}));
   CHECK(std::fabs(s.read<float>("cl", {1}, gamut::all).values[0] - 0.6f) < 1e-6f);

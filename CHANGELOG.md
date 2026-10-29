@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+**Upgrading from 1.3.** The file format is unchanged (`gamut/1`), so
+files move between 1.3 and 2.0, short of the new limits below. Code
+written for 1.3 can stop at, or behave differently after, these changes;
+the fixes further down also correct results that were wrong, such as a
+`select` on int64 values past 2⁵³.
+
+- Creating a file never replaces an existing one: `create`,
+  `create_model`, `extract`, `write_copy`, `evaluate` with a path,
+  `gamut build`, `gamut-vtk import`, and `gamut get` without `--force`.
+- A parameter is float64 unless declared int64; integers given to it no
+  longer make it int64.
+- In MATLAB, `[]` as rows, nodes or cells selects none; `':'`, or leaving
+  them out, selects every one.
+- Input that was stored wrongly is refused: a field given sites × runs (a
+  square array cannot be told apart, and is taken as runs × sites), a
+  label given `None` or NaN, a fractional, out-of-range, text or boolean
+  value for an int64 model input, an integer that float64 would round, a
+  group member given two different geometries in one batch, and a
+  negative `--rows` position on the command line.
+- A file whose category tables together, or a model whose arrays
+  together, pass the cap one table or array had is refused (E23) when it
+  is opened or read; 1.3 allocated for them without limit.
+- In C, `gamut_batch_values` takes a `first_axis` argument.
+
+The rest of this section says what changed and why.
+
 Creating a Gamut file never replaces an existing one. `create`,
 `create_model`, `evaluate`, `extract` and `write_copy`, in every language
 and in C, `gamut build` and `gamut-vtk import` refuse a destination that
@@ -11,6 +37,15 @@ run: choose a new name, or remove the previous output yourself first. To
 add runs to an existing file in Python, open it with
 `gamut.open(path, mode="a")`. A `gamut build` that failed part way used to
 delete the file it had replaced.
+
+A parameter is float64 unless declared int64 (`"dtype": "int64"`; in C++,
+`declare_parameter<int64_t>`). 1.3.0 and earlier stored an undeclared
+parameter as int64 when its first values were integers, so a Python sweep
+begun with `range(0, 11, 2)` refused 2.5 when appended to, and the same
+program wrote int64 from Python and float64 from MATLAB. Files are
+unchanged: an int64 parameter stays valid and reads as before. Code that
+gives integers to an undeclared parameter now writes float64; declare
+int64 where whole numbers are meant.
 
 A refused replacement of an attribute (a value of about 64 KiB or more)
 keeps the attribute's previous value. Before, the previous value was
@@ -115,6 +150,34 @@ batch refused for its own data leaves the file as it was, every such
 check being made before the first write, but a write that fails or a
 process killed while it appends can leave the whole file unreadable. Keep a copy of a file you cannot regenerate, or append each
 job's own file at the end.
+
+In MATLAB, `[]` as rows, nodes or cells selects none and `':'` (or leaving
+them out) every one; `[]` meant every row, so the rows of a `select` that
+matched nothing read the whole file. MATLAB passes integer arrays to the
+core in their own class, so int64 codes above 2⁵³ are not rounded through
+double. An int64 model input given fractional or out-of-range values is
+refused in Python and MATLAB, as in Julia, instead of being truncated; an
+unsigned array above int64's range is refused instead of wrapping. Julia's
+`open` closes the file when its `threads` value is refused. An integer
+written to a float64 parameter, scalar, field or coordinate, or given to a
+float64 model input, that a float64 cannot hold exactly (past 2⁵³) is
+refused (E4) in every language; it was rounded silently. Opening a file that does not exist says so, rather than
+that it is not HDF5. A column with the wrong number of values names it and
+both counts. A Python `Study` prints its path, kind, type and row count.
+
+A group member repeated with the same values in another shape (4 × 2 and
+2 × 4 points) is refused as a different geometry. Replacing an attribute
+works however many one-character names the object already holds. The
+validator checks a model-data scale's extent and attribute creation order
+as it checks every scale. A `where` nested past the cap is E23, as the
+limits in `docs/security.md` are. `gamut get` refuses to write over an
+existing `.csv`, `.npy` or `.npz` output unless given `--force`, and
+checks `--rows` without reading the rows.
+
+A file whose `DIMENSION_LIST` attribute is not HDF5's list of dimension
+scales (an integer, a string) is reported (E19) instead of crashing
+`validate` and `open`: HDF5's scale calls follow the attribute as
+references, and Gamut now checks its type before they read it.
 
 ## 1.3.0 (2026-10-25)
 

@@ -335,8 +335,8 @@ void test_attribute_replacement_boundaries() {
       CHECK(f.attributes(object).size() == 9);
     }
     std::remove(tight_path.c_str());
-    // If every one-byte recovery name is occupied, refuse before touching
-    // the original rather than making a compact attribute's name longer.
+    // With every one-byte recovery name occupied, a two-byte one is used,
+    // and nothing of it is left behind.
     const std::string path = "core_replace_no_backup.gamut";
     const std::string names = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
     const std::string old = "unchanged";
@@ -345,13 +345,13 @@ void test_attribute_replacement_boundaries() {
       f.make_group(object);
       f.write_attr(object, "title", AttrValue::text(old));
       for (const char name : names) f.write_attr(object, std::string(1, name), AttrValue::integer(7));
-      CHECK(!raises([&] { f.replace_attr(object, "title", AttrValue::text("new")); }).empty());
-      CHECK(text_is(f, object, "title", old));
+      CHECK(raises([&] { f.replace_attr(object, "title", AttrValue::text("new")); }).empty());
+      CHECK(text_is(f, object, "title", "new"));
       CHECK(f.attributes(object).size() == names.size() + 1);
     }
     {
       File f = File::open_read(path);
-      CHECK(text_is(f, object, "title", old));
+      CHECK(text_is(f, object, "title", "new"));
       CHECK(f.attributes(object).size() == names.size() + 1);
     }
     std::remove(path.c_str());

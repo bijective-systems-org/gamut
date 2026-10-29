@@ -169,3 +169,23 @@ def test_rows_of_a_huge_file_are_checked_without_an_array_of_every_row(tmp_path,
     code, _, err = run(capsys, "get", p, "x", "--rows", "1", "-o", str(tmp_path / "x.npy"))
     assert code == 0, err
     assert np.load(tmp_path / "x.npy").tolist() == [2.0]
+
+
+def test_an_existing_export_is_replaced_only_with_force(tmp_path, capsys):
+    m = str(tmp_path / "m.gamut")
+    _zoned(m)
+    out = tmp_path / "x.csv"
+    out.write_text("keep me")
+    code, _, err = run(capsys, "get", m, "x", "-o", str(out))
+    assert code == 2 and "--force" in err and out.read_text() == "keep me"
+    code, _, _ = run(capsys, "get", m, "x", "--force", "-o", str(out))
+    assert code == 0 and out.read_text() != "keep me"
+
+
+def test_an_npy_output_named_in_capitals_is_checked_where_numpy_writes(tmp_path, capsys):
+    m = str(tmp_path / "m.gamut")
+    _zoned(m)
+    written = tmp_path / "x.NPY.npy"
+    written.write_bytes(b"keep me")
+    code, _, err = run(capsys, "get", m, "x", "-o", str(tmp_path / "x.NPY"))
+    assert code == 2 and "--force" in err and written.read_bytes() == b"keep me"
