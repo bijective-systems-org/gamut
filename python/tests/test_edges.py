@@ -853,3 +853,14 @@ def test_rejected_instance_sizes_are_not_summed(tmp_path):
         f["mesh/instance_nodes"][0] = -2**63
     messages = [x.message for x in gamut.validate(p).findings if x.rule == "E21"]
     assert any("instance_nodes must start at 0" in m for m in messages), messages
+
+
+def test_a_private_group_linked_into_the_public_tree_is_checked_there(tmp_path):
+    p = str(tmp_path / "z.gamut")
+    with gamut.create(p, writer="w", parameters={"x": "1"}) as s:
+        s.add_run({"x": 1.0})
+    with h5py.File(p, "r+") as f:
+        f.require_group("private")["bad"] = h5py.SoftLink("/nowhere")   # allowed in /private
+        f["z"] = f["private"]                                            # the same group, public
+    findings = gamut.validate(p).findings
+    assert any(x.rule == "E22" and x.path == "/z/bad" for x in findings), findings

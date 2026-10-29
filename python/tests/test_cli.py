@@ -155,3 +155,17 @@ def test_a_zone_code_that_is_not_a_number_is_a_usage_error(tmp_path, capsys):
         code, out, _ = run(capsys, "get", p, "q", "--zone", f"zone={bad}", "-o",
                            str(tmp_path / "z.csv"), "--json")
         assert code == 2 and json.loads(out)["error"]["message"].startswith("--zone"), (bad, out)
+
+
+def test_rows_of_a_huge_file_are_checked_without_an_array_of_every_row(tmp_path, capsys):
+    import gamut
+    import h5py
+    p = str(tmp_path / "h.gamut")
+    with gamut.create(p, writer="t", parameters={"x": "1"}) as s:
+        s.add_runs({"x": [1.0, 2.0]})
+    with h5py.File(p, "r+") as f:          # 2**40 rows declared, two stored
+        for name in ("row", "x"):
+            f[name].resize((1 << 40,))
+    code, _, err = run(capsys, "get", p, "x", "--rows", "1", "-o", str(tmp_path / "x.npy"))
+    assert code == 0, err
+    assert np.load(tmp_path / "x.npy").tolist() == [2.0]

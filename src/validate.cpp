@@ -572,7 +572,9 @@ void Validator::walk_links() {
     bool open;   // in the public tree
   };
   std::vector<Group> todo = {{"/", 0, true}};
-  std::set<std::string> walked;
+  // Groups reachable by several hard links, by object: walked at most once in
+  // the public tree and once outside it, since the public tree is held to more.
+  std::set<std::string> walked_public, walked_private;
   while (!todo.empty()) {
     const Group here = todo.back();
     todo.pop_back();
@@ -600,12 +602,17 @@ void Validator::walk_links() {
           }
         });
       }
-      // A group reachable by several hard links is walked once: §8 lets /private
-      // hold any structure, and walking every path takes exponential time.
-      if (m.is_group && m.links > 1 && !walked.insert(file_->object_key(child)).second) continue;
+      // A group reachable by several hard links is walked once in each context:
+      // §8 lets /private hold any structure, and walking every path takes
+      // exponential time.
+      const bool open = here.open && child != "/private" && child != "/VTKHDF";
+      if (m.is_group && m.links > 1) {
+        const std::string key = file_->object_key(child);
+        if (!(open ? walked_public : walked_private).insert(key).second) continue;
+        if (!open && walked_public.count(key)) continue;   // the public walk checked more
+      }
       if (m.is_group) {
-        todo.push_back({child, here.depth + 1,
-                        here.open && child != "/private" && child != "/VTKHDF"});
+        todo.push_back({child, here.depth + 1, open});
       }
     }
   }
