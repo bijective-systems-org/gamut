@@ -501,7 +501,13 @@ def cmd_append(args: argparse.Namespace) -> int:
         for path in (args.file, args.document):
             with open_file(path) as f:
                 _rows_kept(f, "appending")
-        n = gamut_append(args.file, args.document)      # every row of another study file
+        try:
+            n = gamut_append(args.file, args.document)  # every row of another study file
+        except GamutError as e:
+            # Two valid files that do not fit together (no rule): the command's mistake.
+            if e.rule:
+                raise
+            raise _Usage("", e.message, e.path) from None
         _emit(args, {"appended": args.file, "rows": n},
               f"appended {_counted(n, 'run')} from {args.document} to {args.file}")
         return 0

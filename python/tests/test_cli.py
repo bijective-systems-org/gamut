@@ -390,3 +390,14 @@ def test_rows_of_a_model_file_are_a_usage_error(tmp_path, capsys):
         assert code == 2 and "is a model file" in json.loads(out)["problems"][0]["message"], (argv, out)
     assert not (tmp_path / "sub.gamut").exists()
 
+
+
+
+def test_appending_files_that_do_not_fit_together_is_a_usage_error(tmp_path, capsys):
+    a, b = str(tmp_path / "a.gamut"), str(tmp_path / "b.gamut")
+    with gamut.create(a, writer="t", parameters={"x": "1"}) as s:
+        s.add_runs({"x": [1.0]})
+    with gamut.create(b, writer="t", parameters={"x": "1"}, scalars={"y": "1"}) as s:
+        s.add_runs({"x": [2.0], "y": [3.0]})
+    code, out, _ = run(capsys, "append", a, b, "--json")
+    assert code == 2 and "only in the source" in json.loads(out)["problems"][0]["message"], out
