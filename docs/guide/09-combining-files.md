@@ -61,7 +61,11 @@ identity: its `file_id` and creation time.
 
 - To add runs as they finish, open the file to append instead:
   `gamut.open(path, mode="a")` takes `add_run` and `add_runs` as `create`
-  does, without copying the file.
+  does, without copying the file. A refused batch leaves the file as it
+  was. A process killed while it appends, by a crash or a job's time limit,
+  can leave the whole file unreadable, the runs written before included:
+  keep a copy of a file you cannot regenerate before appending to it, or
+  write each job's runs to a file of its own and `append` them at the end.
 - `validate` checks a file against the rules of the specification and
   returns a report: `ok`, then `errors` and `warnings`, each finding with
   its rule, the path of what it concerns, and a message.

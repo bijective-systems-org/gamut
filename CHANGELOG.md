@@ -109,6 +109,12 @@ frees what it built before MATLAB reports the error. In Julia, the
 library's symbols are looked up under a lock from any thread, and a study
 left to the garbage collector removes its temporary file as `close` does.
 
+The guide and SPEC.md say what an append costs when it is interrupted: a
+refused batch leaves the file as it was, and every check is made before the
+first write, but a process killed while it appends can leave the whole file
+unreadable. Keep a copy of a file you cannot regenerate, or append each
+job's own file at the end.
+
 ## 1.3.0 (2026-10-25)
 
 A file may carry a portion marking: a new optional root attribute,

@@ -439,6 +439,7 @@ def test_as_given_float32_coordinates_refuse_float64_points(tmp_path):
         s.add_run({"r": 2.0}, points=np.zeros((3, 2), np.float32))
     with gamut.open(p) as f:
         assert f.row_count == 2
+    assert not gamut.validate(p).findings      # the refused batch left nothing behind (#93)
 
 
 def test_cli_zone_on_a_changing_mesh_and_bad_rows(tmp_path, capsys):
