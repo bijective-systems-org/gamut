@@ -521,7 +521,14 @@ def cmd_append(args: argparse.Namespace) -> int:
             _rows_kept(f, "appending")
             fields = set(f.names("node_fields") + f.names("cell_fields"))
             labels = set(f.names("labels"))
-        with open_file(args.file, mode="a") as study:
+        try:
+            appending = open_file(args.file, mode="a")
+        except GamutError as e:
+            # A valid destination it cannot write (no rule): the command's, as an output is.
+            if e.rule:
+                raise
+            raise _Usage("", e.message, e.path) from None
+        with appending as study:
             n = _add_rows(study, doc, base, fields, labels)
     except Problems as e:
         return _report_problems(args, e.problems)
@@ -565,16 +572,18 @@ class _Usage(GamutError):
 
 
 def _document(path: str) -> Any:
-    """A build or append document, parsed; one that does not parse is a document with
-    errors (exit 1), one that cannot be read a command used wrongly."""
+    """A build or append document, parsed; one that cannot be read or does not
+    parse is a document with errors (exit 1), as a data file that cannot be is."""
     try:
         with open(path, encoding="utf-8") as fh:
             doc = json.load(fh)
     except OSError as e:
-        raise _Usage("", f"cannot read {path}: {e.strerror}") from None
+        raise GamutError("", f"cannot read {path}: {e.strerror}", path) from None
     except RecursionError:
         raise GamutError("", f"{path} nests deeper than a document is read", path) from None
-    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+    except ValueError as e:                    # JSON and UTF-8 errors, and numbers too long
+        if not isinstance(e, (json.JSONDecodeError, UnicodeDecodeError)):
+            raise GamutError("", f"{path} is not a JSON document that can be read: {e}", path) from None
         where = f" at line {e.lineno}, column {e.colno}" if isinstance(e, json.JSONDecodeError) else ""
         raise GamutError("", f"{path} is not JSON{where}: {getattr(e, 'msg', e)}", path) from None
     if not isinstance(doc, dict):
@@ -628,12 +637,12 @@ def _get_study(args: argparse.Namespace) -> int:
     if args.names or args.zone:
         raise _Usage("", "a smaller study file keeps every name and every node; give no "
                           "names and no --zone")
+    _usable_output(args.output)                     # the output first, before any reading
     with open_file(args.file) as f:
         _rows_kept(f, "a smaller study file")
         positions = _positions(f, _rows_arg(args.rows))
         if args.where:
             positions = np.intersect1d(_select(f, args.where), positions)
-    _usable_output(args.output)
     gamut_extract(args.file, args.output, np.asarray(positions, dtype=np.int64))
     _emit(args, {"wrote": args.output, "rows": int(len(positions))},
           f"wrote {_counted(len(positions), 'run')} to {args.output}")

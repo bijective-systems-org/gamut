@@ -401,3 +401,31 @@ def test_appending_files_that_do_not_fit_together_is_a_usage_error(tmp_path, cap
         s.add_runs({"x": [2.0], "y": [3.0]})
     code, out, _ = run(capsys, "append", a, b, "--json")
     assert code == 2 and "only in the source" in json.loads(out)["problems"][0]["message"], out
+
+
+
+def test_documents_paths_and_permissions_have_their_exit_status(tmp_path, capsys):
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"x": "1"}) as s:
+        s.add_runs({"x": [1.0]})
+    (tmp_path / "runs.csv").write_text("x\n2\n")
+    add = tmp_path / "add.json"
+    add.write_text(json.dumps({"runs": "runs.csv"}))
+    code, out, _ = run(capsys, "append", p, str(tmp_path / "none.json"), "--json")
+    assert code == 1 and "cannot read" in json.loads(out)["problems"][0]["message"]
+    long_number = tmp_path / "long.json"
+    long_number.write_text('{"writer": ' + "1" * 5000 + "}")
+    code, out, _ = run(capsys, "build", str(long_number), "-o", str(tmp_path / "n.gamut"), "--json")
+    assert code == 1 and json.loads(out)["problems"], out
+    code, out, _ = run(capsys, "get", str(tmp_path / "none.gamut"), "-o", p, "--json")   # output first
+    assert code == 2 and "never replaced" in json.loads(out)["problems"][0]["message"]
+    odd = str(tmp_path / "bad\udcff.gamut")                            # a name not UTF-8, as argv gives it
+    code, out, _ = run(capsys, "validate", odd, "--json")
+    assert code == 1 and json.loads(out)["findings"][0]["rule"] == "E1", out
+    os.chmod(p, 0o444)
+    try:
+        if not os.access(p, os.W_OK):                                   # not as root
+            code, out, _ = run(capsys, "append", p, str(add), "--json")
+            assert code == 2 and json.loads(out)["problems"], out
+    finally:
+        os.chmod(p, 0o644)

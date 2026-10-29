@@ -181,7 +181,9 @@ def b(text: str | None) -> bytes | None:
     NUL, so text holding one is refused rather than cut short."""
     if text is None:
         return None
-    raw = str(text).encode("utf-8")
+    # surrogateescape keeps a file name that is not UTF-8 as the bytes it was
+    # given; the core refuses such bytes in a name (E8) and opens such a path.
+    raw = str(text).encode("utf-8", "surrogateescape")
     if b"\0" in raw:
         raise GamutError("", f"{text!r} holds a NUL character, which no name or text may hold")
     return raw
