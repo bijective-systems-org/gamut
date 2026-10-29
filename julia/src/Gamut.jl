@@ -419,11 +419,16 @@ function open(path::AbstractString; mode::AbstractString="r", threads::Integer=1
     out = Ref{Ptr{Cvoid}}(C_NULL)
     if mode == "r"
         @mes gamut_open (Cstring, Ref{Ptr{Cvoid}}) cs(path) out
-        s = Study(out[], String(path), false)
-        s.mesh_kind = info(s, "mesh_kind")
-        s.per = info(s, "per")
-        s.group = startswith(s.per, "group:") ? s.per[7:end] : ""
-        threads != 1 && @mes gamut_set_threads (Ptr{Cvoid}, Cint) s.handle threads
+        s = Study(out[], String(path), false)   # owns the handle, so a refusal closes it
+        try
+            s.mesh_kind = info(s, "mesh_kind")
+            s.per = info(s, "per")
+            s.group = startswith(s.per, "group:") ? s.per[7:end] : ""
+            threads != 1 && @mes gamut_set_threads (Ptr{Cvoid}, Cint) s.handle threads
+        catch
+            close(s)
+            rethrow()
+        end
         return s
     elseif mode == "a"
         kind, per, axes = open(path) do r
@@ -440,12 +445,22 @@ open(f::Function, path::AbstractString; kw...) = with_study(f, open(path; kw...)
 
 # --- writing ----------------------------------------------------------------------------
 
+# Values as Float64, refusing an integer a Float64 would round (past 2^53), as
+# the core does: for values computed with here before the core sees them.
+function float64_exactly(v, name)
+    for x in v
+        x isa Integer && !(x isa Bool) && Float64(x) != x &&
+            throw(GamutError("E4", "$name: $x is not exact as a float64, which holds every integer only to 2^53"))
+    end
+    return Float64.(v)
+end
+
 function stage_geometry(s::Study, points, cells, labels)
     h = handle(s)
     if points !== nothing
         p = points isa AbstractMatrix ? points : reshape(points, :, 1)
         T = eltype(p) <: AbstractFloat ? eltype(p) : Float64
-        buf = c_order(convert(Array{T}, p))
+        buf = c_order(T === eltype(p) ? p : float64_exactly(p, "coordinates"))
         GC.@preserve buf begin
             @mes gamut_geometry_points (Ptr{Cvoid}, Cint, Ptr{Cvoid}, Int64, Cint) h DTYPE[T] pointer(buf) size(p, 1) size(p, 2)
         end
@@ -513,7 +528,8 @@ Adds many runs at once: `columns` maps each name to one value per run;
 function add_runs!(s::Study, columns; fields=nothing, points=nothing, cells=nothing, mesh_labels=nothing)
     cols = Dict{String,Any}(pairs_of(columns))
     lengths = unique(length(v) for v in values(cols))
-    length(lengths) == 1 || throw(GamutError("E5", "every column needs the same number of runs"))
+    length(lengths) == 1 || throw(GamutError("E5", "every column needs the same number of runs; given " *
+        (isempty(cols) ? "no columns" : join(("$k $(length(v))" for (k, v) in sort!(collect(cols); by=first)), ", "))))
     return commit!(s, lengths[1], cols, Dict{String,Any}(pairs_of(fields)), points, cells, mesh_labels)
 end
 
@@ -580,9 +596,9 @@ function numbers(v::AbstractArray)
     T <: Union{Float32,Float64,Int8,UInt8,Int32,Int64} && return collect(v)
     T <: Bool && throw(GamutError("E4", "booleans are given as a label's names"))
     T <: Integer && return Vector{Int64}(vec(v))
-    T <: Real && return Vector{Float64}(vec(v))
+    T <: Real && return float64_exactly(vec(v), "a value")
     all(x -> x isa Integer && !(x isa Bool), v) && return Int64[x for x in v]
-    all(x -> x isa Real, v) && return Float64[x for x in v]
+    all(x -> x isa Real, v) && return float64_exactly(vec(v), "a value")
     throw(GamutError("E4", "values are numbers; got $(T)"))
 end
 
@@ -1091,7 +1107,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
         for name in params
             haskey(given, name) || throw(GamutError("E2", "the input $name is missing"))
             d = declared(m, name)
-            col = get(d, "dtype", "") == "int64" ? Vector{Int64}(given[name]) : Vector{Float64}(given[name])
+            col = get(d, "dtype", "") == "int64" ? Vector{Int64}(given[name]) : float64_exactly(given[name], name)
             lo, hi = parse(Float64, d["lower"]), parse(Float64, d["upper"])
             i = findfirst(x -> x < lo || x > hi, col)
             i === nothing || @warn "W4: $name is outside the model's domain [$lo, $hi] at row $i"
@@ -1113,7 +1129,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
             label_names[name] = names_given
         end
         if coordinates !== nothing
-            tbl["coordinates"] = Float64.(coordinates)
+            tbl["coordinates"] = float64_exactly(coordinates, "coordinates")
         elseif !isempty(m.mesh_kind) && m.per == "fixed"
             pts = get_points(m)
             tbl["coordinates"] = permutedims(repeat(reshape(pts, size(pts)..., 1), 1, 1, n), (3, 1, 2))
@@ -1176,7 +1192,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
             if !isempty(m.mesh_kind) && m.per == "run"
                 pts = !isempty(get(coordinate, "model", "")) ?
                       outputs[coordinate["model"]][coordinate["output"]]["values"] :
-                      coordinates !== nothing ? Float64.(coordinates) :
+                      coordinates !== nothing ? float64_exactly(coordinates, "coordinates") :
                       throw(GamutError("E2", "this model file's geometry changes per run; give coordinates"))
                 points = [pts[i, :, :] for i in 1:n]
             end

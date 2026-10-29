@@ -439,6 +439,13 @@ gamut_mex('geometry_cells', d.Handle, uint8([9 9]), single([0 4 8]), int16([0 2 
 gamut_mex('set_mesh', d.Handle);
 d.addRun(struct('k', 1));
 d.setNote('author', "Alice");
+d.setNote('big', uint64(2)^62 + 1);             % any integer class is an integer note
+try
+    d.setNote('huge', intmax('uint64'));
+    ok(false, 'a uint64 note above int64 refused');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E4'), ['uint64 note: ' err.message]);
+end
 try
     gamut_mex('set_note', d.Handle, 'n', int64([]));
     ok(false, 'an empty int64 note refused');
@@ -446,12 +453,94 @@ catch err
     ok(contains(err.message, 'one number'), ['empty int64 note: ' err.message]);
 end
 d.close();
+big = h5readatt(dp, '/notes', 'big');
+ok(isa(big, 'int64') && big == int64(2)^62 + 1, 'a uint64 note is stored as int64, exactly');
 r = gamut.open(dp);
 [~, offsets, conn] = r.getCells();
 ok(isequal(double(offsets(:))', [0 4 8]) && isequal(double(conn(:))', [0 2 3 1 2 4 5 3]), ...
     'single offsets and int16 connectivity are read by their class');
 r.close();
 
+% [] selects nothing and ':' everything, so a select that matched nothing
+% reads nothing; integer arguments reach the gateway in their own class.
+r = gamut.open(p);
+none = r.select('k > 99');
+ok(isempty(none), 'a select matching nothing is empty');
+ok(isempty(r.getParameter('k', 'rows', none)), 'reading the rows of an empty select reads none');
+ok(numel(r.getParameter('k', 'rows', ':')) == numel(r.getParameter('k')) && numel(r.getParameter('k')) == 4, ...
+    "':' and no rows read every row");
+r.close();
+wp = fullfile(tmp, 'wide_codes.gamut');
+w = gamut.create(wp, 'writer', 'matlab tests', 'mesh', 'changing', 'per', 'run', ...
+    'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'), ...
+    'meshLabels', struct('zone', struct('at', 'cell')));
+w.addRun(struct('k', 1), 'points', pts, 'cells', {int64(cells{1}), int64(cells{2}), int64(cells{3})}, ...
+    'meshLabels', struct('zone', int64([2147483647; 1])));
+w.close();
+r = gamut.open(wp);
+z = r.getMeshLabel('zone', 1);
+ok(isequal(double(z(:))', [2147483647 1]), 'int64 cells and mesh-label codes pass through unconverted');
+r.close();
+% ':' as char or string is every position; nodes and cells are taken as
+% given; extract takes ':' or nothing for every row.
+r = gamut.open(p);
+ok(isequal(size(r.getField('pf', 'rows', 1, 'nodes', ":")), [1 6]), 'nodes ":" is every node');
+ok(isempty(r.getField('pf', 'rows', 1, 'cells', [])), 'cells [] is no cells');
+r.close();
+r = gamut.open(fullfile(tmp, 'sweep.gamut'));
+ok(isequal(r.getPoints(":"), r.getPoints()), 'getPoints(":") is the fixed points');
+ok(isequal(size(r.getPoints([])), [0 2]), 'getPoints([]) is no points, with the file''s two axes');
+r.close();
+try
+    r = gamut.open(p);
+    r.getField('pf', 'rows', 1, 'nodes', ":", 'cells', []);
+    ok(false, 'nodes and cells together refused');
+catch err
+    ok(contains(err.message, 'not both'), ['nodes and cells: ' err.message]);
+end
+r.close();
+xp = fullfile(tmp, 'extracted.gamut');
+gamut.extract(p, xp);
+r = gamut.open(xp); ok(r.rowCount() == 4, 'extract without rows takes every row'); r.close();
+xa = fullfile(tmp, 'extracted_all.gamut');
+gamut.extract(p, xa, ":");
+r = gamut.open(xa); ok(r.rowCount() == 4, 'extract with ":" takes every row'); r.close();
+xn = fullfile(tmp, 'extracted_none.gamut');
+gamut.extract(p, xn, []);
+r = gamut.open(xn); ok(r.rowCount() == 0, 'extract with [] takes no rows'); r.close();
+% An int64 model input takes whole numbers in its range, here as singles,
+% and refuses fractions, infinities, values past int64, logicals, complex
+% and sparse inputs: int64() would round or saturate them silently.
+ip = fullfile(tmp, 'int64_model.gamut');
+s = gamut.createModel(ip, 'writer', 'matlab tests', ...
+    'parameters', struct('n', struct('units', '1', 'dtype', 'int64', 'lower', 0, 'upper', 10)), ...
+    'scalars', struct('y', struct('units', '1', 'model', 'fit', 'output', 'y')));
+s.addModel('fit', gamut.Nearest({'n'}, 0, 10, [1; 9], struct('y', [1; 2])), {'n'});
+s.close();
+out = gamut.evaluate(ip, struct('n', single([2; 8])));
+ok(isequal(out.getScalar('y'), [1; 2]), 'whole singles evaluate an int64 input');
+out.close();
+for bad = {2.5, Inf, 2^63, uint64(2)^63, true, 3 + 2i, sparse(3)}
+    try
+        o = gamut.evaluate(ip, struct('n', bad{1}));
+        o.close();
+        ok(false, sprintf('int64 input %s (%s) refused', num2str(full(bad{1})), class(bad{1})));
+    catch err
+        ok(strcmp(err.identifier, 'gamut:E4'), ['int64 input: ' err.message]);
+    end
+end
+% A float64 model input takes integer classes, and refuses an integer that
+% double() would round.
+o = gamut.evaluate(fullfile(tmp, 'nearest.gamut'), struct('alpha', int32([1; 9])));
+ok(isequal(o.getParameter('alpha'), [1; 9]), 'an int32 input to a float64 model input evaluates');
+o.close();
+try
+    o = gamut.evaluate(fullfile(tmp, 'nearest.gamut'), struct('alpha', int64(2)^53 + 1));
+    o.close();
+    ok(false, 'an integer past 2^53 refused for a float64 input');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E4'), ['integer past 2^53: ' err.message]);
+end
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end
 end

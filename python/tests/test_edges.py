@@ -634,8 +634,9 @@ def test_selection_parentheses_nest_64_deep_and_no_deeper(tmp_path):
     with gamut.open(str(tmp_path / "a.gamut")) as f:
         assert list(f.select("(" * 64 + "x == 1" + ")" * 64)) == [0]
         for depth in (65, 20000):
-            with pytest.raises(gamut.GamutError, match="nested deeper than 64"):
+            with pytest.raises(gamut.GamutError, match="nested deeper than 64") as e:
                 f.select("(" * depth + "x == 1" + ")" * depth)
+            assert e.value.rule == "E23"        # a cap, as docs/security.md lists it
 
 
 def test_appending_to_a_file_with_an_int64_label_writes_int64_codes(tmp_path):
@@ -864,3 +865,199 @@ def test_a_private_group_linked_into_the_public_tree_is_checked_there(tmp_path):
         f["z"] = f["private"]                                            # the same group, public
     findings = gamut.validate(p).findings
     assert any(x.rule == "E22" and x.path == "/z/bad" for x in findings), findings
+
+
+def test_a_member_repeated_with_the_same_values_in_another_shape_is_refused(tmp_path):
+    pts, cells = grid(2, 2)
+    with gamut.create(str(tmp_path / "fam.gamut"), writer="t", mesh="shared", per="group:member",
+                      coordinates={"units": "m", "axes": 2}, labels={"member": "group"},
+                      parameters={"mach": "1"}) as s:
+        s.set_mesh(cells=cells, n_nodes=4)
+        flat = np.arange(8.0)
+        with pytest.raises(gamut.GamutError):
+            s.add_runs({"member": ["a", "a"], "mach": [1.0, 2.0]},
+                       points=[flat.reshape(4, 2), flat.reshape(2, 4)])
+
+
+def test_int64_inputs_and_unsigned_values_convert_exactly_or_are_refused(tmp_path):
+    p = str(tmp_path / "m.gamut")
+    with gamut.create_model(p, writer="t",
+                            parameters={"n": {"units": "1", "dtype": "int64", "lower": 0, "upper": 10}},
+                            scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as mf:
+        mf.add_model("fit", gamut.Nearest(["n"], [0.0], [10.0], [[1.0], [9.0]], {"y": [1.0, 2.0]}),
+                     ["n"])
+    with gamut.evaluate(p, {"n": [2.0, 8.0]}) as out:      # whole numbers given as floats
+        assert out.get_scalar("y").tolist() == [1.0, 2.0]
+    with pytest.raises(gamut.GamutError, match="whole numbers") as e:
+        gamut.evaluate(p, {"n": [2.5]})
+    assert e.value.rule == "E4"
+    with gamut.create(str(tmp_path / "u.gamut"), writer="t", parameters={"x": "1"}) as s:
+        with pytest.raises(gamut.GamutError, match="above int64"):
+            s.add_runs({"x": np.array([2**63 + 1], dtype=np.uint64)})
+
+
+def test_model_data_scales_are_checked_as_every_scale(tmp_path):
+    p = str(tmp_path / "m.gamut")
+    with gamut.create_model(p, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
+                            scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as mf:
+        mf.add_model("fit", gamut.Nearest(["x"], [0.0], [1.0], [[0.1], [0.9]], {"y": [1.0, 2.0]}),
+                     ["x"])
+    with h5py.File(p, "r+") as f:
+        g = f["models/fit"]
+        d = g.create_dataset("extra", data=np.arange(3.0))
+        sc = g.create_dataset("gamut_extra_d0", shape=(2,), dtype=">f4", track_order=True)
+        sc.make_scale("This is a netCDF dimension but not a netCDF variable.         2")
+        d.dims[0].attach_scale(sc)
+    messages = [x.message for x in gamut.validate(p).findings if x.rule == "E19"]
+    assert any("entries and its scale gamut_extra_d0" in m for m in messages), messages
+
+
+@pytest.mark.parametrize("given, ok", [
+    (np.array([2**53 + 1], dtype=object), [2**53 + 1]),
+    (np.array([-2.0**63]), [-2**63]),
+    (np.array([2**63], dtype=">u8"), None),
+    (np.array([__import__("decimal").Decimal("9007199254740992.5")], dtype=object), None),
+    (np.array([True]), None),
+    (np.array([np.nan]), None),
+    (np.array([np.inf]), None),
+    (np.array([2.0**63], dtype=np.float32), None),
+    (np.array([3.0], dtype=np.float16), [3]),
+    (np.array(["1e3"], dtype=object), None),
+    (np.array(["3"]), None),
+    (np.array([], dtype=np.float64), []),
+    (np.array(["2020-01-01"], dtype="M8[ns]"), None),
+    (np.array([5], dtype="m8[ns]"), None),
+])
+def test_int64_conversion_is_exact_in_every_dtype(given, ok):
+    if ok is None:
+        with pytest.raises(gamut.GamutError) as e:
+            _lib.int64_exactly(given, "n")
+        assert e.value.rule == "E4"
+    else:
+        assert _lib.int64_exactly(given, "n").tolist() == ok
+
+
+def test_nodes_and_cells_together_are_refused(tmp_path):
+    p = str(tmp_path / "m.gamut")
+    pts, cells = grid(3, 2)
+    with gamut.create(p, writer="t", mesh="shared", per="fixed", coordinates={"units": "m", "axes": 2},
+                      parameters={"x": "1"}, fields={"q": {"units": "1", "at": "node"}}) as s:
+        s.set_mesh(pts, cells)
+        s.add_run({"x": 1.0}, fields={"q": np.zeros(6)})
+    with gamut.open(p) as f:
+        with pytest.raises(gamut.GamutError, match="nodes or cells, not both"):
+            f.get_field("q", nodes=[0], cells=[0])
+
+
+def test_an_integer_past_2_53_is_refused_where_float64_would_round_it(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"x": {"units": "1", "dtype": "float64"}},
+                      scalars={"y": "1"}) as s:
+        s.add_runs({"x": np.array([2**53, -2**53], dtype=np.int64), "y": [1, 2]})
+        for name, value in (("x", 2**53 + 1), ("y", 2**63 - 1), ("y", -2**63 + 1)):
+            with pytest.raises(gamut.GamutError, match="not exact as a float64") as e:
+                s.add_run({"x": 0, "y": 0, name: value})
+            assert e.value.rule == "E4"
+    with gamut.open(p) as f:
+        assert f.get_parameter("x").tolist() == [2.0**53, -2.0**53]
+        assert f.row_count == 2
+
+
+def test_a_parameter_is_float64_whatever_values_come_first(tmp_path):
+    # The README's sweep passes range() integers; a later 2.5 must still fit.
+    p = str(tmp_path / "sweep.gamut")
+    with gamut.create(p, writer="t", parameters={"alpha": {"units": "degree"},
+                                                 "seed": {"units": "1", "dtype": "int64"}}) as s:
+        for alpha in range(0, 11, 2):
+            s.add_run({"alpha": alpha, "seed": alpha})
+    with gamut.open(p, mode="a") as s:
+        s.add_run({"alpha": 2.5, "seed": 3})
+        with pytest.raises(gamut.GamutError, match="cannot be stored as int64") as e:
+            s.add_run({"alpha": 1.0, "seed": 2.5})
+        assert e.value.rule == "E4"
+    with gamut.open(p) as f:
+        assert f.describe("alpha")["dtype"] == "float64"
+        assert f.describe("seed")["dtype"] == "int64"
+        assert f.get_parameter("alpha").tolist() == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 2.5]
+        assert f.get_parameter("seed").dtype == np.int64
+
+
+def test_a_missing_file_and_a_miscounted_column_say_so(tmp_path):
+    with pytest.raises(gamut.GamutError, match="there is no file"):
+        gamut.open(str(tmp_path / "nope.gamut"))
+    with pytest.raises(gamut.GamutError, match="there is no file"):
+        gamut.open(str(tmp_path / "nope.gamut"), mode="a")
+    text = tmp_path / "notes.txt"
+    text.write_text("not HDF5")
+    with pytest.raises(gamut.GamutError, match="as an HDF5 file"):
+        gamut.open(str(text))
+    with gamut.create(str(tmp_path / "t.gamut"), writer="t", parameters={"x": "1"},
+                      scalars={"y": "1"}) as s:
+        with pytest.raises(gamut.GamutError, match="x: 2 values given for 1 run; give one per run"):
+            s.add_run({"x": [1.0, 2.0]})
+        with pytest.raises(gamut.GamutError, match="the same number of runs; given x 2, y 1"):
+            s.add_runs({"x": [1.0, 2.0], "y": [1.0]})
+        with pytest.raises(gamut.GamutError, match="y: 3 values given for 1 run"):
+            s.add_run({"x": 1.0, "y": [1.0, 2.0, 3.0]})
+
+
+def test_a_study_prints_what_it_is(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    s = gamut.create(p, writer="t", parameters={"x": "1"})
+    assert repr(s) == f"<gamut.Study {p!r}, open to add runs>"
+    s.add_runs({"x": [1.0, 2.0]})
+    s.close()
+    assert repr(s) == f"<gamut.Study {p!r}, closed>"
+    with gamut.open(p) as f:
+        assert repr(f) == f"<gamut.Study {p!r} (data, table, 2 rows)>"
+
+
+def test_integers_past_2_53_are_refused_on_every_path_to_a_float64(tmp_path):
+    big = 2**53 + 1
+    model = str(tmp_path / "model.gamut")
+    with gamut.create_model(model, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
+                            scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as m:
+        m.add_model("fit", gamut.Nearest(["x"], [0.], [1.], [[0.], [1.]], {"y": [0., 2.]}), ["x"])
+    for given in ([big], np.array([big]), np.array([big], dtype=object),
+                  np.array([np.int64(big)], dtype=object)):
+        with pytest.raises(gamut.GamutError, match="not exact as a float64") as e:
+            gamut.evaluate(model, {"x": given})
+        assert e.value.rule == "E4"
+    with pytest.raises(gamut.GamutError, match="coordinates: 9007199254740993 is not exact"):
+        gamut.evaluate(model, {"x": [0.5]}, coordinates=np.array([[[big, 0]]]))
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"x": {"units": "m"}, "n": {"units": "1", "dtype": "int64"}}) as s:
+        with pytest.raises(gamut.GamutError, match="not exact as a float64"):
+            s.add_run({"x": (big, "m"), "n": 1})
+        s.add_run({"x": (2, "m"), "n": (big, "1")})           # int64 in its own units is exact
+    with gamut.open(p) as f:
+        assert f.get_parameter("x").tolist() == [2.0]
+        assert f.get_parameter("n").tolist() == [big]
+
+
+def test_an_integer_past_2_53_is_refused_before_a_unit_conversion(tmp_path):
+    pytest.importorskip("pint")
+    with gamut.create(str(tmp_path / "t.gamut"), writer="t", parameters={"x": {"units": "m"}}) as s:
+        with pytest.raises(gamut.GamutError, match="not exact as a float64"):
+            s.add_run({"x": (2**53 + 1, "km")})
+        s.add_run({"x": (2, "km")})
+    with gamut.open(str(tmp_path / "t.gamut")) as f:
+        assert f.get_parameter("x").tolist() == [2000.0]
+
+
+def test_integer_constants_and_notes_stay_exact_or_are_refused(tmp_path):
+    p = str(tmp_path / "c.gamut")
+    with gamut.create(p, writer="t", parameters={"x": "1"},
+                      constants={"c": (np.array(2**53 + 1), "1")}) as s:   # a 0-d array
+        s.add_run({"x": 1.0})
+        s.notes["n"] = np.uint64(2**63 - 1)
+        for value in (2**64, np.uint64(2**64 - 1), -2**63 - 1):
+            with pytest.raises(gamut.GamutError, match="outside int64's range"):
+                s.notes["m"] = value
+    with gamut.open(p) as f:
+        assert f.get_constant("c") == 2**53 + 1
+        assert f.notes["n"] == 2**63 - 1
+    for value in (2**64, np.uint64(2**64 - 1)):
+        with pytest.raises(gamut.GamutError, match="outside int64's range"):
+            gamut.create(str(tmp_path / "d.gamut"), writer="t", parameters={"x": "1"},
+                         constants={"c": (value, "1")})

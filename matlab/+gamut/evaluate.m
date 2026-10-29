@@ -46,9 +46,16 @@ for k = 1:numel(params)
     end
     d = m.describe(name);
     if strcmp(gamut.internal.field(d, 'dtype', ''), 'int64')
-        col = int64(inputs.(name)(:));
+        % Whole numbers in range only: int64() would round or saturate silently.
+        v = inputs.(name)(:);
+        if ~isnumeric(v) || ~isreal(v) || issparse(v) || ...
+                (isfloat(v) && any(v ~= fix(v) | ~isfinite(v) | v >= 2^63 | v < -2^63)) || ...
+                (isa(v, 'uint64') && any(v > uint64(intmax('int64'))))
+            error('gamut:E4', '%s is int64 and takes whole numbers in its range', name);
+        end
+        col = int64(v);
     else
-        col = double(inputs.(name)(:));
+        col = exactDouble(inputs.(name)(:), name);
     end
     lo = str2double(declared(d, 'lower', name)); hi = str2double(declared(d, 'upper', name));
     outside = find(col < lo | col > hi, 1);
@@ -75,7 +82,7 @@ for k = 1:numel(labels)
     labelNames.(name) = names(:);
 end
 if ~isempty(coordinates)
-    tbl.coordinates = double(coordinates);
+    tbl.coordinates = exactDouble(coordinates, 'coordinates');
 elseif ~isempty(m.MeshKind) && strcmp(m.Per, 'fixed')
     pts = m.getPoints();
     tbl.coordinates = repmat(reshape(pts, [1 size(pts)]), [n 1 1]);
@@ -192,9 +199,9 @@ for k = 1:size(requests, 1)
         error('gamut:error', 'the model %s gave no %s for %s', id, req{2}, output);
     end
     if any(strcmp(scalars, name))
-        columns.(name) = double(values(:));
+        columns.(name) = exactDouble(values(:), name);
     else
-        fields.(name) = reshape(double(values), n, []);
+        fields.(name) = reshape(exactDouble(values, name), n, []);
     end
 end
 points = {};
@@ -203,7 +210,7 @@ if ~isempty(m.MeshKind) && strcmp(m.Per, 'run')
         got = outputs(coordinate.model);
         pts = got.(coordinate.output).values;
     elseif ~isempty(coordinates)
-        pts = double(coordinates);
+        pts = exactDouble(coordinates, 'coordinates');
     else
         error('gamut:E2', 'this model file''s geometry changes per run; give coordinates');
     end
@@ -230,4 +237,17 @@ if isKey(wanted, id)
 else
     wanted(id) = {req};
 end
+end
+
+function v = exactDouble(v, name)
+%EXACTDOUBLE double(v), refusing an integer that double() would round (past
+%   2^53) as the core refuses one.
+if isa(v, 'int64') || isa(v, 'uint64')
+    d = double(v);
+    top = 2^63; if isa(v, 'uint64'), top = 2^64; end   % the first double past the class
+    if any(d(:) >= top | cast(d(:), class(v)) ~= v(:))
+        error('gamut:E4', '%s: an integer past 2^53 is not exact as a float64', name);
+    end
+end
+v = double(v);
 end

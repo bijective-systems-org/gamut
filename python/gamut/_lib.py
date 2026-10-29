@@ -6,6 +6,7 @@ from __future__ import annotations
 import ctypes
 import os
 import sys
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -235,6 +236,78 @@ def dtype_code(values: np.ndarray) -> int:
                                 "use float32, float64, int32 or int64") from None
 
 
+def int64_exactly(values: Any, what: str) -> np.ndarray:
+    """Values as int64 when each is a whole number within its range, compared
+    exactly; a cast would round a fraction or wrap a large unsigned value
+    without a word."""
+    arr = np.asarray(values)
+    if arr.dtype.kind == "i" or (arr.dtype.kind == "u" and arr.dtype.itemsize < 8):
+        return arr.astype(np.int64)
+    if arr.dtype.kind == "u":                     # 64-bit unsigned, in either byte order
+        if arr.size and arr.max() > np.iinfo(np.int64).max:
+            raise GamutError("E4", f"{what}: {arr.max()} is above int64's range")
+        return arr.astype(np.int64)
+    if arr.dtype.kind == "b":
+        raise GamutError("E4", f"{what} is int64 and takes numbers, not booleans")
+    if arr.dtype.kind in "USVMm":
+        raise GamutError("E4", f"{what} is int64 and takes numbers, not {arr.dtype}")
+    if arr.dtype.kind == "f":                     # whole and in range, compared in its own dtype
+        whole = np.all(np.isfinite(arr)) and np.all(arr == np.round(arr))
+        if whole and float(np.finfo(arr.dtype).max) >= 2.0**63:   # a float16 cannot reach them
+            lo, hi = arr.dtype.type(-2.0**63), arr.dtype.type(2.0**63)
+            whole = bool(np.all((arr >= lo) & (arr < hi)))
+        if arr.size and not whole:
+            raise GamutError("E4", f"{what} is int64 and takes whole numbers in its range")
+        return arr.astype(np.int64)
+    out = np.empty(arr.shape, dtype=np.int64)
+    flat = out.reshape(-1)
+    for k, v in enumerate(arr.reshape(-1).tolist()):
+        if isinstance(v, (str, bytes, bool)):     # Fraction would parse "1e3"
+            raise GamutError("E4", f"{what} is int64 and takes numbers; {v!r} is not one")
+        try:
+            exact = Fraction(v)                   # ints, floats and Decimals exactly
+        except (TypeError, ValueError, OverflowError):
+            raise GamutError("E4", f"{what} is int64 and takes whole numbers; {v!r} is not one") from None
+        if exact.denominator != 1 or not -2**63 <= exact.numerator < 2**63:
+            raise GamutError("E4", f"{what} is int64 and takes whole numbers in its range; "
+                                   f"{v!r} is not one")
+        flat[k] = exact.numerator
+    return out
+
+
+def float64_exactly(values: Any, what: str) -> np.ndarray:
+    """Values as float64, refusing an integer a float64 would round (past
+    2**53), as the core does: for values computed with here before the core
+    sees them. Values NumPy itself reads as floats (a float array, a list
+    with a float in it) are floats already."""
+    arr = np.asarray(values)
+    if arr.dtype.kind in "iuO":
+        flat = arr.reshape(-1)
+        if arr.dtype.kind != "O":
+            flat = flat[(flat > 2**53) | (flat < -2**53)]
+        for v in flat.tolist():
+            if isinstance(v, (int, np.integer)) and not isinstance(v, (bool, np.bool_)) \
+                    and abs(int(v)) > 2**53:
+                v = int(v)
+                try:
+                    exact = int(float(v)) == v
+                except OverflowError:
+                    exact = False
+                if not exact:
+                    raise GamutError("E4", f"{what}: {v} is not exact as a float64, which holds "
+                                           "every integer only to 2^53")
+    return np.asarray(arr, dtype=np.float64)
+
+
+def int64_value(value: Any, what: str) -> int:
+    """One integer as a Python int in int64's range: ctypes would wrap one
+    outside it without a word."""
+    v = int(value)
+    if not -2**63 <= v < 2**63:
+        raise GamutError("E4", f"{what}: {v} is outside int64's range")
+    return v
+
+
 def as_array(values: Any) -> np.ndarray:
     """A C-contiguous numeric array; Python ints become int64, floats float64."""
     arr = np.asarray(values)
@@ -244,7 +317,7 @@ def as_array(values: Any) -> np.ndarray:
     if arr.dtype.kind == "i" and arr.dtype not in _DTYPE_CODE:
         arr = arr.astype(np.int64)
     if arr.dtype.kind == "u" and arr.dtype != np.uint8:
-        arr = arr.astype(np.int64)
+        arr = int64_exactly(arr, "values")
     if arr.dtype.kind == "f" and arr.dtype not in _DTYPE_CODE:
         arr = arr.astype(np.float64)
     return np.ascontiguousarray(arr)

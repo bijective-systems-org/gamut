@@ -119,6 +119,16 @@ class Study:
     def __enter__(self) -> "Study":
         return self
 
+    def __repr__(self) -> str:
+        if self._h is None:
+            return f"<gamut.Study {self.path!r}, closed>"
+        if self._writing:
+            return f"<gamut.Study {self.path!r}, open to add runs>"
+        try:
+            return f"<gamut.Study {self.path!r} ({self.kind}, {self.type}, {self.row_count} rows)>"
+        except GamutError:                        # a damaged file still prints
+            return f"<gamut.Study {self.path!r}>"
+
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         if exc_type is None:
             # Nothing can be fixed once the block has ended: a file that
@@ -222,7 +232,9 @@ class Study:
             target = self._declared_units.get(name)
             if target is None:
                 raise GamutError("", f"{name} has no declared units to convert to")
-            return float(_units.convert(value[0], value[1], target))
+            if value[1] == target:            # nothing to convert: the core takes it as given
+                return value[0]
+            return float(_units.convert(_lib.float64_exactly(value[0], name), value[1], target))
         return value
 
     def add_runs(self, columns: Mapping[str, Any], *, fields: Mapping[str, Any] | None = None,
@@ -234,9 +246,11 @@ class Study:
         `cells`, `mesh_labels` one per run (or per new group member) when the
         geometry changes."""
         columns = dict(columns.items())
-        lengths = {len(v) if _lib.iterable(v) else 1 for v in columns.values()}
+        counts = {name: len(v) if _lib.iterable(v) else 1 for name, v in columns.items()}
+        lengths = set(counts.values())
         if len(lengths) != 1:
-            raise GamutError("E5", "every column needs the same number of runs")
+            given = ", ".join(f"{name} {n}" for name, n in counts.items()) or "no columns"
+            raise GamutError("E5", f"every column needs the same number of runs; given {given}")
         return self._commit(lengths.pop(), dict(columns), dict(fields or {}), points, cells,
                             mesh_labels)
 
@@ -475,6 +489,8 @@ class Study:
         """A field: runs x nodes (or cells) on a shared mesh, one row's
         values on a changing mesh. `nodes` or `cells` choose sites by
         position, as `rows` chooses rows."""
+        if nodes is not None and cells is not None:
+            raise GamutError("", f"{name}: give nodes or cells, not both")
         sites = nodes if nodes is not None else cells
         if self._mesh_kind == "changing":
             one = isinstance(rows, (list, tuple, np.ndarray)) and len(rows) == 1
@@ -612,7 +628,7 @@ class _NotesWriter:
     def __setitem__(self, key: str, value: Any) -> None:
         h = self._study._handle()
         if isinstance(value, bool) or isinstance(value, (int, np.integer)):
-            call("gamut_set_note_int", h, b(key), int(value))
+            call("gamut_set_note_int", h, b(key), _lib.int64_value(value, key))
         elif isinstance(value, (float, np.floating)):
             call("gamut_set_note_float", h, b(key), float(value))
         elif isinstance(value, str):
@@ -637,8 +653,9 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
 
     parameters   inputs that place a run: {"alpha": {"units": "degree",
                  "role": "condition"}}. Role "design" (the default),
-                 "condition" or "time"; optional "lower", "upper",
-                 "dtype": "int64".
+                 "condition" or "time"; optional "lower", "upper".
+                 float64 whatever the values given, or "dtype":
+                 "int64" for whole numbers such as a count or a seed.
     labels       names rather than numbers: {"status": {"role": "status",
                  "categories": ["converged", "failed"]}}. Role
                  "categorical" (the default), "group", "status" or
@@ -729,10 +746,13 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
             call("gamut_set_generalisation_group", handle, b(generalisation_group))
         for name, value in (constants or {}).items():
             number, units = value
+            if isinstance(number, np.ndarray) and number.ndim == 0:
+                number = number[()]                     # its NumPy scalar
             if isinstance(number, np.float32):
                 call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_FLOAT32, float(number), 0)
-            elif isinstance(number, (int, np.integer)) and not isinstance(number, bool):
-                call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_INT64, 0.0, int(number))
+            elif isinstance(number, (int, np.integer)) and not isinstance(number, (bool, np.bool_)):
+                call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_INT64, 0.0,
+                     _lib.int64_value(number, name))
             else:
                 call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_FLOAT64, float(number), 0)
     except BaseException:

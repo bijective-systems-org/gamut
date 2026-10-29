@@ -163,7 +163,7 @@ if isfield(p, 'select')
     return
 end
 codes = struct('float64', 6, 'float32', 5, 'int64', 4);
-rows = []; sites = [];
+rows = ':'; sites = ':';
 if isfield(p, 'rows') && ~isempty(p.rows), rows = double(p.rows(:)); end
 if isfield(p, 'sites') && ~isempty(p.sites), sites = double(p.sites(:)); end
 got = gamut_mex('read', r.Handle, p.read, rows, sites, codes.(p.dtype));

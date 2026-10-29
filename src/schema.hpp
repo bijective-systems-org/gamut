@@ -33,8 +33,7 @@ struct Parameter {
   std::string name;
   std::string role;               // design | condition | time | unknown
   std::string units;
-  DType dtype = DType::Float64;
-  bool auto_dtype = false;        // taken from the first values written
+  DType dtype = DType::Float64;   // int64 only when declared so
   std::optional<double> lower, upper;
   std::string run_group;
 };

@@ -16,6 +16,7 @@ has errors, 2 a usage error.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import csv
 import json
 import os
@@ -494,17 +495,27 @@ def _document(path: str) -> Any:
         raise GamutError("", f"{path} is not JSON{where}: {getattr(e, 'msg', e)}", path) from None
 
 
-def _positions(f: Any, rows: Any) -> np.ndarray:
-    """The positions --rows names, checked by the core as every read checks them,
-    and sized by the selection, never by the file."""
-    if rows is None:
-        return np.arange(f.row_count)
+def _check_rows(f: Any, rows: Any) -> None:
+    """--rows checked by the core as every read checks it, by the shape of the
+    rows it names: nothing is read."""
     try:
-        f.get_row_ids(rows)
+        sel = _lib.Selection(rows, "rows")
+        sel.resolve(f.row_count)
+        shape, rank = (ctypes.c_int64 * 4)(), ctypes.c_int()
+        _lib.call("gamut_shape", f._handle(), _lib.b("row"), sel.pointer(),
+                  _lib.Selection(None, "sites").pointer(), shape, ctypes.byref(rank))
     except GamutError as e:
         if e.rule:          # the file itself is at fault (exit 1), not the positions
             raise
         raise _Usage(e.rule, f"--rows: {e.message}") from None
+
+
+def _positions(f: Any, rows: Any) -> np.ndarray:
+    """The positions --rows names, checked, and sized by the selection, never by
+    the file."""
+    if rows is None:
+        return np.arange(f.row_count)
+    _check_rows(f, rows)
     if isinstance(rows, slice):
         return np.arange(*rows.indices(f.row_count))
     return np.asarray(rows, dtype=np.int64)
@@ -551,7 +562,7 @@ def cmd_get(args: argparse.Namespace) -> int:
     with open_file(args.file) as f:
         rows = _rows_arg(args.rows)
         if rows is not None:
-            _positions(f, rows)
+            _check_rows(f, rows)
         if args.where:
             chosen = f.select(args.where)
             if rows is not None:
@@ -609,6 +620,10 @@ def cmd_get(args: argparse.Namespace) -> int:
                 data[name] = f.get_scalar(name, rows=rows)
             units[name] = f.describe(name).get("units", "") if name != "row" else ""
         ids = f.get_row_ids(rows)
+    if ext in (".npy", ".npz") and not out.endswith(ext):
+        out += ext                                # the name NumPy writes, whatever case was given
+    if ext in (".csv", ".npy", ".npz") and os.path.exists(out) and not args.force:
+        raise _Usage("", f"{out} exists; give --force to replace it")   # as .gamut is never replaced
     if ext == ".csv":
         with open(out, "w", newline="") as fh:
             w = csv.writer(fh)
@@ -676,6 +691,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--rows", help="a:b or i,j,k")
     p.add_argument("--zone", help="LABEL=NAME: the nodes or cells of one zone")
     p.add_argument("-o", "--output", required=True)
+    p.add_argument("--force", action="store_true",
+                   help="replace an existing .csv, .npy or .npz output (a .gamut one is never replaced)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_get)
     args = parser.parse_args(argv)

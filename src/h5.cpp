@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <set>
 
 #include "chunk.hpp"
@@ -78,8 +79,30 @@ std::string token_key(hid_t where, const H5O_token_t& token) {
 
 struct ScaleVisit {
   std::vector<std::string>* names;
+  std::vector<std::string>* keys;
   const File* file;
 };
+
+// HDF5's dimension-scale calls trust DIMENSION_LIST to be what they write:
+// one variable-length list of object references per axis. One of another
+// type sends them through a wild pointer, so it is checked first; a dataset
+// whose list is wrong is treated as having no scales (E19 says so).
+bool dimension_list_ok(hid_t dset, int rank) {
+  const htri_t has = H5Aexists(dset, "DIMENSION_LIST");
+  if (has == 0) return true;
+  if (has < 0) return false;
+  Id attr(H5Aopen(dset, "DIMENSION_LIST", H5P_DEFAULT));
+  if (!attr.valid()) return false;
+  Id type(H5Aget_type(attr.get()));
+  Id space(H5Aget_space(attr.get()));
+  if (!type.valid() || !space.valid() || H5Tget_class(type.get()) != H5T_VLEN) return false;
+  Id base(H5Tget_super(type.get()));
+  if (!base.valid() || H5Tequal(base.get(), H5T_STD_REF_OBJ) <= 0) return false;
+  if (H5Sget_simple_extent_ndims(space.get()) != 1) return false;
+  hsize_t n = 0;
+  H5Sget_simple_extent_dims(space.get(), &n, nullptr);
+  return n == static_cast<hsize_t>(rank);
+}
 
 herr_t collect_scale(hid_t /*did*/, unsigned /*dim*/, hid_t dsid, void* data) {
   ScaleVisit* visit = static_cast<ScaleVisit*>(data);
@@ -87,6 +110,10 @@ herr_t collect_scale(hid_t /*did*/, unsigned /*dim*/, hid_t dsid, void* data) {
   // attribute, and it is found through the object index, never by
   // asking HDF5 for a path (spec section 9.4).
   visit->names->push_back(visit->file->dataset_link_name(dsid));
+  // The attached scale's identity, whatever else shares its name.
+  H5O_info2_t info;
+  visit->keys->push_back(H5Oget_info3(dsid, &info, H5O_INFO_BASIC) >= 0 ? token_key(dsid, info.token)
+                                                                         : std::string());
   return 0;
 }
 
@@ -337,11 +364,23 @@ bool dtype_of(const AttrType& t, DType* out) {
 
 // --- File ------------------------------------------------------------
 
+namespace {
+
+// HDF5 says only that the open failed; a missing file is the usual reason.
+std::string cannot_open(const std::string& path, const std::string& as) {
+  std::error_code ec;
+  if (!std::filesystem::exists(std::filesystem::u8path(path), ec) && !ec)
+    return "there is no file \"" + path + "\"";
+  return "cannot open \"" + path + "\" " + as;
+}
+
+}  // namespace
+
 File File::open_read(const std::string& path) {
   File f;
   f.id_ = Id(H5Fopen(path.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT));
   if (!f.id_.valid()) {
-    throw Error("E1", "cannot open \"" + path + "\" as an HDF5 file");
+    throw Error("E1", cannot_open(path, "as an HDF5 file"));
   }
   return f;
 }
@@ -350,7 +389,7 @@ File File::open_write(const std::string& path) {
   File f;
   f.id_ = Id(H5Fopen(path.c_str(), H5F_ACC_RDWR, H5P_DEFAULT));
   if (!f.id_.valid()) {
-    throw Error("", "cannot open \"" + path + "\" for writing");
+    throw Error("", cannot_open(path, "for writing"));
   }
   return f;
 }
@@ -625,12 +664,16 @@ DsetInfo File::described(hid_t dset, bool scales) const {
   if (!scales) return info;
   info.is_scale = H5DSis_scale(dset) > 0;
   info.scales.resize(static_cast<std::size_t>(rank > 0 ? rank : 0));
+  info.scale_keys.resize(info.scales.size());
   if (!info.is_scale) {
-    for (int axis = 0; axis < rank; ++axis) {
-      ScaleVisit visit{&info.scales[static_cast<std::size_t>(axis)], this};
-      int index = 0;
-      H5DSiterate_scales(dset, static_cast<unsigned>(axis), &index,
-                         collect_scale, &visit);
+    if (dimension_list_ok(dset, rank)) {
+      for (int axis = 0; axis < rank; ++axis) {
+        const std::size_t a = static_cast<std::size_t>(axis);
+        ScaleVisit visit{&info.scales[a], &info.scale_keys[a], this};
+        int index = 0;
+        H5DSiterate_scales(dset, static_cast<unsigned>(axis), &index,
+                           collect_scale, &visit);
+      }
     }
   } else if (rank == 1) {
     // A coordinate variable carries itself as its own scale.
@@ -1031,8 +1074,16 @@ void File::replace_attr(const std::string& path, const std::string& name,
   // Keep a separate copy: H5Arename can delete its source before failing.
   // A backup name must not grow a compact attribute past its message limit.
   std::string backup;
-  for (const char candidate : std::string("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")) {
-    const std::string next(1, candidate);
+  // One byte first, then two once those are taken: the backup is written
+  // before the original is touched, so one that does not fit is refused
+  // with the original intact.
+  const std::string letters = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  std::vector<std::string> candidates;
+  for (const char a : letters) candidates.emplace_back(1, a);
+  for (const char a : letters) {
+    for (const char b : letters) candidates.push_back(std::string{a, b});
+  }
+  for (const std::string& next : candidates) {
     const htri_t found = H5Aexists(object.get(), next.c_str());
     need(found >= 0, "cannot inspect the recovery attribute \"" + next + "\"");
     if (found == 0) {
@@ -1304,6 +1355,11 @@ void File::detach_scale(const std::string& dataset, const std::string& scale,
                         unsigned axis) {
   Id d(open_dataset(dataset));
   Id s(open_dataset(scale));
+  Id space(H5Dget_space(d.get()));
+  if (!dimension_list_ok(d.get(), H5Sget_simple_extent_ndims(space.get()))) {
+    throw Error("E19", "\"" + dataset + "\": its DIMENSION_LIST is not a list of dimension scales",
+                dataset);
+  }
   need(H5DSdetach_scale(d.get(), s.get(), axis) >= 0,
        "cannot detach \"" + scale + "\" from \"" + dataset + "\"");
 }

@@ -63,7 +63,8 @@ study.close();
 `"run"` or `"group:<label>"`). Declarations come next, then the mesh, then
 runs. `points` are nodes × axes in C order and `cells` a `gamut::Cells` in
 VTK's convention, node numbers from 0. Each run gives its parameters and
-scalars as numbers (an integer stays an integer) and its labels by name,
+scalars as numbers (a parameter is a double unless declared with
+`declare_parameter<int64_t>`) and its labels by name,
 then its fields; `add_run` writes it all or nothing and returns its id,
 and takes a `gamut::Geometry` when the run brings its own points.
 `add_runs` writes many runs at once from a column per name. `solve`

@@ -37,7 +37,8 @@ lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
 
 `solve` stands for the solver. A run left without a result, such as the
 failed one here, stores it as missing (`NaN`), and `select` returns
-positions counted from 1.
+positions counted from 1. `'rows'` left out, or `':'`, is every row, and
+`[]` is none, so the rows of a `select` that matched nothing read nothing.
 
 ## On one mesh
 

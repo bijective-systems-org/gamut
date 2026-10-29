@@ -122,6 +122,10 @@ struct DsetInfo {
   bool attr_order_indexed = false;
   bool is_scale = false;
   std::vector<std::vector<std::string>> scales;   // per axis, link names
+  // Per axis, parallel to scales: each attached scale's object identity
+  // (File::object_key), so a check reads the scale attached and not another
+  // of the same name. Empty for a dataset that is itself a scale.
+  std::vector<std::vector<std::string>> scale_keys;
   bool has_fill_value_set = false;
 };
 

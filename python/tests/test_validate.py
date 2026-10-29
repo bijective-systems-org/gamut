@@ -474,3 +474,75 @@ def test_an_ignored_dataset_named_like_a_scale_does_not_make_a_file_read_only(tm
     with gamut.open(p, mode="a") as s:
         s.add_run({"r": 2.0}, points=pts, cells=cells)
     assert not [x for x in gamut.validate(p).findings if x.severity == "error"]
+
+
+@pytest.mark.parametrize("kind", ["int", "ints", "text", "vlen-uint64", "two-lists"])
+def test_a_dimension_list_of_another_type_is_e19_not_a_crash(tmp_path, kind):
+    p = str(tmp_path / "t.gamut")
+    _sweep(p)
+    with h5py.File(p, "r+") as f:      # HDF5's own scale calls would follow it as references
+        del f["cl"].attrs["DIMENSION_LIST"]
+        if kind == "int":
+            f["cl"].attrs["DIMENSION_LIST"] = np.int64(0)
+        elif kind == "ints":
+            f["cl"].attrs["DIMENSION_LIST"] = np.arange(3, dtype=np.int32)
+        elif kind == "text":
+            f["cl"].attrs["DIMENSION_LIST"] = "x" * 100
+        elif kind == "vlen-uint64":
+            lists = np.empty(1, dtype=object)
+            lists[0] = np.array([7], np.uint64)
+            f["cl"].attrs.create("DIMENSION_LIST", lists, dtype=h5py.vlen_dtype(np.uint64))
+        else:                           # references, but one list too many for one axis
+            refs = np.empty(2, dtype=object)
+            refs[0] = np.array([f["row"].ref], dtype=h5py.ref_dtype)
+            refs[1] = np.array([f["row"].ref], dtype=h5py.ref_dtype)
+            f["cl"].attrs.create("DIMENSION_LIST", refs, dtype=h5py.vlen_dtype(h5py.ref_dtype))
+    assert "E19" in _rules(p)
+    with gamut.open(p) as s:
+        s.get_parameter("mach")
+
+
+def test_the_scale_attached_is_checked_not_a_namesake(tmp_path):
+    p = str(tmp_path / "m.gamut")
+    with gamut.create_model(p, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
+                            scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as mf:
+        mf.add_model("fit", gamut.Nearest(["x"], [0.0], [1.0], [[0.1], [0.9]], {"y": [1.0, 2.0]}),
+                     ["x"])
+    name = "This is a netCDF dimension but not a netCDF variable.%10d"
+    with h5py.File(p, "r+") as f:
+        g = f["models/fit"]
+        d = g.create_dataset("extra", data=np.arange(3.0))
+        local = g.create_dataset("gamut_extra_d0", shape=(3,), dtype=">f4", track_order=True)
+        local.make_scale(name % 3)
+        other = f["private"].create_group("b") if "private" in f else f.create_group("private/b")
+        far = other.create_dataset("gamut_extra_d0", shape=(2,), dtype=">f4", track_order=True)
+        far.make_scale(name % 2)
+        d.dims[0].attach_scale(far)            # the attached scale is two long, the namesake three
+    messages = [x.message for x in gamut.validate(p).findings if x.rule == "E19"]
+    assert any("attached to a scale named gamut_extra_d0 that is not models/fit/gamut_extra_d0" in m
+               for m in messages), messages
+
+
+def test_a_scale_of_the_right_name_elsewhere_is_not_the_scale(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    _sweep(p)
+    with h5py.File(p, "r+") as f:
+        decoy = f.require_group("private").create_dataset("row", data=np.arange(2, dtype="<i8"))
+        decoy.make_scale("row")
+        f["cl"].dims[0].detach_scale(f["row"])
+        f["cl"].dims[0].attach_scale(decoy)
+    messages = [x.message for x in gamut.validate(p).findings if x.rule == "E19"]
+    assert any("is attached to a scale named row that is not row" in m for m in messages), messages
+
+
+def test_widening_a_table_whose_dimension_list_is_wrong_is_refused_not_a_crash(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"x": "1"}, labels={"case": "group"}) as s:
+        s.add_run({"x": 1.0, "case": "a"})
+    with h5py.File(p, "r+") as f:
+        del f["categories/case"].attrs["DIMENSION_LIST"]
+        f["categories/case"].attrs["DIMENSION_LIST"] = np.int64(0)
+    with pytest.raises(gamut.GamutError) as e:
+        with gamut.open(p, mode="a") as s:
+            s.add_run({"x": 2.0, "case": "a name long enough to widen the table"})
+    assert e.value.rule == "E19"

@@ -36,6 +36,13 @@ void need(bool ok, const std::string& rule, const std::string& message,
   if (!ok) throw Error(rule, message, path);
 }
 
+// "2 values given for 1 run": a column that is not one entry per run.
+std::string per_run(std::int64_t given, std::int64_t runs, std::string what = "values") {
+  if (given == 1) what.pop_back();
+  return std::to_string(given) + " " + what + " given for " + std::to_string(runs) +
+         (runs == 1 ? " run" : " runs") + "; give one per run";
+}
+
 const std::set<std::string> kParameterRoles = {"design", "condition", "time"};
 const std::set<std::string> kLabelRoles = {"group", "categorical", "status",
                                            "split"};
@@ -127,8 +134,14 @@ std::vector<unsigned char> convert(const Column& c, DType target,
   }
   if (is_int(c.dtype) && is_float(target)) {
     for (std::size_t i = 0; i < n; ++i) {
-      const double v = static_cast<double>(int_at(c, i));
+      const std::int64_t x = int_at(c, i);
+      const double v = static_cast<double>(x);
       if (target == DType::Float64) {
+        // A double holds every integer only to 2^53; past it the cast rounds.
+        // (A float32 target is a declared precision, and rounds like a double.)
+        need(v < 9223372036854775808.0 && static_cast<std::int64_t>(v) == x, "E4",
+             what + ": " + std::to_string(x) + " is not exact as a float64, which holds "
+                    "every integer only to 2^53", what);
         std::memcpy(&out[i * 8], &v, 8);
       } else {
         const float f = static_cast<float>(v);
@@ -592,7 +605,7 @@ void Writer::declare_parameter(const Parameter& p) {
        p.name + ": the role \"" + p.role + "\" is not design, condition or time",
        p.name);
   check_units(p.units, p.name);
-  need(p.auto_dtype || p.dtype == DType::Float64 || p.dtype == DType::Int64, "E4",
+  need(p.dtype == DType::Float64 || p.dtype == DType::Int64, "E4",
        p.name + ": a parameter is float64 or int64", p.name);
   need(p.lower.has_value() == p.upper.has_value(), "E16",
        p.name + ": give both bounds or neither", p.name);
@@ -971,12 +984,6 @@ void Writer::resolve_autos(Schema& s, const Batch* first) {
     const auto it = first->values.find(name);
     return it == first->values.end() ? nullptr : &it->second;
   };
-  for (auto& p : s.parameters) {
-    if (!p.auto_dtype) continue;
-    const Column* c = given(p.name);
-    p.dtype = c != nullptr && is_int(c->dtype) ? DType::Int64 : DType::Float64;
-    p.auto_dtype = false;
-  }
   for (auto& r : s.results) {
     if (!r.auto_dtype) continue;
     const Column* c = given(r.name);
@@ -1339,8 +1346,7 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
       }
       throw Error("E2", p.name + ": every run needs a value", p.name);
     }
-    need(it->second.count == n, "E5",
-         p.name + ": expected " + std::to_string(n) + " values", p.name);
+    need(it->second.count == n, "E5", p.name + ": " + per_run(it->second.count, n), p.name);
     root_bytes[p.name] = convert(it->second, p.dtype, p.name);
     if (p.dtype == DType::Float64) {
       for (std::size_t i = 0; i < N; ++i) {
@@ -1361,12 +1367,13 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
          l.name + ": give names or codes, not both", l.name);
     if (byname != batch.names.end()) {
       need(byname->second.size() == N, "E5",
-           l.name + ": expected " + std::to_string(n) + " names", l.name);
+           l.name + ": " + per_run(static_cast<std::int64_t>(byname->second.size()), n, "names"),
+           l.name);
       for (const auto& nm : byname->second) c.push_back(code_of(l.category, nm, &added[l.category]));
     } else {
       need(bycode != batch.values.end(), "E2", l.name + ": every run needs a value", l.name);
-      need(bycode->second.count == n, "E5",
-           l.name + ": expected " + std::to_string(n) + " codes", l.name);
+      need(bycode->second.count == n, "E5", l.name + ": " + per_run(bycode->second.count, n, "codes"),
+           l.name);
       c = as_i64(bycode->second, l.name);
       const std::int64_t size = static_cast<std::int64_t>(s.tables.at(l.category).size());
       for (const std::int64_t v : c) {
@@ -1383,8 +1390,7 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
       const std::vector<double> nan(N, std::nan(""));
       root_bytes[r.name] = convert(Column::of(DType::Float64, nan.data(), n), r.dtype, r.name);
     } else {
-      need(it->second.count == n, "E5",
-           r.name + ": expected " + std::to_string(n) + " values", r.name);
+      need(it->second.count == n, "E5", r.name + ": " + per_run(it->second.count, n), r.name);
       need(!(r.given_precision && r.dtype == DType::Float32 && it->second.dtype == DType::Float64),
            "E4", r.name + ": its first values were float32, so it is stored as float32; give "
                           "float32 values, or declare its precision to convert",
@@ -1664,7 +1670,8 @@ std::string Writer::geometry_print(const Geometry& g) const {
   const Mesh& m = schema_.mesh;
   Sha256 h;
   const std::vector<unsigned char> points = convert(g.points, m.coordinate_dtype, "coordinates");
-  const std::int64_t sizes[3] = {static_cast<std::int64_t>(points.size()),
+  // The shape too: the same values as 3 x 2 and as 2 x 3 points are not one geometry.
+  const std::int64_t sizes[5] = {g.n_nodes, g.axes, static_cast<std::int64_t>(points.size()),
                                  static_cast<std::int64_t>(g.types.size()),
                                  static_cast<std::int64_t>(g.connectivity.size())};
   h.update(sizes, sizeof sizes);

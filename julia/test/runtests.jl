@@ -47,6 +47,18 @@ mktempdir() do tmp
         end
     end
 
+    @testset "a refused threads value leaves the file closed" begin
+        p = joinpath(tmp, "threads.gamut")
+        Gamut.create(p; writer="tests", parameters=Dict("x" => "1")) do s
+            Gamut.add_run!(s, Dict("x" => 1.0))
+        end
+        @test_throws GamutError Gamut.open(p; threads=0)
+        Gamut.open(p; mode="a") do s                 # no handle was left open
+            Gamut.add_run!(s, Dict("x" => 2.0))
+        end
+        @test Gamut.open(f -> f.row_count, p) == 2
+    end
+
     @testset "a field given nodes × runs is refused" begin
         p = joinpath(tmp, "transposed.gamut")
         pts, cells = grid(4, 3)
@@ -199,6 +211,18 @@ mktempdir() do tmp
             e = try Gamut.create(p; writer="t", parameters=Dict("x" => (units="1", bound...))); nothing catch x; x end
             @test e isa GamutError && e.rule == "E16" && !isfile(p)
         end
+        Gamut.create(joinpath(tmp, "wide.gamut"); writer="t", mesh="shared", per="fixed",
+                      coordinates=(units="m", axes=2)) do s
+            e = try Gamut.set_mesh!(s; points=[2^53+1 0; 0 1]); nothing catch x; x end
+            @test e isa GamutError && e.rule == "E4"
+            Gamut.set_mesh!(s; points=[2 0; 0 1])            # integers that fit are taken exactly
+        end
+        @test Gamut.open(f -> Gamut.get_points(f), joinpath(tmp, "wide.gamut")) == [2.0 0.0; 0.0 1.0]
+        Gamut.create(joinpath(tmp, "counts.gamut"); writer="t", parameters=Dict("x" => "1"),
+                      scalars=Dict("y" => "1")) do s
+            e = try Gamut.add_runs!(s, Dict("x" => [1.0, 2.0], "y" => [1.0])); nothing catch x; x end
+            @test e isa GamutError && e.rule == "E5" && occursin("given x 2, y 1", e.message)
+        end
         pts, cells = grid(2, 2)
         Gamut.create(joinpath(tmp, "cells.gamut"); writer="t", mesh="shared", per="fixed",
                       coordinates=(units="m", axes=2)) do s
@@ -294,6 +318,8 @@ mktempdir() do tmp
         end
         @test isempty(Gamut.validate(mp))
         @test Gamut.open(f -> Gamut.describe(f)["portion_marking"], mp) == "Example marking"
+        e = try Gamut.evaluate(mp, Dict("alpha" => [2^53 + 1])); nothing catch x; x end
+        @test e isa GamutError && e.rule == "E4"       # Float64 would round it
         out = Gamut.evaluate(mp, Dict("alpha" => [1.0, 4.0, 9.0]))
         @test Gamut.get_scalar(out, "cl") == [0.1, 0.5, 1.0]
         @test Gamut.describe(out)["portion_marking"] == "Example marking"   # copied into the answer

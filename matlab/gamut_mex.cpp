@@ -5,6 +5,7 @@
 // error into a MATLAB error with identifier gamut:<rule>.
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <set>
@@ -122,6 +123,24 @@ std::vector<int64_t> integers(const mxArray* a, const char* what) {
 int64_t one_int64(const mxArray* v) {
   if (mxGetNumberOfElements(v) != 1) usage("an int64 value is one number");
   return *static_cast<const int64_t*>(mxGetData(v));
+}
+
+// One integer of any integer class as int64 (a constant or a note), where a
+// double would round a uint64 or int64 past 2^53.
+bool is_integer(const mxArray* v) {
+  return v != nullptr && (mxIsInt8(v) || mxIsUint8(v) || mxIsInt16(v) || mxIsUint16(v) ||
+                          mxIsInt32(v) || mxIsUint32(v) || mxIsInt64(v) || mxIsUint64(v));
+}
+int64_t one_integer(const mxArray* v) {
+  if (mxIsInt64(v)) return one_int64(v);
+  if (mxGetNumberOfElements(v) != 1) usage("an integer value is one number");
+  if (mxIsUint64(v)) {
+    const uint64_t u = *static_cast<const uint64_t*>(mxGetData(v));
+    if (u > static_cast<uint64_t>(INT64_MAX))
+      throw Refusal{"gamut:E4", std::to_string(u) + " is above int64's range"};
+    return static_cast<int64_t>(u);
+  }
+  return static_cast<int64_t>(mxGetScalar(v));    // int8 to uint32: exact as a double
 }
 
 // A model tree, freed on every path out, a thrown usage error included.
@@ -303,8 +322,9 @@ std::vector<unsigned char> to_c_order(const mxArray* a, std::size_t rank, std::v
   return out;
 }
 
-// A selection from MATLAB: [] for everything, or 0-based positions as
-// doubles or integers (the M layer converts from 1-based).
+// A selection from MATLAB: ':' (or nothing) for everything, [] for nothing,
+// or 0-based positions as doubles or integers (the M layer converts from
+// 1-based). [] is no positions, so a select that matched nothing reads nothing.
 struct Sel {
   gamut_sel sel{};
   std::vector<int64_t> index;
@@ -314,7 +334,17 @@ struct Sel {
 Sel selection(const mxArray* a) {
   Sel s;
   s.sel.kind = GAMUT_SEL_ALL;
-  if (a == nullptr || mxIsEmpty(a)) return s;
+  if (a == nullptr) return s;
+  if (mxIsChar(a)) {
+    if (text(a, "positions") != ":") usage("positions are ':' for every one, or numbers");
+    return s;
+  }
+  if (mxIsEmpty(a)) {
+    s.sel.kind = GAMUT_SEL_INDEX;
+    s.sel.count = 0;
+    s.sel.index = nullptr;
+    return s;
+  }
   if (!mxIsDouble(a) && !mxIsInt64(a)) usage("positions are double or int64");
   const mwSize n = mxGetNumberOfElements(a);
   s.index.resize(n);
@@ -688,9 +718,9 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
           e);
   } else if (cmd == "set_constant") {
     const mxArray* v = arg(4);
-    if (v != nullptr && mxIsInt64(v)) {
+    if (is_integer(v)) {
       check(gamut_set_constant(file(arg(1)), text(arg(2), "name").c_str(), text(arg(3), "units").c_str(),
-                             GAMUT_INT64, 0.0, one_int64(v), &e), e);
+                             GAMUT_INT64, 0.0, one_integer(v), &e), e);
     } else {
       check(gamut_set_constant(file(arg(1)), text(arg(2), "name").c_str(), text(arg(3), "units").c_str(),
                              GAMUT_FLOAT64, scalar(v, "value"), 0, &e), e);
@@ -773,8 +803,8 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     const mxArray* v = arg(3);
     if (v != nullptr && (mxIsChar(v) || mxIsClass(v, "string"))) {
       check(gamut_set_note_text(f, key.c_str(), text(v, "value").c_str(), &e), e);
-    } else if (v != nullptr && mxIsInt64(v)) {
-      check(gamut_set_note_int(f, key.c_str(), one_int64(v), &e), e);
+    } else if (is_integer(v)) {
+      check(gamut_set_note_int(f, key.c_str(), one_integer(v), &e), e);
     } else {
       check(gamut_set_note_float(f, key.c_str(), scalar(v, "value"), &e), e);
     }
@@ -841,12 +871,7 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     check(gamut_append(text(arg(1), "dst").c_str(), text(arg(2), "src").c_str(), &n, &e), e);
     plhs[0] = mxCreateDoubleScalar(static_cast<double>(n));
   } else if (cmd == "extract") {
-    Sel rows = selection(arg(3));
-    if (rows.sel.kind == GAMUT_SEL_ALL) {   // [] here is no rows, not every row
-      rows.sel.kind = GAMUT_SEL_INDEX;
-      rows.sel.count = 0;
-      rows.sel.index = nullptr;
-    }
+    const Sel rows = selection(arg(3));   // ':' every row, [] none
     check(gamut_extract(text(arg(1), "src").c_str(), text(arg(2), "dst").c_str(), rows.ptr(), &e), e);
   } else if (cmd == "write_copy") {
     check(gamut_write_copy(text(arg(1), "src").c_str(), text(arg(2), "dst").c_str(), &e), e);
@@ -864,14 +889,24 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
   static const bool at_exit = (mexAtExit(finish_open_files), true);
   (void)at_exit;
-  Refusal r;
-  try {
-    dispatch(nlhs, plhs, nrhs, prhs);
-    return;
-  } catch (const Refusal& x) {
-    r = x;
-  } catch (const std::exception& x) {
-    r = {"gamut:error", x.what()};
+  // The error is copied to fixed storage and every C++ object is gone before
+  // mexErrMsgIdAndTxt, which leaves without running destructors.
+  static char id[64];
+  static char message[4096];
+  {
+    std::string i, m;
+    try {
+      dispatch(nlhs, plhs, nrhs, prhs);
+      return;
+    } catch (const Refusal& x) {
+      i = x.id;
+      m = x.message;
+    } catch (const std::exception& x) {
+      i = "gamut:error";
+      m = x.what();
+    }
+    std::snprintf(id, sizeof id, "%s", i.c_str());
+    std::snprintf(message, sizeof message, "%s", m.c_str());
   }
-  mexErrMsgIdAndTxt(r.id.c_str(), "%s", r.message.c_str());
+  mexErrMsgIdAndTxt(id, "%s", message);
 }
