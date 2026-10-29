@@ -127,8 +127,14 @@ std::vector<unsigned char> convert(const Column& c, DType target,
   }
   if (is_int(c.dtype) && is_float(target)) {
     for (std::size_t i = 0; i < n; ++i) {
-      const double v = static_cast<double>(int_at(c, i));
+      const std::int64_t x = int_at(c, i);
+      const double v = static_cast<double>(x);
       if (target == DType::Float64) {
+        // A double holds every integer only to 2^53; past it the cast rounds.
+        // (A float32 target is a declared precision, and rounds like a double.)
+        need(v < 9223372036854775808.0 && static_cast<std::int64_t>(v) == x, "E4",
+             what + ": " + std::to_string(x) + " is not exact as a float64, which holds "
+                    "every integer only to 2^53", what);
         std::memcpy(&out[i * 8], &v, 8);
       } else {
         const float f = static_cast<float>(v);

@@ -499,8 +499,9 @@ r = gamut.open(xa); ok(r.rowCount() == 4, 'extract with ":" takes every row'); r
 xn = fullfile(tmp, 'extracted_none.gamut');
 gamut.extract(p, xn, []);
 r = gamut.open(xn); ok(r.rowCount() == 0, 'extract with [] takes no rows'); r.close();
-% An int64 model input takes whole numbers in its range, in any numeric
-% class, and refuses fractions, uint64 above its range and logicals.
+% An int64 model input takes whole numbers in its range, here as singles,
+% and refuses fractions, infinities, values past int64, logicals, complex
+% and sparse inputs: int64() would round or saturate them silently.
 ip = fullfile(tmp, 'int64_model.gamut');
 s = gamut.createModel(ip, 'writer', 'matlab tests', ...
     'parameters', struct('n', struct('units', '1', 'dtype', 'int64', 'lower', 0, 'upper', 10)), ...
@@ -510,11 +511,11 @@ s.close();
 out = gamut.evaluate(ip, struct('n', single([2; 8])));
 ok(isequal(out.getScalar('y'), [1; 2]), 'whole singles evaluate an int64 input');
 out.close();
-for bad = {2.5, uint64(2)^63, true}
+for bad = {2.5, Inf, 2^63, uint64(2)^63, true, 3 + 2i, sparse(3)}
     try
         o = gamut.evaluate(ip, struct('n', bad{1}));
         o.close();
-        ok(false, sprintf('int64 input of class %s refused', class(bad{1})));
+        ok(false, sprintf('int64 input %s (%s) refused', num2str(full(bad{1})), class(bad{1})));
     catch err
         ok(strcmp(err.identifier, 'gamut:E4'), ['int64 input: ' err.message]);
     end

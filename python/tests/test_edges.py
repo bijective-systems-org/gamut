@@ -925,6 +925,8 @@ def test_model_data_scales_are_checked_as_every_scale(tmp_path):
     (np.array(["1e3"], dtype=object), None),
     (np.array(["3"]), None),
     (np.array([], dtype=np.float64), []),
+    (np.array(["2020-01-01"], dtype="M8[ns]"), None),
+    (np.array([5], dtype="m8[ns]"), None),
 ])
 def test_int64_conversion_is_exact_in_every_dtype(given, ok):
     if ok is None:
@@ -945,3 +947,17 @@ def test_nodes_and_cells_together_are_refused(tmp_path):
     with gamut.open(p) as f:
         with pytest.raises(gamut.GamutError, match="nodes or cells, not both"):
             f.get_field("q", nodes=[0], cells=[0])
+
+
+def test_an_integer_past_2_53_is_refused_where_float64_would_round_it(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"x": {"units": "1", "dtype": "float64"}},
+                      scalars={"y": "1"}) as s:
+        s.add_runs({"x": np.array([2**53, -2**53], dtype=np.int64), "y": [1, 2]})
+        for name, value in (("x", 2**53 + 1), ("y", 2**63 - 1), ("y", -2**63 + 1)):
+            with pytest.raises(gamut.GamutError, match="not exact as a float64") as e:
+                s.add_run({"x": 0, "y": 0, name: value})
+            assert e.value.rule == "E4"
+    with gamut.open(p) as f:
+        assert f.get_parameter("x").tolist() == [2.0**53, -2.0**53]
+        assert f.row_count == 2

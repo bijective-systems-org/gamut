@@ -123,7 +123,10 @@ core in their own class, so int64 codes above 2⁵³ are not rounded through
 double. An int64 model input given fractional or out-of-range values is
 refused in Python and MATLAB, as in Julia, instead of being truncated; an
 unsigned array above int64's range is refused instead of wrapping. Julia's
-`open` closes the file when its `threads` value is refused.
+`open` closes the file when its `threads` value is refused. An integer
+written to a float64 parameter, scalar, field or coordinate that a float64
+cannot hold exactly (past 2⁵³) is refused (E4) in every language; it was
+rounded silently.
 
 A group member repeated with the same values in another shape (4 × 2 and
 2 × 4 points) is refused as a different geometry. Replacing an attribute
