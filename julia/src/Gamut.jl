@@ -518,7 +518,8 @@ Adds many runs at once: `columns` maps each name to one value per run;
 function add_runs!(s::Study, columns; fields=nothing, points=nothing, cells=nothing, mesh_labels=nothing)
     cols = Dict{String,Any}(pairs_of(columns))
     lengths = unique(length(v) for v in values(cols))
-    length(lengths) == 1 || throw(GamutError("E5", "every column needs the same number of runs"))
+    length(lengths) == 1 || throw(GamutError("E5", "every column needs the same number of runs; given " *
+        (isempty(cols) ? "no columns" : join(("$k $(length(v))" for (k, v) in sort!(collect(cols); by=first)), ", "))))
     return commit!(s, lengths[1], cols, Dict{String,Any}(pairs_of(fields)), points, cells, mesh_labels)
 end
 

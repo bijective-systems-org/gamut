@@ -211,6 +211,11 @@ mktempdir() do tmp
             e = try Gamut.create(p; writer="t", parameters=Dict("x" => (units="1", bound...))); nothing catch x; x end
             @test e isa GamutError && e.rule == "E16" && !isfile(p)
         end
+        Gamut.create(joinpath(tmp, "counts.gamut"); writer="t", parameters=Dict("x" => "1"),
+                      scalars=Dict("y" => "1")) do s
+            e = try Gamut.add_runs!(s, Dict("x" => [1.0, 2.0], "y" => [1.0])); nothing catch x; x end
+            @test e isa GamutError && e.rule == "E5" && occursin("given x 2, y 1", e.message)
+        end
         pts, cells = grid(2, 2)
         Gamut.create(joinpath(tmp, "cells.gamut"); writer="t", mesh="shared", per="fixed",
                       coordinates=(units="m", axes=2)) do s

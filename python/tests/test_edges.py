@@ -980,3 +980,33 @@ def test_a_parameter_is_float64_whatever_values_come_first(tmp_path):
         assert f.describe("seed")["dtype"] == "int64"
         assert f.get_parameter("alpha").tolist() == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 2.5]
         assert f.get_parameter("seed").dtype == np.int64
+
+
+def test_a_missing_file_and_a_miscounted_column_say_so(tmp_path):
+    with pytest.raises(gamut.GamutError, match="there is no file"):
+        gamut.open(str(tmp_path / "nope.gamut"))
+    with pytest.raises(gamut.GamutError, match="there is no file"):
+        gamut.open(str(tmp_path / "nope.gamut"), mode="a")
+    text = tmp_path / "notes.txt"
+    text.write_text("not HDF5")
+    with pytest.raises(gamut.GamutError, match="as an HDF5 file"):
+        gamut.open(str(text))
+    with gamut.create(str(tmp_path / "t.gamut"), writer="t", parameters={"x": "1"},
+                      scalars={"y": "1"}) as s:
+        with pytest.raises(gamut.GamutError, match="x: 2 values given for 1 run; give one per run"):
+            s.add_run({"x": [1.0, 2.0]})
+        with pytest.raises(gamut.GamutError, match="the same number of runs; given x 2, y 1"):
+            s.add_runs({"x": [1.0, 2.0], "y": [1.0]})
+        with pytest.raises(gamut.GamutError, match="y: 3 values given for 1 run"):
+            s.add_run({"x": 1.0, "y": [1.0, 2.0, 3.0]})
+
+
+def test_a_study_prints_what_it_is(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    s = gamut.create(p, writer="t", parameters={"x": "1"})
+    assert repr(s) == f"<gamut.Study {p!r}, open to add runs>"
+    s.add_runs({"x": [1.0, 2.0]})
+    s.close()
+    assert repr(s) == f"<gamut.Study {p!r}, closed>"
+    with gamut.open(p) as f:
+        assert repr(f) == f"<gamut.Study {p!r} (data, table, 2 rows)>"

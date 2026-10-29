@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <set>
 
 #include "chunk.hpp"
@@ -363,11 +364,23 @@ bool dtype_of(const AttrType& t, DType* out) {
 
 // --- File ------------------------------------------------------------
 
+namespace {
+
+// HDF5 says only that the open failed; a missing file is the usual reason.
+std::string cannot_open(const std::string& path, const std::string& as) {
+  std::error_code ec;
+  if (!std::filesystem::exists(std::filesystem::u8path(path), ec) && !ec)
+    return "there is no file \"" + path + "\"";
+  return "cannot open \"" + path + "\" " + as;
+}
+
+}  // namespace
+
 File File::open_read(const std::string& path) {
   File f;
   f.id_ = Id(H5Fopen(path.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT));
   if (!f.id_.valid()) {
-    throw Error("E1", "cannot open \"" + path + "\" as an HDF5 file");
+    throw Error("E1", cannot_open(path, "as an HDF5 file"));
   }
   return f;
 }
@@ -376,7 +389,7 @@ File File::open_write(const std::string& path) {
   File f;
   f.id_ = Id(H5Fopen(path.c_str(), H5F_ACC_RDWR, H5P_DEFAULT));
   if (!f.id_.valid()) {
-    throw Error("", "cannot open \"" + path + "\" for writing");
+    throw Error("", cannot_open(path, "for writing"));
   }
   return f;
 }

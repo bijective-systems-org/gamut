@@ -135,7 +135,9 @@ unsigned array above int64's range is refused instead of wrapping. Julia's
 `open` closes the file when its `threads` value is refused. An integer
 written to a float64 parameter, scalar, field or coordinate that a float64
 cannot hold exactly (past 2⁵³) is refused (E4) in every language; it was
-rounded silently.
+rounded silently. Opening a file that does not exist says so, rather than
+that it is not HDF5. A column with the wrong number of values names it and
+both counts. A Python `Study` prints its path, kind, type and row count.
 
 A group member repeated with the same values in another shape (4 × 2 and
 2 × 4 points) is refused as a different geometry. Replacing an attribute

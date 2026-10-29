@@ -36,6 +36,13 @@ void need(bool ok, const std::string& rule, const std::string& message,
   if (!ok) throw Error(rule, message, path);
 }
 
+// "2 values given for 1 run": a column that is not one entry per run.
+std::string per_run(std::int64_t given, std::int64_t runs, std::string what = "values") {
+  if (given == 1) what.pop_back();
+  return std::to_string(given) + " " + what + " given for " + std::to_string(runs) +
+         (runs == 1 ? " run" : " runs") + "; give one per run";
+}
+
 const std::set<std::string> kParameterRoles = {"design", "condition", "time"};
 const std::set<std::string> kLabelRoles = {"group", "categorical", "status",
                                            "split"};
@@ -1339,8 +1346,7 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
       }
       throw Error("E2", p.name + ": every run needs a value", p.name);
     }
-    need(it->second.count == n, "E5",
-         p.name + ": expected " + std::to_string(n) + " values", p.name);
+    need(it->second.count == n, "E5", p.name + ": " + per_run(it->second.count, n), p.name);
     root_bytes[p.name] = convert(it->second, p.dtype, p.name);
     if (p.dtype == DType::Float64) {
       for (std::size_t i = 0; i < N; ++i) {
@@ -1361,12 +1367,13 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
          l.name + ": give names or codes, not both", l.name);
     if (byname != batch.names.end()) {
       need(byname->second.size() == N, "E5",
-           l.name + ": expected " + std::to_string(n) + " names", l.name);
+           l.name + ": " + per_run(static_cast<std::int64_t>(byname->second.size()), n, "names"),
+           l.name);
       for (const auto& nm : byname->second) c.push_back(code_of(l.category, nm, &added[l.category]));
     } else {
       need(bycode != batch.values.end(), "E2", l.name + ": every run needs a value", l.name);
-      need(bycode->second.count == n, "E5",
-           l.name + ": expected " + std::to_string(n) + " codes", l.name);
+      need(bycode->second.count == n, "E5", l.name + ": " + per_run(bycode->second.count, n, "codes"),
+           l.name);
       c = as_i64(bycode->second, l.name);
       const std::int64_t size = static_cast<std::int64_t>(s.tables.at(l.category).size());
       for (const std::int64_t v : c) {
@@ -1383,8 +1390,7 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
       const std::vector<double> nan(N, std::nan(""));
       root_bytes[r.name] = convert(Column::of(DType::Float64, nan.data(), n), r.dtype, r.name);
     } else {
-      need(it->second.count == n, "E5",
-           r.name + ": expected " + std::to_string(n) + " values", r.name);
+      need(it->second.count == n, "E5", r.name + ": " + per_run(it->second.count, n), r.name);
       need(!(r.given_precision && r.dtype == DType::Float32 && it->second.dtype == DType::Float64),
            "E4", r.name + ": its first values were float32, so it is stored as float32; give "
                           "float32 values, or declare its precision to convert",

@@ -119,6 +119,16 @@ class Study:
     def __enter__(self) -> "Study":
         return self
 
+    def __repr__(self) -> str:
+        if self._h is None:
+            return f"<gamut.Study {self.path!r}, closed>"
+        if self._writing:
+            return f"<gamut.Study {self.path!r}, open to add runs>"
+        try:
+            return f"<gamut.Study {self.path!r} ({self.kind}, {self.type}, {self.row_count} rows)>"
+        except GamutError:                        # a damaged file still prints
+            return f"<gamut.Study {self.path!r}>"
+
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         if exc_type is None:
             # Nothing can be fixed once the block has ended: a file that
@@ -234,9 +244,11 @@ class Study:
         `cells`, `mesh_labels` one per run (or per new group member) when the
         geometry changes."""
         columns = dict(columns.items())
-        lengths = {len(v) if _lib.iterable(v) else 1 for v in columns.values()}
+        counts = {name: len(v) if _lib.iterable(v) else 1 for name, v in columns.items()}
+        lengths = set(counts.values())
         if len(lengths) != 1:
-            raise GamutError("E5", "every column needs the same number of runs")
+            given = ", ".join(f"{name} {n}" for name, n in counts.items()) or "no columns"
+            raise GamutError("E5", f"every column needs the same number of runs; given {given}")
         return self._commit(lengths.pop(), dict(columns), dict(fields or {}), points, cells,
                             mesh_labels)
 
