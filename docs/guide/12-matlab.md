@@ -8,7 +8,8 @@ no compiler ([installing](../install.md#matlab)).
 There are two examples, from a working folder with `examples/matlab` on
 the path: `sweep`, the [README](../../README.md#example)'s run table, and
 `one_mesh`, eight runs of flow past a cylinder on one mesh, with a ninth
-added and one node read in every run.
+added, then the run count, the lowest `cp` on the wall and `cp` at the
+top read back.
 
 ## A run table
 
@@ -48,8 +49,9 @@ positions counted from 1. `'rows'` left out, or `':'`, is every row, and
 study = gamut.create('cylinder.gamut', 'writer', 'example sweep', 'mesh', 'shared', 'per', 'fixed', ...
     'coordinates', struct('units', 'm', 'axes', 2), ...
     'parameters', struct('gamma', struct('units', 'm2 s-1', 'role', 'design')), ...
+    'meshLabels', struct('surface', struct('at', 'node', 'categories', {{'field', 'wall'}})), ...
     'fields', struct('cp', struct('units', '1', 'at', 'node')));
-study.setMesh(points, cells);
+study.setMesh(points, cells, struct('surface', surface));
 for gamma = linspace(0, 3.5, 8)
     study.addRun(struct('gamma', gamma), 'fields', struct('cp', solve(gamma)));
 end
@@ -62,19 +64,29 @@ study.close();
 
 Declarations are structs, one field per name. Cells are a cell array
 `{types, offsets, connectivity}`, in VTK's convention as in every
-language: the node numbers inside `connectivity` count from 0. `solve`
-stands for the solver and returns `cp` at every node. `gamut.open(path,
-'mode', 'a')` reopens a file to add runs.
+language: the node numbers inside `connectivity` count from 0. The
+`surface` label marks the wall's nodes with code 1, its place in
+`categories` minus one. `solve` stands for the solver and returns `cp`
+at every node. `gamut.open(path, 'mode', 'a')` reopens a file to add
+runs.
 
 ### Reading
 
 ```matlab
 study = gamut.open('cylinder.gamut');
-cp = study.getField('cp', 'nodes', 13);                         % runs x nodes, from 1
+fprintf('%s mesh, %d runs, %d nodes\n', study.type(), study.rowCount(), size(study.getPoints(), 1));
+wall = find(strcmp(study.categories('surface'), 'wall')) - 1;  % the code that means 'wall'
+onWall = find(study.getMeshLabel('surface') == wall);
+lowest = min(study.getField('cp', 'nodes', onWall), [], 2);    % runs x wall nodes; each run's lowest
+fprintf('lowest cp on the wall, by run:%s\n', sprintf(' %.2f', lowest));
+top = study.getField('cp', 'nodes', 13);                       % node 13, the top, in every run
 study.close();
+fprintf('cp at the top of the cylinder, run by run:%s\n', sprintf(' %.2f', top));
 ```
 
 ```text
+shared mesh, 9 runs, 576 nodes
+lowest cp on the wall, by run: -3.00 -3.32 -3.66 -4.01 -4.37 -4.75 -5.14 -5.54 -5.95
 cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
 ```
 

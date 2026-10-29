@@ -8,8 +8,9 @@ and positions counted from 1. The package needs the core library
 
 There are two examples: `sweep.jl`, the [README](../../README.md#example)'s
 run table, and `one_mesh.jl`, eight runs of flow past a cylinder on one
-mesh, with a ninth added and one node read in every run. From a working
-folder: `julia --project=<checkout>/julia <checkout>/examples/julia/sweep.jl`.
+mesh, with a ninth added, then the run count, the lowest `cp` on the wall
+and `cp` at the top read back. Run either from a working folder:
+`julia --project=<checkout>/julia <checkout>/examples/julia/one_mesh.jl`.
 
 ## A run table
 
@@ -48,8 +49,9 @@ positions counted from 1.
 Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed",
               coordinates=(units="m", axes=2),
               parameters=Dict("gamma" => (units="m2 s-1", role="design")),
+              mesh_labels=Dict("surface" => (at="node", categories=["field", "wall"])),
               fields=Dict("cp" => (units="1", at="node"))) do study
-    Gamut.set_mesh!(study; points, cells)
+    Gamut.set_mesh!(study; points, cells, labels=Dict("surface" => surface))
     for gamma in range(0, 3.5; length=8)
         Gamut.add_run!(study, Dict("gamma" => gamma); fields=Dict("cp" => solve(gamma)))
     end
@@ -62,7 +64,8 @@ end
 
 `points` is nodes × axes; `cells` is a tuple `(types, offsets,
 connectivity)`, in VTK's convention as in every language: the node numbers
-inside `connectivity` count from 0. The `do` block finishes the file when
+inside `connectivity` count from 0, and `surface` is a code per node, 1 on
+the wall. The `do` block finishes the file when
 it ends, and removes it if the block throws and the file cannot be
 finished. `solve` stands for the solver and returns `cp` at every node,
 and `Gamut.open(path; mode="a")` reopens a file to add runs.
@@ -70,18 +73,27 @@ and `Gamut.open(path; mode="a")` reopens a file to add runs.
 ### Reading
 
 ```julia
-cp = Gamut.open("cylinder.gamut") do study
-    Gamut.get_field(study, "cp"; nodes=[13])                 # runs × nodes, from 1
+Gamut.open("cylinder.gamut") do study
+    println(study.type, " mesh, ", study.row_count, " runs, ", size(Gamut.get_points(study), 1), " nodes")
+    wall = findfirst(==("wall"), Gamut.categories(study, "surface")) - 1   # the code that means "wall"
+    on_wall = findall(==(wall), vec(Gamut.get_mesh_label(study, "surface")))
+    lowest = minimum(Gamut.get_field(study, "cp"; nodes=on_wall); dims=2)  # runs × wall nodes; each run's lowest
+    println("lowest cp on the wall, by run: ", join((@sprintf("%.2f", v) for v in lowest), " "))
+    top = Gamut.get_field(study, "cp"; nodes=[13])                         # node 13, the top, in every run
+    println("cp at the top of the cylinder, run by run: ", join((@sprintf("%.2f", v) for v in top), " "))
 end
 ```
 
 ```text
+shared mesh, 9 runs, 576 nodes
+lowest cp on the wall, by run: -3.00 -3.32 -3.66 -4.01 -4.37 -4.75 -5.14 -5.54 -5.95
 cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
 ```
 
 Node 13 here is node 12 in Python: positions count from 1 in Julia and
 from 0 in Python. Arrays come back with the axes in their logical order,
-`cp[run, node]`.
+`cp[run, node]`. A mesh label's stored codes count from 0 in every
+language, so the wall's code is its place in `categories` minus one.
 
 ## Inputs outside a model's range
 

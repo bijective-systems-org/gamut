@@ -16,7 +16,10 @@ import pytest
 import gamut
 from _pages import EXAMPLES, GUIDE, ROOT, blocks, contiguous
 
-PAGES = {"07-models.md": [("matlab", [EXAMPLES / "matlab" / "Polynomial.m",
+PAGES = {"02-one-mesh.md": [("matlab", [EXAMPLES / "matlab" / "one_mesh.m"]),
+                            ("julia", [EXAMPLES / "julia" / "one_mesh.jl"]),
+                            ("cpp", [EXAMPLES / "cpp" / "one_mesh.cpp"])],
+         "07-models.md": [("matlab", [EXAMPLES / "matlab" / "Polynomial.m",
                                       EXAMPLES / "matlab" / "evaluate_model.m"]),
                           ("julia", [EXAMPLES / "julia" / "nearest.jl"])],
          "12-matlab.md": [("matlab", [EXAMPLES / "matlab" / "sweep.m", EXAMPLES / "matlab" / "one_mesh.m",

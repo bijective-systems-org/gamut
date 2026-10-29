@@ -26,9 +26,11 @@ pytestmark = pytest.mark.skipif(not (README.is_file() and EXAMPLES.is_dir()),
                                 reason="the README and examples are not beside this test (an installed package)")
 
 
+@pytest.mark.parametrize("page", [README, ROOT / "docs" / "README.md"], ids=["README", "docs"])
 @pytest.mark.parametrize("language", sorted(SOURCES))
-def test_readme_quotes_the_examples(language):
-    text = README.read_text(encoding="utf-8")
+def test_readme_quotes_the_examples(language, page):
+    # The documentation's front page shows the same program in tabs.
+    text = page.read_text(encoding="utf-8")
     shown = blocks(text, language)
     assert shown, f"the README shows {language} code"
     sources = [p.read_text(encoding="utf-8") for p in SOURCES[language]]
