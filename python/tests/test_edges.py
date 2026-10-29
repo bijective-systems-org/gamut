@@ -755,3 +755,91 @@ def test_category_tables_share_one_budget_at_open(tmp_path):
     with pytest.raises(gamut.GamutError) as e:
         gamut.open(p)
     assert e.value.rule == "E23"
+
+
+def _widen_to_int64(f, path):
+    """Rewrites an int32 dataset as int64, as another writer may store codes."""
+    old = f[path]
+    data = old[...].astype("<i8")
+    attrs = {k: v for k, v in old.attrs.items() if k != "DIMENSION_LIST"}
+    scales = [d[0] for d in old.dims]
+    chunks = (max(1, old.chunks[0] // 2),) + old.chunks[1:]       # the same bytes a chunk
+    kw = dict(chunks=chunks, maxshape=old.maxshape, compression=old.compression,
+              compression_opts=old.compression_opts, shuffle=old.shuffle)
+    for i, sc in enumerate(scales):
+        old.dims[i].detach_scale(sc)
+    del f[path]
+    new = f.create_dataset(path, data=data, **kw)
+    for k, v in attrs.items():
+        new.attrs[k] = v
+    for i, sc in enumerate(scales):
+        new.dims[i].attach_scale(sc)
+
+
+def _changing(path, labels=False):
+    pts, cells = grid(2, 2)
+    with gamut.create(path, writer="t", mesh="changing", per="group:member",
+                      coordinates={"units": "m", "axes": 2}, labels={"member": "group"},
+                      parameters={"r": "m"},
+                      mesh_labels={"zone": {"at": "cell"}} if labels else None) as s:
+        s.add_run({"member": "a", "r": 1.0}, points=pts, cells=cells,
+                  mesh_labels={"zone": np.array([1])} if labels else None)
+    return pts, cells
+
+
+def test_a_row_naming_an_instance_past_int64_is_reported(tmp_path):
+    p = str(tmp_path / "c.gamut")
+    _changing(p)
+    with h5py.File(p, "r+") as f:
+        f["mesh/row_instance"][0] = 2**63 - 1
+    messages = [x.message for x in gamut.validate(p).findings if x.rule == "E21"]
+    assert any(f"names instance {2**63 - 1}, which does not exist" in m for m in messages), messages
+
+
+def test_cell_offsets_out_of_order_are_reported_before_their_differences(tmp_path):
+    p = str(tmp_path / "s.gamut")
+    pts, _ = grid(3, 2)
+    cells = (np.array([9, 9], np.uint8), np.array([0, 4, 8]), np.array([0, 1, 4, 3, 1, 2, 5, 4]))
+    with gamut.create(p, writer="t", mesh="shared", per="fixed", coordinates={"units": "m", "axes": 2},
+                      parameters={"x": "1"}) as s:
+        s.set_mesh(pts, cells)
+        s.add_run({"x": 1.0})
+    with h5py.File(p, "r+") as f:
+        f["mesh/cell_offsets"][...] = np.array([0, 2**63 - 1, 8], dtype="<i8")
+    messages = [x.message for x in gamut.validate(p).findings if x.rule == "E10"]
+    assert any("offsets decrease or run past" in m for m in messages), messages
+
+
+def test_negative_changing_mesh_offsets_are_refused_on_reading(tmp_path):
+    p = str(tmp_path / "c.gamut")
+    _changing(p)
+    with h5py.File(p, "r+") as f:
+        f["mesh/cell_offsets"][0] = -2**63
+    with gamut.open(p) as f:
+        with pytest.raises(gamut.GamutError, match="cell_offsets is negative") as e:
+            f._get("cells/offsets", [0], dtype=np.int64)
+    assert e.value.rule == "E21"
+
+
+def test_int64_literals_beyond_the_range_compare_exactly(tmp_path):
+    with gamut.create(str(tmp_path / "n.gamut"), writer="t",
+                      parameters={"n": {"units": "1", "dtype": "int64"}}) as s:
+        s.add_runs({"n": np.array([2**63 - 1, -2**63], dtype=np.int64)})
+    with gamut.open(str(tmp_path / "n.gamut")) as f:
+        assert list(f.select(f"n == {2**63}")) == [] and list(f.select(f"n < {2**63}")) == [0, 1]
+        assert list(f.select(f"n == {-2**63 - 1}")) == [] and list(f.select(f"n > {-2**63 - 1}")) == [0, 1]
+        assert list(f.select(f"n == {2**63 - 1}")) == [0]
+
+
+def test_appending_geometry_to_int64_mesh_labels_takes_wide_codes(tmp_path):
+    p = str(tmp_path / "c.gamut")
+    pts, cells = _changing(p, labels=True)
+    with h5py.File(p, "r+") as f:
+        _widen_to_int64(f, "mesh/cell_labels/zone")
+    assert not gamut.validate(p).findings
+    with gamut.open(p, mode="a") as s:
+        s.add_run({"member": "b", "r": 2.0}, points=pts, cells=cells,
+                  mesh_labels={"zone": np.array([2**40])})
+    assert not gamut.validate(p).findings
+    with gamut.open(p) as f:
+        assert f.get_mesh_label("zone", row=1).tolist() == [2**40]

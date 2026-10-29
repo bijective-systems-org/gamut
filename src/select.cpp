@@ -82,8 +82,9 @@ bool is_op(const std::string& w) {
   return w == "==" || w == "!=" || w == "<" || w == "<=" || w == ">" || w == ">=";
 }
 
-// An optional sign and decimal digits that fit an int64.
-bool integer(const std::string& w, std::int64_t* out) {
+// An optional sign and decimal digits. *beyond is 1 above int64's range, -1
+// below it, and 0 when *out holds the value.
+bool integer(const std::string& w, std::int64_t* out, int* beyond) {
   const std::size_t start = !w.empty() && (w[0] == '-' || w[0] == '+') ? 1 : 0;
   if (start == w.size()) return false;
   for (std::size_t k = start; k < w.size(); ++k) {
@@ -92,7 +93,8 @@ bool integer(const std::string& w, std::int64_t* out) {
   errno = 0;
   char* end = nullptr;
   const long long v = std::strtoll(w.c_str(), &end, 10);
-  if (errno == ERANGE || end == nullptr || *end != '\0') return false;
+  if (end == nullptr || *end != '\0') return false;
+  *beyond = errno == ERANGE ? (w[0] == '-' ? -1 : 1) : 0;
   *out = static_cast<std::int64_t>(v);
   return true;
 }
@@ -249,7 +251,8 @@ class Parser {
     const DType dtype = s.parameter(name.text) ? s.parameter(name.text)->dtype
                                                : s.result(name.text)->dtype;
     std::int64_t iv = 0;
-    if (dtype == DType::Int64 && integer(value.text, &iv)) {
+    int beyond = 0;
+    if (dtype == DType::Int64 && integer(value.text, &iv, &beyond)) {
       for (std::int64_t a = 0; a < rows_; a += block) {
         const std::int64_t b = std::min(rows_, a + block);
         std::vector<std::int64_t> col(static_cast<std::size_t>(b - a));
@@ -257,9 +260,11 @@ class Parser {
                 col.size() * 8);
         for (std::int64_t i = a; i < b; ++i) {
           const std::int64_t x = col[static_cast<std::size_t>(i - a)];
-          out[static_cast<std::size_t>(i)] = op == "==" ? x == iv : op == "!=" ? x != iv
-                                             : op == "<"  ? x < iv  : op == "<=" ? x <= iv
-                                             : op == ">"  ? x > iv  : x >= iv;
+          // How x compares with the literal; one outside int64 is beyond every x.
+          const int c = beyond != 0 ? -beyond : x < iv ? -1 : x > iv ? 1 : 0;
+          out[static_cast<std::size_t>(i)] = op == "==" ? c == 0 : op == "!=" ? c != 0
+                                             : op == "<"  ? c < 0  : op == "<=" ? c <= 0
+                                             : op == ">"  ? c > 0  : c >= 0;
         }
       }
       return out;

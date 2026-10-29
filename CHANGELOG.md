@@ -44,11 +44,14 @@ overflowed the stack and crashed. Appending to a file whose label codes
 are int64, as §10.1 allows another writer to store them, works; it failed
 with an internal error and left the file's columns of different lengths.
 
-A changing mesh's start of a run, read from the file, is checked before
-any arithmetic on it, so a damaged file is refused (E21) instead of
-overflowing. `select` compares an int64 parameter or scalar exactly with
-an integer literal; as doubles, values above 2⁵³ that differ compared
-equal. BitRound no longer rounds a value near the largest finite float up
+Values read from the file that locate others (a changing mesh's run
+starts and instance numbers, cell offsets) are range-checked before any
+arithmetic on them, so a damaged file is refused or reported (E21, E10)
+instead of overflowing into wrong answers. `select` compares an int64
+parameter or scalar exactly with an integer literal, one outside int64's
+range included; as doubles, values above 2⁵³ that differ compared equal.
+Appending a changing mesh's geometry to int64 mesh labels takes codes
+beyond int32. BitRound no longer rounds a value near the largest finite float up
 to infinity. Names are checked against ASCII letters and digits whatever
 locale the host program has set. The header names `gamut_units_parse`,
 which returns 1 when its units parse, as the one function that does not

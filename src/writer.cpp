@@ -1470,7 +1470,7 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
         need(static_cast<std::int64_t>(it->second.size()) == len, "E5",
              who + ": mesh label " + ml.name + " expects " + std::to_string(len) + " values", p);
         for (const std::int64_t v : it->second) {
-          need(v >= INT32_MIN && v <= INT32_MAX, "E4",
+          need(ml.dtype == DType::Int64 || (v >= INT32_MIN && v <= INT32_MAX), "E4",
                who + ": a mesh-label code does not fit in int32", p);
           if (!ml.category.empty()) {
             need(v >= 0 && v < static_cast<std::int64_t>(s.tables.at(ml.category).size()), "E9",

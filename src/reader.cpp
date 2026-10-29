@@ -616,6 +616,7 @@ void Reader::read(const std::string& path, const Selection& runs,
     std::vector<std::int64_t> offs(checked_count(path, 8, {c1 - c0 + 1}));
     f.read("/mesh/cell_offsets", DType::Int64, {Selection::range(c0, c1 + 1)},
            offs.data(), offs.size() * 8);
+    need(offs.front() >= 0, "E21", path + ": /mesh/cell_offsets is negative", path);
     for (std::size_t i = 1; i < offs.size(); ++i) {
       need(offs[i] >= offs[i - 1], "E21", path + ": /mesh/cell_offsets decreases", path);
     }

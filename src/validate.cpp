@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -478,8 +479,16 @@ bool Validator::check_cells(const Object& t, const Object& o, const Object& c,
       }
       if (j == b) break;
       const int want = nodes_of_type(static_cast<int>(tv[static_cast<std::size_t>(j - a)]));
-      const std::int64_t have = ov[static_cast<std::size_t>(j - a + 1)] - ov[static_cast<std::size_t>(j - a)];
-      if (have < 0 || (want > 0 && have != want) || (want < 0 && have < 3)) {
+      const std::int64_t lo = ov[static_cast<std::size_t>(j - a)];
+      const std::int64_t hi = ov[static_cast<std::size_t>(j - a + 1)];
+      // Bounded before the difference, which arbitrary values would overflow.
+      if (lo < 0 || hi < lo || hi > nc) {
+        add("E10", "cells", "cell " + std::to_string(j) + "'s offsets decrease or run past the "
+                                "connectivity's length, " + std::to_string(nc));
+        return false;
+      }
+      const std::int64_t have = hi - lo;
+      if ((want > 0 && have != want) || (want < 0 && have < 3)) {
         add("E10", "cells", "cell " + std::to_string(j) + " has " + std::to_string(have) +
                                 " nodes, which its type does not allow");
         return false;
@@ -1102,7 +1111,7 @@ void Validator::mesh() {
         std::int64_t at = 0;
         for (std::size_t r = 0; r < starts.size() && r < inst.size(); ++r) {
           const std::int64_t k = inst[r];
-          if (k < 0 || k + 1 >= static_cast<std::int64_t>(cum.size())) {
+          if (k < 0 || k >= static_cast<std::int64_t>(cum.size()) - 1) {
             add("E21", "mesh", "row " + std::to_string(r) + " names instance " + std::to_string(k) +
                                ", which does not exist");
             return;
@@ -1112,7 +1121,12 @@ void Validator::mesh() {
                                "sizes at row " + std::to_string(r));
             break;
           }
-          at += cum[static_cast<std::size_t>(k + 1)] - cum[static_cast<std::size_t>(k)];
+          const std::int64_t size = cum[static_cast<std::size_t>(k + 1)] - cum[static_cast<std::size_t>(k)];
+          if (size > std::numeric_limits<std::int64_t>::max() - at) {
+            add("E21", "mesh", std::string("the rows' ") + which + " counts add up past int64");
+            break;
+          }
+          at += size;
         }
         const std::string vdim = std::string("/mesh/") + which + "_value";
         const std::int64_t values = scale_len(vdim);
