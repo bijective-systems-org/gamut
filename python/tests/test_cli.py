@@ -90,3 +90,36 @@ def test_vtk_command_without_its_extra_says_what_to_install():
     assert result.returncode == 2, result.stderr
     assert 'pip install "gamut-format[vtk]"' in result.stderr
     assert "Traceback" not in result.stderr
+
+
+def _zoned(path):
+    import gamut
+    xs, ys = np.meshgrid(np.arange(3.0), np.arange(2.0))
+    pts = np.stack([xs.ravel(), ys.ravel()], axis=1)
+    cells = (np.array([9, 9], np.uint8), np.array([0, 4, 8]), np.array([0, 1, 4, 3, 1, 2, 5, 4]))
+    with gamut.create(path, writer="t", mesh="shared", per="fixed", coordinates={"units": "m", "axes": 2},
+                      parameters={"x": "1"}, fields={"q": {"units": "1", "at": "cell"}},
+                      mesh_labels={"zone": {"at": "cell", "categories": ["a", "b"]}}) as s:
+        s.set_mesh(pts, cells, labels={"zone": np.array([0, 1])})
+        s.add_runs({"x": [1.0, 2.0, 3.0]}, fields={"q": np.ones((3, 2))})
+
+
+def test_malformed_input_is_reported_with_the_guides_exit_status(tmp_path, capsys):
+    m = str(tmp_path / "m.gamut")
+    _zoned(m)
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json")
+    code, _, err = run(capsys, "build", str(bad), "-o", str(tmp_path / "x.gamut"))
+    assert code == 1 and err.startswith("error: ") and "is not JSON at line 1" in err
+    for argv, says in ((["--zone", "zone=c"], "'c' is not a name in zone's table (a, b)"),
+                       (["--zone", "zone"], "--zone takes LABEL=NAME"),
+                       (["--rows", "7"], "--rows: "),
+                       (["--rows", "-1"], "--rows: ")):
+        for out in ("z.csv", "z.gamut"):
+            if out == "z.gamut" and argv[0] == "--zone":
+                continue
+            names = [] if out == "z.gamut" else ["q"]
+            code, _, err = run(capsys, "get", m, *names, *argv, "-o", str(tmp_path / out))
+            assert code == 2 and err.startswith("error: ") and says in err, (argv, out, err)
+    code, _, _ = run(capsys, "get", m, "q", "--zone", "zone=b", "-o", str(tmp_path / "b.csv"))
+    assert code == 0

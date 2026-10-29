@@ -126,11 +126,15 @@ Schema load_schema(const File& f, const std::string& path) {
                                std::string("/mesh"), std::string("/models")}) {
     for (const Member& m : f.members(g)) hard(m, g);
   }
+  // Tables are read at open, so their size is capped as structure: one budget
+  // for all of them, as for one table, so many tables cannot add up (E23).
+  std::size_t entries_left = kMaxTableEntries, bytes_left = kMaxTableBytes;
   for (const Member& m : f.members("/categories")) {
     if (!m.is_dataset) continue;
-    // Tables are read at open, so their size is capped as structure.
     const std::string p = "/categories/" + m.name;
-    s.tables[m.name] = f.read_strings(p, kMaxTableEntries, kMaxTableBytes);
+    s.tables[m.name] = f.read_strings(p, entries_left, bytes_left);
+    entries_left -= s.tables[m.name].size();
+    bytes_left -= s.tables[m.name].size() * f.dataset_info(p, false).type.size;
     for (const std::string& entry : s.tables[m.name]) {
       need(entry.find('\0') == std::string::npos && valid_utf8(entry), "E4",
            p + ": a category name is not valid UTF-8 or holds a NUL", p);

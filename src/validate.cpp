@@ -584,6 +584,12 @@ void Validator::walk_links() {
           }
         });
       }
+      if (m.is_group && m.links > 1) {
+        // Walked once per path, a chain of such groups takes exponential time.
+        add("E22", child, "is a group reachable by more than one hard link; a file's groups "
+                          "form a tree");
+        continue;
+      }
       if (m.is_group) {
         todo.push_back({child, here.depth + 1,
                         here.open && child != "/private" && child != "/VTKHDF"});

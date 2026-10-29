@@ -110,6 +110,7 @@ herr_t collect_member(hid_t group, const char* name, const H5L_info2_t* linfo,
                              H5P_DEFAULT) >= 0) {
       m.is_group = oinfo.type == H5O_TYPE_GROUP;
       m.is_dataset = oinfo.type == H5O_TYPE_DATASET;
+      m.links = oinfo.rc;
     }
   }
   out->push_back(m);
@@ -1321,7 +1322,8 @@ void File::build_object_index() const {
       const std::string child =
           (here.first == "/" ? std::string("/") : here.first + "/") + m.name;
       if (m.is_group) {
-        todo.emplace_back(child, here.second + 1);
+        // A group linked twice would be walked once per path, exponentially (E22).
+        if (m.links == 1) todo.emplace_back(child, here.second + 1);
         continue;
       }
       if (!m.is_dataset) continue;

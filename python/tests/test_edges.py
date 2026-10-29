@@ -705,3 +705,53 @@ def test_a_repeat_with_out_of_range_mesh_labels_is_not_taken_for_the_same(tmp_pa
             s.add_runs({"member": ["a", "a"], "mach": [1.0, 2.0]}, points=[pts, pts],
                        cells=[cells, cells],
                        mesh_labels=[{"zone": np.array([2**32, 0, 0, 0])}, {"zone": np.zeros(4, int)}])
+
+
+def _doubled_chain(group, levels):
+    """Each group links to the next twice: walked once per path, 2**levels."""
+    chain = [group.create_group("g0")]
+    for _ in range(1, levels):
+        chain.append(chain[-1].create_group("a"))
+        chain[-2]["b"] = chain[-1]
+
+
+def test_a_group_linked_twice_is_refused_without_walking_every_path(tmp_path):
+    import time
+    p = str(tmp_path / "fan.gamut")
+    with gamut.create(p, writer="w", parameters={"x": "1"}) as s:
+        s.add_run({"x": 1.0})
+    with h5py.File(p, "r+") as f:
+        _doubled_chain(f.require_group("private"), 30)
+    t = time.time()
+    report = gamut.validate(p)
+    assert time.time() - t < 5
+    assert {x.rule for x in report.findings} == {"E22"}      # each link to the doubled group
+    assert all("more than one hard link" in x.message for x in report.findings)
+
+
+def test_model_data_with_a_group_linked_twice_is_refused(tmp_path):
+    p = str(tmp_path / "m.gamut")
+    with gamut.create_model(p, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
+                            scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as mf:
+        mf.add_model("fit", gamut.Nearest(["x"], [0.0], [1.0], [[0.1], [0.9]], {"y": [1.0, 2.0]}),
+                     ["x"])
+    with h5py.File(p, "r+") as f:
+        _doubled_chain(f["models/fit"], 30)
+    with gamut.open(p) as f:
+        with pytest.raises(gamut.GamutError) as e:
+            f.model_numbers("fit")
+    assert e.value.rule == "E22"
+
+
+def test_category_tables_share_one_budget_at_open(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="w", parameters={"x": "1"}) as s:
+        s.add_run({"x": 1.0})
+    with h5py.File(p, "r+") as f:
+        for i in range(3):     # each at the per-table cap of 2**24 entries; nothing is stored
+            f.create_dataset(f"categories/t{i}", shape=(1 << 24,), maxshape=(None,),
+                             dtype=h5py.string_dtype("utf-8", 16), chunks=(1 << 14,),
+                             compression="gzip")
+    with pytest.raises(gamut.GamutError) as e:
+        gamut.open(p)
+    assert e.value.rule == "E23"

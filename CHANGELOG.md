@@ -54,6 +54,22 @@ locale the host program has set. The header names `gamut_units_parse`,
 which returns 1 when its units parse, as the one function that does not
 return 0 on success.
 
+A group reachable by more than one hard link is an error (E22): a
+file's groups form a tree, as netCDF-4's do. Validation reports it without
+walking into it, model data refuses it, and the reader's index skips it; a
+chain of such groups made validation, append, extract, `write_copy` and
+model reads take time that doubled with every level. The category tables
+read when a file opens share one budget, the cap one table had, and a
+model's arrays share one budget, the cap one array had (E23); many tables or
+arrays each under its own cap could make open allocate gigabytes.
+
+The command line reports malformed input as `error: …` with the exit
+status the guide gives instead of a Python traceback: a build or append
+document that is not JSON exits 1, and `--zone` without `=`, a zone name
+not in the label's table, or a `--rows` position outside the file exits 2.
+`--rows` positions are checked by the core for every output type; for a
+`.gamut` output, `-1` meant the last row.
+
 ## 1.3.0 (2026-10-25)
 
 A file may carry a portion marking: a new optional root attribute,

@@ -200,6 +200,7 @@ struct Member {
   LinkKind kind = LinkKind::Missing;
   bool is_group = false;
   bool is_dataset = false;
+  unsigned links = 0;   // hard links to the object; a group with more is not a tree
 };
 
 class File {
