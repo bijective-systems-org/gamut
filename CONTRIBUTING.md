@@ -82,3 +82,12 @@ Code reads like the code around it: plain names, few comments, each
 saying why. Messages say what is wrong and what to do, with the rule
 (`E7`) when one applies. Documentation is short and tested where it can
 be.
+
+## The documentation site
+
+`docs/` reads on GitHub as it is. `mkdocs build` (with
+`pip install "mkdocs-material==9.6.*"`) turns it into a site whose
+examples in several languages are tabs: a `/// tab | Python` ... `///`
+block per language around a fenced block, which on GitHub reads as a line
+of text above the code. Choosing a language in one set of tabs switches
+every set. Each block is still quoted from `examples/` and tested.

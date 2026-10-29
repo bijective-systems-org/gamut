@@ -1,0 +1,12 @@
+/* Bijective blue, as in the marks; tabs and links take it, and code stays neutral. */
+:root, [data-md-color-scheme="default"] {
+  --md-primary-fg-color: #0070dc;
+  --md-primary-fg-color--light: #74bff8;
+  --md-primary-fg-color--dark: #0059b0;
+  --md-accent-fg-color: #0070dc;
+}
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0a2a4a;
+  --md-accent-fg-color: #74bff8;
+  --md-typeset-a-color: #74bff8;
+}
