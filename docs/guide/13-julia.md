@@ -8,7 +8,8 @@ and positions counted from 1. The package needs the core library
 
 There are two examples: `sweep.jl`, the [README](../../README.md#example)'s
 run table, and `one_mesh.jl`, eight runs of flow past a cylinder on one
-mesh, with a ninth added and one node read in every run. From a working
+mesh, with a ninth added, then the run count, the lowest `cp` on the wall
+and `cp` at the top read back. From a working
 folder: `julia --project=<checkout>/julia <checkout>/examples/julia/sweep.jl`.
 
 ## A run table
@@ -63,7 +64,8 @@ end
 
 `points` is nodes × axes; `cells` is a tuple `(types, offsets,
 connectivity)`, in VTK's convention as in every language: the node numbers
-inside `connectivity` count from 0. The `do` block finishes the file when
+inside `connectivity` count from 0, and `surface` is a code per node, 1 on
+the wall. The `do` block finishes the file when
 it ends, and removes it if the block throws and the file cannot be
 finished. `solve` stands for the solver and returns `cp` at every node,
 and `Gamut.open(path; mode="a")` reopens a file to add runs.
@@ -75,7 +77,7 @@ Gamut.open("cylinder.gamut") do study
     println(study.type, " mesh, ", study.row_count, " runs, ", size(Gamut.get_points(study), 1), " nodes")
     wall = findfirst(==("wall"), Gamut.categories(study, "surface")) - 1   # the code that means "wall"
     on_wall = findall(==(wall), vec(Gamut.get_mesh_label(study, "surface")))
-    lowest = minimum(Gamut.get_field(study, "cp"; nodes=on_wall); dims=2)  # runs × wall nodes, per run
+    lowest = minimum(Gamut.get_field(study, "cp"; nodes=on_wall); dims=2)  # runs × wall nodes; each run's lowest
     println("lowest cp on the wall, by run: ", join((@sprintf("%.2f", v) for v in lowest), " "))
     top = Gamut.get_field(study, "cp"; nodes=[13])                         # node 13, the top, in every run
     println("cp at the top of the cylinder, run by run: ", join((@sprintf("%.2f", v) for v in top), " "))

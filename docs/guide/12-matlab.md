@@ -8,7 +8,8 @@ no compiler ([installing](../install.md#matlab)).
 There are two examples, from a working folder with `examples/matlab` on
 the path: `sweep`, the [README](../../README.md#example)'s run table, and
 `one_mesh`, eight runs of flow past a cylinder on one mesh, with a ninth
-added and one node read in every run.
+added, then the run count, the lowest `cp` on the wall and `cp` at the
+top read back.
 
 ## A run table
 
@@ -64,9 +65,9 @@ Declarations are structs, one field per name. Cells are a cell array
 `{types, offsets, connectivity}`, in VTK's convention as in every
 language: the node numbers inside `connectivity` count from 0. The
 `surface` label marks the wall's nodes with code 1, its place in
-`categories` minus one. `solve`
-stands for the solver and returns `cp` at every node. `gamut.open(path,
-'mode', 'a')` reopens a file to add runs.
+`categories` minus one. `solve` stands for the solver and returns `cp`
+at every node. `gamut.open(path, 'mode', 'a')` reopens a file to add
+runs.
 
 ### Reading
 
@@ -75,9 +76,9 @@ study = gamut.open('cylinder.gamut');
 fprintf('%s mesh, %d runs, %d nodes\n', study.type(), study.rowCount(), size(study.getPoints(), 1));
 wall = find(strcmp(study.categories('surface'), 'wall')) - 1;  % the code that means 'wall'
 onWall = find(study.getMeshLabel('surface') == wall);
-lowest = min(study.getField('cp', 'nodes', onWall), [], 2);    % runs x wall nodes, per run
+lowest = min(study.getField('cp', 'nodes', onWall), [], 2);    % runs x wall nodes; each run's lowest
 fprintf('lowest cp on the wall, by run:%s\n', sprintf(' %.2f', lowest));
-top = study.getField('cp', 'nodes', 13);                      % node 13, the top, in every run
+top = study.getField('cp', 'nodes', 13);                       % node 13, the top, in every run
 study.close();
 fprintf('cp at the top of the cylinder, run by run:%s\n', sprintf(' %.2f', top));
 ```

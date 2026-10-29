@@ -38,8 +38,8 @@ study = gamut.open('cylinder.gamut');
 fprintf('%s mesh, %d runs, %d nodes\n', study.type(), study.rowCount(), size(study.getPoints(), 1));
 wall = find(strcmp(study.categories('surface'), 'wall')) - 1;  % the code that means 'wall'
 onWall = find(study.getMeshLabel('surface') == wall);
-lowest = min(study.getField('cp', 'nodes', onWall), [], 2);    % runs x wall nodes, per run
+lowest = min(study.getField('cp', 'nodes', onWall), [], 2);    % runs x wall nodes; each run's lowest
 fprintf('lowest cp on the wall, by run:%s\n', sprintf(' %.2f', lowest));
-top = study.getField('cp', 'nodes', 13);                      % node 13, the top, in every run
+top = study.getField('cp', 'nodes', 13);                       % node 13, the top, in every run
 study.close();
 fprintf('cp at the top of the cylinder, run by run:%s\n', sprintf(' %.2f', top));

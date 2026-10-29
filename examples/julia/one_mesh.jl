@@ -43,7 +43,7 @@ Gamut.open("cylinder.gamut") do study
     println(study.type, " mesh, ", study.row_count, " runs, ", size(Gamut.get_points(study), 1), " nodes")
     wall = findfirst(==("wall"), Gamut.categories(study, "surface")) - 1   # the code that means "wall"
     on_wall = findall(==(wall), vec(Gamut.get_mesh_label(study, "surface")))
-    lowest = minimum(Gamut.get_field(study, "cp"; nodes=on_wall); dims=2)  # runs × wall nodes, per run
+    lowest = minimum(Gamut.get_field(study, "cp"; nodes=on_wall); dims=2)  # runs × wall nodes; each run's lowest
     println("lowest cp on the wall, by run: ", join((@sprintf("%.2f", v) for v in lowest), " "))
     top = Gamut.get_field(study, "cp"; nodes=[13])                         # node 13, the top, in every run
     println("cp at the top of the cylinder, run by run: ", join((@sprintf("%.2f", v) for v in top), " "))

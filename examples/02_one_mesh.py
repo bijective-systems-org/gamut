@@ -47,9 +47,9 @@ with gamut.open("cylinder.gamut", mode="a") as study:
 
 with gamut.open("cylinder.gamut") as study:
     print(study.type, "mesh,", study.row_count, "runs,", len(study.get_points()), "nodes")
-    wall = study.categories("surface").index("wall")        # the code that means "wall"
+    wall = study.categories("surface").index("wall")           # the code that means "wall"
     on_wall = np.flatnonzero(study.get_mesh_label("surface") == wall)
-    lowest = study.get_field("cp", nodes=on_wall).min(axis=1)   # runs x wall nodes, per run
+    lowest = study.get_field("cp", nodes=on_wall).min(axis=1)  # runs x wall nodes; each run's lowest
     print("lowest cp on the wall, by run:", " ".join(f"{v:.2f}" for v in lowest))
-    top = study.get_field("cp", nodes=[12])                   # node 12, the top, in every run
+    top = study.get_field("cp", nodes=[12])                    # node 12, the top, in every run
     print("cp at the top of the cylinder, run by run:", " ".join(f"{v:.2f}" for v in top.ravel()))

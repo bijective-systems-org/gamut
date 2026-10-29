@@ -2,8 +2,8 @@
  *
  * Potential flow past a cylinder at nine values of circulation, on one ring
  * of quadrilaterals: the runs of the Python, MATLAB, Julia and C++ examples
- * of this name, without their wall label, and their last line. Every call
- * returns 0, or fills the error record and returns nonzero.
+ * of this name, with no wall label, and it prints only their last line.
+ * Every call returns 0, or fills the error record and returns nonzero.
  *
  *   cc one_mesh.c -I<prefix>/include -L<prefix>/lib -lgamut -lm -o one_mesh
  */

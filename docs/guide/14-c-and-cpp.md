@@ -11,9 +11,10 @@ and `gamut::gamut` are all a project needs.
 
 There are three examples: [`sweep.cpp`](../../examples/cpp/sweep.cpp), the
 [README](../../README.md#example)'s run table;
-[`one_mesh.cpp`](../../examples/cpp/one_mesh.cpp) (and its C twin), eight
-runs of flow past a cylinder on one mesh, with a ninth added and one node
-read in every run; and [`nearest.cpp`](../../examples/cpp/nearest.cpp),
+[`one_mesh.cpp`](../../examples/cpp/one_mesh.cpp), eight runs of flow
+past a cylinder on one mesh, with a ninth added, then the run count, the
+lowest `cp` on the wall and `cp` at the top read back (a shorter C
+version prints the last line); and [`nearest.cpp`](../../examples/cpp/nearest.cpp),
 a model fitted in Python and evaluated in C++.
 
 ## C++
@@ -63,7 +64,8 @@ study.close();
 `"shared"` or `"changing"`) and how often the geometry changes (`"fixed"`,
 `"run"` or `"group:<label>"`). Declarations come next, then the mesh, then
 runs. `points` are nodes × axes in C order and `cells` a `gamut::Cells` in
-VTK's convention, node numbers from 0. Each run gives its parameters and
+VTK's convention, node numbers from 0; `surface` is a code per node, 1 on
+the wall, for the mesh label. Each run gives its parameters and
 scalars as numbers (an integer stays an integer) and its labels by name,
 then its fields; `add_run` writes it all or nothing and returns its id,
 and takes a `gamut::Geometry` when the run brings its own points.
@@ -92,12 +94,13 @@ study = gamut::open("cylinder.gamut");
 std::printf("%s mesh, %lld runs, %lld nodes\n", study.type().c_str(), (long long)study.row_count(),
             (long long)study.get_points().shape[0]);
 const auto names = study.categories("surface");
-const int64_t wall = std::find(names.begin(), names.end(), "wall") - names.begin();   // its code
+// The code that means "wall" is its place in the table.
+const int64_t wall = std::find(names.begin(), names.end(), "wall") - names.begin();
 std::vector<int64_t> on_wall;
 const auto label = study.get_mesh_label("surface");
 for (int64_t k = 0; k < int64_t(label.size()); ++k)
   if (label[size_t(k)] == wall) on_wall.push_back(k);
-const auto block = study.get_field("cp", gamut::all, on_wall);     // runs x wall nodes
+const auto block = study.get_field("cp", gamut::all, on_wall);  // runs x wall nodes
 std::printf("lowest cp on the wall, by run:");
 for (int64_t run = 0; run < block.shape[0]; ++run) {
   double lowest = block(run, 0);
@@ -105,7 +108,7 @@ for (int64_t run = 0; run < block.shape[0]; ++run) {
   std::printf(" %.2f", lowest);
 }
 std::printf("\n");
-const auto top = study.get_field("cp", gamut::all, {12});           // node 12, the top, in every run
+const auto top = study.get_field("cp", gamut::all, {12});       // node 12, the top, in every run
 std::printf("cp at the top of the cylinder, run by run:");
 for (double v : top) std::printf(" %.2f", v);
 std::printf("\n");
@@ -117,11 +120,13 @@ lowest cp on the wall, by run: -3.00 -3.32 -3.66 -4.01 -4.37 -4.75 -5.14 -5.54 -
 cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
 ```
 
-`get_field` takes the rows and the nodes (or cells) to read: `gamut::all`,
-positions such as `{12}`, or `gamut::Selection::range(start, stop)`. It
-returns a `gamut::Array<double>`: the values in C order and their shape,
-here 9 × 1, with `cp(i, j)` for one value. `gamut::open(path, "r", 4)`
-decompresses large reads in four threads.
+`categories` gives a mesh label's names, code c being entry c, and
+`get_mesh_label` its code per node. `get_field` takes the rows and the
+nodes (or cells) to read: `gamut::all`, positions such as `{12}`, or
+`gamut::Selection::range(start, stop)`. It returns a
+`gamut::Array<double>`: the values in C order and their shape, here 9 runs
+× 48 wall nodes, with `block(run, k)` for one value.
+`gamut::open(path, "r", 4)` decompresses large reads in four threads.
 
 ### The same calls
 
@@ -172,8 +177,8 @@ writes a data file, as `evaluate` does in Python, MATLAB and Julia.
 
 ## C
 
-The same program in C is
-[`examples/c/one_mesh.c`](../../examples/c/one_mesh.c).
+[`examples/c/one_mesh.c`](../../examples/c/one_mesh.c) writes the same
+runs in C, with no wall label, and prints the last line.
 
 ### The conventions
 

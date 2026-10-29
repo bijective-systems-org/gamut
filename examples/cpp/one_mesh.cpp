@@ -63,12 +63,13 @@ int main() {
   std::printf("%s mesh, %lld runs, %lld nodes\n", study.type().c_str(), (long long)study.row_count(),
               (long long)study.get_points().shape[0]);
   const auto names = study.categories("surface");
-  const int64_t wall = std::find(names.begin(), names.end(), "wall") - names.begin();   // its code
+  // The code that means "wall" is its place in the table.
+  const int64_t wall = std::find(names.begin(), names.end(), "wall") - names.begin();
   std::vector<int64_t> on_wall;
   const auto label = study.get_mesh_label("surface");
   for (int64_t k = 0; k < int64_t(label.size()); ++k)
     if (label[size_t(k)] == wall) on_wall.push_back(k);
-  const auto block = study.get_field("cp", gamut::all, on_wall);     // runs x wall nodes
+  const auto block = study.get_field("cp", gamut::all, on_wall);  // runs x wall nodes
   std::printf("lowest cp on the wall, by run:");
   for (int64_t run = 0; run < block.shape[0]; ++run) {
     double lowest = block(run, 0);
@@ -76,7 +77,7 @@ int main() {
     std::printf(" %.2f", lowest);
   }
   std::printf("\n");
-  const auto top = study.get_field("cp", gamut::all, {12});           // node 12, the top, in every run
+  const auto top = study.get_field("cp", gamut::all, {12});       // node 12, the top, in every run
   std::printf("cp at the top of the cylinder, run by run:");
   for (double v : top) std::printf(" %.2f", v);
   std::printf("\n");
