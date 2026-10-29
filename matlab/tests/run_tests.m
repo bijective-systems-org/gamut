@@ -480,7 +480,7 @@ ok(isempty(r.getField('pf', 'rows', 1, 'cells', [])), 'cells [] is no cells');
 r.close();
 r = gamut.open(fullfile(tmp, 'sweep.gamut'));
 ok(isequal(r.getPoints(":"), r.getPoints()), 'getPoints(":") is the fixed points');
-ok(isempty(r.getPoints([])), 'getPoints([]) is no points');
+ok(isequal(size(r.getPoints([])), [0 2]), 'getPoints([]) is no points, with the file''s two axes');
 r.close();
 try
     r = gamut.open(p);
@@ -499,6 +499,26 @@ r = gamut.open(xa); ok(r.rowCount() == 4, 'extract with ":" takes every row'); r
 xn = fullfile(tmp, 'extracted_none.gamut');
 gamut.extract(p, xn, []);
 r = gamut.open(xn); ok(r.rowCount() == 0, 'extract with [] takes no rows'); r.close();
+% An int64 model input takes whole numbers in its range, in any numeric
+% class, and refuses fractions, uint64 above its range and logicals.
+ip = fullfile(tmp, 'int64_model.gamut');
+s = gamut.createModel(ip, 'writer', 'matlab tests', ...
+    'parameters', struct('n', struct('units', '1', 'dtype', 'int64', 'lower', 0, 'upper', 10)), ...
+    'scalars', struct('y', struct('units', '1', 'model', 'fit', 'output', 'y')));
+s.addModel('fit', gamut.Nearest({'n'}, 0, 10, [1; 9], struct('y', [1; 2])), {'n'});
+s.close();
+out = gamut.evaluate(ip, struct('n', single([2; 8])));
+ok(isequal(out.getScalar('y'), [1; 2]), 'whole singles evaluate an int64 input');
+out.close();
+for bad = {2.5, uint64(2)^63, true}
+    try
+        o = gamut.evaluate(ip, struct('n', bad{1}));
+        o.close();
+        ok(false, sprintf('int64 input of class %s refused', class(bad{1})));
+    catch err
+        ok(strcmp(err.identifier, 'gamut:E4'), ['int64 input: ' err.message]);
+    end
+end
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end
 end

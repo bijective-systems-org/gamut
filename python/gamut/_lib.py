@@ -252,14 +252,18 @@ def int64_exactly(values: Any, what: str) -> np.ndarray:
     if arr.dtype.kind in "USV":
         raise GamutError("E4", f"{what} is int64 and takes numbers, not text")
     if arr.dtype.kind == "f":                     # whole and in range, compared in its own dtype
-        lo, hi = arr.dtype.type(-2.0**63), arr.dtype.type(2.0**63)
-        if arr.size and not (np.all(np.isfinite(arr)) and np.all(arr == np.round(arr))
-                             and np.all((arr >= lo) & (arr < hi))):
+        whole = np.all(np.isfinite(arr)) and np.all(arr == np.round(arr))
+        if whole and float(np.finfo(arr.dtype).max) >= 2.0**63:   # a float16 cannot reach them
+            lo, hi = arr.dtype.type(-2.0**63), arr.dtype.type(2.0**63)
+            whole = bool(np.all((arr >= lo) & (arr < hi)))
+        if arr.size and not whole:
             raise GamutError("E4", f"{what} is int64 and takes whole numbers in its range")
         return arr.astype(np.int64)
     out = np.empty(arr.shape, dtype=np.int64)
     flat = out.reshape(-1)
     for k, v in enumerate(arr.reshape(-1).tolist()):
+        if isinstance(v, (str, bytes, bool)):     # Fraction would parse "1e3"
+            raise GamutError("E4", f"{what} is int64 and takes numbers; {v!r} is not one")
         try:
             exact = Fraction(v)                   # ints, floats and Decimals exactly
         except (TypeError, ValueError, OverflowError):

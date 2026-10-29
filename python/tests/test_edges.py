@@ -918,6 +918,13 @@ def test_model_data_scales_are_checked_as_every_scale(tmp_path):
     (np.array([2**63], dtype=">u8"), None),
     (np.array([__import__("decimal").Decimal("9007199254740992.5")], dtype=object), None),
     (np.array([True]), None),
+    (np.array([np.nan]), None),
+    (np.array([np.inf]), None),
+    (np.array([2.0**63], dtype=np.float32), None),
+    (np.array([3.0], dtype=np.float16), [3]),
+    (np.array(["1e3"], dtype=object), None),
+    (np.array(["3"]), None),
+    (np.array([], dtype=np.float64), []),
 ])
 def test_int64_conversion_is_exact_in_every_dtype(given, ok):
     if ok is None:
@@ -926,3 +933,15 @@ def test_int64_conversion_is_exact_in_every_dtype(given, ok):
         assert e.value.rule == "E4"
     else:
         assert _lib.int64_exactly(given, "n").tolist() == ok
+
+
+def test_nodes_and_cells_together_are_refused(tmp_path):
+    p = str(tmp_path / "m.gamut")
+    pts, cells = grid(3, 2)
+    with gamut.create(p, writer="t", mesh="shared", per="fixed", coordinates={"units": "m", "axes": 2},
+                      parameters={"x": "1"}, fields={"q": {"units": "1", "at": "node"}}) as s:
+        s.set_mesh(pts, cells)
+        s.add_run({"x": 1.0}, fields={"q": np.zeros(6)})
+    with gamut.open(p) as f:
+        with pytest.raises(gamut.GamutError, match="nodes or cells, not both"):
+            f.get_field("q", nodes=[0], cells=[0])
