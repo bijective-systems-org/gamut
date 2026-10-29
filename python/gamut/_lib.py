@@ -235,6 +235,23 @@ def dtype_code(values: np.ndarray) -> int:
                                 "use float32, float64, int32 or int64") from None
 
 
+def int64_exactly(values: Any, what: str) -> np.ndarray:
+    """Values as int64 when they are whole numbers within its range; a cast
+    would round a fraction or wrap a large unsigned value without a word."""
+    arr = np.asarray(values)
+    if arr.dtype.kind in "iu" and arr.dtype != np.uint64:
+        return arr.astype(np.int64)
+    if arr.dtype.kind == "u":
+        if arr.size and arr.max() > np.iinfo(np.int64).max:
+            raise GamutError("E4", f"{what}: {arr.max()} is above int64's range")
+        return arr.astype(np.int64)
+    as_float = arr.astype(np.float64)
+    if as_float.size and not (np.all(np.isfinite(as_float)) and np.all(as_float == np.round(as_float))
+                              and np.all(np.abs(as_float) < 2.0**63)):
+        raise GamutError("E4", f"{what} is int64 and takes whole numbers in its range")
+    return as_float.astype(np.int64)
+
+
 def as_array(values: Any) -> np.ndarray:
     """A C-contiguous numeric array; Python ints become int64, floats float64."""
     arr = np.asarray(values)
@@ -244,7 +261,7 @@ def as_array(values: Any) -> np.ndarray:
     if arr.dtype.kind == "i" and arr.dtype not in _DTYPE_CODE:
         arr = arr.astype(np.int64)
     if arr.dtype.kind == "u" and arr.dtype != np.uint8:
-        arr = arr.astype(np.int64)
+        arr = int64_exactly(arr, "values")
     if arr.dtype.kind == "f" and arr.dtype not in _DTYPE_CODE:
         arr = arr.astype(np.float64)
     return np.ascontiguousarray(arr)

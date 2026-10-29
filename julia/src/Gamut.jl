@@ -419,11 +419,16 @@ function open(path::AbstractString; mode::AbstractString="r", threads::Integer=1
     out = Ref{Ptr{Cvoid}}(C_NULL)
     if mode == "r"
         @mes gamut_open (Cstring, Ref{Ptr{Cvoid}}) cs(path) out
-        s = Study(out[], String(path), false)
-        s.mesh_kind = info(s, "mesh_kind")
-        s.per = info(s, "per")
-        s.group = startswith(s.per, "group:") ? s.per[7:end] : ""
-        threads != 1 && @mes gamut_set_threads (Ptr{Cvoid}, Cint) s.handle threads
+        s = Study(out[], String(path), false)   # owns the handle, so a refusal closes it
+        try
+            s.mesh_kind = info(s, "mesh_kind")
+            s.per = info(s, "per")
+            s.group = startswith(s.per, "group:") ? s.per[7:end] : ""
+            threads != 1 && @mes gamut_set_threads (Ptr{Cvoid}, Cint) s.handle threads
+        catch
+            close(s)
+            rethrow()
+        end
         return s
     elseif mode == "a"
         kind, per, axes = open(path) do r

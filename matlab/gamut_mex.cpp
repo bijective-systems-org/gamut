@@ -5,6 +5,7 @@
 // error into a MATLAB error with identifier gamut:<rule>.
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <set>
@@ -303,8 +304,9 @@ std::vector<unsigned char> to_c_order(const mxArray* a, std::size_t rank, std::v
   return out;
 }
 
-// A selection from MATLAB: [] for everything, or 0-based positions as
-// doubles or integers (the M layer converts from 1-based).
+// A selection from MATLAB: ':' (or nothing) for everything, [] for nothing,
+// or 0-based positions as doubles or integers (the M layer converts from
+// 1-based). [] is no positions, so a select that matched nothing reads nothing.
 struct Sel {
   gamut_sel sel{};
   std::vector<int64_t> index;
@@ -314,7 +316,17 @@ struct Sel {
 Sel selection(const mxArray* a) {
   Sel s;
   s.sel.kind = GAMUT_SEL_ALL;
-  if (a == nullptr || mxIsEmpty(a)) return s;
+  if (a == nullptr) return s;
+  if (mxIsChar(a)) {
+    if (text(a, "positions") != ":") usage("positions are ':' for every one, or numbers");
+    return s;
+  }
+  if (mxIsEmpty(a)) {
+    s.sel.kind = GAMUT_SEL_INDEX;
+    s.sel.count = 0;
+    s.sel.index = nullptr;
+    return s;
+  }
   if (!mxIsDouble(a) && !mxIsInt64(a)) usage("positions are double or int64");
   const mwSize n = mxGetNumberOfElements(a);
   s.index.resize(n);
@@ -864,14 +876,24 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
   static const bool at_exit = (mexAtExit(finish_open_files), true);
   (void)at_exit;
-  Refusal r;
-  try {
-    dispatch(nlhs, plhs, nrhs, prhs);
-    return;
-  } catch (const Refusal& x) {
-    r = x;
-  } catch (const std::exception& x) {
-    r = {"gamut:error", x.what()};
+  // The error is copied to fixed storage and every C++ object is gone before
+  // mexErrMsgIdAndTxt, which leaves without running destructors.
+  static char id[64];
+  static char message[4096];
+  {
+    std::string i, m;
+    try {
+      dispatch(nlhs, plhs, nrhs, prhs);
+      return;
+    } catch (const Refusal& x) {
+      i = x.id;
+      m = x.message;
+    } catch (const std::exception& x) {
+      i = "gamut:error";
+      m = x.what();
+    }
+    std::snprintf(id, sizeof id, "%s", i.c_str());
+    std::snprintf(message, sizeof message, "%s", m.c_str());
   }
-  mexErrMsgIdAndTxt(r.id.c_str(), "%s", r.message.c_str());
+  mexErrMsgIdAndTxt(id, "%s", message);
 }

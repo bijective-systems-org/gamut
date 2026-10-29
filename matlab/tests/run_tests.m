@@ -452,6 +452,26 @@ ok(isequal(double(offsets(:))', [0 4 8]) && isequal(double(conn(:))', [0 2 3 1 2
     'single offsets and int16 connectivity are read by their class');
 r.close();
 
+% [] selects nothing and ':' everything, so a select that matched nothing
+% reads nothing; integer arguments reach the gateway in their own class.
+r = gamut.open(p);
+none = r.select('k > 99');
+ok(isempty(none), 'a select matching nothing is empty');
+ok(isempty(r.getParameter('k', 'rows', none)), 'reading the rows of an empty select reads none');
+ok(numel(r.getParameter('k', 'rows', ':')) == numel(r.getParameter('k')) && numel(r.getParameter('k')) == 4, ...
+    "':' and no rows read every row");
+r.close();
+wp = fullfile(tmp, 'wide_codes.gamut');
+w = gamut.create(wp, 'writer', 'matlab tests', 'mesh', 'changing', 'per', 'run', ...
+    'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'), ...
+    'meshLabels', struct('zone', struct('at', 'cell')));
+w.addRun(struct('k', 1), 'points', pts, 'cells', {int64(cells{1}), int64(cells{2}), int64(cells{3})}, ...
+    'meshLabels', struct('zone', int64([2147483647; 1])));
+w.close();
+r = gamut.open(wp);
+z = r.getMeshLabel('zone', 1);
+ok(isequal(double(z(:))', [2147483647 1]), 'int64 cells and mesh-label codes pass through unconverted');
+r.close();
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end
 end

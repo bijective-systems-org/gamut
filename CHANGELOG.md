@@ -116,6 +116,24 @@ check being made before the first write, but a write that fails or a
 process killed while it appends can leave the whole file unreadable. Keep a copy of a file you cannot regenerate, or append each
 job's own file at the end.
 
+In MATLAB, `[]` as rows, nodes or cells selects none and `':'` (or leaving
+them out) every one; `[]` meant every row, so the rows of a `select` that
+matched nothing read the whole file. MATLAB passes integer arrays to the
+core in their own class, so int64 codes above 2⁵³ are not rounded through
+double. An int64 model input given fractional or out-of-range values is
+refused in Python and MATLAB, as in Julia, instead of being truncated; an
+unsigned array above int64's range is refused instead of wrapping. Julia's
+`open` closes the file when its `threads` value is refused.
+
+A group member repeated with the same values in another shape (4 × 2 and
+2 × 4 points) is refused as a different geometry. Replacing an attribute
+works however many one-character names the object already holds. The
+validator checks a model-data scale's extent and attribute creation order
+as it checks every scale. A `where` nested past the cap is E23, as the
+limits in `docs/security.md` are. `gamut get` refuses to write over an
+existing `.csv`, `.npy` or `.npz` output unless given `--force`, and
+checks `--rows` without reading the rows.
+
 ## 1.3.0 (2026-10-25)
 
 A file may carry a portion marking: a new optional root attribute,

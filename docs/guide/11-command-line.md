@@ -46,6 +46,8 @@ wrote 6 runs to mach07.gamut
 
 - `--where` chooses runs by condition, `--rows` by position (`0:3`, or
   `2,5,9`), and `--zone LABEL=NAME` the nodes or cells of one zone.
+- An output that exists is refused; `--force` replaces a `.csv`, `.npy` or
+  `.npz` one, and a `.gamut` file is never written over.
 - The output's extension decides its form: `.csv` (one line per run, its
   id first; a field goes alone, a column per node), `.npy` (one array),
   `.npz` (several, with the row ids), or `.gamut`, a smaller study file with

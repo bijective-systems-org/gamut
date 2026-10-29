@@ -1664,7 +1664,8 @@ std::string Writer::geometry_print(const Geometry& g) const {
   const Mesh& m = schema_.mesh;
   Sha256 h;
   const std::vector<unsigned char> points = convert(g.points, m.coordinate_dtype, "coordinates");
-  const std::int64_t sizes[3] = {static_cast<std::int64_t>(points.size()),
+  // The shape too: the same values as 3 x 2 and as 2 x 3 points are not one geometry.
+  const std::int64_t sizes[5] = {g.n_nodes, g.axes, static_cast<std::int64_t>(points.size()),
                                  static_cast<std::int64_t>(g.types.size()),
                                  static_cast<std::int64_t>(g.connectivity.size())};
   h.update(sizes, sizeof sizes);

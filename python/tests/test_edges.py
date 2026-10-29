@@ -634,8 +634,9 @@ def test_selection_parentheses_nest_64_deep_and_no_deeper(tmp_path):
     with gamut.open(str(tmp_path / "a.gamut")) as f:
         assert list(f.select("(" * 64 + "x == 1" + ")" * 64)) == [0]
         for depth in (65, 20000):
-            with pytest.raises(gamut.GamutError, match="nested deeper than 64"):
+            with pytest.raises(gamut.GamutError, match="nested deeper than 64") as e:
                 f.select("(" * depth + "x == 1" + ")" * depth)
+            assert e.value.rule == "E23"        # a cap, as docs/security.md lists it
 
 
 def test_appending_to_a_file_with_an_int64_label_writes_int64_codes(tmp_path):
@@ -864,3 +865,48 @@ def test_a_private_group_linked_into_the_public_tree_is_checked_there(tmp_path):
         f["z"] = f["private"]                                            # the same group, public
     findings = gamut.validate(p).findings
     assert any(x.rule == "E22" and x.path == "/z/bad" for x in findings), findings
+
+
+def test_a_member_repeated_with_the_same_values_in_another_shape_is_refused(tmp_path):
+    pts, cells = grid(2, 2)
+    with gamut.create(str(tmp_path / "fam.gamut"), writer="t", mesh="shared", per="group:member",
+                      coordinates={"units": "m", "axes": 2}, labels={"member": "group"},
+                      parameters={"mach": "1"}) as s:
+        s.set_mesh(cells=cells, n_nodes=4)
+        flat = np.arange(8.0)
+        with pytest.raises(gamut.GamutError):
+            s.add_runs({"member": ["a", "a"], "mach": [1.0, 2.0]},
+                       points=[flat.reshape(4, 2), flat.reshape(2, 4)])
+
+
+def test_int64_inputs_and_unsigned_values_convert_exactly_or_are_refused(tmp_path):
+    p = str(tmp_path / "m.gamut")
+    with gamut.create_model(p, writer="t",
+                            parameters={"n": {"units": "1", "dtype": "int64", "lower": 0, "upper": 10}},
+                            scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as mf:
+        mf.add_model("fit", gamut.Nearest(["n"], [0.0], [10.0], [[1.0], [9.0]], {"y": [1.0, 2.0]}),
+                     ["n"])
+    with gamut.evaluate(p, {"n": [2.0, 8.0]}) as out:      # whole numbers given as floats
+        assert out.get_scalar("y").tolist() == [1.0, 2.0]
+    with pytest.raises(gamut.GamutError, match="whole numbers") as e:
+        gamut.evaluate(p, {"n": [2.5]})
+    assert e.value.rule == "E4"
+    with gamut.create(str(tmp_path / "u.gamut"), writer="t", parameters={"x": "1"}) as s:
+        with pytest.raises(gamut.GamutError, match="above int64"):
+            s.add_runs({"x": np.array([2**63 + 1], dtype=np.uint64)})
+
+
+def test_model_data_scales_are_checked_as_every_scale(tmp_path):
+    p = str(tmp_path / "m.gamut")
+    with gamut.create_model(p, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
+                            scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as mf:
+        mf.add_model("fit", gamut.Nearest(["x"], [0.0], [1.0], [[0.1], [0.9]], {"y": [1.0, 2.0]}),
+                     ["x"])
+    with h5py.File(p, "r+") as f:
+        g = f["models/fit"]
+        d = g.create_dataset("extra", data=np.arange(3.0))
+        sc = g.create_dataset("gamut_extra_d0", shape=(2,), dtype=">f4", track_order=True)
+        sc.make_scale("This is a netCDF dimension but not a netCDF variable.         2")
+        d.dims[0].attach_scale(sc)
+    messages = [x.message for x in gamut.validate(p).findings if x.rule == "E19"]
+    assert any("entries and its scale gamut_extra_d0" in m for m in messages), messages

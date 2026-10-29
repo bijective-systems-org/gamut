@@ -1299,6 +1299,19 @@ void Validator::models() {
           if (at.size() != 1 || at[0] != want) {
             add("E19", p.substr(1), "axis " + std::to_string(a) + " needs exactly one dimension "
                                     "scale, named " + want);
+            continue;
+          }
+          // The scale itself, as every scale (§9.4): its extent the axis's, its
+          // attribute creation order tracked and indexed.
+          const DsetInfo sc = file_->dataset_info(g + "/" + want, false);
+          if (sc.shape.size() != 1 || sc.shape[0] != i.shape[a]) {
+            add("E19", p.substr(1), "axis " + std::to_string(a) + " has " +
+                                    std::to_string(i.shape[a]) + " entries and its scale " + want +
+                                    " another number");
+          }
+          if (!(sc.attr_order_tracked && sc.attr_order_indexed)) {
+            add("E19", (g + "/" + want).substr(1), "a dimension scale has attribute creation order "
+                                                    "tracked and indexed");
           }
         }
       }

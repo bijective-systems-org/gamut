@@ -422,8 +422,8 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
             if name not in inputs:
                 raise GamutError("E2", f"the input {name} is missing")
             d = _declared(m, name)
-            col = np.atleast_1d(np.asarray(inputs[name],
-                                           dtype=np.int64 if d.get("dtype") == "int64" else np.float64))
+            col = np.atleast_1d(_lib.int64_exactly(inputs[name], name) if d.get("dtype") == "int64"
+                                else np.asarray(inputs[name], dtype=np.float64))
             lo, hi = float(d["lower"]), float(d["upper"])
             outside = np.flatnonzero((col < lo) | (col > hi))
             if outside.size:

@@ -1031,8 +1031,16 @@ void File::replace_attr(const std::string& path, const std::string& name,
   // Keep a separate copy: H5Arename can delete its source before failing.
   // A backup name must not grow a compact attribute past its message limit.
   std::string backup;
-  for (const char candidate : std::string("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")) {
-    const std::string next(1, candidate);
+  // One byte first, then two once those are taken: the backup is written
+  // before the original is touched, so one that does not fit is refused
+  // with the original intact.
+  const std::string letters = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  std::vector<std::string> candidates;
+  for (const char a : letters) candidates.emplace_back(1, a);
+  for (const char a : letters) {
+    for (const char b : letters) candidates.push_back(std::string{a, b});
+  }
+  for (const std::string& next : candidates) {
     const htri_t found = H5Aexists(object.get(), next.c_str());
     need(found >= 0, "cannot inspect the recovery attribute \"" + next + "\"");
     if (found == 0) {

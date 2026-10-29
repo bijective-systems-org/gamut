@@ -47,6 +47,18 @@ mktempdir() do tmp
         end
     end
 
+    @testset "a refused threads value leaves the file closed" begin
+        p = joinpath(tmp, "threads.gamut")
+        Gamut.create(p; writer="tests", parameters=Dict("x" => "1")) do s
+            Gamut.add_run!(s, Dict("x" => 1.0))
+        end
+        @test_throws GamutError Gamut.open(p; threads=0)
+        Gamut.open(p; mode="a") do s                 # no handle was left open
+            Gamut.add_run!(s, Dict("x" => 2.0))
+        end
+        @test Gamut.open(f -> f.row_count, p) == 2
+    end
+
     @testset "a field given nodes × runs is refused" begin
         p = joinpath(tmp, "transposed.gamut")
         pts, cells = grid(4, 3)

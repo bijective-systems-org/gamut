@@ -174,8 +174,10 @@ class Parser {
 
   std::vector<bool> parse_atom() {
     if (peek().kind == Token::Open) {
-      if (++depth_ > kMaxNesting) {
-        fail("parentheses are nested deeper than " + std::to_string(kMaxNesting) + " levels");
+      if (++depth_ > kMaxNesting) {   // a cap (docs/security.md), so E23
+        throw Error("E23", "where: parentheses are nested deeper than " +
+                               std::to_string(kMaxNesting) + " levels at character " +
+                               std::to_string(peek().at));
       }
       next();
       std::vector<bool> v = parse_or();
