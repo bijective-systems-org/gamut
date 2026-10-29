@@ -12,7 +12,7 @@ agents, and every failure as {"problems": [{"rule", "path", "message"}]};
 `validate` always prints its findings, a file it cannot open among them.
 Big data goes to files; every problem is reported at once with where it is
 and what to do.  Exit status: 0 success, 1 the file or document has errors,
-2 a usage error.
+2 a usage error, appending to a valid read-only file (E25) among them.
 """
 
 from __future__ import annotations
@@ -512,6 +512,7 @@ def cmd_append(args: argparse.Namespace) -> int:
         return _report_problems(args, problems)
     try:
         with open_file(args.file) as f:
+            _rows_kept(f, "appending")
             fields = set(f.names("node_fields") + f.names("cell_fields"))
             labels = set(f.names("labels"))
         with open_file(args.file, mode="a") as study:
@@ -877,7 +878,8 @@ def main(argv: list[str] | None = None) -> int:
             print(_problems_json([(e.rule, e.path, e.message)]))
         else:
             print(f"error: {e}", file=sys.stderr)
-        return 2 if isinstance(e, _Usage) else 1
+        # E25 is a valid file this command cannot grow: the command's, as a usage error is.
+        return 2 if isinstance(e, _Usage) or e.rule == "E25" else 1
     except OSError as e:             # a file named that cannot be read or written: which, and why
         where = str(e.filename or "")
         message = f"{where}: {e.strerror}" if where else str(e)

@@ -382,6 +382,10 @@ def test_a_fixed_layout_is_valid_and_read_only_until_rewritten(tmp_path):
         with gamut.open(p, mode="a") as s:
             s.add_run({"mach": 0.5, "cl": 0.3, "status": "converged"})
     assert e.value.rule == "E25"                  # valid and read-only, not E20's bad storage
+    from gamut import cli                         # the command's mistake on the command line: exit 2
+    source = str(tmp_path / "source.gamut")
+    gamut.write_copy(p, source)
+    assert cli.main(["append", p, source, "--json"]) == 2
     gamut.write_copy(p, grow)
     with gamut.open(grow, mode="a") as s:
         s.add_run({"mach": 0.5, "cl": 0.3, "status": "converged"})

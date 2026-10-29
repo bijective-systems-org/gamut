@@ -101,7 +101,8 @@ both explained.
   included; `validate` always prints its findings, a file it cannot
   open among them.
 - The exit status is 0 on success, 1 when a file or document has errors,
-  and 2 for a command used wrongly.
+  and 2 for a command used wrongly, such as appending to a valid file that
+  cannot grow (E25).
 - `gamut --version` gives the package version and the format version it
   writes.
 
