@@ -639,8 +639,9 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
 
     parameters   inputs that place a run: {"alpha": {"units": "degree",
                  "role": "condition"}}. Role "design" (the default),
-                 "condition" or "time"; optional "lower", "upper",
-                 "dtype": "int64".
+                 "condition" or "time"; optional "lower", "upper".
+                 float64 whatever the values given, or "dtype":
+                 "int64" for whole numbers such as a count or a seed.
     labels       names rather than numbers: {"status": {"role": "status",
                  "categories": ["converged", "failed"]}}. Role
                  "categorical" (the default), "group", "status" or

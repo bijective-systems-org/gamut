@@ -42,7 +42,8 @@ typedef struct {
 } gamut_error;
 
 /* Element types; the numbers are fixed.  GAMUT_AS_GIVEN in a declaration
- * means the dtype of the first values written (precision kept as given). */
+ * means the dtype of the first values written (precision kept as given),
+ * except for a parameter, which is float64 unless declared GAMUT_INT64. */
 enum {
   GAMUT_AS_GIVEN = 0,
   GAMUT_UINT8 = 1,

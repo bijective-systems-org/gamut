@@ -961,3 +961,22 @@ def test_an_integer_past_2_53_is_refused_where_float64_would_round_it(tmp_path):
     with gamut.open(p) as f:
         assert f.get_parameter("x").tolist() == [2.0**53, -2.0**53]
         assert f.row_count == 2
+
+
+def test_a_parameter_is_float64_whatever_values_come_first(tmp_path):
+    # The README's sweep passes range() integers; a later 2.5 must still fit.
+    p = str(tmp_path / "sweep.gamut")
+    with gamut.create(p, writer="t", parameters={"alpha": {"units": "degree"},
+                                                 "seed": {"units": "1", "dtype": "int64"}}) as s:
+        for alpha in range(0, 11, 2):
+            s.add_run({"alpha": alpha, "seed": alpha})
+    with gamut.open(p, mode="a") as s:
+        s.add_run({"alpha": 2.5, "seed": 3})
+        with pytest.raises(gamut.GamutError, match="cannot be stored as int64") as e:
+            s.add_run({"alpha": 1.0, "seed": 2.5})
+        assert e.value.rule == "E4"
+    with gamut.open(p) as f:
+        assert f.describe("alpha")["dtype"] == "float64"
+        assert f.describe("seed")["dtype"] == "int64"
+        assert f.get_parameter("alpha").tolist() == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 2.5]
+        assert f.get_parameter("seed").dtype == np.int64

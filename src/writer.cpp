@@ -598,7 +598,7 @@ void Writer::declare_parameter(const Parameter& p) {
        p.name + ": the role \"" + p.role + "\" is not design, condition or time",
        p.name);
   check_units(p.units, p.name);
-  need(p.auto_dtype || p.dtype == DType::Float64 || p.dtype == DType::Int64, "E4",
+  need(p.dtype == DType::Float64 || p.dtype == DType::Int64, "E4",
        p.name + ": a parameter is float64 or int64", p.name);
   need(p.lower.has_value() == p.upper.has_value(), "E16",
        p.name + ": give both bounds or neither", p.name);
@@ -977,12 +977,6 @@ void Writer::resolve_autos(Schema& s, const Batch* first) {
     const auto it = first->values.find(name);
     return it == first->values.end() ? nullptr : &it->second;
   };
-  for (auto& p : s.parameters) {
-    if (!p.auto_dtype) continue;
-    const Column* c = given(p.name);
-    p.dtype = c != nullptr && is_int(c->dtype) ? DType::Int64 : DType::Float64;
-    p.auto_dtype = false;
-  }
   for (auto& r : s.results) {
     if (!r.auto_dtype) continue;
     const Column* c = given(r.name);

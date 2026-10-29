@@ -19,6 +19,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -216,19 +217,26 @@ class Study {
     axes_ = axes;
   }
   // role: "design", "condition" or "time"; run_group names the label that
-  // groups a time parameter's rows into runs.
+  // groups a time parameter's rows into runs. T is double, or int64_t for
+  // whole numbers such as a count or a seed: declare_parameter<int64_t>(...).
+  template <class T = double>
   void declare_parameter(const std::string& name, const std::string& role, const std::string& units,
                          const std::string& run_group = "") {
+    static_assert(std::is_same_v<T, double> || std::is_same_v<T, int64_t>,
+                  "a parameter is double or int64_t");
     gamut_error e{};
     detail::check(gamut_declare_parameter(need_writer(), name.c_str(), role.c_str(), units.c_str(),
-                                          GAMUT_AS_GIVEN, 0, 0.0, 0.0, run_group.c_str(), &e), e);
+                                          detail::dtype<T>(), 0, 0.0, 0.0, run_group.c_str(), &e), e);
   }
   // With the bounds the values lie in (a model file's domain).
+  template <class T = double>
   void declare_parameter(const std::string& name, const std::string& role, const std::string& units,
                          double lower, double upper, const std::string& run_group = "") {
+    static_assert(std::is_same_v<T, double> || std::is_same_v<T, int64_t>,
+                  "a parameter is double or int64_t");
     gamut_error e{};
     detail::check(gamut_declare_parameter(need_writer(), name.c_str(), role.c_str(), units.c_str(),
-                                          GAMUT_AS_GIVEN, 1, lower, upper, run_group.c_str(), &e), e);
+                                          detail::dtype<T>(), 1, lower, upper, run_group.c_str(), &e), e);
   }
   // role: "categorical", "status", "group" or "split"; without categories
   // the table grows as names appear.

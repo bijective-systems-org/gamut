@@ -12,6 +12,15 @@ add runs to an existing file in Python, open it with
 `gamut.open(path, mode="a")`. A `gamut build` that failed part way used to
 delete the file it had replaced.
 
+A parameter is float64 unless declared int64 (`"dtype": "int64"`; in C++,
+`declare_parameter<int64_t>`). 1.3.0 and earlier stored an undeclared
+parameter as int64 when its first values were integers, so a Python sweep
+begun with `range(0, 11, 2)` refused 2.5 when appended to, and the same
+program wrote int64 from Python and float64 from MATLAB. Files are
+unchanged: an int64 parameter stays valid and reads as before. Code that
+gives integers to an undeclared parameter now writes float64; declare
+int64 where whole numbers are meant.
+
 A refused replacement of an attribute (a value of about 64 KiB or more)
 keeps the attribute's previous value. Before, the previous value was
 deleted first, so the refusal lost it.
