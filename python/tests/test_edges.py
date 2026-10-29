@@ -843,3 +843,13 @@ def test_appending_geometry_to_int64_mesh_labels_takes_wide_codes(tmp_path):
     assert not gamut.validate(p).findings
     with gamut.open(p) as f:
         assert f.get_mesh_label("zone", row=1).tolist() == [2**40]
+
+
+def test_rejected_instance_sizes_are_not_summed(tmp_path):
+    # Differences of a rejected instance_nodes would overflow (UBSan sees it).
+    p = str(tmp_path / "c.gamut")
+    _changing(p)
+    with h5py.File(p, "r+") as f:
+        f["mesh/instance_nodes"][0] = -2**63
+    messages = [x.message for x in gamut.validate(p).findings if x.rule == "E21"]
+    assert any("instance_nodes must start at 0" in m for m in messages), messages

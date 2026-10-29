@@ -643,6 +643,13 @@ def hostile_cases(out):
                                  compression="gzip", compression_opts=1, shuffle=True)
             t.dims[0].attach_scale(f["category_many"])
     cases["hostile_tables_together"] = {"rules": ["E23"]}
+    # Cumulative node counts starting at the least int64: reported, and never
+    # differenced (a sanitizer build sees any overflow).
+    p = os.path.join(out, "hostile_instance_min.gamut")
+    shutil.copy(os.path.join(out, "changing.gamut"), p)
+    with h5py.File(p, "r+") as f:
+        f["mesh/instance_nodes"][0] = -2**63
+    cases["hostile_instance_min"] = {"rules": ["E21"], "reads": [{"cells": 0}]}
     # A where text nested 20,000 parentheses deep: refused, not a crash.
     p = os.path.join(out, "hostile_where_deep.gamut")
     shutil.copy(os.path.join(out, "table.gamut"), p)

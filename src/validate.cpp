@@ -1144,6 +1144,9 @@ void Validator::mesh() {
         if (check_dims(rs, {"row"}, {"/row"})) check_storage(rs, true, {true});
         const auto starts = ints(rs);
         const auto& cum = std::string(which) == "node" ? cn : cc;
+        // Sizes come from differences of cum: only once it is known to start at 0
+        // and never decrease, so no difference or sum below can overflow.
+        if (!(std::string(which) == "node" ? nodes_ok : cells_ok)) continue;
         std::int64_t at = 0;
         for (std::size_t r = 0; r < starts.size() && r < inst.size(); ++r) {
           const std::int64_t k = inst[r];
