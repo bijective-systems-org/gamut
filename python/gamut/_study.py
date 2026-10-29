@@ -604,7 +604,8 @@ class Study:
                         if wrt == "coordinates":
                             wrt = f"coordinates:{d.get('axis', '')}"
                         out["derivatives"][wrt] = other
-                if mine.get("vector") and d.get("vector") == mine.get("vector"):
+                # The vector's parts, not the statistics or derivatives of them.
+                if mine.get("vector") and d.get("vector") == mine.get("vector") and not d.get("of"):
                     out["vector"].append(other)
         return out
 

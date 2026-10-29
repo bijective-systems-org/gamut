@@ -35,6 +35,11 @@ the fixes further down also correct results that were wrong, such as a
   or `{"problems": [{"key", "message"}]}` by command, and argparse's own
   mistakes printed text (`validate` still prints its findings). Success documents no longer carry an empty
   `problems`. A misused `gamut get` exits 2 before creating its output.
+- In Python, `related(name)["vector"]` lists the vector's parts only, as
+  Julia did; a statistic or derivative of a part that carries the same
+  `vector` was listed among them.
+- NumPy 1.26 or later is required (it was 1.24, never tested); the
+  oldest supported NumPy and Python 3.14 are now tested.
 - In C++, `get_parameter<T>` and `get_constant<T>` name the type: `double`,
   or `int64_t` for a value declared int64. Another type is refused rather
   than rounded or truncated.

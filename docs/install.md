@@ -20,7 +20,7 @@ pip install "gamut-format[vtk]"          # with VTK import and export (pyvista, 
 
 Wheels are built for macOS (arm64 and x86_64, macOS 11 and later), Linux
 (x86_64, glibc 2.28 and later) and Windows (x86_64). One wheel serves every Python version on its
-platform. The only required dependency is NumPy.
+platform. The only required dependency is NumPy, 1.26 or later, 2.x included.
 
 Check the install:
 

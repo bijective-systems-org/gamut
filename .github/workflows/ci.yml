@@ -45,6 +45,7 @@ jobs:
           python-version: |
             3.10
             3.13
+            3.14
             3.12
 
       - name: Tools
@@ -87,14 +88,16 @@ jobs:
           CMAKE_ARGS="-DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT=$RUNNER_TEMP/deps -DZLIB_ROOT=$RUNNER_TEMP/deps" \
             python -m build --outdir dist .
 
-      - name: The Python suite on the installed wheel (3.12 with every extra; 3.10, 3.13)
+      - name: The Python suite on the installed wheel (3.12 with every extra; 3.10 on the oldest NumPy; 3.13, 3.14)
         # From a directory outside the checkout, so `import gamut` is the
         # wheel; the tests reach the examples and docs by their own path.
         run: |
           wheel=$(ls dist/*.whl)
-          for v in 3.12 3.10 3.13; do
+          for v in 3.12 3.10 3.13 3.14; do
             spec="$wheel"; extras="pytest h5py"
             [ "$v" = 3.12 ] && { spec="$wheel[test]"; extras=""; }
+            # The oldest NumPy pyproject.toml allows is tested, not only the newest.
+            [ "$v" = 3.10 ] && extras="pytest h5py numpy==1.26.*"
             "python$v" -m venv "$RUNNER_TEMP/venv-$v"
             "$RUNNER_TEMP/venv-$v/bin/python" -m pip install -q "$spec" $extras
             (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/venv-$v/bin/python" -m pytest -q -p no:cacheprovider \

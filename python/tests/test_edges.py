@@ -1131,3 +1131,20 @@ def test_cell_arrays_are_counted_by_their_elements_and_rank_is_always_given(tmp_
         assert rank.value == 2                              # asked with no room, the rank is still given
     finally:
         _lib._lib.gamut_tree_free(t)
+
+
+
+def test_related_lists_a_vector_s_parts_not_their_statistics(tmp_path):
+    # As Julia does: a std field that shares its source's vector is the std, not a part.
+    p = str(tmp_path / "v.gamut")
+    with gamut.create(p, writer="t", mesh="shared", per="fixed", coordinates={"units": "m", "axes": 3},
+                      parameters={"x": "1"},
+                      fields={"u_x": {"units": "m s-1", "at": "node", "vector": "u", "axis": "x"},
+                              "u_y": {"units": "m s-1", "at": "node", "vector": "u", "axis": "y"},
+                              "s_x": {"units": "m s-1", "at": "node", "of": "u_x", "statistic": "std",
+                                      "vector": "u", "axis": "z"}}) as s:
+        s.set_mesh(np.zeros((2, 3)))
+        s.add_runs({"x": [1.0]}, fields={k: np.ones((1, 2)) for k in ("u_x", "u_y", "s_x")})
+    with gamut.open(p) as f:
+        r = f.related("u_x")
+    assert r["std"] == "s_x" and sorted(r["vector"]) == ["u_x", "u_y"]

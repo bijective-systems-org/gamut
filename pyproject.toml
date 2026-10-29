@@ -11,7 +11,7 @@ license = "Apache-2.0"
 license-files = ["LICENSE", "licenses/*.txt"]
 authors = [{ name = "Bijective Systems" }]
 requires-python = ">=3.10"
-dependencies = ["numpy>=1.24"]
+dependencies = ["numpy>=1.26"]
 keywords = ["simulation", "parametric study", "design of experiments", "CFD", "FEA", "HDF5",
             "netCDF", "xarray", "surrogate model", "reduced-order model", "machine learning",
             "dataset", "MATLAB", "Julia"]
