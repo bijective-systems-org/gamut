@@ -81,6 +81,27 @@ struct ScaleVisit {
   const File* file;
 };
 
+// HDF5's dimension-scale calls trust DIMENSION_LIST to be what they write:
+// one variable-length list of object references per axis. One of another
+// type sends them through a wild pointer, so it is checked first; a dataset
+// whose list is wrong is treated as having no scales (E19 says so).
+bool dimension_list_ok(hid_t dset, int rank) {
+  const htri_t has = H5Aexists(dset, "DIMENSION_LIST");
+  if (has == 0) return true;
+  if (has < 0) return false;
+  Id attr(H5Aopen(dset, "DIMENSION_LIST", H5P_DEFAULT));
+  if (!attr.valid()) return false;
+  Id type(H5Aget_type(attr.get()));
+  Id space(H5Aget_space(attr.get()));
+  if (!type.valid() || !space.valid() || H5Tget_class(type.get()) != H5T_VLEN) return false;
+  Id base(H5Tget_super(type.get()));
+  if (!base.valid() || H5Tequal(base.get(), H5T_STD_REF_OBJ) <= 0) return false;
+  if (H5Sget_simple_extent_ndims(space.get()) != 1) return false;
+  hsize_t n = 0;
+  H5Sget_simple_extent_dims(space.get(), &n, nullptr);
+  return n == static_cast<hsize_t>(rank);
+}
+
 herr_t collect_scale(hid_t /*did*/, unsigned /*dim*/, hid_t dsid, void* data) {
   ScaleVisit* visit = static_cast<ScaleVisit*>(data);
   // A dimension's name is the scale's link name, never its NAME
@@ -626,11 +647,13 @@ DsetInfo File::described(hid_t dset, bool scales) const {
   info.is_scale = H5DSis_scale(dset) > 0;
   info.scales.resize(static_cast<std::size_t>(rank > 0 ? rank : 0));
   if (!info.is_scale) {
-    for (int axis = 0; axis < rank; ++axis) {
-      ScaleVisit visit{&info.scales[static_cast<std::size_t>(axis)], this};
-      int index = 0;
-      H5DSiterate_scales(dset, static_cast<unsigned>(axis), &index,
-                         collect_scale, &visit);
+    if (dimension_list_ok(dset, rank)) {
+      for (int axis = 0; axis < rank; ++axis) {
+        ScaleVisit visit{&info.scales[static_cast<std::size_t>(axis)], this};
+        int index = 0;
+        H5DSiterate_scales(dset, static_cast<unsigned>(axis), &index,
+                           collect_scale, &visit);
+      }
     }
   } else if (rank == 1) {
     // A coordinate variable carries itself as its own scale.
@@ -1312,6 +1335,11 @@ void File::detach_scale(const std::string& dataset, const std::string& scale,
                         unsigned axis) {
   Id d(open_dataset(dataset));
   Id s(open_dataset(scale));
+  Id space(H5Dget_space(d.get()));
+  if (!dimension_list_ok(d.get(), H5Sget_simple_extent_ndims(space.get()))) {
+    throw Error("E19", "\"" + dataset + "\": its DIMENSION_LIST is not a list of dimension scales",
+                dataset);
+  }
   need(H5DSdetach_scale(d.get(), s.get(), axis) >= 0,
        "cannot detach \"" + scale + "\" from \"" + dataset + "\"");
 }

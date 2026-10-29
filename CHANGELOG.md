@@ -134,6 +134,11 @@ limits in `docs/security.md` are. `gamut get` refuses to write over an
 existing `.csv`, `.npy` or `.npz` output unless given `--force`, and
 checks `--rows` without reading the rows.
 
+A file whose `DIMENSION_LIST` attribute is not HDF5's list of dimension
+scales (an integer, a string) is reported (E19) instead of crashing
+`validate` and `open`: HDF5's scale calls follow the attribute as
+references, and Gamut now checks its type before they read it.
+
 ## 1.3.0 (2026-10-25)
 
 A file may carry a portion marking: a new optional root attribute,

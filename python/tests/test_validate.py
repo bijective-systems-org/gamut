@@ -474,3 +474,15 @@ def test_an_ignored_dataset_named_like_a_scale_does_not_make_a_file_read_only(tm
     with gamut.open(p, mode="a") as s:
         s.add_run({"r": 2.0}, points=pts, cells=cells)
     assert not [x for x in gamut.validate(p).findings if x.severity == "error"]
+
+
+@pytest.mark.parametrize("value", [np.int64(0), np.arange(3, dtype=np.int32), "x" * 100])
+def test_a_dimension_list_of_another_type_is_e19_not_a_crash(tmp_path, value):
+    p = str(tmp_path / "t.gamut")
+    _sweep(p)
+    with h5py.File(p, "r+") as f:      # HDF5's own scale calls would follow it as references
+        del f["cl"].attrs["DIMENSION_LIST"]
+        f["cl"].attrs["DIMENSION_LIST"] = value
+    assert "E19" in _rules(p)
+    with gamut.open(p) as s:
+        s.get_parameter("mach")
