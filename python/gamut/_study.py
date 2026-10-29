@@ -475,6 +475,8 @@ class Study:
         """A field: runs x nodes (or cells) on a shared mesh, one row's
         values on a changing mesh. `nodes` or `cells` choose sites by
         position, as `rows` chooses rows."""
+        if nodes is not None and cells is not None:
+            raise GamutError("", f"{name}: give nodes or cells, not both")
         sites = nodes if nodes is not None else cells
         if self._mesh_kind == "changing":
             one = isinstance(rows, (list, tuple, np.ndarray)) and len(rows) == 1

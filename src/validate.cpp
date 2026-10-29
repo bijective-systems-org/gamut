@@ -303,6 +303,13 @@ bool Validator::check_dims(const Object& o, const std::vector<std::string>& dims
                             " and should be " + dims[a]);
       continue;
     }
+    // The scale §10 names, not another of its name elsewhere in the file.
+    if (o.info.scale_keys.size() > a && o.info.scale_keys[a].size() == 1 &&
+        o.info.scale_keys[a][0] != file_->object_key(scale_paths[a])) {
+      add("E19", o.concept, "axis " + std::to_string(a) + " is attached to a scale named " +
+                            dims[a] + " that is not " + scale_paths[a].substr(1));
+      continue;
+    }
     const DsetInfo s = file_->dataset_info(scale_paths[a], false);
     if (s.is_dataset && s.shape.size() == 1 && s.shape[0] != o.info.shape[a]) {
       add("E19", o.concept, "axis " + std::to_string(a) + " has " + std::to_string(o.info.shape[a]) +
@@ -1301,14 +1308,22 @@ void Validator::models() {
                                     "scale, named " + want);
             continue;
           }
-          // The attached scale itself, as every scale (§9.4): its extent the
-          // axis's, its attribute creation order tracked and indexed.
-          if (i.scale_extents[a][0] != i.shape[a]) {
+          // The scale beside the dataset, as §12 places it, and no other of its
+          // name; then as every scale (§9.4): one axis, the axis's extent, its
+          // attribute creation order tracked and indexed.
+          const std::string sp = g + "/" + want;
+          if (i.scale_keys[a].size() != 1 || i.scale_keys[a][0] != file_->object_key(sp)) {
+            add("E19", p.substr(1), "axis " + std::to_string(a) + " is attached to a scale named " +
+                                    want + " that is not " + sp.substr(1));
+            continue;
+          }
+          const DsetInfo sc = file_->dataset_info(sp, false);
+          if (sc.shape.size() != 1 || sc.shape[0] != i.shape[a]) {
             add("E19", p.substr(1), "axis " + std::to_string(a) + " has " +
                                     std::to_string(i.shape[a]) + " entries and its scale " + want +
                                     " another number");
           }
-          if (!i.scale_ordered[a][0]) {
+          if (!(sc.attr_order_tracked && sc.attr_order_indexed)) {
             add("E19", p.substr(1), "the scale " + want + " of axis " + std::to_string(a) +
                                     " needs attribute creation order tracked and indexed");
           }

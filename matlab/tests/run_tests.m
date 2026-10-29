@@ -482,9 +482,23 @@ r = gamut.open(fullfile(tmp, 'sweep.gamut'));
 ok(isequal(r.getPoints(":"), r.getPoints()), 'getPoints(":") is the fixed points');
 ok(isempty(r.getPoints([])), 'getPoints([]) is no points');
 r.close();
+try
+    r = gamut.open(p);
+    r.getField('pf', 'rows', 1, 'nodes', ":", 'cells', []);
+    ok(false, 'nodes and cells together refused');
+catch err
+    ok(contains(err.message, 'not both'), ['nodes and cells: ' err.message]);
+end
+r.close();
 xp = fullfile(tmp, 'extracted.gamut');
 gamut.extract(p, xp);
 r = gamut.open(xp); ok(r.rowCount() == 4, 'extract without rows takes every row'); r.close();
+xa = fullfile(tmp, 'extracted_all.gamut');
+gamut.extract(p, xa, ":");
+r = gamut.open(xa); ok(r.rowCount() == 4, 'extract with ":" takes every row'); r.close();
+xn = fullfile(tmp, 'extracted_none.gamut');
+gamut.extract(p, xn, []);
+r = gamut.open(xn); ok(r.rowCount() == 0, 'extract with [] takes no rows'); r.close();
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end
 end

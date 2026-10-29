@@ -78,8 +78,7 @@ std::string token_key(hid_t where, const H5O_token_t& token) {
 
 struct ScaleVisit {
   std::vector<std::string>* names;
-  std::vector<hsize_t>* extents;
-  std::vector<bool>* ordered;
+  std::vector<std::string>* keys;
   const File* file;
 };
 
@@ -110,18 +109,10 @@ herr_t collect_scale(hid_t /*did*/, unsigned /*dim*/, hid_t dsid, void* data) {
   // attribute, and it is found through the object index, never by
   // asking HDF5 for a path (spec section 9.4).
   visit->names->push_back(visit->file->dataset_link_name(dsid));
-  // The attached scale itself, whatever else shares its name.
-  hsize_t extent = 0;
-  Id space(H5Dget_space(dsid));
-  if (space.valid() && H5Sget_simple_extent_ndims(space.get()) == 1) {
-    H5Sget_simple_extent_dims(space.get(), &extent, nullptr);
-  }
-  visit->extents->push_back(extent);
-  unsigned order = 0;
-  Id dcpl(H5Dget_create_plist(dsid));
-  visit->ordered->push_back(dcpl.valid() && H5Pget_attr_creation_order(dcpl.get(), &order) >= 0 &&
-                            (order & H5P_CRT_ORDER_TRACKED) != 0 &&
-                            (order & H5P_CRT_ORDER_INDEXED) != 0);
+  // The attached scale's identity, whatever else shares its name.
+  H5O_info2_t info;
+  visit->keys->push_back(H5Oget_info3(dsid, &info, H5O_INFO_BASIC) >= 0 ? token_key(dsid, info.token)
+                                                                         : std::string());
   return 0;
 }
 
@@ -660,13 +651,12 @@ DsetInfo File::described(hid_t dset, bool scales) const {
   if (!scales) return info;
   info.is_scale = H5DSis_scale(dset) > 0;
   info.scales.resize(static_cast<std::size_t>(rank > 0 ? rank : 0));
-  info.scale_extents.resize(info.scales.size());
-  info.scale_ordered.resize(info.scales.size());
+  info.scale_keys.resize(info.scales.size());
   if (!info.is_scale) {
     if (dimension_list_ok(dset, rank)) {
       for (int axis = 0; axis < rank; ++axis) {
         const std::size_t a = static_cast<std::size_t>(axis);
-        ScaleVisit visit{&info.scales[a], &info.scale_extents[a], &info.scale_ordered[a], this};
+        ScaleVisit visit{&info.scales[a], &info.scale_keys[a], this};
         int index = 0;
         H5DSiterate_scales(dset, static_cast<unsigned>(axis), &index,
                            collect_scale, &visit);

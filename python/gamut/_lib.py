@@ -249,6 +249,14 @@ def int64_exactly(values: Any, what: str) -> np.ndarray:
         return arr.astype(np.int64)
     if arr.dtype.kind == "b":
         raise GamutError("E4", f"{what} is int64 and takes numbers, not booleans")
+    if arr.dtype.kind in "USV":
+        raise GamutError("E4", f"{what} is int64 and takes numbers, not text")
+    if arr.dtype.kind == "f":                     # whole and in range, compared in its own dtype
+        lo, hi = arr.dtype.type(-2.0**63), arr.dtype.type(2.0**63)
+        if arr.size and not (np.all(np.isfinite(arr)) and np.all(arr == np.round(arr))
+                             and np.all((arr >= lo) & (arr < hi))):
+            raise GamutError("E4", f"{what} is int64 and takes whole numbers in its range")
+        return arr.astype(np.int64)
     out = np.empty(arr.shape, dtype=np.int64)
     flat = out.reshape(-1)
     for k, v in enumerate(arr.reshape(-1).tolist()):

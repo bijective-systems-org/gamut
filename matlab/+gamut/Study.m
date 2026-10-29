@@ -225,7 +225,7 @@ classdef Study < handle
         function v = getPoints(s, row)
             if nargin < 2, row = ':'; end
             if isnumeric(row) && isempty(row)       % no row: no points
-                v = zeros(0, s.Axes);
+                v = zeros(0, str2double(gamut.internal.field(s.describe('coordinates'), 'axes', '3')));
                 return
             end
             if s.isall(row) && ~any(strcmp(s.Per, {'fixed', ''}))
