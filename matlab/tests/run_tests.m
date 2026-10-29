@@ -472,6 +472,19 @@ r = gamut.open(wp);
 z = r.getMeshLabel('zone', 1);
 ok(isequal(double(z(:))', [2147483647 1]), 'int64 cells and mesh-label codes pass through unconverted');
 r.close();
+% ':' as char or string is every position; nodes and cells are taken as
+% given; extract takes ':' or nothing for every row.
+r = gamut.open(p);
+ok(isequal(size(r.getField('pf', 'rows', 1, 'nodes', ":")), [1 6]), 'nodes ":" is every node');
+ok(isempty(r.getField('pf', 'rows', 1, 'cells', [])), 'cells [] is no cells');
+r.close();
+r = gamut.open(fullfile(tmp, 'sweep.gamut'));
+ok(isequal(r.getPoints(":"), r.getPoints()), 'getPoints(":") is the fixed points');
+ok(isempty(r.getPoints([])), 'getPoints([]) is no points');
+r.close();
+xp = fullfile(tmp, 'extracted.gamut');
+gamut.extract(p, xp);
+r = gamut.open(xp); ok(r.rowCount() == 4, 'extract without rows takes every row'); r.close();
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end
 end

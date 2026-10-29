@@ -122,6 +122,10 @@ struct DsetInfo {
   bool attr_order_indexed = false;
   bool is_scale = false;
   std::vector<std::vector<std::string>> scales;   // per axis, link names
+  // Per axis, parallel to scales: each attached scale's extent, and whether
+  // its attribute creation order is tracked and indexed.
+  std::vector<std::vector<hsize_t>> scale_extents;
+  std::vector<std::vector<bool>> scale_ordered;
   bool has_fill_value_set = false;
 };
 

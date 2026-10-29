@@ -6,6 +6,7 @@ from __future__ import annotations
 import ctypes
 import os
 import sys
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -236,20 +237,30 @@ def dtype_code(values: np.ndarray) -> int:
 
 
 def int64_exactly(values: Any, what: str) -> np.ndarray:
-    """Values as int64 when they are whole numbers within its range; a cast
-    would round a fraction or wrap a large unsigned value without a word."""
+    """Values as int64 when each is a whole number within its range, compared
+    exactly; a cast would round a fraction or wrap a large unsigned value
+    without a word."""
     arr = np.asarray(values)
-    if arr.dtype.kind in "iu" and arr.dtype != np.uint64:
+    if arr.dtype.kind == "i" or (arr.dtype.kind == "u" and arr.dtype.itemsize < 8):
         return arr.astype(np.int64)
-    if arr.dtype.kind == "u":
+    if arr.dtype.kind == "u":                     # 64-bit unsigned, in either byte order
         if arr.size and arr.max() > np.iinfo(np.int64).max:
             raise GamutError("E4", f"{what}: {arr.max()} is above int64's range")
         return arr.astype(np.int64)
-    as_float = arr.astype(np.float64)
-    if as_float.size and not (np.all(np.isfinite(as_float)) and np.all(as_float == np.round(as_float))
-                              and np.all(np.abs(as_float) < 2.0**63)):
-        raise GamutError("E4", f"{what} is int64 and takes whole numbers in its range")
-    return as_float.astype(np.int64)
+    if arr.dtype.kind == "b":
+        raise GamutError("E4", f"{what} is int64 and takes numbers, not booleans")
+    out = np.empty(arr.shape, dtype=np.int64)
+    flat = out.reshape(-1)
+    for k, v in enumerate(arr.reshape(-1).tolist()):
+        try:
+            exact = Fraction(v)                   # ints, floats and Decimals exactly
+        except (TypeError, ValueError, OverflowError):
+            raise GamutError("E4", f"{what} is int64 and takes whole numbers; {v!r} is not one") from None
+        if exact.denominator != 1 or not -2**63 <= exact.numerator < 2**63:
+            raise GamutError("E4", f"{what} is int64 and takes whole numbers in its range; "
+                                   f"{v!r} is not one")
+        flat[k] = exact.numerator
+    return out
 
 
 def as_array(values: Any) -> np.ndarray:

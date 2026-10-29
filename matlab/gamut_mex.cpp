@@ -853,12 +853,7 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     check(gamut_append(text(arg(1), "dst").c_str(), text(arg(2), "src").c_str(), &n, &e), e);
     plhs[0] = mxCreateDoubleScalar(static_cast<double>(n));
   } else if (cmd == "extract") {
-    Sel rows = selection(arg(3));
-    if (rows.sel.kind == GAMUT_SEL_ALL) {   // [] here is no rows, not every row
-      rows.sel.kind = GAMUT_SEL_INDEX;
-      rows.sel.count = 0;
-      rows.sel.index = nullptr;
-    }
+    const Sel rows = selection(arg(3));   // ':' every row, [] none
     check(gamut_extract(text(arg(1), "src").c_str(), text(arg(2), "dst").c_str(), rows.ptr(), &e), e);
   } else if (cmd == "write_copy") {
     check(gamut_write_copy(text(arg(1), "src").c_str(), text(arg(2), "dst").c_str(), &e), e);

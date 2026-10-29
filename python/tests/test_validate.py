@@ -486,3 +486,23 @@ def test_a_dimension_list_of_another_type_is_e19_not_a_crash(tmp_path, value):
     assert "E19" in _rules(p)
     with gamut.open(p) as s:
         s.get_parameter("mach")
+
+
+def test_the_scale_attached_is_checked_not_a_namesake(tmp_path):
+    p = str(tmp_path / "m.gamut")
+    with gamut.create_model(p, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
+                            scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as mf:
+        mf.add_model("fit", gamut.Nearest(["x"], [0.0], [1.0], [[0.1], [0.9]], {"y": [1.0, 2.0]}),
+                     ["x"])
+    name = "This is a netCDF dimension but not a netCDF variable.%10d"
+    with h5py.File(p, "r+") as f:
+        g = f["models/fit"]
+        d = g.create_dataset("extra", data=np.arange(3.0))
+        local = g.create_dataset("gamut_extra_d0", shape=(3,), dtype=">f4", track_order=True)
+        local.make_scale(name % 3)
+        other = f["private"].create_group("b") if "private" in f else f.create_group("private/b")
+        far = other.create_dataset("gamut_extra_d0", shape=(2,), dtype=">f4", track_order=True)
+        far.make_scale(name % 2)
+        d.dims[0].attach_scale(far)            # the attached scale is two long, the namesake three
+    messages = [x.message for x in gamut.validate(p).findings if x.rule == "E19"]
+    assert any("entries and its scale gamut_extra_d0" in m for m in messages), messages

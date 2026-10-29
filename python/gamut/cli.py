@@ -620,6 +620,8 @@ def cmd_get(args: argparse.Namespace) -> int:
                 data[name] = f.get_scalar(name, rows=rows)
             units[name] = f.describe(name).get("units", "") if name != "row" else ""
         ids = f.get_row_ids(rows)
+    if ext in (".npy", ".npz") and not out.endswith(ext):
+        out += ext                                # the name NumPy writes, whatever case was given
     if ext in (".csv", ".npy", ".npz") and os.path.exists(out) and not args.force:
         raise _Usage("", f"{out} exists; give --force to replace it")   # as .gamut is never replaced
     if ext == ".csv":

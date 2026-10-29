@@ -207,10 +207,14 @@ classdef Study < handle
         function v = getField(s, name, varargin)
             %GETFIELD A field: 'rows', 'nodes' or 'cells' select (1-based);
             %   rows x sites on a shared mesh, one row's values on a changing one.
-            o = s.opts(varargin);
-            sites = o.nodes;
-            if ischar(sites), sites = o.cells; end
-            if strcmp(s.MeshKind, 'changing') && (ischar(o.rows) || numel(o.rows) ~= 1)
+            [o, given] = s.opts(varargin);
+            if ismember('nodes', given) && ismember('cells', given)
+                error('gamut:usage', 'give nodes or cells, not both');
+            end
+            sites = ':';
+            if ismember('nodes', given), sites = o.nodes; end
+            if ismember('cells', given), sites = o.cells; end
+            if strcmp(s.MeshKind, 'changing') && (s.isall(o.rows) || numel(o.rows) ~= 1)
                 error('gamut:usage', ['%s: a changing mesh is read one row at a time; ' ...
                     'reads across rows need a shared mesh'], name);
             end
@@ -220,13 +224,17 @@ classdef Study < handle
 
         function v = getPoints(s, row)
             if nargin < 2, row = ':'; end
-            if ischar(row) && ~any(strcmp(s.Per, {'fixed', ''}))
+            if isnumeric(row) && isempty(row)       % no row: no points
+                v = zeros(0, s.Axes);
+                return
+            end
+            if s.isall(row) && ~any(strcmp(s.Per, {'fixed', ''}))
                 error('gamut:usage', 'this mesh''s geometry changes; give the row');
             end
             code = 6;
             if strcmp(gamut.internal.field(s.describe('coordinates'), 'dtype', ''), 'float32'), code = 5; end
             v = gamut_mex('read', s.Handle, 'coordinates', s.pos(row), ':', code);
-            if ~ischar(row) && strcmp(s.MeshKind, 'shared')
+            if ~s.isall(row) && strcmp(s.MeshKind, 'shared')
                 v = reshape(v(1, :, :), size(v, 2), size(v, 3));
             end
         end
@@ -295,13 +303,19 @@ classdef Study < handle
             if strcmp(gamut.internal.field(s.describe(name), 'dtype', ''), 'float32'), code = 5; end
         end
 
-        function o = opts(~, args)
+        function [o, given] = opts(~, args)
             p = inputParser;
             p.addParameter('rows', ':');    % ':' every row; [] none, as select may return
             p.addParameter('nodes', ':');
             p.addParameter('cells', ':');
             p.parse(args{:});
             o = p.Results;
+            given = setdiff(p.Parameters, p.UsingDefaults);
+        end
+
+        function tf = isall(~, x)
+            % ':' (as char or string) is every position.
+            tf = (ischar(x) || isstring(x)) && isscalar(string(x)) && string(x) == ":";
         end
 
         function p = pos(~, x)
@@ -309,7 +323,9 @@ classdef Study < handle
             % position and [] none.  Only whole-number positions; a logical
             % mask is find(mask).
             if ischar(x) || isstring(x)
-                if ~strcmp(x, ':'), error('gamut:usage', 'positions are '':'' or numbers'); end
+                if ~(isscalar(string(x)) && string(x) == ":")
+                    error('gamut:usage', 'positions are '':'' or numbers');
+                end
                 p = ':';
             elseif isempty(x)
                 p = zeros(0, 1);

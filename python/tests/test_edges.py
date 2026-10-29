@@ -910,3 +910,19 @@ def test_model_data_scales_are_checked_as_every_scale(tmp_path):
         d.dims[0].attach_scale(sc)
     messages = [x.message for x in gamut.validate(p).findings if x.rule == "E19"]
     assert any("entries and its scale gamut_extra_d0" in m for m in messages), messages
+
+
+@pytest.mark.parametrize("given, ok", [
+    (np.array([2**53 + 1], dtype=object), [2**53 + 1]),
+    (np.array([-2.0**63]), [-2**63]),
+    (np.array([2**63], dtype=">u8"), None),
+    (np.array([__import__("decimal").Decimal("9007199254740992.5")], dtype=object), None),
+    (np.array([True]), None),
+])
+def test_int64_conversion_is_exact_in_every_dtype(given, ok):
+    if ok is None:
+        with pytest.raises(gamut.GamutError) as e:
+            _lib.int64_exactly(given, "n")
+        assert e.value.rule == "E4"
+    else:
+        assert _lib.int64_exactly(given, "n").tolist() == ok

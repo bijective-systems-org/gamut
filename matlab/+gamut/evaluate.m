@@ -48,7 +48,8 @@ for k = 1:numel(params)
     if strcmp(gamut.internal.field(d, 'dtype', ''), 'int64')
         % Whole numbers in range only: int64() would round or saturate silently.
         v = inputs.(name)(:);
-        if isfloat(v) && any(v ~= fix(v) | ~isfinite(v) | v >= 2^63 | v < -2^63)
+        if (isfloat(v) && any(v ~= fix(v) | ~isfinite(v) | v >= 2^63 | v < -2^63)) || ...
+                (isa(v, 'uint64') && any(v > uint64(intmax('int64')))) || ~(isnumeric(v) || islogical(v))
             error('gamut:E4', '%s is int64 and takes whole numbers in its range', name);
         end
         col = int64(v);
