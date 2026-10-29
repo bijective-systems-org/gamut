@@ -8,9 +8,9 @@ or behave differently after, these changes; the fixes further down also
 correct results that were wrong, such as a `select` on int64 values past
 2⁵³.
 
-- Creating a file never replaces an existing one: `create`, `extract`,
-  `write_copy`, `evaluate` with a path, `gamut build`, and `gamut get`
-  without `--force`.
+- Creating a file never replaces an existing one: `create`,
+  `create_model`, `extract`, `write_copy`, `evaluate` with a path,
+  `gamut build`, `gamut-vtk import`, and `gamut get` without `--force`.
 - A parameter is float64 unless declared int64; integers given to it no
   longer make it int64.
 - In MATLAB, `[]` as rows, nodes or cells selects none; `':'`, or leaving
