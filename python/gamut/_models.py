@@ -42,7 +42,7 @@ def _fill(h: ctypes.c_void_p, prefix: str, d: Mapping[str, Any]) -> None:
         elif isinstance(value, (bool, np.bool_)):
             call("gamut_tree_set_bool", h, b(path), 1 if value else 0)
         elif isinstance(value, (int, np.integer)):
-            call("gamut_tree_set_int", h, b(path), int(value))
+            call("gamut_tree_set_int", h, b(path), _lib.int64_value(value, path))
         elif isinstance(value, (float, np.floating)):
             call("gamut_tree_set_float", h, b(path), float(value))
         elif isinstance(value, str):
@@ -366,10 +366,13 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
             declare(name, spec, spec.get("at", "node"))
         for name, value in (constants or {}).items():
             number, units = value
+            if isinstance(number, np.ndarray) and number.ndim == 0:
+                number = number[()]                     # its NumPy scalar
             if isinstance(number, np.float32):
                 call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_FLOAT32, float(number), 0)
-            elif isinstance(number, (int, np.integer)) and not isinstance(number, bool):
-                call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_INT64, 0.0, int(number))
+            elif isinstance(number, (int, np.integer)) and not isinstance(number, (bool, np.bool_)):
+                call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_INT64, 0.0,
+                     _lib.int64_value(number, name))
             else:
                 call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_FLOAT64,
                      float(number), 0)
@@ -529,7 +532,7 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
                 if coordinate.get("model"):
                     pts = outputs[coordinate["model"]][coordinate["output"]]["values"]
                 elif coordinates is not None:
-                    pts = np.asarray(coordinates, dtype=np.float64)
+                    pts = _lib.float64_exactly(coordinates, "coordinates")
                 else:
                     raise GamutError("E2", "this model file's geometry changes per run; give "
                                             "coordinates")

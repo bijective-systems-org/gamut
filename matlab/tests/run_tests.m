@@ -439,6 +439,13 @@ gamut_mex('geometry_cells', d.Handle, uint8([9 9]), single([0 4 8]), int16([0 2 
 gamut_mex('set_mesh', d.Handle);
 d.addRun(struct('k', 1));
 d.setNote('author', "Alice");
+d.setNote('big', uint64(2)^62);                 % any integer class is an integer note
+try
+    d.setNote('huge', intmax('uint64'));
+    ok(false, 'a uint64 note above int64 refused');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E4'), ['uint64 note: ' err.message]);
+end
 try
     gamut_mex('set_note', d.Handle, 'n', int64([]));
     ok(false, 'an empty int64 note refused');
@@ -520,7 +527,11 @@ for bad = {2.5, Inf, 2^63, uint64(2)^63, true, 3 + 2i, sparse(3)}
         ok(strcmp(err.identifier, 'gamut:E4'), ['int64 input: ' err.message]);
     end
 end
-% A float64 model input refuses an integer that double() would round.
+% A float64 model input takes integer classes, and refuses an integer that
+% double() would round.
+o = gamut.evaluate(fullfile(tmp, 'nearest.gamut'), struct('alpha', int32([1; 9])));
+ok(isequal(o.getParameter('alpha'), [1; 9]), 'an int32 input to a float64 model input evaluates');
+o.close();
 try
     o = gamut.evaluate(fullfile(tmp, 'nearest.gamut'), struct('alpha', int64(2)^53 + 1));
     o.close();

@@ -1018,7 +1018,8 @@ def test_integers_past_2_53_are_refused_on_every_path_to_a_float64(tmp_path):
     with gamut.create_model(model, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
                             scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as m:
         m.add_model("fit", gamut.Nearest(["x"], [0.], [1.], [[0.], [1.]], {"y": [0., 2.]}), ["x"])
-    for given in ([big], np.array([big]), np.array([big], dtype=object)):
+    for given in ([big], np.array([big]), np.array([big], dtype=object),
+                  np.array([np.int64(big)], dtype=object)):
         with pytest.raises(gamut.GamutError, match="not exact as a float64") as e:
             gamut.evaluate(model, {"x": given})
         assert e.value.rule == "E4"
@@ -1031,3 +1032,21 @@ def test_integers_past_2_53_are_refused_on_every_path_to_a_float64(tmp_path):
     with gamut.open(p) as f:
         assert f.get_parameter("x").tolist() == [2000.0]
         assert f.get_parameter("n").tolist() == [big]
+
+
+def test_integer_constants_and_notes_stay_exact_or_are_refused(tmp_path):
+    p = str(tmp_path / "c.gamut")
+    with gamut.create(p, writer="t", parameters={"x": "1"},
+                      constants={"c": (np.array(2**53 + 1), "1")}) as s:   # a 0-d array
+        s.add_run({"x": 1.0})
+        s.notes["n"] = np.uint64(2**63 - 1)
+        for value in (2**64, np.uint64(2**64 - 1), -2**63 - 1):
+            with pytest.raises(gamut.GamutError, match="outside int64's range"):
+                s.notes["m"] = value
+    with gamut.open(p) as f:
+        assert f.get_constant("c") == 2**53 + 1
+        assert f.notes["n"] == 2**63 - 1
+    for value in (2**64, np.uint64(2**64 - 1)):
+        with pytest.raises(gamut.GamutError, match="outside int64's range"):
+            gamut.create(str(tmp_path / "d.gamut"), writer="t", parameters={"x": "1"},
+                         constants={"c": (value, "1")})

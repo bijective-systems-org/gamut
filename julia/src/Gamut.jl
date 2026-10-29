@@ -596,9 +596,9 @@ function numbers(v::AbstractArray)
     T <: Union{Float32,Float64,Int8,UInt8,Int32,Int64} && return collect(v)
     T <: Bool && throw(GamutError("E4", "booleans are given as a label's names"))
     T <: Integer && return Vector{Int64}(vec(v))
-    T <: Real && return Vector{Float64}(vec(v))
+    T <: Real && return float64_exactly(vec(v), "a value")
     all(x -> x isa Integer && !(x isa Bool), v) && return Int64[x for x in v]
-    all(x -> x isa Real, v) && return Float64[x for x in v]
+    all(x -> x isa Real, v) && return float64_exactly(vec(v), "a value")
     throw(GamutError("E4", "values are numbers; got $(T)"))
 end
 
@@ -1192,7 +1192,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
             if !isempty(m.mesh_kind) && m.per == "run"
                 pts = !isempty(get(coordinate, "model", "")) ?
                       outputs[coordinate["model"]][coordinate["output"]]["values"] :
-                      coordinates !== nothing ? Float64.(coordinates) :
+                      coordinates !== nothing ? float64_exactly(coordinates, "coordinates") :
                       throw(GamutError("E2", "this model file's geometry changes per run; give coordinates"))
                 points = [pts[i, :, :] for i in 1:n]
             end

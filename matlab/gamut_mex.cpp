@@ -125,6 +125,24 @@ int64_t one_int64(const mxArray* v) {
   return *static_cast<const int64_t*>(mxGetData(v));
 }
 
+// One integer of any integer class as int64 (a constant or a note), where a
+// double would round a uint64 or int64 past 2^53.
+bool is_integer(const mxArray* v) {
+  return v != nullptr && (mxIsInt8(v) || mxIsUint8(v) || mxIsInt16(v) || mxIsUint16(v) ||
+                          mxIsInt32(v) || mxIsUint32(v) || mxIsInt64(v) || mxIsUint64(v));
+}
+int64_t one_integer(const mxArray* v) {
+  if (mxIsInt64(v)) return one_int64(v);
+  if (mxGetNumberOfElements(v) != 1) usage("an integer value is one number");
+  if (mxIsUint64(v)) {
+    const uint64_t u = *static_cast<const uint64_t*>(mxGetData(v));
+    if (u > static_cast<uint64_t>(INT64_MAX))
+      throw Refusal{"gamut:E4", std::to_string(u) + " is above int64's range"};
+    return static_cast<int64_t>(u);
+  }
+  return static_cast<int64_t>(mxGetScalar(v));    // int8 to uint32: exact as a double
+}
+
 // A model tree, freed on every path out, a thrown usage error included.
 struct Tree {
   gamut_tree* t = nullptr;
@@ -700,9 +718,9 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
           e);
   } else if (cmd == "set_constant") {
     const mxArray* v = arg(4);
-    if (v != nullptr && mxIsInt64(v)) {
+    if (is_integer(v)) {
       check(gamut_set_constant(file(arg(1)), text(arg(2), "name").c_str(), text(arg(3), "units").c_str(),
-                             GAMUT_INT64, 0.0, one_int64(v), &e), e);
+                             GAMUT_INT64, 0.0, one_integer(v), &e), e);
     } else {
       check(gamut_set_constant(file(arg(1)), text(arg(2), "name").c_str(), text(arg(3), "units").c_str(),
                              GAMUT_FLOAT64, scalar(v, "value"), 0, &e), e);
@@ -785,8 +803,8 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     const mxArray* v = arg(3);
     if (v != nullptr && (mxIsChar(v) || mxIsClass(v, "string"))) {
       check(gamut_set_note_text(f, key.c_str(), text(v, "value").c_str(), &e), e);
-    } else if (v != nullptr && mxIsInt64(v)) {
-      check(gamut_set_note_int(f, key.c_str(), one_int64(v), &e), e);
+    } else if (is_integer(v)) {
+      check(gamut_set_note_int(f, key.c_str(), one_integer(v), &e), e);
     } else {
       check(gamut_set_note_float(f, key.c_str(), scalar(v, "value"), &e), e);
     }

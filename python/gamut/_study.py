@@ -628,7 +628,7 @@ class _NotesWriter:
     def __setitem__(self, key: str, value: Any) -> None:
         h = self._study._handle()
         if isinstance(value, bool) or isinstance(value, (int, np.integer)):
-            call("gamut_set_note_int", h, b(key), int(value))
+            call("gamut_set_note_int", h, b(key), _lib.int64_value(value, key))
         elif isinstance(value, (float, np.floating)):
             call("gamut_set_note_float", h, b(key), float(value))
         elif isinstance(value, str):
@@ -746,10 +746,13 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
             call("gamut_set_generalisation_group", handle, b(generalisation_group))
         for name, value in (constants or {}).items():
             number, units = value
+            if isinstance(number, np.ndarray) and number.ndim == 0:
+                number = number[()]                     # its NumPy scalar
             if isinstance(number, np.float32):
                 call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_FLOAT32, float(number), 0)
-            elif isinstance(number, (int, np.integer)) and not isinstance(number, bool):
-                call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_INT64, 0.0, int(number))
+            elif isinstance(number, (int, np.integer)) and not isinstance(number, (bool, np.bool_)):
+                call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_INT64, 0.0,
+                     _lib.int64_value(number, name))
             else:
                 call("gamut_set_constant", handle, b(name), b(units), _lib.GAMUT_FLOAT64, float(number), 0)
     except BaseException:
