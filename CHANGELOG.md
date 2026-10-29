@@ -33,7 +33,7 @@ the fixes further down also correct results that were wrong, such as a
 - On the command line, every failure under `--json` is
   `{"problems": [{"rule", "path", "message"}]}`; it was `{"error": {...}}`
   or `{"problems": [{"key", "message"}]}` by command, and argparse's own
-  mistakes printed text. Success documents no longer carry an empty
+  mistakes printed text (`validate` still prints its findings). Success documents no longer carry an empty
   `problems`. A misused `gamut get` exits 2 before creating its output.
 - In C++, `get_parameter<T>` and `get_constant<T>` name the type: `double`,
   or `int64_t` for a value declared int64. Another type is refused rather

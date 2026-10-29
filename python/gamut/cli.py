@@ -8,7 +8,8 @@
 
 Readable text by default; `--json` prints one document of the shape given
 in each command's docstring, kept stable across versions for scripts and
-agents, and every failure as {"problems": [{"rule", "path", "message"}]}.
+agents, and every failure as {"problems": [{"rule", "path", "message"}]};
+`validate` always prints its findings, a file it cannot open among them.
 Big data goes to files; every problem is reported at once with where it is
 and what to do.  Exit status: 0 success, 1 the file or document has errors,
 2 a usage error.
@@ -485,12 +486,16 @@ def _document(path: str) -> Any:
     errors (exit 1), one that cannot be read a command used wrongly."""
     try:
         with open(path, encoding="utf-8") as fh:
-            return json.load(fh)
+            doc = json.load(fh)
     except OSError as e:
         raise _Usage("", f"cannot read {path}: {e.strerror}") from None
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         where = f" at line {e.lineno}, column {e.colno}" if isinstance(e, json.JSONDecodeError) else ""
         raise GamutError("", f"{path} is not JSON{where}: {getattr(e, 'msg', e)}", path) from None
+    if not isinstance(doc, dict):
+        raise GamutError("", f"{path} holds {type(doc).__name__}, not a JSON object of keys "
+                              "(gamut build --example shows one)", path)
+    return doc
 
 
 def _check_rows(f: Any, rows: Any) -> None:
@@ -536,8 +541,8 @@ def _get_study(args: argparse.Namespace) -> int:
     """get -o NAME.gamut: the selected rows as a smaller study file, every name
     kept (gamut.extract). --json: {"wrote": OUT, "rows": n}"""
     if args.names or args.zone:
-        raise GamutError("", "a smaller study file keeps every name and every node; give no "
-                              "names and no --zone")
+        raise _Usage("", "a smaller study file keeps every name and every node; give no "
+                          "names and no --zone")
     with open_file(args.file) as f:
         positions = _positions(f, _rows_arg(args.rows))
         if args.where:
@@ -556,7 +561,7 @@ def cmd_get(args: argparse.Namespace) -> int:
     if ext == ".gamut":
         return _get_study(args)
     if not args.names:
-        raise GamutError("", "name what to write (or write a smaller study file: -o NAME.gamut)")
+        raise _Usage("", "name what to write (or write a smaller study file: -o NAME.gamut)")
     with open_file(args.file) as f:
         rows = _rows_arg(args.rows)
         if rows is not None:
@@ -627,6 +632,10 @@ def cmd_get(args: argparse.Namespace) -> int:
         raise _Usage("", f"OUT ends in .csv, .npy or .npz (got {ext or 'nothing'})")
     if ext == ".csv" and len(data) != 1 and any(v.ndim > 1 for v in data.values()):
         raise _Usage("", "a field goes to CSV alone (one line per row)")
+    if ext == ".csv" and any(v.ndim == 0 for v in data.values()):
+        name = next(k for k, v in data.items() if v.ndim == 0)
+        raise _Usage("", f"{name} is a constant, one value, and a CSV has a line per row; "
+                         "write it to .npz or .npy")
     if ext == ".npy" and len(data) != 1:
         raise _Usage("", "a .npy holds one array; use .npz for several")
     if ext == ".csv":
@@ -714,6 +723,13 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"error: {e}", file=sys.stderr)
         return 2 if isinstance(e, _Usage) else 1
+    except OSError as e:             # an output that cannot be written: where, and why
+        where = e.filename or ""
+        if _Parser.wants_json:
+            print(_problems_json([("", str(where), f"cannot write {where}: {e.strerror}")]))
+        else:
+            print(f"error: cannot write {where}: {e.strerror}", file=sys.stderr)
+        return 2
 
 
 def vtk_main(argv: list[str] | None = None) -> int:

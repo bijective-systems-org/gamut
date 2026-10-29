@@ -198,9 +198,14 @@ def test_every_json_failure_has_one_shape_and_its_exit_status(tmp_path, capsys):
         s.add_runs({"x": [1.0, 2.0], "y": [3.0, 4.0]})
     bad_doc = tmp_path / "bad.json"
     bad_doc.write_text(json.dumps({"writer": "t"}))
+    null_doc = tmp_path / "null.json"
+    null_doc.write_text("null")
     cases = [
-        (1, ["validate", str(tmp_path / "none.gamut"), "--json"], None),     # validate reports, never fails
         (1, ["info", str(tmp_path / "none.gamut"), "--json"], "there is no file"),
+        (1, ["build", str(null_doc), "-o", str(tmp_path / "n.gamut"), "--json"], "not a JSON object"),
+        (2, ["get", p, "-o", str(tmp_path / "none.csv"), "--json"], "name what to write"),
+        (2, ["get", p, "x", "-o", str(tmp_path / "x.gamut"), "--json"], "keeps every name"),
+        (2, ["get", p, "x", "-o", str(tmp_path / "no" / "dir.csv"), "--json"], "cannot write"),
         (1, ["build", str(bad_doc), "-o", str(tmp_path / "b.gamut"), "--json"], ""),
         (2, ["get", p, "x", "y", "-o", str(tmp_path / "two.npy"), "--json"], "a .npy holds one array"),
         (2, ["get", p, "x", "-o", str(tmp_path / "x.txt"), "--json"], "OUT ends in"),
@@ -209,12 +214,23 @@ def test_every_json_failure_has_one_shape_and_its_exit_status(tmp_path, capsys):
     ]
     for status, argv, says in cases:
         code, out, err = run(capsys, *argv)
-        if says is None:
-            assert code == 1 and "findings" in json.loads(out)
-            continue
         doc = json.loads(out)
         assert code == status, (argv, out, err)
         assert list(doc) == ["problems"] and doc["problems"], (argv, out)
         assert all(set(x) == {"rule", "path", "message"} for x in doc["problems"]), (argv, out)
         assert says in doc["problems"][0]["message"], (argv, out)
     assert not (tmp_path / "two.npy").exists() and not (tmp_path / "x.txt").exists()
+    # validate's document is its findings, a file it cannot open among them.
+    code, out, _ = run(capsys, "validate", str(tmp_path / "none.gamut"), "--json")
+    assert code == 1 and json.loads(out)["findings"][0]["rule"] == "E1"
+
+
+def test_a_constant_is_refused_for_csv_before_the_output_exists(tmp_path, capsys):
+    p = str(tmp_path / "c.gamut")
+    with gamut.create(p, writer="t", parameters={"x": "1"}, constants={"area": (2.5, "m2")}) as s:
+        s.add_runs({"x": [1.0, 2.0]})
+    out = tmp_path / "area.csv"
+    out.write_text("kept")
+    code, text, _ = run(capsys, "get", p, "area", "-o", str(out), "--force", "--json")
+    assert code == 2 and "is a constant" in json.loads(text)["problems"][0]["message"]
+    assert out.read_text() == "kept"                          # not truncated before the refusal
