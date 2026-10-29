@@ -372,3 +372,17 @@ def test_odd_outputs_and_self_append_are_usage_errors(tmp_path, capsys):
     code, out, _ = run(capsys, "get", m, "coordinates", "-o", str(tmp_path / "c.csv"), "--json")
     assert code == 2 and "more than a CSV" in json.loads(out)["problems"][0]["message"]
     assert not (tmp_path / "c.csv").exists()
+
+
+
+def test_rows_of_a_model_file_are_a_usage_error(tmp_path, capsys):
+    data, model = str(tmp_path / "d.gamut"), str(tmp_path / "m.gamut")
+    with gamut.create(data, writer="t", parameters={"x": "1"}) as s:
+        s.add_runs({"x": [0.2, 0.8]})
+    with gamut.create_model(model, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
+                            scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as s:
+        s.add_model("fit", gamut.Nearest(["x"], [0.], [1.], [[0.], [1.]], {"y": [0., 2.]}), ["x"])
+    for argv in (["get", model, "-o", str(tmp_path / "sub.gamut")], ["append", data, model]):
+        code, out, _ = run(capsys, *argv, "--json")
+        assert code == 2 and "is a model file" in json.loads(out)["problems"][0]["message"], (argv, out)
+    assert not (tmp_path / "sub.gamut").exists()

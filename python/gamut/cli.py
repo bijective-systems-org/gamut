@@ -498,6 +498,9 @@ def cmd_append(args: argparse.Namespace) -> int:
         if os.path.exists(args.document) and os.path.exists(args.file) and \
                 os.path.samefile(args.document, args.file):
             raise _Usage("", "the source and the destination are one file")
+        for path in (args.file, args.document):
+            with open_file(path) as f:
+                _rows_kept(f, "appending")
         n = gamut_append(args.file, args.document)      # every row of another study file
         _emit(args, {"appended": args.file, "rows": n},
               f"appended {_counted(n, 'run')} from {args.document} to {args.file}")
@@ -619,6 +622,7 @@ def _get_study(args: argparse.Namespace) -> int:
         raise _Usage("", "a smaller study file keeps every name and every node; give no "
                           "names and no --zone")
     with open_file(args.file) as f:
+        _rows_kept(f, "a smaller study file")
         positions = _positions(f, _rows_arg(args.rows))
         if args.where:
             positions = np.intersect1d(_select(f, args.where), positions)
@@ -627,6 +631,12 @@ def _get_study(args: argparse.Namespace) -> int:
     _emit(args, {"wrote": args.output, "rows": int(len(positions))},
           f"wrote {_counted(len(positions), 'run')} to {args.output}")
     return 0
+
+
+def _rows_kept(f: Any, what: str) -> None:
+    """A model file holds a model, not rows: asking it for rows is the command's mistake."""
+    if f.kind == "model":
+        raise _Usage("", f"{f.path} is a model file, with no rows; {what} takes data files")
 
 
 def _usable_output(path: str) -> None:
