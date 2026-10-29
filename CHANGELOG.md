@@ -100,8 +100,9 @@ break rules by accident, every valid data file is appended to itself, and
 it gains a valid file of int64 columns and hostile files of several large
 tables and a deeply nested `where`.
 
-MATLAB takes `"double-quoted"` strings wherever it takes text, and cell
-arrays given as any integer class, read by their class; integer arrays
+MATLAB takes `"double-quoted"` strings wherever it takes text, notes and
+model numbers included, refuses sparse arrays, and takes cell arrays given
+as any integer class, read by their class; integer arrays
 that were not double were read as int64, past the end of their buffer.
 An open study keeps the MATLAB gateway loaded, so `clear mex` no longer
 orphans it, and MATLAB finishes open files when it exits. A refused call
@@ -110,9 +111,9 @@ library's symbols are looked up under a lock from any thread, and a study
 left to the garbage collector removes its temporary file as `close` does.
 
 The guide and SPEC.md say what an append costs when it is interrupted: a
-refused batch leaves the file as it was, and every check is made before the
-first write, but a process killed while it appends can leave the whole file
-unreadable. Keep a copy of a file you cannot regenerate, or append each
+batch refused for its own data leaves the file as it was, every such
+check being made before the first write, but a write that fails or a
+process killed while it appends can leave the whole file unreadable. Keep a copy of a file you cannot regenerate, or append each
 job's own file at the end.
 
 ## 1.3.0 (2026-10-25)

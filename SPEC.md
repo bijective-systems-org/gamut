@@ -693,11 +693,13 @@ Rows can be appended in place when every growable dimension is unlimited,
 as a writer of this format makes them, so new runs may bring new members (a
 group table grows) or new instances. A file whose growable dimensions are
 fixed is read-only: appending refuses it (E20), and a copy rewritten with
-the default layout (`write_copy`) can grow. Every check of a batch is made before
-its first write, so a refused batch leaves the file as it was. HDF5 does not
-keep a file consistent on disk while it is written: a writer stopped partway
-(a crash, a killed process) can leave the file unreadable, rows written
-before included. A library says so; this version defines no recovery. A
+the default layout (`write_copy`) can grow. Every check of a batch's own data is made before its first write, so
+a batch refused for its data leaves the file as it was. A failure of the
+file itself while it is written (a damaged chunk, a full disk) can come
+after writes, and HDF5 does not keep a file consistent on disk while it is
+written: such a failure, or a writer stopped partway (a crash, a killed
+process), can leave the file unreadable, rows written before included. A
+library says so; this version defines no recovery. A
 library appends without copying or re-reading the whole file, and checks
 the structure and the appended rows. A fixed-length string dataset whose
 new values need a wider width is recreated: its scale is detached, the

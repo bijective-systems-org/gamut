@@ -415,9 +415,35 @@ s.close();
 r = gamut.open(string(sp));
 ok(isequal(r.getField("pf"), P), 'a string path and name read like char ones');
 [types, offsets] = r.getCells();
-ok(isequal(double(offsets(:))', [0 4 8]), 'int32 offsets are read by their class');
+ok(isequal(double(offsets(:))', [0 4 8]), 'int32 offsets reach the file');
 clear mex
 ok(isequal(r.getField("pf", 'rows', 1), P(1, :)), 'an open study survives clear mex');
+r.close();
+% The gateway itself reads integers by class (the M layer converts first).
+dp = fullfile(tmp, 'direct.gamut');
+d = gamut.create(dp, 'writer', 'matlab tests', 'mesh', 'shared', 'per', 'fixed', ...
+    'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'));
+for bad = {{uint64(2)^63, 'out of range'}, {[0 4.5 8], 'whole numbers'}, {sparse([0 4 8]), 'sparse'}}
+    gamut_mex('geometry_begin', d.Handle);
+    gamut_mex('geometry_points', d.Handle, pts);
+    try
+        gamut_mex('geometry_cells', d.Handle, uint8([9 9]), bad{1}{1}, int64([0 2 3 1 2 4 5 3]));
+        ok(false, ['refused offsets: ' bad{1}{2}]);
+    catch err
+        ok(contains(err.message, bad{1}{2}), ['refused offsets: ' err.message]);
+    end
+end
+gamut_mex('geometry_begin', d.Handle);
+gamut_mex('geometry_points', d.Handle, pts);
+gamut_mex('geometry_cells', d.Handle, uint8([9 9]), single([0 4 8]), int16([0 2 3 1 2 4 5 3]));
+gamut_mex('set_mesh', d.Handle);
+d.addRun(struct('k', 1));
+d.setNote('author', "Alice");
+d.close();
+r = gamut.open(dp);
+[~, offsets, conn] = r.getCells();
+ok(isequal(double(offsets(:))', [0 4 8]) && isequal(double(conn(:))', [0 2 3 1 2 4 5 3]), ...
+    'single offsets and int16 connectivity are read by their class');
 r.close();
 
 fprintf('%d checks, %d failures\n', checks, failures);

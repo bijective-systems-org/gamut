@@ -81,7 +81,9 @@ std::string text(const mxArray* a, const char* what) {
 // Integers given in any numeric class, converted by that class; a value that is
 // not a whole number, or out of int64's range, is refused.
 std::vector<int64_t> integers(const mxArray* a, const char* what) {
-  if (a == nullptr || !mxIsNumeric(a) || mxIsComplex(a)) usage(std::string(what) + " must be integers");
+  if (a == nullptr || !mxIsNumeric(a) || mxIsComplex(a) || mxIsSparse(a)) {
+    usage(std::string(what) + " must be full integer arrays");
+  }
   const mwSize n = mxGetNumberOfElements(a);
   std::vector<int64_t> out(n);
   const void* d = mxGetData(a);
@@ -141,11 +143,20 @@ gamut_file* file(const mxArray* a) {
   return reinterpret_cast<gamut_file*>(p);
 }
 
-mxArray* handle_out(gamut_file* f) {
-  if (g_files.empty()) mexLock();
-  g_files.insert(reinterpret_cast<std::uintptr_t>(f));
-  mxArray* out = mxCreateNumericMatrix(1, 1, mxUINT64_CLASS, mxREAL);
-  *static_cast<std::uint64_t*>(mxGetData(out)) = reinterpret_cast<std::uintptr_t>(f);
+// A handle's output is made before the file is acquired, so a MATLAB allocation
+// failure (which leaves the MEX function at once) cannot strand an open file.
+mxArray* new_handle() { return mxCreateNumericMatrix(1, 1, mxUINT64_CLASS, mxREAL); }
+
+mxArray* handle_out(mxArray* out, gamut_file* f) {
+  const std::uintptr_t p = reinterpret_cast<std::uintptr_t>(f);
+  try {
+    g_files.insert(p);
+  } catch (...) {
+    gamut_abandon(f, 1);   // a file this handle created is removed; one opened is only closed
+    throw;
+  }
+  if (g_files.size() == 1) mexLock();
+  *static_cast<std::uint64_t*>(mxGetData(out)) = p;
   return out;
 }
 
@@ -256,6 +267,7 @@ mxArray* from_c_order(const unsigned char* src, const std::vector<int64_t>& dims
 // A MATLAB array to C order, its extents as MATLAB gives them (trailing
 // singleton extents beyond `rank` dropped).
 std::vector<unsigned char> to_c_order(const mxArray* a, std::size_t rank, std::vector<int64_t>* dims) {
+  if (mxIsSparse(a)) usage("a sparse array is not taken; give full(...)");
   const mwSize nd = mxGetNumberOfDimensions(a);
   const mwSize* md = mxGetDimensions(a);
   dims->assign(md, md + nd);
@@ -329,9 +341,9 @@ void tree_set(gamut_tree* t, const std::string& key, const mxArray* v) {
   } else if (mxIsStruct(v)) {
     check(gamut_tree_set_dict(t, key.c_str(), &e), e);
     tree_from(t, key, v);
-  } else if (mxIsChar(v)) {
+  } else if (mxIsChar(v) || (mxIsClass(v, "string") && mxGetNumberOfElements(v) == 1)) {
     check(gamut_tree_set_string(t, key.c_str(), text(v, key.c_str()).c_str(), &e), e);
-  } else if (mxIsCell(v)) {
+  } else if (mxIsCell(v) || mxIsClass(v, "string")) {
     const auto items = cellstr(v, key.c_str());
     const auto p = pointers(items);
     check(gamut_tree_set_strings(t, key.c_str(), p.data(), static_cast<int64_t>(p.size()), &e), e);
@@ -387,7 +399,7 @@ void nearest_tree(gamut_tree* t, const mxArray* numbers) {
   };
   gamut_error e{};
   auto doubles = [&](const mxArray* a, const char* what) {
-    if (!mxIsDouble(a) || mxIsComplex(a)) usage(std::string(what) + " is real double");
+    if (!mxIsDouble(a) || mxIsComplex(a) || mxIsSparse(a)) usage(std::string(what) + " is real full double");
   };
   const auto columns = cellstr(field("columns"), "columns");
   const auto p = pointers(columns);
@@ -443,7 +455,7 @@ mxArray* tree_value(const gamut_tree* t, const std::string& key) {
   switch (kind) {
     case GAMUT_TREE_NULL: {
       mxArray* m = nullptr;
-      mexCallMATLAB(1, &m, 0, nullptr, "missing");
+      if (mexCallMATLABWithTrap(1, &m, 0, nullptr, "missing") != nullptr) usage("cannot make a missing value");
       return m;
     }
     case GAMUT_TREE_BOOL:
@@ -486,7 +498,7 @@ mxArray* tree_value(const gamut_tree* t, const std::string& key) {
       mxArray* m = from_c_order(bytes.data(), dims, dtype);
       if (dtype == GAMUT_INT8) {
         mxArray* l = nullptr;
-        mexCallMATLAB(1, &l, 1, &m, "logical");
+        if (mexCallMATLABWithTrap(1, &l, 1, &m, "logical") != nullptr) usage("cannot make a logical array");
         return l;
       }
       return m;
@@ -519,22 +531,27 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
   const std::string cmd = text(prhs[0], "command");
   auto arg = [&](int i) -> const mxArray* { return i < nrhs ? prhs[i] : nullptr; };
   gamut_error e{};
+  for (int i = 1; i < nrhs; ++i) {   // nothing Gamut takes is sparse; its storage is compressed
+    if (mxIsSparse(prhs[i])) usage("a sparse array is not taken; give full(...)");
+  }
 
   if (cmd == "version") {
     plhs[0] = mxCreateString(gamut_version());
   } else if (cmd == "open" || cmd == "open_append") {
     gamut_file* f = nullptr;
     const std::string path = text(arg(1), "path");
+    mxArray* out = new_handle();
     check(cmd == "open" ? gamut_open(path.c_str(), &f, &e) : gamut_open_append(path.c_str(), &f, &e), e);
-    plhs[0] = handle_out(f);
+    plhs[0] = handle_out(out, f);
   } else if (cmd == "create" || cmd == "create_model") {
     gamut_file* f = nullptr;
     const std::string path = text(arg(1), "path"), writer = text(arg(2), "writer");
     const std::string kind = text(arg(3), "mesh kind"), per = text(arg(4), "per");
+    mxArray* out = new_handle();
     check(cmd == "create" ? gamut_create(path.c_str(), writer.c_str(), kind.c_str(), per.c_str(), &f, &e)
                           : gamut_create_model(path.c_str(), writer.c_str(), kind.c_str(), per.c_str(), &f, &e),
           e);
-    plhs[0] = handle_out(f);
+    plhs[0] = handle_out(out, f);
   } else if (cmd == "close") {
     gamut_file* f = file(arg(1));
     const int status = gamut_close(f, &e);
@@ -748,7 +765,7 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     gamut_file* f = file(arg(1));
     const std::string key = text(arg(2), "key");
     const mxArray* v = arg(3);
-    if (v != nullptr && mxIsChar(v)) {
+    if (v != nullptr && (mxIsChar(v) || mxIsClass(v, "string"))) {
       check(gamut_set_note_text(f, key.c_str(), text(v, "value").c_str(), &e), e);
     } else if (v != nullptr && mxIsInt64(v)) {
       check(gamut_set_note_int(f, key.c_str(), *static_cast<int64_t*>(mxGetData(v)), &e), e);
@@ -792,7 +809,9 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     }
     for (std::size_t j = 0; j < names.size(); ++j) {
       const mxArray* c = mxGetCell(cols, static_cast<mwIndex>(j));
-      if (c == nullptr || !mxIsDouble(c) || mxIsComplex(c)) usage("input columns are real double");
+      if (c == nullptr || !mxIsDouble(c) || mxIsComplex(c) || mxIsSparse(c)) {
+        usage("input columns are real full double");
+      }
       data.emplace_back(mxGetPr(c), mxGetPr(c) + mxGetNumberOfElements(c));
       if (j > 0 && static_cast<int64_t>(data.back().size()) != rows) {
         usage("input columns have one length");
@@ -827,8 +846,10 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     check(gamut_write_copy(text(arg(1), "src").c_str(), text(arg(2), "dst").c_str(), &e), e);
   } else if (cmd == "evaluate_begin") {
     gamut_file* w = nullptr;
-    check(gamut_evaluate_begin(file(arg(1)), text(arg(2), "path").c_str(), &w, &e), e);
-    plhs[0] = handle_out(w);
+    const std::string path = text(arg(2), "path");
+    mxArray* out = new_handle();
+    check(gamut_evaluate_begin(file(arg(1)), path.c_str(), &w, &e), e);
+    plhs[0] = handle_out(out, w);
   } else {
     usage("unknown command \"" + cmd + "\"");
   }
