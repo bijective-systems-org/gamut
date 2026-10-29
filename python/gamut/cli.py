@@ -495,6 +495,9 @@ def cmd_build(args: argparse.Namespace) -> int:
 def cmd_append(args: argparse.Namespace) -> int:
     """--json: {"appended": FILE, "rows": n}"""
     if args.document.lower().endswith(".gamut"):
+        if os.path.exists(args.document) and os.path.exists(args.file) and \
+                os.path.samefile(args.document, args.file):
+            raise _Usage("", "the source and the destination are one file")
         n = gamut_append(args.file, args.document)      # every row of another study file
         _emit(args, {"appended": args.file, "rows": n},
               f"appended {_counted(n, 'run')} from {args.document} to {args.file}")
@@ -627,12 +630,16 @@ def _get_study(args: argparse.Namespace) -> int:
 
 
 def _usable_output(path: str) -> None:
-    """A .gamut output the command can create: a new name in a folder that exists."""
+    """A .gamut output the command can create: a new name it may make, which is
+    tried (and removed) so a folder, a permission or a name the system refuses
+    is the argument's (exit 2) before any work."""
     if os.path.exists(path):
         raise _Usage("", f"{path} exists; a .gamut output is never replaced")
-    folder = os.path.dirname(os.path.abspath(path))
-    if not os.path.isdir(folder):
-        raise _Usage("", f"{folder} does not exist; the output goes in a folder that does")
+    try:
+        os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except OSError as e:
+        raise _Usage("", f"cannot create {path}: {e.strerror}") from None
+    os.remove(path)
 
 
 def _select(f: Any, where: str) -> np.ndarray:
@@ -776,6 +783,9 @@ def cmd_get(args: argparse.Namespace) -> int:
     if ext == ".npy" and len(data) != 1:
         raise _Usage("", "a .npy holds one array; use .npz for several")
     for name, v in data.items():
+        if ext == ".csv" and v.ndim > 2:
+            raise _Usage("", f"{name} has {v.ndim} axes, more than a CSV's rows and columns; "
+                             "write it to .npz or .npy")
         if ext == ".csv" and v.ndim and v.shape[0] != len(ids):
             raise _Usage("", f"{name} has {v.shape[0]} entries, not one per row as a CSV line is; "
                              "write it to .npz or .npy")

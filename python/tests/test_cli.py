@@ -351,4 +351,24 @@ def test_damaged_files_deep_documents_and_missing_folders(tmp_path, capsys):
     for argv in (["get", p, "-o", str(tmp_path / "no" / "x.gamut")],
                  ["build", str(deep), "-o", str(tmp_path / "no" / "y.gamut")]):
         code, out, _ = run(capsys, *argv, "--json")
-        assert code == 2 and "does not exist" in json.loads(out)["problems"][0]["message"], (argv, out)
+        assert code == 2 and "cannot create" in json.loads(out)["problems"][0]["message"], (argv, out)
+
+
+
+def test_odd_outputs_and_self_append_are_usage_errors(tmp_path, capsys):
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"x": "1"}) as s:
+        s.add_runs({"x": [1.0, 2.0]})
+    code, out, _ = run(capsys, "append", p, p, "--json")
+    assert code == 2 and "one file" in json.loads(out)["problems"][0]["message"]
+    long_name = str(tmp_path / ("a" * 300 + ".gamut"))
+    code, out, _ = run(capsys, "get", p, "-o", long_name, "--json")
+    assert code == 2 and "cannot create" in json.loads(out)["problems"][0]["message"]
+    m = str(tmp_path / "m.gamut")
+    with gamut.create(m, writer="t", mesh="shared", per="run", coordinates={"units": "m", "axes": 2},
+                      parameters={"x": "1"}) as s:
+        s.set_mesh(n_nodes=2)
+        s.add_runs({"x": [1.0, 2.0]}, points=[np.zeros((2, 2)), np.ones((2, 2))])
+    code, out, _ = run(capsys, "get", m, "coordinates", "-o", str(tmp_path / "c.csv"), "--json")
+    assert code == 2 and "more than a CSV" in json.loads(out)["problems"][0]["message"]
+    assert not (tmp_path / "c.csv").exists()
