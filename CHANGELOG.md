@@ -3,10 +3,10 @@
 ## Unreleased
 
 **Upgrading from 1.3.** The file format is unchanged (`gamut/1`), so
-files move freely between 1.3 and 2.0. Code written for 1.3 can stop at,
-or behave differently after, these changes; the fixes further down also
-correct results that were wrong, such as a `select` on int64 values past
-2⁵³.
+files move between 1.3 and 2.0, short of the new limits below. Code
+written for 1.3 can stop at, or behave differently after, these changes;
+the fixes further down also correct results that were wrong, such as a
+`select` on int64 values past 2⁵³.
 
 - Creating a file never replaces an existing one: `create`,
   `create_model`, `extract`, `write_copy`, `evaluate` with a path,
@@ -17,10 +17,13 @@ correct results that were wrong, such as a `select` on int64 values past
   them out, selects every one.
 - Input that was stored wrongly is refused: a field given sites × runs (a
   square array cannot be told apart, and is taken as runs × sites), a
-  label given `None` or NaN, a fractional or out-of-range value for an
-  int64 model input, an integer that float64 would round, a group member
-  given two geometries in one batch, and a negative `--rows` position on
-  the command line.
+  label given `None` or NaN, a fractional, out-of-range, text or boolean
+  value for an int64 model input, an integer that float64 would round, a
+  group member given two different geometries in one batch, and a
+  negative `--rows` position on the command line.
+- A file whose category tables together, or a model whose arrays
+  together, pass the cap one table or array had is refused (E23) when it
+  is opened or read; 1.3 allocated for them without limit.
 - In C, `gamut_batch_values` takes a `first_axis` argument.
 
 The rest of this section says what changed and why.
