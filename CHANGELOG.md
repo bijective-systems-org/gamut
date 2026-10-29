@@ -3,8 +3,10 @@
 ## Unreleased
 
 **Upgrading from 1.3.** The file format is unchanged (`gamut/1`), so
-files move freely between 1.3 and 2.0. These changes can stop, or change
-the result of, code written for 1.3:
+files move freely between 1.3 and 2.0. Code written for 1.3 can stop at,
+or behave differently after, these changes; the fixes further down also
+correct results that were wrong, such as a `select` on int64 values past
+2⁵³.
 
 - Creating a file never replaces an existing one: `create`, `extract`,
   `write_copy`, `evaluate` with a path, `gamut build`, and `gamut get`
@@ -13,8 +15,12 @@ the result of, code written for 1.3:
   longer make it int64.
 - In MATLAB, `[]` as rows, nodes or cells selects none; `':'`, or leaving
   them out, selects every one.
-- A field given sites × runs, a label given `None` or NaN, and an integer
-  that float64 would round are refused instead of stored wrongly.
+- Input that was stored wrongly is refused: a field given sites × runs (a
+  square array cannot be told apart, and is taken as runs × sites), a
+  label given `None` or NaN, a fractional or out-of-range value for an
+  int64 model input, an integer that float64 would round, a group member
+  given two geometries in one batch, and a negative `--rows` position on
+  the command line.
 - In C, `gamut_batch_values` takes a `first_axis` argument.
 
 The rest of this section says what changed and why.
