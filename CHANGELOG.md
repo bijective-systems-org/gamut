@@ -57,14 +57,15 @@ locale the host program has set. The header names `gamut_units_parse`,
 which returns 1 when its units parse, as the one function that does not
 return 0 on success.
 
-A group reachable by more than one hard link is an error (E22): a
-file's groups form a tree, as netCDF-4's do. Validation reports it without
-walking into it, model data refuses it, and the reader's index skips it; a
-chain of such groups made validation, append, extract, `write_copy` and
-model reads take time that doubled with every level. The category tables
-read when a file opens share one budget, the cap one table had, and a
-model's arrays share one budget, the cap one array had (E23); many tables or
-arrays each under its own cap could make open allocate gigabytes.
+A group reachable by more than one hard link is walked once; a chain of
+such groups made validation, append, extract and `write_copy` take time
+that doubled with every level. `/private` may hold them, as §8 lets it
+hold any structure; model data, a tree, refuses them (E18). The category
+tables read when a file opens share one budget, the cap one table had, and
+so does validation; a model's arrays read together share one budget, the
+cap one array had (E23). Many tables, or many arrays, each under its own
+cap could make opening a file, or reading or validating a model,
+allocate gigabytes.
 
 The command line reports malformed input as `error: …` with the exit
 status the guide gives instead of a Python traceback: a build or append

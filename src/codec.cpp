@@ -88,8 +88,8 @@ Dict read_dict(const File& f, const std::string& path, bool top_level, int depth
     }
     if (m.is_group) {
       if (m.links > 1) {
-        throw Error("E22", "\"" + child + "\" is a group reachable by more than one hard link; "
-                           "model data is a tree");
+        throw Error("E18", "\"" + child + "\" is a group reachable by more than one hard link, "
+                           "which model data, a tree, cannot represent");
       }
       d[m.name] = Value::dict(read_dict(f, child, false, depth + 1, left));
       continue;

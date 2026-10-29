@@ -123,3 +123,35 @@ def test_malformed_input_is_reported_with_the_guides_exit_status(tmp_path, capsy
             assert code == 2 and err.startswith("error: ") and says in err, (argv, out, err)
     code, _, _ = run(capsys, "get", m, "q", "--zone", "zone=b", "-o", str(tmp_path / "b.csv"))
     assert code == 0
+
+
+def test_rows_are_checked_without_reading_every_row_and_file_faults_stay_exit_1(tmp_path, capsys):
+    m = str(tmp_path / "m.gamut")
+    _zoned(m)
+    code, _, _ = run(capsys, "get", m, "x", "--rows", "1", "-o", str(tmp_path / "x.npy"))
+    assert code == 0 and np.load(tmp_path / "x.npy").tolist() == [2.0]
+    import h5py
+    with h5py.File(m, "r") as f:       # a damaged row chunk: a file fault, exit 1
+        info = f["row"].id.get_chunk_info(0)
+    with open(m, "r+b") as fh:
+        fh.seek(info.byte_offset)
+        fh.write(b"\xff" * info.size)
+    code, _, err = run(capsys, "get", m, "x", "--rows", "0", "-o", str(tmp_path / "y.csv"))
+    assert code in (1,) and err.startswith("error: "), err
+
+
+def test_a_zone_code_that_is_not_a_number_is_a_usage_error(tmp_path, capsys):
+    import gamut
+    p = str(tmp_path / "c.gamut")
+    xs, ys = np.meshgrid(np.arange(3.0), np.arange(2.0))
+    pts = np.stack([xs.ravel(), ys.ravel()], axis=1)
+    cells = (np.array([9, 9], np.uint8), np.array([0, 4, 8]), np.array([0, 1, 4, 3, 1, 2, 5, 4]))
+    with gamut.create(p, writer="t", mesh="shared", per="fixed", coordinates={"units": "m", "axes": 2},
+                      parameters={"x": "1"}, fields={"q": {"units": "1", "at": "cell"}},
+                      mesh_labels={"zone": {"at": "cell"}}) as s:
+        s.set_mesh(pts, cells, labels={"zone": np.array([0, 1])})
+        s.add_runs({"x": [1.0]}, fields={"q": np.ones((1, 2))})
+    for bad in ("--1", "\u00b2", "1.5"):
+        code, out, _ = run(capsys, "get", p, "q", "--zone", f"zone={bad}", "-o",
+                           str(tmp_path / "z.csv"), "--json")
+        assert code == 2 and json.loads(out)["error"]["message"].startswith("--zone"), (bad, out)

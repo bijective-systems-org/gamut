@@ -715,18 +715,17 @@ def _doubled_chain(group, levels):
         chain[-2]["b"] = chain[-1]
 
 
-def test_a_group_linked_twice_is_refused_without_walking_every_path(tmp_path):
+def test_a_group_linked_twice_is_walked_once(tmp_path):
     import time
-    p = str(tmp_path / "fan.gamut")
+    p, q = str(tmp_path / "fan.gamut"), str(tmp_path / "copy.gamut")
     with gamut.create(p, writer="w", parameters={"x": "1"}) as s:
         s.add_run({"x": 1.0})
     with h5py.File(p, "r+") as f:
-        _doubled_chain(f.require_group("private"), 30)
+        _doubled_chain(f.require_group("private"), 30)      # /private may hold any structure
     t = time.time()
-    report = gamut.validate(p)
+    assert not gamut.validate(p).findings
+    gamut.write_copy(p, q)
     assert time.time() - t < 5
-    assert {x.rule for x in report.findings} == {"E22"}      # each link to the doubled group
-    assert all("more than one hard link" in x.message for x in report.findings)
 
 
 def test_model_data_with_a_group_linked_twice_is_refused(tmp_path):
@@ -738,9 +737,9 @@ def test_model_data_with_a_group_linked_twice_is_refused(tmp_path):
     with h5py.File(p, "r+") as f:
         _doubled_chain(f["models/fit"], 30)
     with gamut.open(p) as f:
-        with pytest.raises(gamut.GamutError) as e:
+        with pytest.raises(gamut.GamutError, match="more than one hard link") as e:
             f.model_numbers("fit")
-    assert e.value.rule == "E22"
+    assert e.value.rule == "E18"
 
 
 def test_category_tables_share_one_budget_at_open(tmp_path):

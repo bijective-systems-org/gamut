@@ -495,14 +495,19 @@ def _document(path: str) -> Any:
 
 
 def _positions(f: Any, rows: Any) -> np.ndarray:
-    """The positions --rows names, checked by the core as every read checks them."""
+    """The positions --rows names, checked by the core as every read checks them,
+    and sized by the selection, never by the file."""
     if rows is None:
         return np.arange(f.row_count)
     try:
         f.get_row_ids(rows)
     except GamutError as e:
+        if e.rule:          # the file itself is at fault (exit 1), not the positions
+            raise
         raise _Usage(e.rule, f"--rows: {e.message}") from None
-    return np.arange(f.row_count)[rows]
+    if isinstance(rows, slice):
+        return np.arange(*rows.indices(f.row_count))
+    return np.asarray(rows, dtype=np.int64)
 
 
 def _rows_arg(text: str | None) -> Any:
@@ -572,9 +577,14 @@ def cmd_get(args: argparse.Namespace) -> int:
             if table is not None and value not in table:
                 raise _Usage("", f"--zone: {value!r} is not a name in {label}'s table "
                                  f"({', '.join(table)})")
-            if table is None and not value.lstrip("-").isdigit():
-                raise _Usage("", f"--zone: {label} has no table, so give a code, not {value!r}")
-            want = table.index(value) if table is not None else int(value)
+            if table is not None:
+                want = table.index(value)
+            else:
+                try:
+                    want = int(value, 10)
+                except ValueError:
+                    raise _Usage("", f"--zone: {label} has no table, so give a code, not "
+                                     f"{value!r}") from None
             sites = np.flatnonzero(codes == want)
         data: dict[str, np.ndarray] = {}
         units: dict[str, str] = {}

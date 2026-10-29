@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <set>
 
 #include "chunk.hpp"
 #include "names.hpp"
@@ -1311,6 +1312,7 @@ void File::build_object_index() const {
   object_index_built_ = true;
   object_paths_.clear();
   std::vector<std::pair<std::string, int>> todo;
+  std::set<std::string> walked;   // groups reachable by more than one link
   todo.emplace_back("/", 0);
   while (!todo.empty()) {
     const std::pair<std::string, int> here = todo.back();
@@ -1322,8 +1324,10 @@ void File::build_object_index() const {
       const std::string child =
           (here.first == "/" ? std::string("/") : here.first + "/") + m.name;
       if (m.is_group) {
-        // A group linked twice would be walked once per path, exponentially (E22).
-        if (m.links == 1) todo.emplace_back(child, here.second + 1);
+        // A group linked twice is walked once: once per path is exponential.
+        if (m.links == 1 || walked.insert(object_key(child)).second) {
+          todo.emplace_back(child, here.second + 1);
+        }
         continue;
       }
       if (!m.is_dataset) continue;
@@ -1337,6 +1341,14 @@ void File::build_object_index() const {
       if (object_paths_.size() >= kMaxIndexedObjects) return;
     }
   }
+}
+
+std::string File::object_key(const std::string& path) const {
+  H5O_info2_t info;
+  if (H5Oget_info_by_name3(id_.get(), path.c_str(), &info, H5O_INFO_BASIC, H5P_DEFAULT) < 0) {
+    return std::string();
+  }
+  return token_key(id_.get(), info.token);
 }
 
 std::string File::dataset_path(hid_t object) const {
