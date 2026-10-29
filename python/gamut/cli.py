@@ -305,6 +305,11 @@ _KNOWN_KEYS = {"writer", "title", "license", "references", "source", "portion_ma
                "generalisation_group"}
 
 
+def _json_kind(value: Any) -> str:
+    return {dict: "an object", list: "a list", str: "text", bool: "true or false",
+            type(None): "null"}.get(type(value), "a number")
+
+
 def _check_document(doc: dict, base: str, appending: bool) -> list[tuple[str, str]]:
     """Every problem a document has, before anything is written."""
     problems: list[tuple[str, str]] = []
@@ -314,15 +319,34 @@ def _check_document(doc: dict, base: str, appending: bool) -> list[tuple[str, st
                                   f"{', '.join(sorted(_KNOWN_KEYS))}"))
     if not appending and not doc.get("writer"):
         problems.append(("writer", "name the program writing the file"))
+    # Each section's JSON type first: the checks below read inside them.
+    shapes = {"parameters": dict, "labels": dict, "scalars": dict, "fields": dict,
+              "mesh_labels": dict, "constants": dict, "mesh": dict, "runs": str, "writer": str,
+              "title": str, "license": str, "references": str, "source": str,
+              "portion_marking": str, "generalisation_group": str}
+    wrong = {k for k, kind in shapes.items() if doc.get(k) is not None and not isinstance(doc[k], kind)}
+    for key in sorted(wrong):
+        problems.append((key, f"is {_json_kind(doc[key])}; it is " +
+                              ("an object of names" if shapes[key] is dict else "text")))
     for group in ("parameters", "scalars", "fields"):
+        if group in wrong:
+            continue
         for name, spec in (doc.get(group) or {}).items():
+            if not isinstance(spec, (str, dict)):
+                problems.append((f"{group}.{name}", f"is {_json_kind(spec)}; give its units, "
+                                                     "or an object with \"units\""))
+                continue
             units = spec if isinstance(spec, str) else (spec or {}).get("units")
             if not units:
                 problems.append((f"{group}.{name}.units", "units are required (e.g. Pa, m s-1, 1)"))
             elif not _lib.units_valid(units):
                 problems.append((f"{group}.{name}.units",
                                  f"\"{units}\" does not parse; use UDUNITS form such as m s-1"))
-    mesh = doc.get("mesh")
+    if "constants" not in wrong:
+        for name, value in (doc.get("constants") or {}).items():
+            if not (isinstance(value, list) and len(value) == 2 and isinstance(value[1], str)):
+                problems.append((f"constants.{name}", "is [number, units]"))
+    mesh = doc.get("mesh") if "mesh" not in wrong else None
     if mesh:
         for k in ("kind", "per", "units"):
             if not appending and k not in mesh:
@@ -330,7 +354,9 @@ def _check_document(doc: dict, base: str, appending: bool) -> list[tuple[str, st
         if mesh.get("file") and not os.path.exists(os.path.join(base, mesh["file"])):
             problems.append(("mesh.file", f"{mesh['file']} does not exist next to the document"))
     runs = doc.get("runs")
-    if not runs:
+    if "runs" in wrong:
+        pass
+    elif not runs:
         problems.append(("runs", "name the CSV holding one line per run"))
     elif not os.path.exists(os.path.join(base, runs)):
         problems.append(("runs", f"{runs} does not exist next to the document"))
@@ -348,6 +374,10 @@ def _read_runs(doc: dict, base: str, study_fields: set[str], labels: set[str],
     points: list = []
     cells: list = []
     for i, row in enumerate(rows, start=2):
+        if None in row or None in row.values():
+            problems.append((f"runs line {i}", "has more cells than the header" if None in row
+                                               else "has fewer cells than the header"))
+            continue
         for key, value in row.items():
             where = f"runs line {i}, column {key}"
             if key in study_fields:
@@ -425,6 +455,9 @@ def cmd_build(args: argparse.Namespace) -> int:
         study.close()
     except Problems as e:
         return _report_problems(args, e.problems)
+    except (TypeError, ValueError, AttributeError, KeyError) as e:
+        # A value inside a declaration of the wrong JSON type: the document's.
+        return _report_problems(args, [("document", f"a value the API cannot take: {e}")])
     finally:
         if study is not None:
             study._abandon(remove=True)
@@ -453,6 +486,8 @@ def cmd_append(args: argparse.Namespace) -> int:
             n = _add_rows(study, doc, base, fields, labels)
     except Problems as e:
         return _report_problems(args, e.problems)
+    except (TypeError, ValueError, AttributeError, KeyError) as e:
+        return _report_problems(args, [("document", f"a value the API cannot take: {e}")])
     _emit(args, {"appended": args.file, "rows": n},
           f"appended {_counted(n, 'run')} to {args.file}")
     return 0
@@ -546,11 +581,33 @@ def _get_study(args: argparse.Namespace) -> int:
     with open_file(args.file) as f:
         positions = _positions(f, _rows_arg(args.rows))
         if args.where:
-            positions = np.intersect1d(f.select(args.where), positions)
+            positions = np.intersect1d(_select(f, args.where), positions)
+    if os.path.exists(args.output):
+        raise _Usage("", f"{args.output} exists; a .gamut output is never replaced")
     gamut_extract(args.file, args.output, np.asarray(positions, dtype=np.int64))
     _emit(args, {"wrote": args.output, "rows": int(len(positions))},
           f"wrote {_counted(len(positions), 'run')} to {args.output}")
     return 0
+
+
+def _select(f: Any, where: str) -> np.ndarray:
+    """--where, whose mistakes are the argument's (exit 2); a refusal with a rule
+    is the file's (exit 1)."""
+    try:
+        return f.select(where)
+    except GamutError as e:
+        if e.rule:
+            raise
+        raise _Usage("", e.message, e.path) from None
+
+
+def _savez(path: str, arrays: dict[str, np.ndarray]) -> None:
+    """np.savez with any names: its own keyword `file` cannot clash with one."""
+    import zipfile
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED, allowZip64=True) as z:
+        for name, value in arrays.items():
+            with z.open(name + ".npy", "w", force_zip64=True) as fh:
+                np.lib.format.write_array(fh, np.asanyarray(value), allow_pickle=False)
 
 
 def cmd_get(args: argparse.Namespace) -> int:
@@ -567,7 +624,7 @@ def cmd_get(args: argparse.Namespace) -> int:
         if rows is not None:
             _check_rows(f, rows)
         if args.where:
-            chosen = f.select(args.where)
+            chosen = _select(f, args.where)
             if rows is not None:
                 chosen = np.intersect1d(chosen, _positions(f, rows))
             rows = chosen
@@ -653,7 +710,7 @@ def cmd_get(args: argparse.Namespace) -> int:
     elif ext == ".npy":
         np.save(out, next(iter(data.values())))
     else:
-        np.savez(out, row=ids, **data)
+        _savez(out, {"row": ids, **data})
     doc = {"wrote": out, "names": list(data), "rows": int(len(ids)),
            "shape": {k: list(v.shape) for k, v in data.items()}, "units": units}
     _emit(args, doc, f"wrote {out}: " + ", ".join(
@@ -723,12 +780,13 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"error: {e}", file=sys.stderr)
         return 2 if isinstance(e, _Usage) else 1
-    except OSError as e:             # an output that cannot be written: where, and why
-        where = e.filename or ""
+    except OSError as e:             # a file named that cannot be read or written: which, and why
+        where = str(e.filename or "")
+        message = f"{where}: {e.strerror}" if where else str(e)
         if _Parser.wants_json:
-            print(_problems_json([("", str(where), f"cannot write {where}: {e.strerror}")]))
+            print(_problems_json([("", where, message)]))
         else:
-            print(f"error: cannot write {where}: {e.strerror}", file=sys.stderr)
+            print(f"error: {message}", file=sys.stderr)
         return 2
 
 

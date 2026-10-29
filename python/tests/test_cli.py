@@ -205,7 +205,7 @@ def test_every_json_failure_has_one_shape_and_its_exit_status(tmp_path, capsys):
         (1, ["build", str(null_doc), "-o", str(tmp_path / "n.gamut"), "--json"], "not a JSON object"),
         (2, ["get", p, "-o", str(tmp_path / "none.csv"), "--json"], "name what to write"),
         (2, ["get", p, "x", "-o", str(tmp_path / "x.gamut"), "--json"], "keeps every name"),
-        (2, ["get", p, "x", "-o", str(tmp_path / "no" / "dir.csv"), "--json"], "cannot write"),
+        (2, ["get", p, "x", "-o", str(tmp_path / "no" / "dir.csv"), "--json"], "No such file"),
         (1, ["build", str(bad_doc), "-o", str(tmp_path / "b.gamut"), "--json"], ""),
         (2, ["get", p, "x", "y", "-o", str(tmp_path / "two.npy"), "--json"], "a .npy holds one array"),
         (2, ["get", p, "x", "-o", str(tmp_path / "x.txt"), "--json"], "OUT ends in"),
@@ -234,3 +234,40 @@ def test_a_constant_is_refused_for_csv_before_the_output_exists(tmp_path, capsys
     code, text, _ = run(capsys, "get", p, "area", "-o", str(out), "--force", "--json")
     assert code == 2 and "is a constant" in json.loads(text)["problems"][0]["message"]
     assert out.read_text() == "kept"                          # not truncated before the refusal
+
+
+def test_a_malformed_document_or_argument_is_reported_not_raised(tmp_path, capsys):
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"x": "1"}, scalars={"y": "1"}) as s:
+        s.add_runs({"x": [1.0, 2.0], "y": [3.0, 4.0]})
+
+    def doc(name, body, csv_text="x,y\n1,2\n"):
+        (tmp_path / f"{name}.csv").write_text(csv_text)
+        (tmp_path / f"{name}.json").write_text(json.dumps({**body, "runs": f"{name}.csv"}))
+        return str(tmp_path / f"{name}.json")
+
+    base = {"writer": "t", "parameters": {"x": "1"}, "scalars": {"y": "1"}}
+    cases = [
+        (1, doc("list", {**base, "parameters": ["x"]}), "parameters", "is a list"),
+        (1, doc("short", base, "x,y\n1\n"), "runs line 2", "fewer cells"),
+        (1, doc("long", base, "x,y\n1,2,3\n"), "runs line 2", "more cells"),
+        (1, doc("spec", {**base, "parameters": {"x": 5}}), "parameters.x", "give its units"),
+        (1, doc("const", {**base, "constants": {"c": 5}}), "constants.c", "[number, units]"),
+    ]
+    for status, path, key, says in cases:
+        code, out, err = run(capsys, "build", path, "-o", str(tmp_path / "o.gamut"), "--json")
+        problems = json.loads(out)["problems"]
+        assert code == status and any(x["path"] == key and says in x["message"] for x in problems), \
+            (path, out, err)
+        assert not (tmp_path / "o.gamut").exists()
+
+    code, out, _ = run(capsys, "get", p, "x", "--where", "x >>> 1", "-o", str(tmp_path / "w.csv"), "--json")
+    assert code == 2 and json.loads(out)["problems"][0]["message"].startswith("where")
+    code, out, _ = run(capsys, "get", p, "-o", p, "--json")      # the input itself
+    assert code == 2 and "never replaced" in json.loads(out)["problems"][0]["message"]
+
+    # Any name goes to .npz, row included, as np.savez's own keyword would not.
+    code, out, _ = run(capsys, "get", p, "row", "x", "-o", str(tmp_path / "r.npz"), "--json")
+    assert code == 0, out
+    z = np.load(tmp_path / "r.npz")
+    assert z["row"].tolist() == [0, 1] and z["x"].tolist() == [1.0, 2.0]
