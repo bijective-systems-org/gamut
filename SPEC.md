@@ -655,10 +655,12 @@ writes for the same BitRound algorithm. The relative error is at most
 
 ### 11.4 Chunking and file space
 
-Every dataset with a dimension that may grow (`row`, `category_<t>`,
-`instance`, and in a changing mesh the dimensions §10.4 lists as
-unlimited) is chunked (E20); larger fixed datasets may be chunked too, to
-be compressed. With T = 262,144 bytes and b the bytes of one entry along
+A writer chunks every dataset with a dimension that may grow (`row`,
+`category_<t>`, `instance`, and in a changing mesh the dimensions §10.4
+lists as unlimited) and makes that dimension unlimited; any dataset with an
+unlimited dimension is chunked (E20). A file whose growable dimensions are
+fixed instead is valid and read-only (§11.5). Larger fixed datasets may be
+chunked too, to be compressed. With T = 262,144 bytes and b the bytes of one entry along
 the first axis (dtype size times the other extents):
 
 - **Leading axis grows** (root datasets; category tables; shared-mesh

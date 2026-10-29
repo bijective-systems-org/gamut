@@ -385,3 +385,56 @@ def test_a_fixed_layout_is_valid_and_read_only_until_rewritten(tmp_path):
     with gamut.open(grow, mode="a") as s:
         s.add_run({"mach": 0.5, "cl": 0.3, "status": "converged"})
     assert not gamut.validate(grow).findings
+
+
+def test_a_fixed_table_makes_the_file_read_only_before_anything_changes(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    _sweep(p)
+    with h5py.File(p, "r+") as f:                       # the table fixed, its scale left unlimited
+        t = f["categories/status"]
+        data, attrs = t[...], [(k, t.attrs[k], t.attrs.get_id(k).dtype)
+                               for k in t.attrs if k != "DIMENSION_LIST"]
+        dtype = t.dtype
+        t.dims[0].detach_scale(f["category_status"])
+        del f["categories/status"]
+        n = f.create_dataset("categories/status", data=data, dtype=dtype)
+        for k, v, ty in attrs:
+            n.attrs.create(k, v, dtype=ty)
+        n.dims[0].attach_scale(f["category_status"])
+    assert not gamut.validate(p).findings
+    before = open(p, "rb").read()
+    with pytest.raises(gamut.GamutError, match="read-only"):
+        gamut.open(p, mode="a")
+    assert open(p, "rb").read() == before
+
+
+def test_absent_cell_arrays_are_e2_without_a_cascade(tmp_path):
+    p = str(tmp_path / "s.gamut")
+    _sweep(p, mesh=True)
+    with h5py.File(p, "r+") as f:
+        del f["mesh/cell_types"]
+    rules = _rules(p)
+    assert "E2" in rules and not rules & {"E5", "E11"}, rules
+    q = str(tmp_path / "c.gamut")
+    pts, cells = grid(3, 2)
+    with gamut.create(q, writer="t", mesh="changing", per="run", coordinates={"units": "m", "axes": 2},
+                      parameters={"r": "m"}) as s:
+        s.add_run({"r": 1.0}, points=pts, cells=cells)
+    with h5py.File(q, "r+") as f:
+        del f["mesh/cell_offsets"]
+    rules = _rules(q)
+    assert "E2" in rules and "E21" not in rules, rules
+
+
+def test_an_empty_attribute_is_not_an_absent_one(tmp_path):
+    def emptied(name, obj, attr, mesh=False):
+        p = str(tmp_path / f"{name}.gamut")
+        _sweep(p, mesh=mesh)
+        with h5py.File(p, "r+") as f:
+            del f[obj].attrs[attr]
+            f[obj].attrs.create(attr, np.array(b"", dtype=h5py.string_dtype("utf-8", 1)))
+        return _rules(p)
+    assert "E9" in emptied("category", "status", "category") and "E2" not in emptied("c2", "status", "category")
+    assert "E6" in emptied("kind", "mesh", "kind", mesh=True)
+    rules = emptied("support", "mesh", "support_id", mesh=True)
+    assert "E11" in rules and "E2" not in rules

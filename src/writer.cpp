@@ -420,20 +420,34 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
     w->filters_ = pipeline_of(f.dataset_info("/row", false));
     w->datasets_ready_ = true;
     w->schema_.mesh.set_done = !w->schema_.mesh.kind.empty();
+    // A fixed layout is valid and read-only (spec section 11.5): everything an
+    // append grows, the scales of what it grows included, is checked first.
+    auto growable = [&](const std::string& p, const DsetInfo& info) {
+      need(info.chunked && !info.maxshape.empty() && info.maxshape[0] == H5S_UNLIMITED, "E20",
+           "\"" + p + "\" has a fixed size, so this file is read-only; write_copy makes a copy "
+           "runs can be added to");
+    };
     auto resume = [&](const std::string& p) {
-      const DsetInfo info = f.dataset_info(p, false);
+      const DsetInfo info = f.dataset_info(p);
       if (!info.is_dataset || info.shape.empty()) return;
       DType t;
       if (!dtype_of(info.type, &t) || t == DType::String) return;
-      // A fixed layout is valid and read-only (spec section 11.5).
-      need(info.chunked && info.maxshape[0] == H5S_UNLIMITED, "E20",
-           "\"" + p + "\" has a fixed size, so this file is read-only; write_copy makes a copy "
-           "runs can be added to");
+      growable(p, info);
+      if (!info.scales.empty() && info.scales[0].size() == 1 && p != "/row") {
+        const std::string& name = info.scales[0][0];
+        const std::string scale = f.exists("/mesh/" + name) ? "/mesh/" + name : "/" + name;
+        growable(scale, f.dataset_info(scale, false));
+      }
       w->pending_[p] = make_pending(
           p, t, std::vector<hsize_t>(info.shape.begin() + 1, info.shape.end()),
           info.chunk[0], static_cast<std::int64_t>(info.shape[0]));
     };
     const Schema& s = w->schema_;
+    for (const auto& kv : s.tables) {   // a table grows when a run brings a new name
+      for (const std::string& p : {"/categories/" + kv.first, "/category_" + kv.first}) {
+        growable(p, f.dataset_info(p, false));
+      }
+    }
     resume("/row");
     for (const auto& x : s.parameters) resume(root(x.name));
     for (const auto& x : s.labels) resume(root(x.name));

@@ -441,6 +441,35 @@ def case_model_nearest(path):
 MARKING = "Example marking: for the study team only"
 
 
+def case_fixed_layout(path):
+    # The table study with /row and every column fixed and contiguous, as some
+    # netCDF writers leave them: valid and read-only (§11.5).
+    probes = case_table(path)
+    with h5py.File(path, "r+") as f:
+        cols = [n for n in f if isinstance(f[n], h5py.Dataset) and n != "row"
+                and "DIMENSION_LIST" in f[n].attrs and f[n].dims[0] and f[n].dims[0][0].name == "/row"]
+        saved = {}
+        for n in cols:
+            saved[n] = (f[n][...], [(k, f[n].attrs[k], f[n].attrs.get_id(k).dtype)
+                                    for k in f[n].attrs if k != "DIMENSION_LIST"])
+            f[n].dims[0].detach_scale(f["row"])
+            del f[n]
+        ids = f["row"][...]
+        row_attrs = [(k, f["row"].attrs[k], f["row"].attrs.get_id(k).dtype)
+                     for k in f["row"].attrs if k not in ("CLASS", "NAME", "REFERENCE_LIST")]
+        del f["row"]
+        r = f.create_dataset("row", data=ids, track_order=True)
+        r.make_scale("row")
+        for k, v, t in row_attrs:
+            r.attrs.create(k, v, dtype=t)
+        for n, (data, attrs) in saved.items():
+            d = f.create_dataset(n, data=data)
+            for k, v, t in attrs:
+                d.attrs.create(k, v, dtype=t)
+            d.dims[0].attach_scale(f["row"])
+    return probes
+
+
 def case_marked_table(path):
     """A data file carrying `portion_marking` (spec section 8): read as given,
     kept by extract and write_copy."""
@@ -475,7 +504,8 @@ def case_marked_model(path):
 VALID = {"table": case_table, "shared_fixed": case_shared_fixed, "point_cloud": case_point_cloud,
          "shared_group": case_shared_group, "changing": case_changing,
          "model_nearest": case_model_nearest, "marked_table": case_marked_table,
-         "marked_model": case_marked_model, "wide_integers": case_wide_integers}
+         "marked_model": case_marked_model, "wide_integers": case_wide_integers,
+         "fixed_layout": case_fixed_layout}
 
 
 # --- rule cases: a valid file broken to break one rule ---------------------------------

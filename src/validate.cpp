@@ -794,7 +794,7 @@ void Validator::root_objects() {
     const Object& o = kv.second;
     status += o.text("role") == "status";
     const std::string table = o.text("category");
-    if (table.empty()) {
+    if (!o.has("category")) {
       add("E2", kv.first, "a label needs its category, the name of its table");
       continue;
     }
@@ -842,7 +842,7 @@ void Validator::mesh() {
   check_attrs(m, kMeshAttrs);
   mesh_kind_ = m.text("kind");
   per_ = m.text("per");
-  if (mesh_kind_.empty()) {
+  if (!m.has("kind")) {
     add("E2", "mesh", "the mesh needs its kind, shared or changing");
     return;
   }
@@ -907,7 +907,9 @@ void Validator::mesh() {
   }
   axes_ = static_cast<int>(coords.info.shape.back());
   if (axes_ < 1 || axes_ > 3) add("E24", "coordinates", "coordinates have one to three axes");
-  const bool cells = file_->exists("/mesh/cell_types");
+  // A mesh has cells when any cell array is present; one absent is then E2.
+  const bool cells = file_->exists("/mesh/cell_types") || file_->exists("/mesh/cell_offsets") ||
+                     file_->exists("/mesh/cell_connectivity");
   // Cells.
   std::optional<Object> cell_types, cell_offsets, cell_connectivity;
   std::int64_t n_cells = 0;
@@ -920,7 +922,16 @@ void Validator::mesh() {
           absent = true;
         }
       }
-      if (absent) return;
+      if (absent) {
+        // The cell count the present arrays give, so nothing else cascades.
+        const DsetInfo ti = file_->dataset_info("/mesh/cell_types", false);
+        const DsetInfo oi = file_->dataset_info("/mesh/cell_offsets", false);
+        if (ti.is_dataset && ti.shape.size() == 1) n_cells = static_cast<std::int64_t>(ti.shape[0]);
+        else if (oi.is_dataset && oi.shape.size() == 1 && oi.shape[0] > 0) {
+          n_cells = static_cast<std::int64_t>(oi.shape[0]) - 1;
+        }
+        return;
+      }
       Object t = object("/mesh/cell_types", "cells/types", "cell_types");
       Object o = object("/mesh/cell_offsets", "cells/offsets", "cell_offsets");
       Object c = object("/mesh/cell_connectivity", "cells/connectivity", "cell_connectivity");
@@ -1062,7 +1073,7 @@ void Validator::mesh() {
       const std::string want = h.hex();
       const std::string have = m.text("support_id");
       if (have != want) {
-        if (have.empty()) add("E2", "mesh", "the mesh needs its support_id");
+        if (!m.has("support_id")) add("E2", "mesh", "the mesh needs its support_id");
         else add("E11", "mesh", "support_id does not match the mesh (spec section 14)");
       }
     });

@@ -88,7 +88,8 @@ def hostile_read(path: str, f, r: dict) -> None:
 
 def appends_to_itself(path: str) -> str:
     """A valid data file can be appended to: its own rows appended to a copy
-    leave the copy free of errors, with twice the rows."""
+    leave the copy free of errors, with twice the rows. A read-only file (a
+    fixed layout, §11.5) is refused for appending, and its write_copy is not."""
     with gamut.open(path) as f:
         if f.kind != "data" or not f.row_count:
             return ""
@@ -99,7 +100,14 @@ def appends_to_itself(path: str) -> str:
         try:
             gamut.append(copy, path)
         except gamut.GamutError as exc:
-            return f"appending it to itself was refused: {exc}"
+            if not (exc.rule == "E20" and "read-only" in exc.message):
+                return f"appending it to itself was refused: {exc}"
+            os.remove(copy)
+            gamut.write_copy(path, copy)
+            try:
+                gamut.append(copy, path)
+            except gamut.GamutError as again:
+                return f"read-only, and its write_copy refused appending too: {again}"
         # Repeating every row repeats each run's times (W9): only errors count.
         errors = [f for f in gamut.validate(copy).findings if f.severity == "error"]
         if errors:
