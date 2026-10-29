@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from ._lib import GamutError, units_parse
+from ._lib import GamutError, units_valid
 
 _TOKEN = re.compile(r"(\s+|\*\*|\*|/|\^|\(|\)|(?<![0-9])\.(?![0-9]))")
 _POWER = re.compile(r"^([A-Za-z_%'\"][A-Za-z0-9_%'\"]*?[A-Za-z_%'\"]|[A-Za-z_%'\"])(-?[0-9]+)$")
@@ -22,7 +22,7 @@ _POWER = re.compile(r"^([A-Za-z_%'\"][A-Za-z0-9_%'\"]*?[A-Za-z_%'\"]|[A-Za-z_%'\
 
 def translate(units: str) -> str:
     """The pint spelling of a UDUNITS string."""
-    if not units_parse(units):
+    if not units_valid(units):
         raise GamutError("E7", f"the units \"{units}\" do not parse (spec section 13)")
     if units.strip() == "1":
         return "dimensionless"

@@ -462,18 +462,14 @@ function stage_geometry(s::Study, points, cells, labels)
         T = eltype(p) <: AbstractFloat ? eltype(p) : Float64
         buf = c_order(T === eltype(p) ? p : float64_exactly(p, "coordinates"))
         GC.@preserve buf begin
-            @mes gamut_geometry_points (Ptr{Cvoid}, Cint, Ptr{Cvoid}, Int64, Cint) h DTYPE[T] pointer(buf) size(p, 1) size(p, 2)
+            @mes gamut_geometry_points (Ptr{Cvoid}, Cint, Ptr{Cvoid}, Int64, Int64, Cint) h DTYPE[T] pointer(buf) length(buf) size(p, 1) size(p, 2)
         end
     end
     if cells !== nothing
         types = Vector{UInt8}(cells[1])
         offsets = Vector{Int64}(cells[2])
         conn = Vector{Int64}(cells[3])
-        # The core reads one more offset than there are cells and cannot see the length.
-        !isempty(types) && length(offsets) != length(types) + 1 &&
-            throw(GamutError("E5", "cells: offsets need one more entry than there are cells " *
-                                    "($(length(types) + 1)), not $(length(offsets))"))
-        @mes gamut_geometry_cells (Ptr{Cvoid}, Ptr{UInt8}, Int64, Ptr{Int64}, Ptr{Int64}, Int64) h types length(types) offsets conn length(conn)
+        @mes gamut_geometry_cells (Ptr{Cvoid}, Ptr{UInt8}, Int64, Ptr{Int64}, Int64, Ptr{Int64}, Int64) h types length(types) offsets length(offsets) conn length(conn)
     end
     for (name, v) in pairs_of(labels)
         vals = Vector{Int64}(v)
@@ -495,7 +491,7 @@ function set_mesh!(s::Study; points=nothing, cells=nothing, labels=nothing, n_no
     if points === nothing
         n_nodes === nothing && throw(GamutError("", "give the points, or n_nodes when the " *
                                                      "coordinates come with the runs"))
-        @mes gamut_geometry_points (Ptr{Cvoid}, Cint, Ptr{Cvoid}, Int64, Cint) h 6 C_NULL n_nodes s.axes
+        @mes gamut_geometry_points (Ptr{Cvoid}, Cint, Ptr{Cvoid}, Int64, Int64, Cint) h 6 C_NULL 0 n_nodes s.axes
     end
     stage_geometry(s, points, cells, labels)
     @mes gamut_set_mesh (Ptr{Cvoid},) h
@@ -688,7 +684,7 @@ function read(s::Study, name, rows, sites, ::Type{T}; squeeze=true) where {T}
     rsel, ssel = Ref(r.sel), Ref(x.sel)
     rk, xk = r.keep, x.keep
     GC.@preserve rk xk begin
-        @mes gamut_shape (Ptr{Cvoid}, Cstring, Ref{CSel}, Ref{CSel}, Ptr{Int64}, Ref{Cint}) handle(s) cs(name) rsel ssel shape rank
+        @mes gamut_shape (Ptr{Cvoid}, Cstring, Ref{CSel}, Ref{CSel}, Ref{Cint}, Ptr{Int64}, Cint) handle(s) cs(name) rsel ssel rank shape length(shape)
         dims = shape[1:rank[]]
         buf = Vector{T}(undef, prod(dims; init=1))
         @mes gamut_read (Ptr{Cvoid}, Cstring, Ref{CSel}, Ref{CSel}, Cint, Ptr{Cvoid}, Int64) handle(s) cs(name) rsel ssel DTYPE[T] pointer(buf) sizeof(buf)
@@ -726,7 +722,7 @@ function outside(s::Study, name; rows=nothing)
     rsel = Ref(r.sel)
     rk = r.keep
     GC.@preserve rk begin
-        @mes gamut_shape (Ptr{Cvoid}, Cstring, Ref{CSel}, Ptr{CSel}, Ptr{Int64}, Ref{Cint}) handle(s) cs(name) rsel C_NULL shape rank
+        @mes gamut_shape (Ptr{Cvoid}, Cstring, Ref{CSel}, Ptr{CSel}, Ref{Cint}, Ptr{Int64}, Cint) handle(s) cs(name) rsel C_NULL rank shape length(shape)
         # Sized as a read of the parameter; for any other name the core refuses.
         out = Vector{Float64}(undef, rank[] == 1 ? shape[1] : 0)
         @mes gamut_outside (Ptr{Cvoid}, Cstring, Ref{CSel}, Ptr{Float64}, Int64) handle(s) cs(name) rsel out sizeof(out)
@@ -956,7 +952,7 @@ function fill_tree(t, prefix, d)
             buf = c_order(a)
             shape = Int64[size(a)...]
             GC.@preserve buf begin
-                @mes gamut_tree_set_array (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Cint, Ptr{Int64}) t cs(key) DTYPE[eltype(buf)] pointer(buf) ndims(a) shape
+                @mes gamut_tree_set_array (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64, Cint, Ptr{Int64}) t cs(key) DTYPE[eltype(buf)] pointer(buf) length(buf) ndims(a) shape
             end
         else
             throw(GamutError("E18", "$key: $(typeof(v)) is not model data"))
@@ -988,7 +984,7 @@ function from_tree(t, prefix="")
         else
             dtype, rank = Ref{Cint}(0), Ref{Cint}(0)
             shape = zeros(Int64, 8)
-            @mes gamut_tree_array_info (Ptr{Cvoid}, Cstring, Ref{Cint}, Ref{Cint}, Ptr{Int64}) t cs(key) dtype rank shape
+            @mes gamut_tree_array_info (Ptr{Cvoid}, Cstring, Ref{Cint}, Ref{Cint}, Ptr{Int64}, Cint) t cs(key) dtype rank shape length(shape)
             T = Dict(2 => Int8, 3 => Int32, 4 => Int64, 6 => Float64)[dtype[]]
             dims = shape[1:rank[]]
             buf = Vector{T}(undef, prod(dims; init=1))
@@ -1042,14 +1038,12 @@ function call(m::Nearest, inputs, wanted)
     isempty(missing) || throw(GamutError("", "nearest needs the inputs $(join(missing, ", "))"))
     cols = [Vector{Float64}(vec(inputs[c])) for c in m.columns]
     nrows = !isempty(cols) ? length(cols[1]) : isempty(inputs) ? 0 : length(first(values(inputs)))
-    # The core reads nrows values from each column and cannot see their lengths.
-    all(c -> length(c) == nrows, cols) ||
-        throw(GamutError("E5", "nearest needs $nrows values of every input, one per row"))
     t = to_tree(save(m))
     out = Dict{String,Any}()
     try
         strs, names = cstrings(m.columns)
         ptrs = Ptr{Cdouble}[pointer(c) for c in cols]
+        lengths = Int64[length(c) for c in cols]
         for w in wanted
             output, kind = w[1], w[2]
             kind == "values" || throw(GamutError("", "nearest gives values only, not $kind"))
@@ -1057,7 +1051,7 @@ function call(m::Nearest, inputs, wanted)
             @mes gamut_nearest_output_size (Ptr{Cvoid}, Cstring, Ref{Int64}) t cs(output) per
             buf = Vector{Float64}(undef, nrows * per[])
             GC.@preserve strs cols begin
-                @mes gamut_nearest_call (Ptr{Cvoid}, Ptr{Ptr{UInt8}}, Ptr{Ptr{Cdouble}}, Cint, Int64, Cstring, Ptr{Cdouble}, Int64) t names ptrs length(cols) nrows cs(output) buf length(buf)
+                @mes gamut_nearest_call (Ptr{Cvoid}, Ptr{Ptr{UInt8}}, Ptr{Ptr{Cdouble}}, Ptr{Int64}, Cint, Int64, Cstring, Ptr{Cdouble}, Int64) t names ptrs lengths length(cols) nrows cs(output) buf length(buf)
             end
             shape = size(m.outputs[output])[2:end]
             get!(out, output, Dict{String,Any}())["values"] =

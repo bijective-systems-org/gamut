@@ -21,8 +21,9 @@ int main() {
   const char* inputs[] = {"alpha"};
   const double alpha[] = {2.2, 7.9};
   const double* columns[] = {alpha};
+  const int64_t lengths[] = {2};
   double lift[2];
-  if (gamut_nearest_call(numbers.get(), inputs, columns, 1, 2, "cl", lift, 2, &err) != 0)
+  if (gamut_nearest_call(numbers.get(), inputs, columns, lengths, 1, 2, "cl", lift, 2, &err) != 0)
     throw gamut::Error(err);
   std::printf("the nearest run's lift at 2.2 and 7.9 degrees: %.2f %.2f\n", lift[0], lift[1]);
 }

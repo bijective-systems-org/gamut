@@ -335,8 +335,8 @@ def test_an_unknown_statistic_still_has_its_vector_and_axis_checked(tmp_path):
 @pytest.mark.parametrize("units", ["m s", "m s", "m　s", "m s"])
 def test_a_space_outside_ascii_does_not_parse_in_units(units):
     from gamut import _lib
-    assert _lib.units_parse("m s") and not _lib.units_parse(units)
-    assert _lib.units_parse("µm") and _lib.units_parse("Å")
+    assert _lib.units_valid("m s") and not _lib.units_valid(units)
+    assert _lib.units_valid("µm") and _lib.units_valid("Å")
 
 
 def test_absent_required_objects_are_e2(tmp_path):

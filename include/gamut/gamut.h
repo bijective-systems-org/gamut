@@ -5,7 +5,7 @@
  *
  * Every function returning int returns 0 on success and nonzero on
  * failure, when it fills *err if err is not NULL.  The one exception is
- * gamut_units_parse, a test that returns 1 when its units parse.  No function keeps a
+ * gamut_units_valid, a test that returns 1 when its units parse.  No function keeps a
  * pointer the caller passed after it returns.
  *
  * Any function may be called from any thread.  Calls that reach a file
@@ -68,7 +68,7 @@ typedef struct {
 GAMUT_API const char* gamut_version(void);
 GAMUT_API const char* gamut_format(void);
 /* 1 when `units` parses by the grammar of spec section 13, else 0. */
-GAMUT_API int gamut_units_parse(const char* units);
+GAMUT_API int gamut_units_valid(const char* units);
 
 /* Opaque handles. */
 typedef struct gamut_file gamut_file;        /* a file open to write or to read */
@@ -125,13 +125,17 @@ GAMUT_API int gamut_set_compression(gamut_file* f, int gzip_level, int shuffle, 
 /* A geometry is staged, then used by gamut_set_mesh or assigned to batch
  * rows or group members.  Each gamut_geometry_begin starts a new one. */
 GAMUT_API int gamut_geometry_begin(gamut_file* f, gamut_error* err);
-/* points may be NULL to give only n_nodes and axes (a shared mesh whose
+/* points holds count values, n_nodes x axes in C order; points may be NULL,
+ * with count 0, to give only n_nodes and axes (a shared mesh whose
  * coordinates come with the runs). */
-GAMUT_API int gamut_geometry_points(gamut_file* f, int dtype, const void* points, int64_t n_nodes,
-                                int axes, gamut_error* err);
+GAMUT_API int gamut_geometry_points(gamut_file* f, int dtype, const void* points, int64_t count,
+                                int64_t n_nodes, int axes, gamut_error* err);
+/* n_cells types, n_offsets offsets (n_cells + 1, or none for no cells) and
+ * n_connectivity node numbers, in VTK's convention. */
 GAMUT_API int gamut_geometry_cells(gamut_file* f, const uint8_t* types, int64_t n_cells,
-                               const int64_t* offsets, const int64_t* connectivity,
-                               int64_t n_connectivity, gamut_error* err);
+                               const int64_t* offsets, int64_t n_offsets,
+                               const int64_t* connectivity, int64_t n_connectivity,
+                               gamut_error* err);
 GAMUT_API int gamut_geometry_label(gamut_file* f, const char* name, const int64_t* values,
                                int64_t n, gamut_error* err);
 /* A shared mesh from the staged geometry (cells, fixed labels, and the
@@ -196,12 +200,14 @@ GAMUT_API int gamut_describe(const gamut_file* f, const char* name, gamut_string
                          gamut_strings** values, gamut_error* err);
 /* name: a parameter, label, scalar, constant, field or mesh label, or
  * "row", "coordinates", "cells/types", "cells/offsets",
- * "cells/connectivity".  rows and sites may be NULL (everything).  shape
- * holds up to 4 extents.  gamut_read converts to dtype and fills out from the
- * start, in C order; out_bytes is its capacity, at least the product of the
- * shape times the dtype's size. */
+ * "cells/connectivity".  rows and sites may be NULL (everything).  shape has
+ * room for `capacity` extents; *rank is always set, and a capacity below it
+ * is refused (4 is always enough).  gamut_read converts to dtype and fills out
+ * from the start, in C order; out_bytes is its capacity, at least the product
+ * of the shape times the dtype's size. */
 GAMUT_API int gamut_shape(const gamut_file* f, const char* name, const gamut_sel* rows,
-                      const gamut_sel* sites, int64_t* shape, int* rank, gamut_error* err);
+                      const gamut_sel* sites, int* rank, int64_t* shape, int capacity,
+                      gamut_error* err);
 GAMUT_API int gamut_read(const gamut_file* f, const char* name, const gamut_sel* rows,
                      const gamut_sel* sites, int dtype, void* out, int64_t out_bytes,
                      gamut_error* err);
@@ -235,9 +241,10 @@ GAMUT_API int gamut_tree_set_bool(gamut_tree* t, const char* key, int value, gam
 GAMUT_API int gamut_tree_set_int(gamut_tree* t, const char* key, int64_t value, gamut_error* err);
 GAMUT_API int gamut_tree_set_float(gamut_tree* t, const char* key, double value, gamut_error* err);
 GAMUT_API int gamut_tree_set_string(gamut_tree* t, const char* key, const char* value, gamut_error* err);
-/* dtype GAMUT_INT8 (booleans), GAMUT_INT32, GAMUT_INT64 or GAMUT_FLOAT64; C order. */
+/* dtype GAMUT_INT8 (booleans), GAMUT_INT32, GAMUT_INT64 or GAMUT_FLOAT64; data
+ * holds count values, the product of the shape, in C order. */
 GAMUT_API int gamut_tree_set_array(gamut_tree* t, const char* key, int dtype, const void* data,
-                               int rank, const int64_t* shape, gamut_error* err);
+                               int64_t count, int rank, const int64_t* shape, gamut_error* err);
 GAMUT_API int gamut_tree_set_strings(gamut_tree* t, const char* key, const char* const* items,
                                  int64_t n, gamut_error* err);
 GAMUT_API int gamut_tree_set_dict(gamut_tree* t, const char* key, gamut_error* err);
@@ -250,9 +257,10 @@ GAMUT_API int gamut_tree_scalar(const gamut_tree* t, const char* key, int64_t* i
 /* A string (one item) or a list of strings. */
 GAMUT_API int gamut_tree_strings(const gamut_tree* t, const char* key, gamut_strings** out,
                              gamut_error* err);
-/* shape holds up to 8 extents. */
+/* shape has room for `capacity` extents; *rank is always set, and a
+ * capacity below it is refused (8 is always enough). */
 GAMUT_API int gamut_tree_array_info(const gamut_tree* t, const char* key, int* dtype, int* rank,
-                                int64_t* shape, gamut_error* err);
+                                int64_t* shape, int capacity, gamut_error* err);
 /* out_bytes is the capacity of out, at least the array's size. */
 GAMUT_API int gamut_tree_array(const gamut_tree* t, const char* key, void* out, int64_t out_bytes,
                            gamut_error* err);
@@ -271,9 +279,11 @@ GAMUT_API int gamut_model_numbers(const gamut_file* f, const char* id, gamut_tre
 GAMUT_API int gamut_nearest_check(const gamut_tree* numbers, gamut_error* err);
 GAMUT_API int gamut_nearest_output_size(const gamut_tree* numbers, const char* output,
                                     int64_t* per_row, gamut_error* err);
+/* columns[j] holds column_lengths[j] values, each n_rows; out holds out_count. */
 GAMUT_API int gamut_nearest_call(const gamut_tree* numbers, const char* const* input_names,
-                             const double* const* columns, int n_inputs, int64_t n_rows,
-                             const char* output, double* out, int64_t out_count, gamut_error* err);
+                             const double* const* columns, const int64_t* column_lengths,
+                             int n_inputs, int64_t n_rows, const char* output, double* out,
+                             int64_t out_count, gamut_error* err);
 
 /* Evaluation, driven by the binding: a data file declaring what the open
  * model file declares; the caller adds the rows (inputs and the models'

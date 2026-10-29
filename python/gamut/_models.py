@@ -86,7 +86,7 @@ def _fill(h: ctypes.c_void_p, prefix: str, d: Mapping[str, Any]) -> None:
             arr = np.ascontiguousarray(arr)
             shape = (ctypes.c_int64 * arr.ndim)(*arr.shape)
             call("gamut_tree_set_array", h, b(path), code, arr.ctypes.data_as(ctypes.c_void_p),
-                 arr.ndim, shape)
+                 arr.size, arr.ndim, shape)
 
 
 def _from_tree(h: ctypes.c_void_p, prefix: str = "") -> dict[str, Any]:
@@ -111,7 +111,8 @@ def _from_tree(h: ctypes.c_void_p, prefix: str = "") -> dict[str, Any]:
         else:
             dtype, rank = ctypes.c_int(), ctypes.c_int()
             shape = (ctypes.c_int64 * 8)()
-            call("gamut_tree_array_info", h, b(path), ctypes.byref(dtype), ctypes.byref(rank), shape)
+            call("gamut_tree_array_info", h, b(path), ctypes.byref(dtype), ctypes.byref(rank), shape,
+                 len(shape))
             np_dtype = {_lib.GAMUT_INT8: np.int8, _lib.GAMUT_INT32: np.int32,
                         _lib.GAMUT_INT64: np.int64, _lib.GAMUT_FLOAT64: np.float64}[dtype.value]
             arr = np.empty(tuple(shape[i] for i in range(rank.value)), dtype=np_dtype)
@@ -200,14 +201,12 @@ class Nearest:
             raise GamutError("", f"nearest needs the inputs {', '.join(missing)}")
         cols = [np.ascontiguousarray(np.asarray(inputs[c], dtype=np.float64)) for c in self.columns]
         n = len(cols[0]) if cols else len(next(iter(inputs.values()))) if inputs else 0
-        # The core reads n values from each column and cannot see their lengths.
-        if any(c.shape != (n,) for c in cols):
-            raise GamutError("E5", f"nearest needs {n} values of every input, one per row")
         handle = _to_tree(self.save())
         try:
             names = _lib.string_array(self.columns)
             ptrs = (ctypes.POINTER(ctypes.c_double) * len(cols))(
                 *[c.ctypes.data_as(ctypes.POINTER(ctypes.c_double)) for c in cols])
+            lengths = (ctypes.c_int64 * len(cols))(*[c.size for c in cols])
             out: dict[str, dict] = {}
             for output, kind, *extra in wanted:
                 if kind != "values":
@@ -215,7 +214,7 @@ class Nearest:
                 per = ctypes.c_int64()
                 call("gamut_nearest_output_size", handle, b(output), ctypes.byref(per))
                 values = np.empty(n * per.value, dtype=np.float64)
-                call("gamut_nearest_call", handle, names, ptrs, len(cols), n, b(output),
+                call("gamut_nearest_call", handle, names, ptrs, lengths, len(cols), n, b(output),
                      values.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), values.size)
                 shape = self.outputs[output].shape[1:]
                 out.setdefault(output, {})["values"] = values.reshape((n,) + shape)

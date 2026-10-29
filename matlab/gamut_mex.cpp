@@ -404,7 +404,8 @@ void tree_set(gamut_tree* t, const std::string& key, const mxArray* v) {
     if (nd == 2 && (md[0] == 1 || md[1] == 1)) rank = 1;
     const auto bytes = to_c_order(v, rank, &dims);
     if (rank == 1) dims = {static_cast<int64_t>(mxGetNumberOfElements(v))};
-    check(gamut_tree_set_array(t, key.c_str(), code, bytes.data(), static_cast<int>(dims.size()),
+    check(gamut_tree_set_array(t, key.c_str(), code, bytes.data(),
+                             static_cast<int64_t>(mxGetNumberOfElements(v)), static_cast<int>(dims.size()),
                              dims.data(), &e),
           e);
   }
@@ -445,7 +446,7 @@ void nearest_tree(gamut_tree* t, const mxArray* numbers) {
     const mxArray* a = field(name);
     doubles(a, name);
     int64_t n = static_cast<int64_t>(mxGetNumberOfElements(a));
-    check(gamut_tree_set_array(t, name, GAMUT_FLOAT64, mxGetData(a), 1, &n, &e), e);
+    check(gamut_tree_set_array(t, name, GAMUT_FLOAT64, mxGetData(a), n, 1, &n, &e), e);
   }
   const mxArray* x = field("x");
   doubles(x, "x");
@@ -460,7 +461,8 @@ void nearest_tree(gamut_tree* t, const mxArray* numbers) {
       for (int64_t j = 0; j < k; ++j) c[static_cast<std::size_t>(i * k + j)] = m[j * points + i];
     }
     const int64_t dims[2] = {points, k};
-    check(gamut_tree_set_array(t, "x", GAMUT_FLOAT64, c.data(), 2, dims, &e), e);
+    check(gamut_tree_set_array(t, "x", GAMUT_FLOAT64, c.data(), static_cast<int64_t>(c.size()), 2, dims, &e),
+          e);
   }
   check(gamut_tree_set_dict(t, "outputs", &e), e);
   const mxArray* outs = field("outputs");
@@ -477,7 +479,8 @@ void nearest_tree(gamut_tree* t, const mxArray* numbers) {
     std::vector<int64_t> c_dims;
     const auto bytes = to_c_order(v, dims.size(), &c_dims);
     check(gamut_tree_set_array(t, key.c_str(), GAMUT_FLOAT64, bytes.data(),
-                             static_cast<int>(dims.size()), dims.data(), &e),
+                             static_cast<int64_t>(mxGetNumberOfElements(v)), static_cast<int>(dims.size()),
+                             dims.data(), &e),
           e);
   }
 }
@@ -524,7 +527,7 @@ mxArray* tree_value(const gamut_tree* t, const std::string& key) {
     default: {
       int dtype = 0, rank = 0;
       int64_t shape[8];
-      check(gamut_tree_array_info(t, key.c_str(), &dtype, &rank, shape, &e), e);
+      check(gamut_tree_array_info(t, key.c_str(), &dtype, &rank, shape, 8, &e), e);
       std::vector<int64_t> dims(shape, shape + rank);
       std::size_t total = 1;
       for (const auto d : dims) total *= static_cast<std::size_t>(d);
@@ -617,7 +620,7 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     const int code = static_cast<int>(scalar(arg(5), "dtype"));
     int64_t shape[4];
     int rank = 0;
-    check(gamut_shape(f, name.c_str(), rows.ptr(), sites.ptr(), shape, &rank, &e), e);
+    check(gamut_shape(f, name.c_str(), rows.ptr(), sites.ptr(), &rank, shape, 4, &e), e);
     std::vector<int64_t> dims(shape, shape + rank);
     std::size_t total = 1;
     for (const auto d : dims) total *= static_cast<std::size_t>(d);
@@ -633,7 +636,7 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     const Sel rows = selection(arg(3));
     int64_t shape[4];
     int rank = 0;
-    check(gamut_shape(f, name.c_str(), rows.ptr(), nullptr, shape, &rank, &e), e);
+    check(gamut_shape(f, name.c_str(), rows.ptr(), nullptr, &rank, shape, 4, &e), e);
     // Sized as a read of the parameter; for any other name the core refuses.
     const mwSize n = rank == 1 ? static_cast<mwSize>(shape[0]) : 0;
     plhs[0] = mxCreateDoubleMatrix(n, 1, mxREAL);
@@ -734,14 +737,15 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     gamut_file* f = file(arg(1));
     const mxArray* p = arg(2);
     if (p == nullptr || mxIsEmpty(p)) {
-      check(gamut_geometry_points(f, GAMUT_FLOAT64, nullptr, static_cast<int64_t>(scalar(arg(3), "n_nodes")),
+      check(gamut_geometry_points(f, GAMUT_FLOAT64, nullptr, 0, static_cast<int64_t>(scalar(arg(3), "n_nodes")),
                                 static_cast<int>(scalar(arg(4), "axes")), &e), e);
     } else {
       const int code = dtype_code(mxGetClassID(p));
       if (code != GAMUT_FLOAT64 && code != GAMUT_FLOAT32) usage("points are double or single");
       std::vector<int64_t> dims;
       const auto bytes = to_c_order(p, 2, &dims);
-      check(gamut_geometry_points(f, code, bytes.data(), dims[0], static_cast<int>(dims[1]), &e), e);
+      check(gamut_geometry_points(f, code, bytes.data(), dims[0] * dims[1], dims[0], static_cast<int>(dims[1]),
+                                &e), e);
     }
   } else if (cmd == "geometry_cells") {
     // types (uint8), offsets (int64), connectivity (int64, 0-based as VTK)
@@ -752,15 +756,9 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     }
     const std::vector<int64_t> offsets = integers(arg(3), "cell offsets");
     const std::vector<int64_t> conn = integers(arg(4), "connectivity");
-    // The core reads one more offset than there are cells and cannot see the length.
-    if (!types.empty() && offsets.size() != types.size() + 1) {
-      const std::string why = "cells: offsets need one more entry than there are cells (" +
-                              std::to_string(types.size() + 1) + "), not " +
-                              std::to_string(offsets.size());
-      throw Refusal{"gamut:E5", why};
-    }
     check(gamut_geometry_cells(file(arg(1)), types.data(), static_cast<int64_t>(types.size()), offsets.data(),
-                             conn.data(), static_cast<int64_t>(conn.size()), &e),
+                             static_cast<int64_t>(offsets.size()), conn.data(),
+                             static_cast<int64_t>(conn.size()), &e),
           e);
   } else if (cmd == "geometry_label") {
     const std::vector<int64_t> v = integers(arg(3), "mesh-label codes");
@@ -849,20 +847,21 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
         usage("input columns are real full double");
       }
       data.emplace_back(mxGetPr(c), mxGetPr(c) + mxGetNumberOfElements(c));
-      if (j > 0 && static_cast<int64_t>(data.back().size()) != rows) {
-        usage("input columns have one length");
-      }
-      rows = static_cast<int64_t>(data.back().size());
     }
+    if (!data.empty()) rows = static_cast<int64_t>(data.front().size());
     std::vector<const double*> ptrs;
-    for (const auto& d : data) ptrs.push_back(d.data());
+    std::vector<int64_t> lengths;
+    for (const auto& d : data) {
+      ptrs.push_back(d.data());
+      lengths.push_back(static_cast<int64_t>(d.size()));
+    }
     const auto np = pointers(names);
     const std::string output = text(arg(4), "output");
     int64_t per = 0;
     check(gamut_nearest_output_size(t.t, output.c_str(), &per, &e), e);
     std::vector<double> out(static_cast<std::size_t>(rows * per));
-    check(gamut_nearest_call(t.t, np.data(), ptrs.data(), static_cast<int>(names.size()), rows, output.c_str(),
-                             out.data(), static_cast<int64_t>(out.size()), &e),
+    check(gamut_nearest_call(t.t, np.data(), ptrs.data(), lengths.data(), static_cast<int>(names.size()), rows,
+                             output.c_str(), out.data(), static_cast<int64_t>(out.size()), &e),
           e);
     std::vector<int64_t> dims = {rows, per};
     plhs[0] = from_c_order(reinterpret_cast<const unsigned char*>(out.data()), dims, GAMUT_FLOAT64);

@@ -289,7 +289,7 @@ class Study {
   void set_mesh(int64_t n_nodes, const Cells& cells, const MeshLabels& labels = {}) {
     gamut_error e{};
     detail::check(gamut_geometry_begin(need_writer(), &e), e);
-    detail::check(gamut_geometry_points(f_, GAMUT_FLOAT64, nullptr, n_nodes, axes_, &e), e);
+    detail::check(gamut_geometry_points(f_, GAMUT_FLOAT64, nullptr, 0, n_nodes, axes_, &e), e);
     stage({}, &cells, labels);
     detail::check(gamut_set_mesh(f_, &e), e);
   }
@@ -432,7 +432,7 @@ class Study {
     const gamut_sel r = rows.c();
     int64_t shape[4] = {0, 0, 0, 0};
     int rank = 0;
-    detail::check(gamut_shape(need_reader(), name.c_str(), &r, nullptr, shape, &rank, &e), e);
+    detail::check(gamut_shape(need_reader(), name.c_str(), &r, nullptr, &rank, shape, 4, &e), e);
     std::vector<double> out(rank == 1 ? static_cast<size_t>(shape[0]) : 0);
     detail::check(gamut_outside(f_, name.c_str(), &r, out.data(),
                                 static_cast<int64_t>(out.size() * sizeof(double)), &e),
@@ -466,7 +466,7 @@ class Study {
     const gamut_sel r = rows.c(), s = sites.c();
     int64_t shape[4] = {0, 0, 0, 0};
     int rank = 0;
-    detail::check(gamut_shape(need_reader(), name.c_str(), &r, &s, shape, &rank, &e), e);
+    detail::check(gamut_shape(need_reader(), name.c_str(), &r, &s, &rank, shape, 4, &e), e);
     Array<T> a;
     a.shape.assign(shape, shape + rank);
     int64_t n = 1;
@@ -523,20 +523,14 @@ class Study {
   void stage(const std::vector<double>& points, const Cells* cells, const MeshLabels& labels) {
     gamut_error e{};
     if (!points.empty()) {
-      if (axes_ < 1 || points.size() % static_cast<size_t>(axes_) != 0)
-        throw Error("E5", "points are nodes x axes, and " + std::to_string(points.size()) +
-                          " values are not a whole number of nodes of " + std::to_string(axes_) + " axes");
-      detail::check(gamut_geometry_points(f_, GAMUT_FLOAT64, points.data(),
-                                          static_cast<int64_t>(points.size()) / axes_, axes_, &e), e);
+      const int64_t count = static_cast<int64_t>(points.size());
+      detail::check(gamut_geometry_points(f_, GAMUT_FLOAT64, points.data(), count,
+                                          axes_ > 0 ? count / axes_ : 0, axes_, &e), e);
     }
-    // Cells, when there are any (none is a point cloud), need one more offset
-    // than cells.
-    if (cells && !cells->types.empty() && cells->offsets.size() != cells->types.size() + 1)
-      throw Error("E5", "cells: offsets need one more entry than there are cells (" +
-                        std::to_string(cells->types.size() + 1) + "), not " + std::to_string(cells->offsets.size()));
     if (cells)
       detail::check(gamut_geometry_cells(f_, cells->types.data(), static_cast<int64_t>(cells->types.size()),
-                                         cells->offsets.data(), cells->connectivity.data(),
+                                         cells->offsets.data(), static_cast<int64_t>(cells->offsets.size()),
+                                         cells->connectivity.data(),
                                          static_cast<int64_t>(cells->connectivity.size()), &e), e);
     for (const auto& [name, values] : labels)
       detail::check(gamut_geometry_label(f_, name.c_str(), values.data(), static_cast<int64_t>(values.size()),

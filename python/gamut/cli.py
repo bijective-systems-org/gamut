@@ -317,7 +317,7 @@ def _check_document(doc: dict, base: str, appending: bool) -> list[tuple[str, st
             units = spec if isinstance(spec, str) else (spec or {}).get("units")
             if not units:
                 problems.append((f"{group}.{name}.units", "units are required (e.g. Pa, m s-1, 1)"))
-            elif not _lib.units_parse(units):
+            elif not _lib.units_valid(units):
                 problems.append((f"{group}.{name}.units",
                                  f"\"{units}\" does not parse; use UDUNITS form such as m s-1"))
     mesh = doc.get("mesh")
@@ -503,7 +503,7 @@ def _check_rows(f: Any, rows: Any) -> None:
         sel.resolve(f.row_count)
         shape, rank = (ctypes.c_int64 * 4)(), ctypes.c_int()
         _lib.call("gamut_shape", f._handle(), _lib.b("row"), sel.pointer(),
-                  _lib.Selection(None, "sites").pointer(), shape, ctypes.byref(rank))
+                  _lib.Selection(None, "sites").pointer(), ctypes.byref(rank), shape, len(shape))
     except GamutError as e:
         if e.rule:          # the file itself is at fault (exit 1), not the positions
             raise

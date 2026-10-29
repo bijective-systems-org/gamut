@@ -24,7 +24,12 @@ the fixes further down also correct results that were wrong, such as a
 - A file whose category tables together, or a model whose arrays
   together, pass the cap one table or array had is refused (E23) when it
   is opened or read; 1.3 allocated for them without limit.
-- In C, `gamut_batch_values` takes a `first_axis` argument.
+- In C, every array argument comes with its length, and every array the
+  core fills with its capacity: `gamut_batch_values` takes `first_axis`;
+  `gamut_geometry_points`, `gamut_geometry_cells`, `gamut_tree_set_array`
+  and `gamut_nearest_call` take counts; `gamut_shape` and
+  `gamut_tree_array_info` take `rank, shape, capacity`.
+  `gamut_units_parse` is `gamut_units_valid`.
 
 The rest of this section says what changed and why.
 
@@ -88,9 +93,17 @@ range included; as doubles, values above 2⁵³ that differ compared equal.
 Appending a changing mesh's geometry to int64 mesh labels takes codes
 beyond int32. BitRound no longer rounds a value near the largest finite float up
 to infinity. Names are checked against ASCII letters and digits whatever
-locale the host program has set. The header names `gamut_units_parse`,
-which returns 1 when its units parse, as the one function that does not
-return 0 on success.
+locale the host program has set.
+
+The C interface states the length of every array it reads and the
+capacity of every array it fills, so the core checks what a binding passes
+instead of trusting it: the points' count, the offsets' count (one more
+than the cells), a model array's count against its shape, and each
+nearest-model column's length. `gamut_shape` and `gamut_tree_array_info`
+take the rank, the shape and the shape's capacity, in that order, and
+refuse a capacity below the rank. `gamut_units_parse` is renamed
+`gamut_units_valid`, which says what its 1 means; it is the one function
+that does not return 0 on success.
 
 A group reachable by more than one hard link is walked once; a chain of
 such groups made validation, append, extract and `write_copy` take time
