@@ -62,17 +62,17 @@ const std::size_t kMaxFilterParameters = 1024;
 
 // `n` elements of `item` bytes, a count taken from the file (or a product
 // of such counts, given as factors), checked against the eager caps
-// before it sizes a buffer: E23 above them.
+// before it sizes a buffer: E26 above them.
 std::size_t checked_count(const std::string& path, std::size_t item,
                           std::initializer_list<std::int64_t> factors);
 
-// The element count of `shape`, a shape taken from the file: E23 above
+// The element count of `shape`, a shape taken from the file: E26 above
 // `limit`.
 std::size_t checked_product(const std::string& path,
                             const std::vector<hsize_t>& shape,
                             std::size_t limit);
 
-// A read touching more chunks than this is refused (E23): HDF5 keeps state
+// A read touching more chunks than this is refused (E26): HDF5 keeps state
 // per chunk touched, so a file of tiny chunks would make a small read cost
 // gigabytes (spec section 9.6).
 const std::size_t kMaxChunksRead = std::size_t(1) << 20;
@@ -82,7 +82,7 @@ const std::size_t kMaxChunksRead = std::size_t(1) << 20;
 const std::int64_t kMaxRowsScanned = std::int64_t(1) << 27;
 const std::int64_t kMaxNamesRead = std::int64_t(1) << 25;
 struct DsetInfo;
-// The chunks a selection of a chunked dataset touches; E23 above the cap.
+// The chunks a selection of a chunked dataset touches; E26 above the cap.
 void check_chunks_touched(const std::string& path, const DsetInfo& info,
                           const std::vector<Selection>& sel);
 const std::size_t kMaxIndexedObjects = 1u << 20;
@@ -254,7 +254,7 @@ class File {
   std::vector<double> read_f64(const std::string& path) const;
   std::vector<std::int64_t> read_i64(const std::string& path) const;
   // A whole one-dimensional fixed-length string dataset, NULs stripped;
-  // more entries or bytes than the caps is E23, before any allocation.
+  // more entries or bytes than the caps is E26, before any allocation.
   std::vector<std::string> read_strings(const std::string& path,
                                         std::size_t max_entries = kMaxDatasetElements,
                                         std::size_t max_bytes = kMaxDatasetBytes) const;

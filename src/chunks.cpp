@@ -284,12 +284,12 @@ ChunkStore::Dataset& ChunkStore::state(hid_t dset, const std::string& path,
   for (std::size_t a = 0; a < rank; ++a) {
     const hsize_t c = info.chunk[a];
     if (c == 0 || d.whole == 0 || d.whole > kMaxChunkBytes / c) {
-      throw Error("E23", "a chunk of \"" + path + "\" is larger than this reader decodes", path);
+      throw Error("E26", "a chunk of \"" + path + "\" is larger than this reader decodes", path);
     }
     d.whole *= static_cast<std::size_t>(c);
     const hsize_t g = info.shape[a] / c + (info.shape[a] % c != 0 ? 1 : 0);
     if (g != 0 && cells > kMaxChunkGrid / g) {
-      throw Error("E23", "\"" + path + "\" has more chunks than this reader indexes", path);
+      throw Error("E26", "\"" + path + "\" has more chunks than this reader indexes", path);
     }
     d.grid.push_back(g);
     cells *= g;

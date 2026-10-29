@@ -43,7 +43,7 @@ path of what it concerns.
 | groups nested inside each other | 64 levels |
 | parentheses nested in a `where` selection | 64 levels |
 
-Each refusal is rule E23, with the path of what was refused. The limits are
+Each refusal is rule E26, with the path of what was refused. The limits are
 far above what a study needs: a field of 8 GiB is read a part at a time,
 which any of the reads in the [guide](guide/08-reading-parts.md) does. The
 [corpus](../corpus) holds hostile files built to cross each limit, and

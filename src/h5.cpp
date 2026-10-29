@@ -230,13 +230,13 @@ std::size_t checked_product(const std::string& path,
   for (const hsize_t raw : shape) {
     const std::size_t e = static_cast<std::size_t>(raw);
     if (e != 0 && n > limit / e) {
-      throw Error("E23", "\"" + path + "\" declares more elements than this "
+      throw Error("E26", "\"" + path + "\" declares more elements than this "
                                         "reader will read");
     }
     n *= e;
   }
   if (n > limit) {
-    throw Error("E23", "\"" + path + "\" declares more elements than this "
+    throw Error("E26", "\"" + path + "\" declares more elements than this "
                                       "reader will read");
   }
   return n;
@@ -773,7 +773,7 @@ std::size_t checked_count(const std::string& path, std::size_t item,
     else n *= x;
   }
   if (over || n > kMaxDatasetElements || n > kMaxDatasetBytes / item) {
-    throw Error("E23", path + ": more elements than this reader reads at once", path);
+    throw Error("E26", path + ": more elements than this reader reads at once", path);
   }
   return n;
 }
@@ -818,7 +818,7 @@ void check_chunks_touched(const std::string& path, const DsetInfo& info,
     else total *= touched;
   }
   if (total > kMaxChunksRead) {
-    throw Error("E23", "\"" + path + "\": the read touches more than " +
+    throw Error("E26", "\"" + path + "\": the read touches more than " +
                            std::to_string(kMaxChunksRead) + " chunks smaller than the default "
                            "layout; read fewer rows, or rewrite the file with the default "
                            "chunks (write_copy)", path);
@@ -974,7 +974,7 @@ std::vector<std::string> File::read_strings(const std::string& path, std::size_t
   if (count == 0) return out;
   const std::size_t item = info.type.size;
   if (item != 0 && count > max_bytes / item) {
-    throw Error("E23", "\"" + path + "\" declares more bytes than this reader "
+    throw Error("E26", "\"" + path + "\" declares more bytes than this reader "
                                      "will read");
   }
   Id type(H5Dget_type(dset.get()));

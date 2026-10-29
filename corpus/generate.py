@@ -628,7 +628,7 @@ def hostile_cases(out):
         for i in range(80):
             path += f"/g{i}"
             f.create_group(path)
-    cases["hostile_deep"] = {"rules": ["E23"]}
+    cases["hostile_deep"] = {"rules": ["E26"]}
     p = os.path.join(out, "hostile_big_attr.gamut")
     shutil.copy(os.path.join(out, "table.gamut"), p)
     with h5py.File(p, "r+") as f:
@@ -658,7 +658,7 @@ def hostile_cases(out):
                              dtype=h5py.string_dtype("utf-8", 24), chunks=(512,),
                              compression="gzip", compression_opts=1, shuffle=True)
         t.dims[0].attach_scale(f["category_huge"])
-    cases["hostile_table_huge"] = {"rules": ["E23"]}
+    cases["hostile_table_huge"] = {"rules": ["E26"]}
     # Three tables of 128 MiB each, none stored: each is under the cap one
     # table has, and the tables a file opens with share it, so the third is
     # refused.
@@ -672,7 +672,7 @@ def hostile_cases(out):
                                  dtype=h5py.string_dtype("utf-8", 4096), chunks=(256,),
                                  compression="gzip", compression_opts=1, shuffle=True)
             t.dims[0].attach_scale(f["category_many"])
-    cases["hostile_tables_together"] = {"rules": ["E23"]}
+    cases["hostile_tables_together"] = {"rules": ["E26"]}
     # Cumulative node counts starting at the least int64: reported, and never
     # differenced (a sanitizer build sees any overflow).
     p = os.path.join(out, "hostile_instance_min.gamut")
@@ -711,7 +711,7 @@ def hostile_cases(out):
             del g[path]
             g.create_dataset(path, shape=(1 << 62, 4), maxshape=(None, 4), chunks=(1, 4),
                              dtype="<f8")
-    cases["hostile_model_wrap"] = {"rules": ["E23"],
+    cases["hostile_model_wrap"] = {"rules": ["E26"],
                                    "reads": [{"evaluate": {"mach": [0.4], "alpha": [1.0]}}]}
     # A changing mesh whose first instance claims 2**30 cells while
     # cell_offsets holds a handful.
@@ -759,7 +759,7 @@ def hostile_cases(out):
             d.attrs.create(k, v)
         d.dims[0].attach_scale(f["mesh/node"])
         d.dims[1].attach_scale(f["mesh/axis"])
-    cases["hostile_points_huge"] = {"rules": ["E23"], "reads": []}
+    cases["hostile_points_huge"] = {"rules": ["E26"], "reads": []}
     # A nearest model without its upper bounds: evaluating checks the stored
     # numbers before it looks one up, and refuses (E17).
     p = os.path.join(out, "hostile_nearest_missing.gamut")

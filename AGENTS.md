@@ -14,7 +14,7 @@ over that interface; a validator; a command line; VTK conversion.
 
 | Path | Holds |
 |---|---|
-| `SPEC.md` | the format: meaning, layout, validation rules (E1-E24, W1-W11), versions |
+| `SPEC.md` | the format: meaning, layout, validation rules (E1-E26, W1-W11), versions |
 | `corpus/` | valid, rule-breaking and hostile files (`generate.py`) and their expected outcomes, checked from every language (`check.py`, `julia/test/check_corpus.jl`, `matlab/tests/check_corpus.m`) |
 | `include/gamut/gamut.h` | the C interface, the only surface any language uses |
 | `include/gamut/gamut.hpp` | the C++ layer, header-only over `gamut.h`; tested by `tests/header_tests.cpp` against the shared library |

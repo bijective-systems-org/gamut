@@ -528,7 +528,7 @@ def test_select_sizes_nothing_from_a_declared_row_count(tmp_path):
         peak = tracemalloc.get_traced_memory()[1]
     finally:
         tracemalloc.stop()
-    assert e.value.rule == "E23"
+    assert e.value.rule == "E26"
     assert peak < 1 << 20
 
 
@@ -636,7 +636,7 @@ def test_selection_parentheses_nest_64_deep_and_no_deeper(tmp_path):
         for depth in (65, 20000):
             with pytest.raises(gamut.GamutError, match="nested deeper than 64") as e:
                 f.select("(" * depth + "x == 1" + ")" * depth)
-            assert e.value.rule == "E23"        # a cap, as docs/security.md lists it
+            assert e.value.rule == "E26"        # a cap, as docs/security.md lists it
 
 
 def test_appending_to_a_file_with_an_int64_label_writes_int64_codes(tmp_path):
@@ -755,7 +755,7 @@ def test_category_tables_share_one_budget_at_open(tmp_path):
                              compression="gzip")
     with pytest.raises(gamut.GamutError) as e:
         gamut.open(p)
-    assert e.value.rule == "E23"
+    assert e.value.rule == "E26"
 
 
 def _widen_to_int64(f, path):

@@ -486,8 +486,8 @@ recommended), the arrays of one model's data at one budget they share
 (the eager read's), and the chunks one
 read touches when its chunks are smaller than §11.4's defaults (2²⁰
 recommended: libraries keep state per chunk, so a file of tiny chunks makes
-a small read costly); beyond any, and for an object it
-cannot read, it reports E23 with the path and goes on. Every count taken
+a small read costly); beyond any it reports E26, and for an object it
+cannot read E23, with the path, and goes on. Every count taken
 from the file is checked against these caps before it sizes a buffer. It
 undoes only the filters §11.2 allows (E20 for another), and each stored
 chunk it reads must come to exactly the chunk's size, stored so or once
@@ -692,7 +692,7 @@ such files. Writers also buffer appends to whole chunks within a session.
 Rows can be appended in place when every growable dimension is unlimited,
 as a writer of this format makes them, so new runs may bring new members (a
 group table grows) or new instances. A file whose growable dimensions are
-fixed is read-only: appending refuses it (E20), and a copy rewritten with
+fixed is read-only: appending refuses it (E25), and a copy rewritten with
 the default layout (`write_copy`) can grow. Every check of a batch's own data is made before its first write, so
 a batch refused for its data leaves the file as it was. A failure of the
 file itself while it is written (a damaged chunk, a full disk) can come
@@ -839,11 +839,13 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 | E17 | a result or computed coordinates naming a model that does not exist, or without `output`; a model without `type` or `inputs`; an `inputs` entry naming anything but a parameter, a label or `coordinates`; a `nearest` model breaking §7.5 (columns, bounds, no points) |
 | E18 | model data that §12 cannot represent (an integer not int64, a number not float64, a group reachable by more than one hard link), or whose top level uses `type`, `inputs` or `repr` |
 | E19 | an axis of a dataset that is not itself a scale with no dimension scale, more than one, or one not named as §10 gives; a scale without attribute creation order tracked and indexed; a scale whose extent differs from an axis attached to it; an unlimited dimension §10 does not let grow (a zero-extent axis inside model data excepted, §12) |
-| E20 | an unlimited dimension that is not chunked; on appending, a growable dimension that is fixed (§11.5); a filter other than gzip 1–9 and shuffle; a user-defined fill value or a `_FillValue` attribute |
+| E20 | an unlimited dimension that is not chunked; a filter other than gzip 1–9 and shuffle; a user-defined fill value or a `_FillValue` attribute |
 | E21 | instances inconsistent: `row_instance` naming an instance that does not exist, giving two rows of one category different instances, or not numbering instances by first appearance; changing-mesh offsets not starting at 0, decreasing, or not ending at the node or cell count; row starts disagreeing with the instance sizes and row order |
 | E22 | a soft or external link in the public tree; a dataset whose values are stored outside the file (HDF5 external storage, a virtual dataset) |
-| E23 | an object the reader cannot read, deeper than its cap, or (eager read only) above its element limit or the budget it shares (§9.6) |
+| E23 | an object the reader cannot read: a chunk index it cannot use, a chunk not stored whole or of another size than the chunk's, stored or decoded, or a filter that fails (§9.6) |
 | E24 | coordinates with other than one to three axes |
+| E25 | on appending, a growable dimension that is fixed: the file is valid and read-only (§11.5); a refusal, never a finding of validation |
+| E26 | a count past a cap §9.6 has a reader or writer state: nesting deeper than its cap, an eager read above its element limit, tables or a model's arrays above the budget they share, more chunks than it indexes or than one read may touch, more rows than a selection scans, or `where` nested past its cap |
 
 **Warnings**
 

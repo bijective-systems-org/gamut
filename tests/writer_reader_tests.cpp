@@ -721,7 +721,7 @@ void test_private_values_stored_outside() {
 }
 
 // A run-table column grows with each run, so appending refuses one that
-// cannot grow (E20) before writing anything.
+// cannot grow (E25) before writing anything.
 void test_append_needs_growable_columns() {
   const std::string path = "wr_fixed.gamut";
   {
@@ -743,7 +743,7 @@ void test_append_needs_growable_columns() {
     f.write_attr("/y", "units", AttrValue::text("1"));
   }
   const std::string before = file_bytes(path);
-  CHECK(rule_of([&] { Writer::open_append(path); }) == "E20");
+  CHECK(rule_of([&] { Writer::open_append(path); }) == "E25");
   CHECK(file_bytes(path) == before);
   std::remove(path.c_str());
 }
@@ -781,7 +781,7 @@ void test_read_limit_before_allocation() {
     f.set_extent("/y", {(hsize_t(1) << 30) + 1});
   }
   const auto r = Reader::open(path);
-  CHECK(rule_of([&] { r->shape("y", Selection::all(), Selection::all()); }) == "E23");
+  CHECK(rule_of([&] { r->shape("y", Selection::all(), Selection::all()); }) == "E26");
   CHECK(r->shape("y", Selection::range(0, 8), Selection::all()) ==
         std::vector<std::int64_t>{8});
   std::remove(path.c_str());

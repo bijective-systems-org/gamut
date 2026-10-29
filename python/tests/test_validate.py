@@ -378,9 +378,10 @@ def test_a_fixed_layout_is_valid_and_read_only_until_rewritten(tmp_path):
                 d.attrs.create(k, v, dtype=t)
             d.dims[0].attach_scale(f["row"])
     assert not gamut.validate(p).findings
-    with pytest.raises(gamut.GamutError, match="this file is read-only; write_copy makes a copy"):
+    with pytest.raises(gamut.GamutError, match="this file is read-only; write_copy makes a copy") as e:
         with gamut.open(p, mode="a") as s:
             s.add_run({"mach": 0.5, "cl": 0.3, "status": "converged"})
+    assert e.value.rule == "E25"                  # valid and read-only, not E20's bad storage
     gamut.write_copy(p, grow)
     with gamut.open(grow, mode="a") as s:
         s.add_run({"mach": 0.5, "cl": 0.3, "status": "converged"})

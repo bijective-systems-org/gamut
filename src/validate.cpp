@@ -440,7 +440,7 @@ bool Validator::check_cells(const Object& t, const Object& o, const Object& c,
   for (const Object* x : {&t, &o, &c}) {
     if (x->info.shape.size() != 1) return false;   // check_dims reports the shape
     if (x->info.shape[0] > kMaxDatasetElements) {
-      add("E23", x->concept, "holds " + std::to_string(x->info.shape[0]) + " entries, more than the " +
+      add("E26", x->concept, "holds " + std::to_string(x->info.shape[0]) + " entries, more than the " +
                                  std::to_string(kMaxDatasetElements) + " a checker reads");
       return false;
     }
@@ -571,7 +571,7 @@ void Validator::root_attrs() {
 
 void Validator::walk_links() {
   // Every link of the public tree: hard links only (E22), bounded depth
-  // (E23). Every dataset, /private and /VTKHDF included, since readers and
+  // (E26). Every dataset, /private and /VTKHDF included, since readers and
   // copies refuse them there too: values stored in the file (E22).
   struct Group {
     std::string path;
@@ -586,7 +586,7 @@ void Validator::walk_links() {
     const Group here = todo.back();
     todo.pop_back();
     if (here.depth > kMaxGroupDepth) {
-      add("E23", here.path, "nested deeper than this reader walks (" +
+      add("E26", here.path, "nested deeper than this reader walks (" +
                             std::to_string(kMaxGroupDepth) + ")");
       continue;
     }
@@ -1063,7 +1063,7 @@ void Validator::mesh() {
         const std::int64_t nodes = static_cast<std::int64_t>(coords.info.shape[0]);
         const std::int64_t width = static_cast<std::int64_t>(coords.info.shape[1]);
         if (static_cast<std::uint64_t>(nodes) * static_cast<std::uint64_t>(width) > kMaxDatasetElements) {
-          add("E23", "coordinates", "holds " + std::to_string(nodes) + " × " + std::to_string(width) +
+          add("E26", "coordinates", "holds " + std::to_string(nodes) + " × " + std::to_string(width) +
                                         " values, more than the " + std::to_string(kMaxDatasetElements) +
                                         " a checker reads");
           return;
