@@ -55,7 +55,14 @@ for k = 1:numel(params)
         end
         col = int64(v);
     else
-        col = double(inputs.(name)(:));
+        v = inputs.(name)(:);
+        if isinteger(v)     % double() would round an integer past 2^53 silently
+            d = double(v);
+            if any(d >= 2^63 | d < -2^63) || any(int64(d) ~= int64(v))
+                error('gamut:E4', '%s: an integer past 2^53 is not exact as a float64', name);
+            end
+        end
+        col = double(v);
     end
     lo = str2double(declared(d, 'lower', name)); hi = str2double(declared(d, 'upper', name));
     outside = find(col < lo | col > hi, 1);

@@ -133,9 +133,9 @@ double. An int64 model input given fractional or out-of-range values is
 refused in Python and MATLAB, as in Julia, instead of being truncated; an
 unsigned array above int64's range is refused instead of wrapping. Julia's
 `open` closes the file when its `threads` value is refused. An integer
-written to a float64 parameter, scalar, field or coordinate that a float64
-cannot hold exactly (past 2⁵³) is refused (E4) in every language; it was
-rounded silently. Opening a file that does not exist says so, rather than
+written to a float64 parameter, scalar, field or coordinate, or given to a
+float64 model input, that a float64 cannot hold exactly (past 2⁵³) is
+refused (E4) in every language; it was rounded silently. Opening a file that does not exist says so, rather than
 that it is not HDF5. A column with the wrong number of values names it and
 both counts. A Python `Study` prints its path, kind, type and row count.
 

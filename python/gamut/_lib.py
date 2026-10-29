@@ -275,6 +275,27 @@ def int64_exactly(values: Any, what: str) -> np.ndarray:
     return out
 
 
+def float64_exactly(values: Any, what: str) -> np.ndarray:
+    """Values as float64, refusing an integer a float64 would round (past
+    2**53), as the core does: for values computed with here before the core
+    sees them."""
+    arr = np.asarray(values)
+    if arr.dtype.kind in "iuO":
+        flat = arr.reshape(-1)
+        if arr.dtype.kind != "O":
+            flat = flat[(flat > 2**53) | (flat < -2**53)]
+        for v in flat.tolist():
+            if isinstance(v, int) and not isinstance(v, bool) and abs(v) > 2**53:
+                try:
+                    exact = int(float(v)) == v
+                except OverflowError:
+                    exact = False
+                if not exact:
+                    raise GamutError("E4", f"{what}: {v} is not exact as a float64, which holds "
+                                           "every integer only to 2^53")
+    return np.asarray(arr, dtype=np.float64)
+
+
 def as_array(values: Any) -> np.ndarray:
     """A C-contiguous numeric array; Python ints become int64, floats float64."""
     arr = np.asarray(values)

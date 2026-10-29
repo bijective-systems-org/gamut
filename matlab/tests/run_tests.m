@@ -520,6 +520,14 @@ for bad = {2.5, Inf, 2^63, uint64(2)^63, true, 3 + 2i, sparse(3)}
         ok(strcmp(err.identifier, 'gamut:E4'), ['int64 input: ' err.message]);
     end
 end
+% A float64 model input refuses an integer that double() would round.
+try
+    o = gamut.evaluate(fullfile(tmp, 'nearest.gamut'), struct('alpha', int64(2)^53 + 1));
+    o.close();
+    ok(false, 'an integer past 2^53 refused for a float64 input');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E4'), ['integer past 2^53: ' err.message]);
+end
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end
 end

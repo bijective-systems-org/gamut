@@ -1010,3 +1010,24 @@ def test_a_study_prints_what_it_is(tmp_path):
     assert repr(s) == f"<gamut.Study {p!r}, closed>"
     with gamut.open(p) as f:
         assert repr(f) == f"<gamut.Study {p!r} (data, table, 2 rows)>"
+
+
+def test_integers_past_2_53_are_refused_on_every_path_to_a_float64(tmp_path):
+    big = 2**53 + 1
+    model = str(tmp_path / "model.gamut")
+    with gamut.create_model(model, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
+                            scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as m:
+        m.add_model("fit", gamut.Nearest(["x"], [0.], [1.], [[0.], [1.]], {"y": [0., 2.]}), ["x"])
+    for given in ([big], np.array([big]), np.array([big], dtype=object)):
+        with pytest.raises(gamut.GamutError, match="not exact as a float64") as e:
+            gamut.evaluate(model, {"x": given})
+        assert e.value.rule == "E4"
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"x": {"units": "m"}, "n": {"units": "1", "dtype": "int64"}}) as s:
+        for value in ((big, "m"), (big, "km")):
+            with pytest.raises(gamut.GamutError, match="not exact as a float64"):
+                s.add_run({"x": value, "n": 1})
+        s.add_run({"x": (2, "km"), "n": (big, "1")})          # int64 in its own units is exact
+    with gamut.open(p) as f:
+        assert f.get_parameter("x").tolist() == [2000.0]
+        assert f.get_parameter("n").tolist() == [big]

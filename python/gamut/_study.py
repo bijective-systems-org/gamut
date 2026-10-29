@@ -232,7 +232,9 @@ class Study:
             target = self._declared_units.get(name)
             if target is None:
                 raise GamutError("", f"{name} has no declared units to convert to")
-            return float(_units.convert(value[0], value[1], target))
+            if value[1] == target:            # nothing to convert: the core takes it as given
+                return value[0]
+            return float(_units.convert(_lib.float64_exactly(value[0], name), value[1], target))
         return value
 
     def add_runs(self, columns: Mapping[str, Any], *, fields: Mapping[str, Any] | None = None,

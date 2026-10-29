@@ -445,12 +445,22 @@ open(f::Function, path::AbstractString; kw...) = with_study(f, open(path; kw...)
 
 # --- writing ----------------------------------------------------------------------------
 
+# Values as Float64, refusing an integer a Float64 would round (past 2^53), as
+# the core does: for values computed with here before the core sees them.
+function float64_exactly(v, name)
+    for x in v
+        x isa Integer && !(x isa Bool) && Float64(x) != x &&
+            throw(GamutError("E4", "$name: $x is not exact as a float64, which holds every integer only to 2^53"))
+    end
+    return Float64.(v)
+end
+
 function stage_geometry(s::Study, points, cells, labels)
     h = handle(s)
     if points !== nothing
         p = points isa AbstractMatrix ? points : reshape(points, :, 1)
         T = eltype(p) <: AbstractFloat ? eltype(p) : Float64
-        buf = c_order(convert(Array{T}, p))
+        buf = c_order(T === eltype(p) ? p : float64_exactly(p, "coordinates"))
         GC.@preserve buf begin
             @mes gamut_geometry_points (Ptr{Cvoid}, Cint, Ptr{Cvoid}, Int64, Cint) h DTYPE[T] pointer(buf) size(p, 1) size(p, 2)
         end
@@ -1097,7 +1107,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
         for name in params
             haskey(given, name) || throw(GamutError("E2", "the input $name is missing"))
             d = declared(m, name)
-            col = get(d, "dtype", "") == "int64" ? Vector{Int64}(given[name]) : Vector{Float64}(given[name])
+            col = get(d, "dtype", "") == "int64" ? Vector{Int64}(given[name]) : float64_exactly(given[name], name)
             lo, hi = parse(Float64, d["lower"]), parse(Float64, d["upper"])
             i = findfirst(x -> x < lo || x > hi, col)
             i === nothing || @warn "W4: $name is outside the model's domain [$lo, $hi] at row $i"
