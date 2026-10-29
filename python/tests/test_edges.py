@@ -207,9 +207,9 @@ def test_floats_are_not_taken_as_integers(tmp_path):
         h = s._handle()
         _lib.call("gamut_batch_begin", h, 1)
         _lib.call("gamut_batch_values", h, b"n", _lib.GAMUT_INT64,
-                  np.array([2], np.int64).ctypes.data_as(ctypes.c_void_p), 1)
+                  np.array([2], np.int64).ctypes.data_as(ctypes.c_void_p), 0, 1)
         _lib.call("gamut_batch_values", h, b"status", _lib.GAMUT_FLOAT64,
-                  np.array([1.0]).ctypes.data_as(ctypes.c_void_p), 1)
+                  np.array([1.0]).ctypes.data_as(ctypes.c_void_p), 0, 1)
         with pytest.raises(gamut.GamutError) as e:
             _lib.call("gamut_batch_commit", h, ctypes.byref(ctypes.c_int64()))
         assert e.value.rule == "E4"
@@ -305,7 +305,7 @@ def test_counts_that_overflow_are_refused(tmp_path):
         one = np.zeros(1)
         with pytest.raises(gamut.GamutError, match="too large"):
             _lib.call("gamut_batch_values", h, b"x", _lib.GAMUT_FLOAT64,
-                      one.ctypes.data_as(ctypes.c_void_p), (1 << 61) + 1)
+                      one.ctypes.data_as(ctypes.c_void_p), 0, (1 << 61) + 1)
         s.add_run({"x": 1.0})
 
 
@@ -439,6 +439,7 @@ def test_as_given_float32_coordinates_refuse_float64_points(tmp_path):
         s.add_run({"r": 2.0}, points=np.zeros((3, 2), np.float32))
     with gamut.open(p) as f:
         assert f.row_count == 2
+    assert not gamut.validate(p).findings      # the refused batch left nothing behind (#93)
 
 
 def test_cli_zone_on_a_changing_mesh_and_bad_rows(tmp_path, capsys):
@@ -529,3 +530,337 @@ def test_select_sizes_nothing_from_a_declared_row_count(tmp_path):
         tracemalloc.stop()
     assert e.value.rule == "E23"
     assert peak < 1 << 20
+
+
+def test_a_field_given_sites_by_runs_is_refused(tmp_path):
+    pts = np.array([[0, 0], [1, 0], [1, 1], [0, 1.], [2, 0], [2, 1]])
+    cells = (np.array([9, 9], np.uint8), np.array([0, 4, 8]), np.array([0, 1, 2, 3, 1, 4, 5, 2]))
+    runs = np.arange(6.0) + np.array([[0.], [100.], [200.]])        # 3 runs x 6 nodes
+    with gamut.create(str(tmp_path / "t.gamut"), writer="t", mesh="shared", per="fixed",
+                      coordinates={"units": "m", "axes": 2}, parameters={"x": "m"},
+                      fields={"q": {"units": "1", "at": "node"}}) as s:
+        s.set_mesh(pts, cells)
+        with pytest.raises(gamut.GamutError, match="q: the array's first axis has 6 entries but "
+                                                   "the batch has 3 runs"):
+            s.add_runs({"x": [1., 2., 3.]}, fields={"q": runs.T})
+        s.add_runs({"x": [1., 2., 3.]}, fields={"q": runs})
+    with gamut.open(str(tmp_path / "t.gamut")) as f:
+        assert f.get_field("q", rows=1).tolist() == runs[1].tolist()
+
+
+def _labelled(path):
+    return gamut.create(path, writer="t", parameters={"x": "m"}, scalars={"y": "1"},
+                        labels={"status": {"role": "status", "categories": ["converged", "failed"]}})
+
+
+@pytest.mark.parametrize("missing", [None, float("nan"), np.float32("nan")])
+def test_a_missing_label_is_refused(tmp_path, missing):
+    with _labelled(str(tmp_path / "t.gamut")) as s:
+        with pytest.raises(gamut.GamutError) as e:
+            s.add_runs({"x": [1., 2.], "y": [1., 2.], "status": ["converged", missing]})
+        assert e.value.rule == "E5" and "status: a label is never missing" in str(e.value)
+        s.add_runs({"x": [1., 2.], "y": [1., 2.], "status": ["converged", "failed"]})
+    with gamut.open(str(tmp_path / "t.gamut")) as f:
+        assert f.categories("status") == ["converged", "failed"]
+
+
+def test_a_category_name_that_is_not_utf8_is_refused_at_open(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    with _labelled(p) as s:
+        s.add_runs({"x": [1.], "y": [1.], "status": ["converged"]})
+    with h5py.File(p, "r+") as f:
+        f["categories/status"][0] = b"\xff"
+    with pytest.raises(gamut.GamutError) as e:
+        gamut.open(p)
+    assert e.value.rule == "E4" and "/categories/status" in str(e.value)
+
+
+def test_a_position_past_int64_is_reported_as_given(tmp_path):
+    with _labelled(str(tmp_path / "t.gamut")) as s:
+        s.add_runs({"x": [1.], "y": [1.], "status": ["converged"]})
+    with gamut.open(str(tmp_path / "t.gamut")) as f:
+        with pytest.raises(gamut.GamutError, match=f"position {2**63 + 1}, counting from 0"):
+            f.get_parameter("x", rows=np.array([2**63 + 1], dtype=np.uint64))
+
+
+def test_points_of_a_file_without_a_mesh_say_so(tmp_path):
+    with _labelled(str(tmp_path / "t.gamut")) as s:
+        s.add_runs({"x": [1.], "y": [1.], "status": ["converged"]})
+    with gamut.open(str(tmp_path / "t.gamut")) as f:
+        with pytest.raises(gamut.GamutError, match="the file has no mesh"):
+            f.get_points()
+
+
+def test_a_refused_threads_value_leaves_the_file_closed(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="w", parameters={"x": "m"}) as s:
+        s.add_run({"x": 1.0})
+    with pytest.raises(gamut.GamutError, match="threads"):
+        gamut.open(p, threads=0)
+    with gamut.open(p, mode="a") as s:
+        s.add_run({"x": 2.0})
+    with gamut.open(p) as f:
+        assert f.row_count == 2
+
+
+def test_a_member_repeated_with_equal_points_in_another_dtype_is_accepted(tmp_path):
+    pts, cells = grid(2, 2)
+    with gamut.create(str(tmp_path / "fam.gamut"), writer="t", mesh="shared", per="group:member",
+                      coordinates={"units": "m", "axes": 2}, labels={"member": "group"},
+                      parameters={"mach": "1"}, precision={"coordinates": "float64"}) as s:
+        s.set_mesh(cells=cells, n_nodes=4)
+        s.add_runs({"member": ["a", "a"], "mach": [1.0, 2.0]},
+                   points=[pts.astype(np.float32), pts.astype(np.float64)])
+    with gamut.open(str(tmp_path / "fam.gamut")) as f:
+        assert f.row_count == 2
+
+
+def test_append_refuses_a_name_that_is_a_parameter_in_one_file_and_a_label_in_the_other(tmp_path):
+    dst, src = str(tmp_path / "dst.gamut"), str(tmp_path / "src.gamut")
+    with gamut.create(dst, writer="w", parameters={"x": "1", "z": "1"}, scalars={"y": "1"}) as s:
+        s.add_run({"x": 1.0, "z": 0.0, "y": 2.0})
+    with gamut.create(src, writer="w", parameters={"z": "1"},
+                      labels={"x": {"categories": ["a"]}}, scalars={"y": "1"}) as s:
+        s.add_run({"z": 1.0, "x": "a", "y": 3.0})
+    with pytest.raises(gamut.GamutError, match="what x is"):
+        gamut.append(dst, src)
+    with gamut.open(dst) as f:
+        assert f.row_count == 1
+
+
+def test_selection_parentheses_nest_64_deep_and_no_deeper(tmp_path):
+    with gamut.create(str(tmp_path / "a.gamut"), writer="w", parameters={"x": "1"}) as s:
+        s.add_run({"x": 1.0})
+    with gamut.open(str(tmp_path / "a.gamut")) as f:
+        assert list(f.select("(" * 64 + "x == 1" + ")" * 64)) == [0]
+        for depth in (65, 20000):
+            with pytest.raises(gamut.GamutError, match="nested deeper than 64"):
+                f.select("(" * depth + "x == 1" + ")" * depth)
+
+
+def test_appending_to_a_file_with_an_int64_label_writes_int64_codes(tmp_path):
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "corpus"))
+    try:
+        import generate as g
+    finally:
+        sys.path.pop(0)
+    p = str(tmp_path / "int64label.gamut")
+    s = g.Study(p)
+    s.row(2)
+    s.parameter("mach", [0.3, 0.4], "condition", "1")
+    s.table("run", ["a", "b"])
+    s.column("run", [0, 1], "<i8", {"role": "group", "category": "run"})
+    s.scalar("cl", [0.1, 0.2], "1")
+    s.finish()
+    assert not gamut.validate(p).findings
+    with gamut.open(p, mode="a") as st:
+        st.add_run({"mach": 0.5, "run": "b", "cl": 0.3})
+    assert not gamut.validate(p).findings
+    with gamut.open(p) as f:
+        assert list(f.get_label("run")) == ["a", "b", "b"]
+
+
+def test_a_run_start_out_of_range_in_the_file_is_refused(tmp_path):
+    p = str(tmp_path / "c.gamut")
+    pts, cells = grid(2, 2)
+    with gamut.create(p, writer="t", mesh="changing", per="run", coordinates={"units": "m", "axes": 2},
+                      parameters={"r": "m"}, fields={"q": {"units": "1", "at": "node"}}) as s:
+        s.add_run({"r": 1.0}, fields={"q": np.arange(4.0)}, points=pts, cells=cells)
+    with h5py.File(p, "r+") as f:
+        f["mesh/row_node_start"][0] = 2**63 - 2
+    with gamut.open(p) as f:
+        with pytest.raises(gamut.GamutError) as e:
+            f.get_field("q", rows=0)
+    assert e.value.rule == "E21"
+
+
+def test_int64_parameters_select_exactly(tmp_path):
+    with gamut.create(str(tmp_path / "n.gamut"), writer="t",
+                      parameters={"n": {"units": "1", "dtype": "int64"}}) as s:
+        s.add_runs({"n": np.array([2**53, 2**53 + 1], dtype=np.int64)})
+    with gamut.open(str(tmp_path / "n.gamut")) as f:
+        assert list(f.select(f"n == {2**53 + 1}")) == [1]
+        assert list(f.select(f"n < {2**53 + 1}")) == [0]
+        assert list(f.select("n > 1.5")) == [0, 1]
+
+
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+def test_bitround_keeps_the_largest_value_finite(tmp_path, dtype):
+    big = np.finfo(dtype).max
+    with gamut.create(str(tmp_path / "b.gamut"), writer="t", parameters={"x": "1"},
+                      scalars={"y": {"units": "1"}}, precision={"y": dtype},
+                      round_bits={"y": 10}) as s:
+        s.add_runs({"x": [1.0, 2.0], "y": np.array([big, -big], dtype=dtype)})
+    with gamut.open(str(tmp_path / "b.gamut")) as f:
+        y = f.get_scalar("y")
+    assert np.all(np.isfinite(y)) and y[0] <= big and y[0] > big * 0.99 and y[1] == -y[0]
+
+
+def test_a_repeat_with_out_of_range_mesh_labels_is_not_taken_for_the_same(tmp_path):
+    pts, cells = grid(2, 2)
+    with gamut.create(str(tmp_path / "fam.gamut"), writer="t", mesh="changing", per="group:member",
+                      coordinates={"units": "m", "axes": 2}, labels={"member": "group"},
+                      parameters={"mach": "1"}, mesh_labels={"zone": {"at": "node"}}) as s:
+        with pytest.raises(gamut.GamutError, match="two different geometries"):
+            s.add_runs({"member": ["a", "a"], "mach": [1.0, 2.0]}, points=[pts, pts],
+                       cells=[cells, cells],
+                       mesh_labels=[{"zone": np.array([2**32, 0, 0, 0])}, {"zone": np.zeros(4, int)}])
+
+
+def _doubled_chain(group, levels):
+    """Each group links to the next twice: walked once per path, 2**levels."""
+    chain = [group.create_group("g0")]
+    for _ in range(1, levels):
+        chain.append(chain[-1].create_group("a"))
+        chain[-2]["b"] = chain[-1]
+
+
+def test_a_group_linked_twice_is_walked_once(tmp_path):
+    import time
+    p, q = str(tmp_path / "fan.gamut"), str(tmp_path / "copy.gamut")
+    with gamut.create(p, writer="w", parameters={"x": "1"}) as s:
+        s.add_run({"x": 1.0})
+    with h5py.File(p, "r+") as f:
+        _doubled_chain(f.require_group("private"), 30)      # /private may hold any structure
+    t = time.time()
+    assert not gamut.validate(p).findings
+    gamut.write_copy(p, q)
+    assert time.time() - t < 5
+
+
+def test_model_data_with_a_group_linked_twice_is_refused(tmp_path):
+    p = str(tmp_path / "m.gamut")
+    with gamut.create_model(p, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
+                            scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as mf:
+        mf.add_model("fit", gamut.Nearest(["x"], [0.0], [1.0], [[0.1], [0.9]], {"y": [1.0, 2.0]}),
+                     ["x"])
+    with h5py.File(p, "r+") as f:
+        _doubled_chain(f["models/fit"], 30)
+    with gamut.open(p) as f:
+        with pytest.raises(gamut.GamutError, match="more than one hard link") as e:
+            f.model_numbers("fit")
+    assert e.value.rule == "E18"
+
+
+def test_category_tables_share_one_budget_at_open(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="w", parameters={"x": "1"}) as s:
+        s.add_run({"x": 1.0})
+    with h5py.File(p, "r+") as f:
+        for i in range(3):     # each at the per-table cap of 2**24 entries; nothing is stored
+            f.create_dataset(f"categories/t{i}", shape=(1 << 24,), maxshape=(None,),
+                             dtype=h5py.string_dtype("utf-8", 16), chunks=(1 << 14,),
+                             compression="gzip")
+    with pytest.raises(gamut.GamutError) as e:
+        gamut.open(p)
+    assert e.value.rule == "E23"
+
+
+def _widen_to_int64(f, path):
+    """Rewrites an int32 dataset as int64, as another writer may store codes."""
+    old = f[path]
+    data = old[...].astype("<i8")
+    attrs = {k: v for k, v in old.attrs.items() if k != "DIMENSION_LIST"}
+    scales = [d[0] for d in old.dims]
+    chunks = (max(1, old.chunks[0] // 2),) + old.chunks[1:]       # the same bytes a chunk
+    kw = dict(chunks=chunks, maxshape=old.maxshape, compression=old.compression,
+              compression_opts=old.compression_opts, shuffle=old.shuffle)
+    for i, sc in enumerate(scales):
+        old.dims[i].detach_scale(sc)
+    del f[path]
+    new = f.create_dataset(path, data=data, **kw)
+    for k, v in attrs.items():
+        new.attrs[k] = v
+    for i, sc in enumerate(scales):
+        new.dims[i].attach_scale(sc)
+
+
+def _changing(path, labels=False):
+    pts, cells = grid(2, 2)
+    with gamut.create(path, writer="t", mesh="changing", per="group:member",
+                      coordinates={"units": "m", "axes": 2}, labels={"member": "group"},
+                      parameters={"r": "m"},
+                      mesh_labels={"zone": {"at": "cell"}} if labels else None) as s:
+        s.add_run({"member": "a", "r": 1.0}, points=pts, cells=cells,
+                  mesh_labels={"zone": np.array([1])} if labels else None)
+    return pts, cells
+
+
+def test_a_row_naming_an_instance_past_int64_is_reported(tmp_path):
+    p = str(tmp_path / "c.gamut")
+    _changing(p)
+    with h5py.File(p, "r+") as f:
+        f["mesh/row_instance"][0] = 2**63 - 1
+    messages = [x.message for x in gamut.validate(p).findings if x.rule == "E21"]
+    assert any(f"names instance {2**63 - 1}, which does not exist" in m for m in messages), messages
+
+
+def test_cell_offsets_out_of_order_are_reported_before_their_differences(tmp_path):
+    p = str(tmp_path / "s.gamut")
+    pts, _ = grid(3, 2)
+    cells = (np.array([9, 9], np.uint8), np.array([0, 4, 8]), np.array([0, 1, 4, 3, 1, 2, 5, 4]))
+    with gamut.create(p, writer="t", mesh="shared", per="fixed", coordinates={"units": "m", "axes": 2},
+                      parameters={"x": "1"}) as s:
+        s.set_mesh(pts, cells)
+        s.add_run({"x": 1.0})
+    with h5py.File(p, "r+") as f:
+        f["mesh/cell_offsets"][...] = np.array([0, 2**63 - 1, 8], dtype="<i8")
+    messages = [x.message for x in gamut.validate(p).findings if x.rule == "E10"]
+    assert any("offsets decrease or run past" in m for m in messages), messages
+
+
+def test_negative_changing_mesh_offsets_are_refused_on_reading(tmp_path):
+    p = str(tmp_path / "c.gamut")
+    _changing(p)
+    with h5py.File(p, "r+") as f:
+        f["mesh/cell_offsets"][0] = -2**63
+    with gamut.open(p) as f:
+        with pytest.raises(gamut.GamutError, match="cell_offsets is negative") as e:
+            f._get("cells/offsets", [0], dtype=np.int64)
+    assert e.value.rule == "E21"
+
+
+def test_int64_literals_beyond_the_range_compare_exactly(tmp_path):
+    with gamut.create(str(tmp_path / "n.gamut"), writer="t",
+                      parameters={"n": {"units": "1", "dtype": "int64"}}) as s:
+        s.add_runs({"n": np.array([2**63 - 1, -2**63], dtype=np.int64)})
+    with gamut.open(str(tmp_path / "n.gamut")) as f:
+        assert list(f.select(f"n == {2**63}")) == [] and list(f.select(f"n < {2**63}")) == [0, 1]
+        assert list(f.select(f"n == {-2**63 - 1}")) == [] and list(f.select(f"n > {-2**63 - 1}")) == [0, 1]
+        assert list(f.select(f"n == {2**63 - 1}")) == [0]
+
+
+def test_appending_geometry_to_int64_mesh_labels_takes_wide_codes(tmp_path):
+    p = str(tmp_path / "c.gamut")
+    pts, cells = _changing(p, labels=True)
+    with h5py.File(p, "r+") as f:
+        _widen_to_int64(f, "mesh/cell_labels/zone")
+    assert not gamut.validate(p).findings
+    with gamut.open(p, mode="a") as s:
+        s.add_run({"member": "b", "r": 2.0}, points=pts, cells=cells,
+                  mesh_labels={"zone": np.array([2**40])})
+    assert not gamut.validate(p).findings
+    with gamut.open(p) as f:
+        assert f.get_mesh_label("zone", row=1).tolist() == [2**40]
+
+
+def test_rejected_instance_sizes_are_not_summed(tmp_path):
+    # Differences of a rejected instance_nodes would overflow (UBSan sees it).
+    p = str(tmp_path / "c.gamut")
+    _changing(p)
+    with h5py.File(p, "r+") as f:
+        f["mesh/instance_nodes"][0] = -2**63
+    messages = [x.message for x in gamut.validate(p).findings if x.rule == "E21"]
+    assert any("instance_nodes must start at 0" in m for m in messages), messages
+
+
+def test_a_private_group_linked_into_the_public_tree_is_checked_there(tmp_path):
+    p = str(tmp_path / "z.gamut")
+    with gamut.create(p, writer="w", parameters={"x": "1"}) as s:
+        s.add_run({"x": 1.0})
+    with h5py.File(p, "r+") as f:
+        f.require_group("private")["bad"] = h5py.SoftLink("/nowhere")   # allowed in /private
+        f["z"] = f["private"]                                            # the same group, public
+    findings = gamut.validate(p).findings
+    assert any(x.rule == "E22" and x.path == "/z/bad" for x in findings), findings

@@ -432,8 +432,10 @@ spaces; names hold no spaces.
 ### 9.3 Names
 
 Every group, dataset, attribute and dimension name is a legal netCDF-4
-name: not empty; no `/` or NUL; letters, digits, `_`, `-`, `.`, `+`; first
-character a letter, digit or underscore; no leading or trailing space.
+name: not empty; no `/` or NUL; ASCII letters and digits, `_`, `-`, `.`,
+`+`; first character an ASCII letter, digit or underscore; no leading or
+trailing space. "Letter" means `A`–`Z` and `a`–`z`, whatever locale a
+program runs in.
 Names a producer chooses must not begin with `gamut_`, and in the root
 must not be `row`, `coordinates`, `categories`, `mesh`, `models`, `notes`,
 `private` or `VTKHDF`, or begin with `category_` (E8). Names are unique in
@@ -453,10 +455,14 @@ row ids as values, `NAME = "row"`. Every scale is created with attribute
 creation order tracked and indexed and object time tracking off. A
 dimension's name is the scale's link name, never its `NAME`; a reader
 resolves attached scales through a map from object address to link name
-built during its own walk, never by asking HDF5 for a path. A scale is
-unlimited when the layout lets its dimension grow (§10) and fixed
-otherwise, and its extent equals the extent of every axis attached to it:
-a writer extends scales as it appends (E19).
+built during its own walk, never by asking HDF5 for a path. A scale may be unlimited only where the layout lets its dimension grow
+(§10), and its extent equals the extent of every axis attached to it: a
+writer extends scales as it appends (E19). A writer makes every growable
+dimension unlimited; a file whose growable dimensions are fixed, as some
+netCDF writers leave them, is valid and read-only (§11.5). The encoding
+above (float32 big-endian, `NAME`) is what a writer produces; a reader
+accepts a scale of any numeric encoding, and no rule checks it. Datasets
+under `/private` and `/VTKHDF` are outside this section.
 
 ### 9.5 Strings in datasets
 
@@ -474,7 +480,10 @@ values are stored elsewhere (HDF5 external storage or a virtual dataset), is
 an error (E22): such a link is never followed, and such values are never
 read, anywhere in the file. It caps recursion over
 groups and model data at a depth it states (64 recommended), an eager
-read at an element count it states (2³¹ recommended), and the chunks one
+read at an element count it states (2³¹ recommended), the category tables
+read when a file opens at one budget they share (2²⁴ entries and 256 MiB
+recommended), the arrays of one model's data at one budget they share
+(the eager read's), and the chunks one
 read touches when its chunks are smaller than §11.4's defaults (2²⁰
 recommended: libraries keep state per chunk, so a file of tiny chunks makes
 a small read costly); beyond any, and for an object it
@@ -518,7 +527,10 @@ model data.
     /models/<id>?              model files only (§10.5)
     /notes?, /private?
 
-Every root dataset or served group carries `role`. Relation attributes are
+Every root dataset or served group carries `role`. A root dataset without
+one, such as a variable another netCDF tool added, is not part of the
+study: it is reported (W5) and ignored, and anything that names it names
+nothing. Relation attributes are
 `of`, `statistic`, `q`, `method`, `with_respect_to`, `axis` (§6). Writers
 add a CF `coordinates` attribute to each scalar listing the parameters and
 labels, so generic netCDF tools show the run table; nothing depends on it.
@@ -643,10 +655,12 @@ writes for the same BitRound algorithm. The relative error is at most
 
 ### 11.4 Chunking and file space
 
-Every dataset with a dimension that may grow (`row`, `category_<t>`,
-`instance`, and in a changing mesh the dimensions §10.4 lists as
-unlimited) is chunked (E20); larger fixed datasets may be chunked too, to
-be compressed. With T = 262,144 bytes and b the bytes of one entry along
+A writer chunks every dataset with a dimension that may grow (`row`,
+`category_<t>`, `instance`, and in a changing mesh the dimensions §10.4
+lists as unlimited) and makes that dimension unlimited; any dataset with an
+unlimited dimension is chunked (E20). A file whose growable dimensions are
+fixed instead is valid and read-only (§11.5). Larger fixed datasets may be
+chunked too, to be compressed. With T = 262,144 bytes and b the bytes of one entry along
 the first axis (dtype size times the other extents):
 
 - **Leading axis grows** (root datasets; category tables; shared-mesh
@@ -675,8 +689,17 @@ such files. Writers also buffer appends to whole chunks within a session.
 
 ### 11.5 Appending
 
-Rows can be appended in place: every growable dimension is unlimited, so
-new runs may bring new members (a group table grows) or new instances. A
+Rows can be appended in place when every growable dimension is unlimited,
+as a writer of this format makes them, so new runs may bring new members (a
+group table grows) or new instances. A file whose growable dimensions are
+fixed is read-only: appending refuses it (E20), and a copy rewritten with
+the default layout (`write_copy`) can grow. Every check of a batch's own data is made before its first write, so
+a batch refused for its data leaves the file as it was. A failure of the
+file itself while it is written (a damaged chunk, a full disk) can come
+after writes, and HDF5 does not keep a file consistent on disk while it is
+written: such a failure, or a writer stopped partway (a crash, a killed
+process), can leave the file unreadable, rows written before included. A
+library says so; this version defines no recovery. A
 library appends without copying or re-reading the whole file, and checks
 the structure and the appended rows. A fixed-length string dataset whose
 new values need a wider width is recreated: its scale is detached, the
@@ -729,7 +752,8 @@ any number. Deciding needs no unit database; converting does.
                  [ ( "e" | "E" ) [ sign ] digit { digit } ]
     integer    = [ sign ] digit { digit }
     name       = letter { letter | digit }
-    letter     = "A"–"Z" | "a"–"z" | "_" | "%" | "'" | '"' | any non-ASCII character
+    letter     = "A"–"Z" | "a"–"z" | "_" | "%" | "'" | '"'
+               | any non-ASCII character that is not a space (Unicode White_Space)
     sign       = "+" | "-"
     digit      = "0"–"9"
     sp         = " "
@@ -797,7 +821,7 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 | Rule | Finding |
 |---|---|
 | E1 | `format` missing or not `gamut/1`; `kind` missing or not `data` or `model` |
-| E2 | a required attribute or object of §10 absent |
+| E2 | a required attribute or object of §10 absent: the rule an absent object breaks, whatever rules its contents would |
 | E3 | an attribute stored with an encoding other than §9.2's, or not valid UTF-8 |
 | E4 | a dataset with a dtype §11.1 does not allow; a string dataset not valid UTF-8 or holding a NUL |
 | E5 | a dataset whose dimensions or lengths disagree with §10: the row count, the node or cell count, a table's length, the instance count, or the shape `per` requires; a parameter with a missing value (§3.8) |
@@ -808,17 +832,17 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 | E10 | cell arrays inconsistent (§10.2): offsets, node counts by type, or a node number outside the mesh or the cell's instance |
 | E11 | a `support_id` that does not match §14 |
 | E12 | a relation incomplete or inconsistent: `of` naming nothing, a label or a relation; `quantile` without `q` in (0, 1); `std` or `quantile` units unequal to those of `of`; `with_respect_to` naming neither a parameter nor `coordinates`; `coordinates` without `axis`; both `statistic` and `with_respect_to`; `q` without `statistic = quantile`; a location unlike that of `of` (a derivative with respect to node position excepted) |
-| E13 | a vector inconsistent: two fields with one `vector` and `axis`; one vector across locations or units; `axis` without `vector` on a field that is not a derivative; an axis the coordinates do not have |
+| E13 | a vector inconsistent: two fields with one `vector` and `axis`; one vector across locations or units; `axis` without `vector` on a field that is not a derivative; an axis the coordinates do not have, on a vector or on a derivative with respect to `coordinates` |
 | E14 | repeated row ids |
 | E15 | `generalisation_group` or `run_group` naming anything but a group label; `run_group` on a parameter whose role is not `time`; two `status` labels |
 | E16 | a data file with a result naming a `model`, or with `/models`; coordinates naming a `model` or `output` outside a model file whose mesh is per run, or a model file whose mesh is per run without that model; a model file with rows, a result without `model`, no model, or a parameter without bounds; in any file, bounds that are not finite or have `lower` > `upper`, or bounds on a label |
 | E17 | a result or computed coordinates naming a model that does not exist, or without `output`; a model without `type` or `inputs`; an `inputs` entry naming anything but a parameter, a label or `coordinates`; a `nearest` model breaking §7.5 (columns, bounds, no points) |
-| E18 | model data that §12 cannot represent, or whose top level uses `type`, `inputs` or `repr` |
+| E18 | model data that §12 cannot represent (an integer not int64, a number not float64, a group reachable by more than one hard link), or whose top level uses `type`, `inputs` or `repr` |
 | E19 | an axis of a dataset that is not itself a scale with no dimension scale, more than one, or one not named as §10 gives; a scale without attribute creation order tracked and indexed; a scale whose extent differs from an axis attached to it; an unlimited dimension §10 does not let grow (a zero-extent axis inside model data excepted, §12) |
-| E20 | a dataset with a growable dimension that is not chunked; a filter other than gzip 1–9 and shuffle; a user-defined fill value or a `_FillValue` attribute |
+| E20 | an unlimited dimension that is not chunked; on appending, a growable dimension that is fixed (§11.5); a filter other than gzip 1–9 and shuffle; a user-defined fill value or a `_FillValue` attribute |
 | E21 | instances inconsistent: `row_instance` naming an instance that does not exist, giving two rows of one category different instances, or not numbering instances by first appearance; changing-mesh offsets not starting at 0, decreasing, or not ending at the node or cell count; row starts disagreeing with the instance sizes and row order |
 | E22 | a soft or external link in the public tree; a dataset whose values are stored outside the file (HDF5 external storage, a virtual dataset) |
-| E23 | an object the reader cannot read, deeper than its cap, or (eager read only) above its element limit |
+| E23 | an object the reader cannot read, deeper than its cap, or (eager read only) above its element limit or the budget it shares (§9.6) |
 | E24 | coordinates with other than one to three axes |
 
 **Warnings**

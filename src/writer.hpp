@@ -122,6 +122,9 @@ class Writer {
   // flushes first.
   void flush();
   void close();
+  // A fingerprint of a geometry as it would be stored: points at the
+  // coordinates' dtype, cells, mesh labels.
+  std::string geometry_print(const Geometry& g) const;
   // Releases the file without finishing it; with `remove`, deletes a file
   // this writer created.  For giving up after an error.
   void abandon(bool remove);
@@ -174,7 +177,6 @@ class Writer {
   // Per group: a fingerprint of each instance's stored geometry, so a
   // member given its geometry again is checked without keeping it.
   std::map<std::int64_t, std::string> instance_print_;
-  std::string geometry_print(const Geometry& g) const;
   std::string instance_print(std::int64_t instance);
   std::map<std::string, std::unique_ptr<Pending>> pending_;
 };

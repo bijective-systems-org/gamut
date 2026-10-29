@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 
@@ -85,6 +86,39 @@ def hostile_read(path: str, f, r: dict) -> None:
             pass
 
 
+def appends_to_itself(path: str) -> str:
+    """A valid data file can be appended to: its own rows appended to a copy
+    leave the copy free of errors, with twice the rows. A read-only file (a
+    fixed layout, §11.5) is refused for appending, and its write_copy is not."""
+    with gamut.open(path) as f:
+        if f.kind != "data" or not f.row_count:
+            return ""
+        rows = f.row_count
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = os.path.join(tmp, "copy.gamut")
+        shutil.copy(path, copy)
+        try:
+            gamut.append(copy, path)
+        except gamut.GamutError as exc:
+            if not (exc.rule == "E20" and "read-only" in exc.message):
+                return f"appending it to itself was refused: {exc}"
+            os.remove(copy)
+            gamut.write_copy(path, copy)
+            try:
+                gamut.append(copy, path)
+            except gamut.GamutError as again:
+                return f"read-only, and its write_copy refused appending too: {again}"
+        # Repeating every row repeats each run's times (W9): only errors count.
+        errors = [f for f in gamut.validate(copy).findings if f.severity == "error"]
+        if errors:
+            return "appended to itself, it drew " + "; ".join(f"{f.rule} {f.path}: {f.message}"
+                                                             for f in errors)
+        with gamut.open(copy) as f:
+            if f.row_count != 2 * rows:
+                return f"appended to itself, it has {f.row_count} rows, not {2 * rows}"
+    return ""
+
+
 def main() -> int:
     corpus = sys.argv[1]
     with open(os.path.join(corpus, "expected.json")) as fh:
@@ -104,6 +138,9 @@ def main() -> int:
             if report.findings:
                 failures.append(f"{name}: a valid file drew " + "; ".join(
                     f"{f.rule} {f.path}: {f.message}" for f in report.findings))
+            why = appends_to_itself(path)
+            if why:
+                failures.append(f"{name}: {why}")
             for p in e.get("probes", []):
                 try:
                     why = probe(path, p)
@@ -112,9 +149,12 @@ def main() -> int:
                 if why:
                     failures.append(f"{name}: {why}")
         else:
-            missing = [r for r in e["rules"] if r not in found]
-            if missing:
-                failures.append(f"{name}: expected {missing}, found {sorted(found)}: " + "; ".join(
+            # A rule case breaks exactly its rules; a hostile case must draw the
+            # rules it names and may draw more, since a reader may refuse sooner.
+            want = set(e["rules"])
+            wrong = found != want if e["group"] == "rules" else not want <= found
+            if wrong:
+                failures.append(f"{name}: expected {sorted(want)}, found {sorted(found)}: " + "; ".join(
                     f"{f.rule} {f.path}: {f.message}" for f in report.findings))
             if e["group"] == "hostile":
                 # Opened and read without a crash: a refusal is a GamutError,

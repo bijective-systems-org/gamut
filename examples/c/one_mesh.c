@@ -43,8 +43,8 @@ static void add_run(gamut_file* f, double gamma) {
   static double cp[N_NODES];
   solve(gamma, cp);
   CHECK(gamut_batch_begin(f, 1, &err));
-  CHECK(gamut_batch_values(f, "gamma", GAMUT_FLOAT64, &gamma, 1, &err));
-  CHECK(gamut_batch_values(f, "cp", GAMUT_FLOAT64, cp, N_NODES, &err));
+  CHECK(gamut_batch_values(f, "gamma", GAMUT_FLOAT64, &gamma, 0, 1, &err));
+  CHECK(gamut_batch_values(f, "cp", GAMUT_FLOAT64, cp, 0, N_NODES, &err));
   CHECK(gamut_batch_commit(f, NULL, &err));
 }
 

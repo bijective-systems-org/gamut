@@ -16,6 +16,106 @@ A refused replacement of an attribute (a value of about 64 KiB or more)
 keeps the attribute's previous value. Before, the previous value was
 deleted first, so the refusal lost it.
 
+A field given the wrong way round, sites × runs instead of runs × sites,
+is refused. It was stored scrambled, each run holding a mix of every run's
+values. The C interface's `gamut_batch_values` takes a new `first_axis`
+argument, the length of the caller's first axis or 0 for a flat array,
+and the core refuses a first axis that is not the batch's runs. A square
+array cannot be told apart and is taken as runs × sites.
+
+A label given as `None` or NaN in Python is refused (E5); it used to
+become a category named "None" or "nan". A category name that is not valid
+UTF-8 is refused when the file opens (E4), in every language, where Python
+raised `UnicodeDecodeError`. A position above 2⁶³ − 1 is reported as given
+rather than wrapped to a negative number. `get_points` on a file with no
+mesh says so, in every language, instead of asking for a row.
+
+A group member given two different geometries in one batch is refused by
+the core, in every language. MATLAB kept the first geometry silently.
+
+`open` with a refused `threads` value closes the file it opened, in Python
+and MATLAB; the file stayed open, and a later append to it failed. MATLAB's
+`'compression', false` works; it always failed with an unknown command.
+
+Appending two files in which one name is a parameter in one and a label
+in the other is refused; it crashed the process. A `where` text with
+parentheses nested deeper than 64 levels is refused; deep enough nesting
+overflowed the stack and crashed. Appending to a file whose label codes
+are int64, as §10.1 allows another writer to store them, works; it failed
+with an internal error and left the file's columns of different lengths.
+
+Values read from the file that locate others (a changing mesh's run
+starts and instance numbers, cell offsets) are range-checked before any
+arithmetic on them, so a damaged file is refused or reported (E21, E10)
+instead of overflowing into wrong answers. `select` compares an int64
+parameter or scalar exactly with an integer literal, one outside int64's
+range included; as doubles, values above 2⁵³ that differ compared equal.
+Appending a changing mesh's geometry to int64 mesh labels takes codes
+beyond int32. BitRound no longer rounds a value near the largest finite float up
+to infinity. Names are checked against ASCII letters and digits whatever
+locale the host program has set. The header names `gamut_units_parse`,
+which returns 1 when its units parse, as the one function that does not
+return 0 on success.
+
+A group reachable by more than one hard link is walked once; a chain of
+such groups made validation, append, extract and `write_copy` take time
+that doubled with every level. `/private` may hold them, as §8 lets it
+hold any structure; model data, a tree, refuses them (E18). The category
+tables read when a file opens share one budget, the cap one table had, and
+so does validation; a model's arrays read together share one budget, the
+cap one array had (E23). Many tables, or many arrays, each under its own
+cap could make opening a file, or reading or validating a model,
+allocate gigabytes.
+
+The command line reports malformed input as `error: …` with the exit
+status the guide gives instead of a Python traceback: a build or append
+document that is not JSON exits 1, and `--zone` without `=`, a zone name
+not in the label's table, or a `--rows` position outside the file exits 2.
+`--rows` positions are checked by the core for every output type; for a
+`.gamut` output, `-1` meant the last row.
+
+The validator checks what SPEC.md says and it did not: a model-data
+array without its dimension scale (E19); an integer that is not int64 or
+a number that is not float64 in model data (E18, which reading model data
+now refuses too); a string attribute stored wider than its UTF-8 bytes
+(E3); a derivative with respect to `coordinates` along an axis the
+coordinates do not have (E13); and the vector and axis of a result whose
+statistic this version does not define. A required object or attribute
+that is absent is E2, whatever rule its contents would break: a label's
+`category`, the mesh's `kind` and `support_id`, a changing mesh's
+`instance_nodes`, the cell arrays. A table's repeated entry is reported
+once.
+
+SPEC.md settles where an independent reader could diverge. A units string
+holding a space outside ASCII, such as a no-break space pasted from a web
+page, does not parse (E7). Names use ASCII letters and digits. A scale's
+encoding is what a writer produces, not a rule. A root dataset without a
+`role` is ignored (W5). A file whose growable dimensions are fixed, as
+some netCDF writers leave them, is valid and read-only: appending says so
+and points to `write_copy`, which makes a copy that grows.
+
+The corpus requires each rule case to break exactly its rules, in Python,
+Julia and MATLAB; it accepted any extra finding. Its rule cases no longer
+break rules by accident, every valid data file is appended to itself, and
+it gains a valid file of int64 columns and hostile files of several large
+tables and a deeply nested `where`.
+
+MATLAB takes `"double-quoted"` strings wherever it takes text, notes and
+model numbers included, refuses sparse arrays, and takes cell arrays given
+as any integer class, read by their class; integer arrays
+that were not double were read as int64, past the end of their buffer.
+An open study keeps the MATLAB gateway loaded, so `clear mex` no longer
+orphans it, and MATLAB finishes open files when it exits. A refused call
+frees what it built before MATLAB reports the error. In Julia, the
+library's symbols are looked up under a lock from any thread, and a study
+left to the garbage collector removes its temporary file as `close` does.
+
+The guide and SPEC.md say what an append costs when it is interrupted: a
+batch refused for its own data leaves the file as it was, every such
+check being made before the first write, but a write that fails or a
+process killed while it appends can leave the whole file unreadable. Keep a copy of a file you cannot regenerate, or append each
+job's own file at the end.
+
 ## 1.3.0 (2026-10-25)
 
 A file may carry a portion marking: a new optional root attribute,

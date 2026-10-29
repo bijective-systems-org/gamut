@@ -21,6 +21,9 @@ export GamutError
 
 const HANDLE = Ref{Ptr{Cvoid}}(C_NULL)
 const SYMBOLS = Dict{Symbol,Ptr{Cvoid}}()
+# The cache is filled lazily from any task, so every look-up takes the lock;
+# finalizers never look up (they use pointers taken when the study opened).
+const SYMBOLS_LOCK = ReentrantLock()
 
 function library_path()
     p = get(ENV, "GAMUT_LIBRARY", "")
@@ -30,17 +33,19 @@ function library_path()
 end
 
 function sym(name::Symbol)
-    get!(SYMBOLS, name) do
-        if HANDLE[] == C_NULL
-            p = library_path()
-            isfile(p) || error("the Gamut core library ($p) was not found; set " *
-                               "GAMUT_LIBRARY to its path: the Python wheel's (pip install " *
-                               "gamut-format, then python -c \"import gamut; " *
-                               "print(gamut.library_path())\"), or one built from a " *
-                               "checkout with cmake -S . -B build && cmake --build build")
-            HANDLE[] = Libdl.dlopen(p)
+    lock(SYMBOLS_LOCK) do
+        get!(SYMBOLS, name) do
+            if HANDLE[] == C_NULL
+                p = library_path()
+                isfile(p) || error("the Gamut core library ($p) was not found; set " *
+                                   "GAMUT_LIBRARY to its path: the Python wheel's (pip install " *
+                                   "gamut-format, then python -c \"import gamut; " *
+                                   "print(gamut.library_path())\"), or one built from a " *
+                                   "checkout with cmake -S . -B build && cmake --build build")
+                HANDLE[] = Libdl.dlopen(p)
+            end
+            Libdl.dlsym(HANDLE[], name)
         end
-        Libdl.dlsym(HANDLE[], name)
     end
 end
 
@@ -192,16 +197,22 @@ mutable struct Study
         s = new(h, path, writing, mesh_kind, per,
                 startswith(per, "group:") ? per[7:end] : "", 3,
                 Dict{String,Dict{String,String}}(), false)
+        close_ptr, abandon_ptr = sym(:gamut_close), sym(:gamut_abandon)
         finalizer(s) do x
-            # A study left open is finished as close would; errors have no
-            # one to go to here.
+            # A study left open is finished as close would, its temporary file
+            # removed as close removes it; errors have no one to go to here.
             h = getfield(x, :handle)
             h == C_NULL && return
             err = Ref{CError}()
-            if ccall(sym(:gamut_close), Cint, (Ptr{Cvoid}, Ref{CError}), h, err) != 0
-                ccall(sym(:gamut_abandon), Cvoid, (Ptr{Cvoid}, Cint), h, 0)
+            if ccall(close_ptr, Cint, (Ptr{Cvoid}, Ref{CError}), h, err) != 0
+                ccall(abandon_ptr, Cvoid, (Ptr{Cvoid}, Cint), h, 0)
             end
             setfield!(x, :handle, C_NULL)
+            p = getfield(x, :path)
+            getfield(x, :remove_on_close) && try
+                isfile(p) && rm(p)
+            catch
+            end
         end
         return s
     end
@@ -525,12 +536,14 @@ function commit!(s::Study, n, columns, fields, points, cells, mesh_labels)
         end
         buf = numbers(v)
         push!(keep, buf)
-        @mes gamut_batch_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64) h cs(name) DTYPE[eltype(buf)] pointer(buf) length(buf)
+        first = ndims(v) > 1 ? size(v, 1) : 0
+        @mes gamut_batch_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64, Int64) h cs(name) DTYPE[eltype(buf)] pointer(buf) first length(buf)
     end
     for (name, vals) in fields
         buf = numbers(c_order(vals))
         push!(keep, buf)
-        @mes gamut_batch_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64) h cs(name) DTYPE[eltype(buf)] pointer(buf) length(buf)
+        first = ndims(vals) > 1 ? size(vals, 1) : 0
+        @mes gamut_batch_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64, Int64) h cs(name) DTYPE[eltype(buf)] pointer(buf) first length(buf)
     end
     if points !== nothing
         pts = collect(points)
@@ -539,17 +552,8 @@ function commit!(s::Study, n, columns, fields, points, cells, mesh_labels)
         if !isempty(s.group)
             group_names === nothing && throw(GamutError("E2", "give $(s.group) by name so " *
                                                                "geometry can be matched to members"))
-            first_run = Dict{String,Int}()
             for (i, member) in enumerate(group_names)
                 pts[i] === nothing && continue
-                if haskey(first_run, member)
-                    j = first_run[member]
-                    (pts[i] == pts[j] && cls[i] == cls[j] && mls[i] == mls[j]) ||
-                        throw(GamutError("", "$(s.group) \"$member\" is given two different " *
-                                              "geometries in one batch (runs $j and $i)", s.group))
-                    continue
-                end
-                first_run[member] = i
                 @mes gamut_geometry_begin (Ptr{Cvoid},) h
                 stage_geometry(s, pts[i], cls[i], mls[i])
                 @mes gamut_batch_geometry_for_member (Ptr{Cvoid}, Cstring) h cs(member)
@@ -747,7 +751,7 @@ end
 
 """    get_points(study; row=nothing)    nodes × axes; a row is needed unless per = fixed."""
 function get_points(s::Study; row=nothing)
-    row === nothing && s.per != "fixed" && throw(GamutError("", "this mesh's geometry changes; give the row"))
+    row === nothing && s.per ∉ ("fixed", "") && throw(GamutError("", "this mesh's geometry changes; give the row"))
     T = get(describe(s, "coordinates"), "dtype", "") == "float32" ? Float32 : Float64
     out = read(s, "coordinates", one_row(row), nothing, T; squeeze=false)
     return row !== nothing && s.mesh_kind == "shared" ? out[1, :, :] : out

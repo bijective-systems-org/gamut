@@ -18,6 +18,9 @@ namespace internal {
 // raises E22; nesting past kMaxDictDepth raises E23.
 Dict read_dict_group(const File& f, const std::string& path, bool top_level, int depth = 0);
 
+// The link name of the scale on `axis` of the model-data dataset `dataset`.
+std::string scale_name(const std::string& dataset, std::size_t axis);
+
 // Everything write_dict_group refuses, checked without writing, so a
 // refused model adds nothing.
 void check_dict(const Dict& d, bool top_level, int depth, const std::string& where);

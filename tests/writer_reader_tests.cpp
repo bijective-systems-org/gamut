@@ -1126,9 +1126,41 @@ void test_other_filter_is_not_read() {
 
 }  // namespace
 
+// Cumulative instance counts from a hostile file are reported and never
+// differenced: the sanitizer lane sees any overflow (#109).
+void test_rejected_instance_counts_are_not_summed() {
+  const std::string path = "wr_instance_min.gamut";
+  {
+    auto w = Writer::create(path, "tests", "changing", "run");
+    w->declare_parameter(param("mach", "condition", "1"));
+    w->declare_coordinates("m", DType::Float64, 2);
+    Batch b;
+    b.runs = 2;
+    b.values["mach"] = f64({1, 2});
+    b.run_geometry = {grid(2, 2), grid(3, 3)};
+    w->add_runs(b);
+    w->close();
+  }
+  for (const std::vector<std::int64_t>& counts :
+       {std::vector<std::int64_t>{INT64_MIN, 4, 13}, std::vector<std::int64_t>{0, -1, 13}}) {
+    hid_t f = H5Fopen(path.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+    hid_t d = H5Dopen2(f, "/mesh/instance_nodes", H5P_DEFAULT);
+    CHECK(H5Dwrite(d, H5T_NATIVE_INT64, H5S_ALL, H5S_ALL, H5P_DEFAULT, counts.data()) >= 0);
+    H5Dclose(d);
+    H5Fclose(f);
+    bool reported = false;
+    for (const auto& x : validate_file(path).findings) {
+      reported = reported || (x.rule == "E21" && x.path == "mesh");
+    }
+    CHECK(reported);
+  }
+  std::remove(path.c_str());
+}
+
 int main() {
   const std::vector<std::pair<const char*, std::function<void()>>> tests = {
       {"table", test_table_run_at_a_time},
+      {"rejected_instance_counts", test_rejected_instance_counts_are_not_summed},
       {"shared_fixed", test_shared_fixed},
       {"shared_group", test_shared_per_group_out_of_order},
       {"changing", test_changing_per_run_and_group},

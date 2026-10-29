@@ -38,8 +38,10 @@ path of what it concerns.
 | a read touching small chunks | 2²⁰ chunks |
 | a selection scanning rows | 2²⁷ rows |
 | label names read at once | 2²⁵ rows |
-| category tables read when a file opens | 2²⁴ entries or 256 MiB |
+| category tables read when a file opens, all together | 2²⁴ entries or 256 MiB |
+| one model's arrays read together | 2³⁰ values (8 GiB) |
 | groups nested inside each other | 64 levels |
+| parentheses nested in a `where` selection | 64 levels |
 
 Each refusal is rule E23, with the path of what was refused. The limits are
 far above what a study needs: a field of 8 GiB is read a part at a time,

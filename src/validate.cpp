@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -228,7 +229,13 @@ void Validator::check_attrs(const Object& o, const AttrSpec& spec) {
     }
     bool good = false;
     switch (it->second) {
-      case Kind::S: good = is_spec_string(a.type) && valid_utf8(a.raw_bytes.empty() ? a.value.as_text() : strip_nul(a.raw_bytes)); break;
+      case Kind::S: {
+        const std::string text = a.raw_bytes.empty() ? a.value.as_text() : strip_nul(a.raw_bytes);
+        // Sized to its UTF-8 bytes, 1 for the empty string (§9.2).
+        good = is_spec_string(a.type) && valid_utf8(text) &&
+               a.type.size == std::max<std::size_t>(1, text.size());
+        break;
+      }
       case Kind::F: good = is_spec_float64(a.type); break;
       case Kind::I: good = is_spec_int64(a.type); break;
       case Kind::Bits: good = is_spec_int64(a.type) || is_spec_int32(a.type); break;
@@ -478,8 +485,16 @@ bool Validator::check_cells(const Object& t, const Object& o, const Object& c,
       }
       if (j == b) break;
       const int want = nodes_of_type(static_cast<int>(tv[static_cast<std::size_t>(j - a)]));
-      const std::int64_t have = ov[static_cast<std::size_t>(j - a + 1)] - ov[static_cast<std::size_t>(j - a)];
-      if (have < 0 || (want > 0 && have != want) || (want < 0 && have < 3)) {
+      const std::int64_t lo = ov[static_cast<std::size_t>(j - a)];
+      const std::int64_t hi = ov[static_cast<std::size_t>(j - a + 1)];
+      // Bounded before the difference, which arbitrary values would overflow.
+      if (lo < 0 || hi < lo || hi > nc) {
+        add("E10", "cells", "cell " + std::to_string(j) + "'s offsets decrease or run past the "
+                                "connectivity's length, " + std::to_string(nc));
+        return false;
+      }
+      const std::int64_t have = hi - lo;
+      if ((want > 0 && have != want) || (want < 0 && have < 3)) {
         add("E10", "cells", "cell " + std::to_string(j) + " has " + std::to_string(have) +
                                 " nodes, which its type does not allow");
         return false;
@@ -557,6 +572,9 @@ void Validator::walk_links() {
     bool open;   // in the public tree
   };
   std::vector<Group> todo = {{"/", 0, true}};
+  // Groups reachable by several hard links, by object: walked at most once in
+  // the public tree and once outside it, since the public tree is held to more.
+  std::set<std::string> walked_public, walked_private;
   while (!todo.empty()) {
     const Group here = todo.back();
     todo.pop_back();
@@ -584,15 +602,25 @@ void Validator::walk_links() {
           }
         });
       }
+      // A group reachable by several hard links is walked once in each context:
+      // §8 lets /private hold any structure, and walking every path takes
+      // exponential time.
+      const bool open = here.open && child != "/private" && child != "/VTKHDF";
+      if (m.is_group && m.links > 1) {
+        const std::string key = file_->object_key(child);
+        if (!(open ? walked_public : walked_private).insert(key).second) continue;
+        if (!open && walked_public.count(key)) continue;   // the public walk checked more
+      }
       if (m.is_group) {
-        todo.push_back({child, here.depth + 1,
-                        here.open && child != "/private" && child != "/VTKHDF"});
+        todo.push_back({child, here.depth + 1, open});
       }
     }
   }
 }
 
 void Validator::tables() {
+  // The budget a reader opening the file shares across its tables (§9.6).
+  std::size_t entries_left = kMaxTableEntries, bytes_left = kMaxTableBytes;
   for (const Member& m : file_->members("/categories")) {
     if (m.kind != LinkKind::Hard) continue;
     const std::string concept = "categories/" + m.name;
@@ -615,13 +643,21 @@ void Validator::tables() {
       }
       check_dims(o, {"category_" + m.name}, {"/category_" + m.name});
       check_storage(o, true, {true});
-      const std::vector<std::string> entries =
-          file_->read_strings(o.h5, kMaxTableEntries, kMaxTableBytes);
+      const std::vector<std::string> entries = file_->read_strings(o.h5, entries_left, bytes_left);
+      entries_left -= entries.size();
+      bytes_left -= entries.size() * o.info.type.size;
       std::set<std::string> seen;
       std::size_t longest = 1;
+      bool repeated = false, invalid = false;
       for (const auto& e : entries) {
-        if (!valid_utf8(e)) add("E4", concept, "an entry is not valid UTF-8");
-        if (!seen.insert(e).second) add("E9", concept, "the entry \"" + e + "\" is listed twice");
+        if (!valid_utf8(e) && !invalid) {
+          add("E4", concept, "an entry is not valid UTF-8");
+          invalid = true;
+        }
+        if (!seen.insert(e).second && !repeated) {   // once a table, not once a repeat
+          add("E9", concept, "the entry \"" + e + "\" is listed twice");
+          repeated = true;
+        }
         longest = std::max(longest, e.size());
       }
       if (o.info.type.size > longest) {
@@ -758,7 +794,11 @@ void Validator::root_objects() {
     const Object& o = kv.second;
     status += o.text("role") == "status";
     const std::string table = o.text("category");
-    if (table.empty() || !tables_.count(table)) {
+    if (!o.has("category")) {
+      add("E2", kv.first, "a label needs its category, the name of its table");
+      continue;
+    }
+    if (!tables_.count(table)) {
       add("E9", kv.first, "category must name a table under categories/");
       continue;
     }
@@ -802,6 +842,10 @@ void Validator::mesh() {
   check_attrs(m, kMeshAttrs);
   mesh_kind_ = m.text("kind");
   per_ = m.text("per");
+  if (!m.has("kind")) {
+    add("E2", "mesh", "the mesh needs its kind, shared or changing");
+    return;
+  }
   if (mesh_kind_ != "shared" && mesh_kind_ != "changing") {
     add("E6", "mesh", "kind must be shared or changing, and is \"" + mesh_kind_ + "\"");
     return;
@@ -863,12 +907,31 @@ void Validator::mesh() {
   }
   axes_ = static_cast<int>(coords.info.shape.back());
   if (axes_ < 1 || axes_ > 3) add("E24", "coordinates", "coordinates have one to three axes");
-  const bool cells = file_->exists("/mesh/cell_types");
+  // A mesh has cells when any cell array is present; one absent is then E2.
+  const bool cells = file_->exists("/mesh/cell_types") || file_->exists("/mesh/cell_offsets") ||
+                     file_->exists("/mesh/cell_connectivity");
   // Cells.
   std::optional<Object> cell_types, cell_offsets, cell_connectivity;
   std::int64_t n_cells = 0;
   if (cells) {
     guarded("cells", [&] {
+      bool absent = false;
+      for (const char* p : {"/mesh/cell_types", "/mesh/cell_offsets", "/mesh/cell_connectivity"}) {
+        if (!file_->is_dataset(p)) {
+          add("E2", std::string(p).substr(1), "a mesh with cells needs it, and it is absent");
+          absent = true;
+        }
+      }
+      if (absent) {
+        // The cell count the present arrays give, so nothing else cascades.
+        const DsetInfo ti = file_->dataset_info("/mesh/cell_types", false);
+        const DsetInfo oi = file_->dataset_info("/mesh/cell_offsets", false);
+        if (ti.is_dataset && ti.shape.size() == 1) n_cells = static_cast<std::int64_t>(ti.shape[0]);
+        else if (oi.is_dataset && oi.shape.size() == 1 && oi.shape[0] > 0) {
+          n_cells = static_cast<std::int64_t>(oi.shape[0]) - 1;
+        }
+        return;
+      }
       Object t = object("/mesh/cell_types", "cells/types", "cell_types");
       Object o = object("/mesh/cell_offsets", "cells/offsets", "cell_offsets");
       Object c = object("/mesh/cell_connectivity", "cells/connectivity", "cell_connectivity");
@@ -1010,8 +1073,8 @@ void Validator::mesh() {
       const std::string want = h.hex();
       const std::string have = m.text("support_id");
       if (have != want) {
-        add("E11", "mesh", have.empty() ? "the mesh needs its support_id"
-                                        : "support_id does not match the mesh (spec section 14)");
+        if (!m.has("support_id")) add("E2", "mesh", "the mesh needs its support_id");
+        else add("E11", "mesh", "support_id does not match the mesh (spec section 14)");
       }
     });
   } else {
@@ -1026,6 +1089,10 @@ void Validator::mesh() {
             add("E5", "mesh", std::string(p).substr(1) + " is present in a mesh without cells");
           }
         }
+      }
+      if (!file_->is_dataset("/mesh/instance_nodes")) {
+        add("E2", "mesh/instance_nodes", "a changing mesh needs it, and it is absent");
+        return;
       }
       Object in = object("/mesh/instance_nodes", "mesh/instance_nodes", "instance_nodes");
       check_dims(in, {"instance_plus_one"}, {"/mesh/instance_plus_one"});
@@ -1093,10 +1160,13 @@ void Validator::mesh() {
         if (check_dims(rs, {"row"}, {"/row"})) check_storage(rs, true, {true});
         const auto starts = ints(rs);
         const auto& cum = std::string(which) == "node" ? cn : cc;
+        // Sizes come from differences of cum: only once it is known to start at 0
+        // and never decrease, so no difference or sum below can overflow.
+        if (!(std::string(which) == "node" ? nodes_ok : cells_ok)) continue;
         std::int64_t at = 0;
         for (std::size_t r = 0; r < starts.size() && r < inst.size(); ++r) {
           const std::int64_t k = inst[r];
-          if (k < 0 || k + 1 >= static_cast<std::int64_t>(cum.size())) {
+          if (k < 0 || k >= static_cast<std::int64_t>(cum.size()) - 1) {
             add("E21", "mesh", "row " + std::to_string(r) + " names instance " + std::to_string(k) +
                                ", which does not exist");
             return;
@@ -1106,7 +1176,12 @@ void Validator::mesh() {
                                "sizes at row " + std::to_string(r));
             break;
           }
-          at += cum[static_cast<std::size_t>(k + 1)] - cum[static_cast<std::size_t>(k)];
+          const std::int64_t size = cum[static_cast<std::size_t>(k + 1)] - cum[static_cast<std::size_t>(k)];
+          if (size > std::numeric_limits<std::int64_t>::max() - at) {
+            add("E21", "mesh", std::string("the rows' ") + which + " counts add up past int64");
+            break;
+          }
+          at += size;
         }
         const std::string vdim = std::string("/mesh/") + which + "_value";
         const std::int64_t values = scale_len(vdim);
@@ -1204,6 +1279,31 @@ void Validator::models() {
       }
     }
     model_ids_.insert(m.name);
+    // Every axis of model data has its one scale, named as §12 names it (E19).
+    std::function<void(const std::string&, int)> model_scales = [&](const std::string& g,
+                                                                     int depth) {
+      if (depth >= kMaxDictDepth) return;
+      for (const Member& d : file_->members(g)) {
+        if (d.kind != LinkKind::Hard || reserved_name(d.name)) continue;
+        const std::string p = g + "/" + d.name;
+        if (d.is_group) {
+          if (d.links == 1) model_scales(p, depth + 1);
+          continue;
+        }
+        if (!d.is_dataset) continue;
+        const DsetInfo i = file_->dataset_info(p);
+        for (std::size_t a = 0; a < i.shape.size(); ++a) {
+          const std::vector<std::string> none;
+          const auto& at = a < i.scales.size() ? i.scales[a] : none;
+          const std::string want = scale_name(d.name, a);
+          if (at.size() != 1 || at[0] != want) {
+            add("E19", p.substr(1), "axis " + std::to_string(a) + " needs exactly one dimension "
+                                    "scale, named " + want);
+          }
+        }
+      }
+    };
+    guarded(concept, [&] { model_scales(o.h5, 0); });
     guarded(concept, [&] {
       const Dict numbers = read_dict_group(*file_, o.h5, true);
       if (o.text("type") != "nearest") return;
@@ -1263,54 +1363,58 @@ void Validator::relations_and_vectors() {
     const std::string of = o.text("of"), stat = o.text("statistic"), wrt = o.text("with_respect_to");
     const bool is_field = o.concept.find('/') != std::string::npos;
     const std::string loc = is_field ? where_word(o.concept) : "scalar";
-    if (!stat.empty() && stat != "std" && stat != "quantile") {
+    // A statistic this version does not define: read as a plain result, so its
+    // relation is not checked, but its vector and axis still are.
+    const bool plain = !stat.empty() && stat != "std" && stat != "quantile";
+    if (plain) {
       add("W5", o.concept, "the statistic \"" + stat + "\" is not defined by this version; the "
                            "result is read as a plain result");
-      continue;
     }
-    if (o.has("q") && stat != "quantile") add("E12", o.concept, "q belongs to a quantile");
-    if (stat == "quantile") {
-      const auto q = o.real("q");
-      if (!q || !(*q > 0.0 && *q < 1.0)) add("E12", o.concept, "a quantile needs q in (0, 1)");
-    }
-    if (!stat.empty() && !wrt.empty()) {
-      add("E12", o.concept, "a result is a statistic or a derivative, not both");
-    }
-    if ((!stat.empty() || !wrt.empty()) && of.empty()) {
-      add("E12", o.concept, "a relation names its result in of");
-    }
-    if (!of.empty() && stat.empty() && wrt.empty()) {
-      add("E12", o.concept, "of needs a statistic or with_respect_to");
-    }
-    if (!of.empty()) {
-      const auto t = results.find(of);
-      if (t == results.end()) {
-        add("E12", o.concept, "of names \"" + of + "\", which is not a result");
-      } else {
-        const Object& target = *t->second;
-        if (!target.text("statistic").empty() || !target.text("with_respect_to").empty()) {
-          add("E12", o.concept, "of names a relation");
-        }
-        const bool target_field = target.concept.find('/') != std::string::npos;
-        const std::string tloc = target_field ? where_word(target.concept) : "scalar";
-        if (wrt == "coordinates") {
-          if (!(loc == "node" && tloc == "scalar")) {
-            add("E12", o.concept, "a derivative with respect to node position is a node field whose "
-                                  "of is a scalar");
+    if (!plain) {
+      if (o.has("q") && stat != "quantile") add("E12", o.concept, "q belongs to a quantile");
+      if (stat == "quantile") {
+        const auto q = o.real("q");
+        if (!q || !(*q > 0.0 && *q < 1.0)) add("E12", o.concept, "a quantile needs q in (0, 1)");
+      }
+      if (!stat.empty() && !wrt.empty()) {
+        add("E12", o.concept, "a result is a statistic or a derivative, not both");
+      }
+      if ((!stat.empty() || !wrt.empty()) && of.empty()) {
+        add("E12", o.concept, "a relation names its result in of");
+      }
+      if (!of.empty() && stat.empty() && wrt.empty()) {
+        add("E12", o.concept, "of needs a statistic or with_respect_to");
+      }
+      if (!of.empty()) {
+        const auto t = results.find(of);
+        if (t == results.end()) {
+          add("E12", o.concept, "of names \"" + of + "\", which is not a result");
+        } else {
+          const Object& target = *t->second;
+          if (!target.text("statistic").empty() || !target.text("with_respect_to").empty()) {
+            add("E12", o.concept, "of names a relation");
           }
-        } else if (tloc != loc) {
-          add("E12", o.concept, "a relation has the location of its of");
-        }
-        if ((stat == "std" || stat == "quantile") && target.text("units") != o.text("units")) {
-          add("E12", o.concept, "a " + stat + " has the units of its result");
+          const bool target_field = target.concept.find('/') != std::string::npos;
+          const std::string tloc = target_field ? where_word(target.concept) : "scalar";
+          if (wrt == "coordinates") {
+            if (!(loc == "node" && tloc == "scalar")) {
+              add("E12", o.concept, "a derivative with respect to node position is a node field whose "
+                                    "of is a scalar");
+            }
+          } else if (tloc != loc) {
+            add("E12", o.concept, "a relation has the location of its of");
+          }
+          if ((stat == "std" || stat == "quantile") && target.text("units") != o.text("units")) {
+            add("E12", o.concept, "a " + stat + " has the units of its result");
+          }
         }
       }
-    }
-    if (!wrt.empty() && wrt != "coordinates" && !parameters_.count(wrt)) {
-      add("E12", o.concept, "with_respect_to names \"" + wrt + "\", which is not a parameter");
-    }
-    if (wrt == "coordinates" && o.text("axis").empty()) {
-      add("E12", o.concept, "a derivative with respect to coordinates names its axis");
+      if (!wrt.empty() && wrt != "coordinates" && !parameters_.count(wrt)) {
+        add("E12", o.concept, "with_respect_to names \"" + wrt + "\", which is not a parameter");
+      }
+      if (wrt == "coordinates" && o.text("axis").empty()) {
+        add("E12", o.concept, "a derivative with respect to coordinates names its axis");
+      }
     }
     const std::string vec = o.text("vector"), axis = o.text("axis");
     if (!vec.empty()) {
@@ -1321,6 +1425,9 @@ void Validator::relations_and_vectors() {
     }
     if (!axis.empty() && axis != "x" && axis != "y" && axis != "z") {
       add("E13", o.concept, "axis is x, y or z");
+    } else if (wrt == "coordinates" && axes_ > 0 && !axis.empty() &&
+               (axis == "z" ? 2 : axis == "y" ? 1 : 0) >= axes_) {
+      add("E13", o.concept, "axis " + axis + " is not among the coordinates' axes");
     }
   }
   for (const auto& kv : vectors) {

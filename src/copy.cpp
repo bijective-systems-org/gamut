@@ -303,18 +303,25 @@ CodeMaps check_same(const Reader& dst, const Reader& src) {
   for (const auto& n : dn) {
     if (!sn.count(n)) differ("what they declare (" + n + " is only in the destination)", n);
   }
+  // Both files declare every name; a name may still be of another kind in each.
+  auto same_kind = [&](const void* q, const std::string& name, const char* kind) {
+    if (q == nullptr) differ("what " + name + " is (a " + kind + " in the source only)", name);
+  };
   for (const auto& p : s.parameters) {
     const Parameter* q = d.parameter(p.name);
+    same_kind(q, p.name, "parameter");
     if (q->role != p.role || q->units != p.units || q->dtype != p.dtype ||
         q->run_group != p.run_group) {
       differ("the parameter " + p.name + " (role, units, dtype or run group)", p.name);
     }
   }
   for (const auto& l : s.labels) {
+    same_kind(d.label(l.name), l.name, "label");
     if (d.label(l.name)->role != l.role) differ("the role of the label " + l.name, l.name);
   }
   for (const auto& r : s.results) {
     const Result* q = d.result(result_path(r));
+    same_kind(q, result_path(r), "result");
     const Relation& a = q->relation;
     const Relation& b = r.relation;
     if (q->where != r.where || q->units != r.units || q->dtype != r.dtype ||
@@ -326,6 +333,7 @@ CodeMaps check_same(const Reader& dst, const Reader& src) {
   }
   for (const auto& c : s.constants) {
     const Constant* q = d.constant(c.name);
+    same_kind(q, c.name, "constant");
     // Compared bit for bit, so a NaN constant equals itself.
     if (q->units != c.units || q->dtype != c.dtype ||
         std::memcmp(&q->f, &c.f, sizeof c.f) != 0 || q->i != c.i) {

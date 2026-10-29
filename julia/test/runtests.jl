@@ -47,6 +47,23 @@ mktempdir() do tmp
         end
     end
 
+    @testset "a field given nodes × runs is refused" begin
+        p = joinpath(tmp, "transposed.gamut")
+        pts, cells = grid(4, 3)
+        prun = permutedims(reshape(collect(0.0:6*12-1), 12, 6))     # runs × nodes
+        Gamut.create(p; writer="tests", mesh="shared", per="fixed", coordinates=(units="m", axes=2),
+                      parameters=Dict("mach" => "1"), fields=Dict("p" => (units="Pa", at="node"))) do s
+            Gamut.set_mesh!(s; points=pts, cells=cells)
+            mach = Dict("mach" => collect(0.1:0.1:0.6))
+            e = try Gamut.add_runs!(s, mach; fields=Dict("p" => permutedims(prun))); nothing catch x; x end
+            @test e isa GamutError && occursin("first axis has 12 entries but the batch has 6 runs", e.message)
+            Gamut.add_runs!(s, mach; fields=Dict("p" => prun))
+        end
+        Gamut.open(p) do f
+            @test Gamut.get_field(f, "p") == prun
+        end
+    end
+
     @testset "a sweep on one mesh, region reads" begin
         p = joinpath(tmp, "sweep.gamut")
         pts, cells = grid(4, 3)
@@ -287,6 +304,10 @@ mktempdir() do tmp
         out = @test_logs (:warn, r"W4") Gamut.evaluate(mp, Dict("alpha" => [-2.0, 5.0, 12.0]))
         @test Gamut.outside(out, "alpha") == [-2.0, 0.0, 2.0]
         close(out)
+        # An answer never closed is removed when the GC finalizes it, as close removes it.
+        left = (() -> Gamut.evaluate(mp, Dict("alpha" => [1.0])).path)()
+        GC.gc(); GC.gc()
+        @test !isfile(left)
         numbers = Gamut.open(s -> Gamut.model_numbers(s, "fit"), mp)
         @test numbers["lower"] == [0.0] && numbers["columns"] == ["alpha"]
     end

@@ -10,10 +10,15 @@ p.parse(varargin{:});
 switch p.Results.mode
     case 'r'
         h = gamut_mex('open', path);
+        s = gamut.Study(h, path, false, '', '');   % owns the handle, so a refusal closes it
         if p.Results.threads ~= 1
-            gamut_mex('set_threads', h, p.Results.threads);
+            try
+                gamut_mex('set_threads', h, p.Results.threads);
+            catch err
+                s.close();
+                rethrow(err);
+            end
         end
-        s = gamut.Study(h, path, false, '', '');
     case 'a'
         r = gamut.open(path);
         kind = r.MeshKind; per = r.Per;

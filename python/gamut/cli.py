@@ -392,8 +392,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     if not args.document or not args.output:
         print("gamut build DOC.json -o FILE (or gamut build --example)", file=sys.stderr)
         return 2
-    with open(args.document) as fh:
-        doc = json.load(fh)
+    doc = _document(args.document)
     base = os.path.dirname(os.path.abspath(args.document))
     problems = _check_document(doc, base, appending=False)
     if problems:
@@ -445,8 +444,7 @@ def cmd_append(args: argparse.Namespace) -> int:
         _emit(args, {"appended": args.file, "rows": n, "problems": []},
               f"appended {_counted(n, 'run')} from {args.document} to {args.file}")
         return 0
-    with open(args.document) as fh:
-        doc = json.load(fh)
+    doc = _document(args.document)
     base = os.path.dirname(os.path.abspath(args.document))
     problems = _check_document(doc, base, appending=True)
     if problems:
@@ -479,6 +477,39 @@ def _report_problems(args: argparse.Namespace, problems: list[tuple[str, str]]) 
 # --- get -------------------------------------------------------------------------------------
 
 
+class _Usage(GamutError):
+    """A command used wrongly: exit status 2."""
+
+
+def _document(path: str) -> Any:
+    """A build or append document, parsed; one that does not parse is a document with
+    errors (exit 1), one that cannot be read a command used wrongly."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except OSError as e:
+        raise _Usage("", f"cannot read {path}: {e.strerror}") from None
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        where = f" at line {e.lineno}, column {e.colno}" if isinstance(e, json.JSONDecodeError) else ""
+        raise GamutError("", f"{path} is not JSON{where}: {getattr(e, 'msg', e)}", path) from None
+
+
+def _positions(f: Any, rows: Any) -> np.ndarray:
+    """The positions --rows names, checked by the core as every read checks them,
+    and sized by the selection, never by the file."""
+    if rows is None:
+        return np.arange(f.row_count)
+    try:
+        f.get_row_ids(rows)
+    except GamutError as e:
+        if e.rule:          # the file itself is at fault (exit 1), not the positions
+            raise
+        raise _Usage(e.rule, f"--rows: {e.message}") from None
+    if isinstance(rows, slice):
+        return np.arange(*rows.indices(f.row_count))
+    return np.asarray(rows, dtype=np.int64)
+
+
 def _rows_arg(text: str | None) -> Any:
     if text is None:
         return None
@@ -488,7 +519,7 @@ def _rows_arg(text: str | None) -> Any:
             return slice(int(a) if a else None, int(b) if b else None)
         return [int(x) for x in text.split(",")]
     except ValueError:
-        raise GamutError("", f"--rows takes positions (3 or 0,2,5) or a range (0:10), not "
+        raise _Usage("", f"--rows takes positions (3 or 0,2,5) or a range (0:10), not "
                               f"{text!r}") from None
 
 
@@ -499,10 +530,7 @@ def _get_study(args: argparse.Namespace) -> int:
         raise GamutError("", "a smaller study file keeps every name and every node; give no "
                               "names and no --zone")
     with open_file(args.file) as f:
-        rows = _rows_arg(args.rows)
-        positions = np.arange(f.row_count)
-        if rows is not None:
-            positions = positions[rows]
+        positions = _positions(f, _rows_arg(args.rows))
         if args.where:
             positions = np.intersect1d(f.select(args.where), positions)
     gamut_extract(args.file, args.output, np.asarray(positions, dtype=np.int64))
@@ -522,20 +550,22 @@ def cmd_get(args: argparse.Namespace) -> int:
         raise GamutError("", "name what to write (or write a smaller study file: -o NAME.gamut)")
     with open_file(args.file) as f:
         rows = _rows_arg(args.rows)
+        if rows is not None:
+            _positions(f, rows)
         if args.where:
             chosen = f.select(args.where)
             if rows is not None:
-                base = np.arange(f.row_count)[rows]
-                chosen = np.intersect1d(chosen, base)
+                chosen = np.intersect1d(chosen, _positions(f, rows))
             rows = chosen
         sites = None
         if args.zone:
-            label, _, value = args.zone.partition("=")
+            label, eq, value = args.zone.partition("=")
+            if not eq or not label or not value:
+                raise _Usage("", f"--zone takes LABEL=NAME, not {args.zone!r}")
             d = f.describe(label)
             if f.type == "changing":
                 # Each row of a changing mesh has its own mesh labels.
-                chosen_rows = np.arange(f.row_count)[rows] if rows is not None else \
-                    np.arange(f.row_count)
+                chosen_rows = _positions(f, rows)
                 if len(np.atleast_1d(chosen_rows)) != 1:
                     raise GamutError("", "--zone on a changing mesh reads one row; give it "
                                           "with --rows N")
@@ -544,7 +574,17 @@ def cmd_get(args: argparse.Namespace) -> int:
                 codes = f.get_mesh_label(label)
             table = _lib.strings_out("gamut_table", f._handle(), _lib.b(d["category"])) \
                 if d.get("category") else None
-            want = table.index(value) if table else int(value)
+            if table is not None and value not in table:
+                raise _Usage("", f"--zone: {value!r} is not a name in {label}'s table "
+                                 f"({', '.join(table)})")
+            if table is not None:
+                want = table.index(value)
+            else:
+                try:
+                    want = int(value, 10)
+                except ValueError:
+                    raise _Usage("", f"--zone: {label} has no table, so give a code, not "
+                                     f"{value!r}") from None
             sites = np.flatnonzero(codes == want)
         data: dict[str, np.ndarray] = {}
         units: dict[str, str] = {}
@@ -647,7 +687,7 @@ def main(argv: list[str] | None = None) -> int:
                              indent=1))
         else:
             print(f"error: {e}", file=sys.stderr)
-        return 1
+        return 2 if isinstance(e, _Usage) else 1
 
 
 def vtk_main(argv: list[str] | None = None) -> int:

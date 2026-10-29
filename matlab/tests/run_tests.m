@@ -350,6 +350,108 @@ if isfile(fullfile(examples, 'one_mesh.m'))
     end
 end
 
+% A field given nodes x runs, a refused threads value, compression off,
+% and one member given two geometries in a batch.
+p = fullfile(tmp, 'refusals.gamut');
+cells = {uint8([9 9]), [0 4 8], [0 2 3 1 2 4 5 3]};
+s = gamut.create(p, 'writer', 'matlab tests', 'mesh', 'shared', 'per', 'fixed', ...
+    'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'), ...
+    'fields', struct('pf', struct('units', 'Pa', 'at', 'node')), 'compression', false);
+s.setMesh(pts, cells);
+try
+    s.addRuns(struct('k', [1; 2; 3]), 'fields', struct('pf', P'));
+    ok(false, 'a field given nodes x runs refused');
+catch err
+    ok(contains(err.message, 'first axis has 6 entries but the batch has 3 runs'), ...
+        ['transposed field: ' err.message]);
+end
+s.addRuns(struct('k', [1; 2; 3]), 'fields', struct('pf', P));
+s.close();
+r = gamut.open(p);
+ok(isequal(r.getField('pf'), P), 'a file written with compression off reads back');
+r.close();
+try
+    gamut.open(p, 'threads', 0);
+    ok(false, 'threads 0 refused');
+catch err
+    ok(contains(err.message, 'threads'), ['threads 0: ' err.message]);
+end
+s = gamut.open(p, 'mode', 'a');      % the refused open left no handle behind
+s.addRuns(struct('k', 4), 'fields', struct('pf', P(1, :)));
+s.close();
+fp = fullfile(tmp, 'members.gamut');
+s = gamut.create(fp, 'writer', 'matlab tests', 'mesh', 'shared', 'per', 'group:member', ...
+    'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'), ...
+    'labels', struct('member', 'group'));
+s.setMesh([], cells, struct(), 6);
+try
+    s.addRuns(struct('k', [1; 2], 'member', {{'a'; 'a'}}), 'points', {pts, 2 * pts});
+    ok(false, 'one member given two geometries refused');
+catch err
+    ok(contains(err.message, 'two different geometries'), ['two geometries: ' err.message]);
+end
+s.addRuns(struct('k', [1; 2], 'member', {{'a'; 'a'}}), 'points', {pts, pts});
+s.close();
+cp = fullfile(tmp, 'changing.gamut');
+s = gamut.create(cp, 'writer', 'matlab tests', 'mesh', 'changing', 'per', 'run', ...
+    'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'), ...
+    'fields', struct('q', struct('units', '1', 'at', 'node')));
+s.addRun(struct('k', 1), 'fields', struct('q', (1:6)'), 'points', pts, 'cells', cells);
+s.close();
+r = gamut.open(cp);
+q = r.getField('q', 'rows', 1);
+ok(isequal(q(:), (1:6)'), 'a changing mesh takes a field as a column');
+r.close();
+
+% Strings as text, integer classes for cells, and a gateway kept loaded while a
+% study is open.
+sp = fullfile(tmp, 'strings.gamut');
+s = gamut.create(string(sp), 'writer', "matlab tests", 'mesh', "shared", 'per', "fixed", ...
+    'coordinates', struct('units', "m", 'axes', 2), 'parameters', struct('k', "1"), ...
+    'fields', struct('pf', struct('units', "Pa", 'at', "node")));
+s.setMesh(pts, {uint8([9 9]), int32([0 4 8]), int32([0 2 3 1 2 4 5 3])});
+s.addRuns(struct('k', [1; 2; 3]), 'fields', struct("pf", P));
+s.close();
+r = gamut.open(string(sp));
+ok(isequal(r.getField("pf"), P), 'a string path and name read like char ones');
+[types, offsets] = r.getCells();
+ok(isequal(double(offsets(:))', [0 4 8]), 'int32 offsets reach the file');
+clear mex
+ok(isequal(r.getField("pf", 'rows', 1), P(1, :)), 'an open study survives clear mex');
+r.close();
+% The gateway itself reads integers by class (the M layer converts first).
+dp = fullfile(tmp, 'direct.gamut');
+d = gamut.create(dp, 'writer', 'matlab tests', 'mesh', 'shared', 'per', 'fixed', ...
+    'coordinates', struct('units', 'm', 'axes', 2), 'parameters', struct('k', '1'));
+for bad = {{uint64(2)^63, 'out of range'}, {[0 4.5 8], 'whole numbers'}, {sparse([0 4 8]), 'sparse'}}
+    gamut_mex('geometry_begin', d.Handle);
+    gamut_mex('geometry_points', d.Handle, pts);
+    try
+        gamut_mex('geometry_cells', d.Handle, uint8([9 9]), bad{1}{1}, int64([0 2 3 1 2 4 5 3]));
+        ok(false, ['refused offsets: ' bad{1}{2}]);
+    catch err
+        ok(contains(err.message, bad{1}{2}), ['refused offsets: ' err.message]);
+    end
+end
+gamut_mex('geometry_begin', d.Handle);
+gamut_mex('geometry_points', d.Handle, pts);
+gamut_mex('geometry_cells', d.Handle, uint8([9 9]), single([0 4 8]), int16([0 2 3 1 2 4 5 3]));
+gamut_mex('set_mesh', d.Handle);
+d.addRun(struct('k', 1));
+d.setNote('author', "Alice");
+try
+    gamut_mex('set_note', d.Handle, 'n', int64([]));
+    ok(false, 'an empty int64 note refused');
+catch err
+    ok(contains(err.message, 'one number'), ['empty int64 note: ' err.message]);
+end
+d.close();
+r = gamut.open(dp);
+[~, offsets, conn] = r.getCells();
+ok(isequal(double(offsets(:))', [0 4 8]) && isequal(double(conn(:))', [0 2 3 1 2 4 5 3]), ...
+    'single offsets and int16 connectivity are read by their class');
+r.close();
+
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end
 end

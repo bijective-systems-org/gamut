@@ -127,8 +127,10 @@ function main(corpus)
                 why === nothing || push!(failures, "$name: $why")
             end
         else
-            missing_ = [r for r in e["rules"] if !(r in found)]
-            isempty(missing_) || push!(failures, "$name: expected $missing_, found $(sort(collect(found)))")
+            # A rule case breaks exactly its rules; a hostile case may draw more.
+            want = Set{String}(e["rules"])
+            wrong = e["group"] == "rules" ? Set{String}(found) != want : !issubset(want, found)
+            wrong && push!(failures, "$name: expected $(sort(collect(want))), found $(sort(collect(found)))")
             if e["group"] == "hostile"
                 why = hostile(path, e)
                 why === nothing || push!(failures, "$name: $why")

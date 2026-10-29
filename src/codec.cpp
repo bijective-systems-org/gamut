@@ -9,6 +9,12 @@
 namespace gamut_core {
 namespace internal {
 
+std::string scale_name(const std::string& dataset, std::size_t axis) {
+  char buffer[32];
+  std::snprintf(buffer, sizeof buffer, "_d%zu", axis);
+  return "gamut_" + dataset + buffer;
+}
+
 namespace {
 
 // Spec section 12: one NUL byte then "null", size 5.
@@ -19,15 +25,22 @@ const std::set<std::string> kMachinery = {
     "_Netcdf4Dimid", "_Netcdf4Coordinates", "_nc3_strict", "_NCProperties"};
 const std::set<std::string> kTopLevel = {"type", "inputs", "repr"};
 
-std::string scale_name(const std::string& dataset, std::size_t axis) {
-  char buffer[32];
-  std::snprintf(buffer, sizeof buffer, "_d%zu", axis);
-  return "gamut_" + dataset + buffer;
-}
+// One budget for all of a model's arrays: each is capped as one read, and
+// together they are capped the same, so many arrays cannot add up (E23).
+Dict read_dict(const File& f, const std::string& path, bool top_level, int depth,
+               std::size_t* left);
 
 }  // namespace
 
 Dict read_dict_group(const File& f, const std::string& path, bool top_level, int depth) {
+  std::size_t left = kMaxDatasetBytes;
+  return read_dict(f, path, top_level, depth, &left);
+}
+
+namespace {
+
+Dict read_dict(const File& f, const std::string& path, bool top_level, int depth,
+               std::size_t* left) {
   if (depth >= kMaxDictDepth) {
     throw Error("E23", "\"" + path + "\" is nested deeper than this reader walks");
   }
@@ -43,8 +56,20 @@ Dict read_dict_group(const File& f, const std::string& path, bool top_level, int
     }
     switch (a.value.kind()) {
       case AttrValue::Kind::Bool: d[a.name] = Value::boolean(a.value.as_bool()); break;
-      case AttrValue::Kind::Int: d[a.name] = Value::integer(a.value.as_int()); break;
-      case AttrValue::Kind::Float: d[a.name] = Value::real(a.value.as_float()); break;
+      case AttrValue::Kind::Int:
+        if (!is_spec_int64(a.type)) {
+          throw Error("E18", "\"" + path + "\": the integer " + a.name + " is not int64, as "
+                             "section 12 stores integers");
+        }
+        d[a.name] = Value::integer(a.value.as_int());
+        break;
+      case AttrValue::Kind::Float:
+        if (!is_spec_float64(a.type)) {
+          throw Error("E18", "\"" + path + "\": the number " + a.name + " is not float64, as "
+                             "section 12 stores numbers");
+        }
+        d[a.name] = Value::real(a.value.as_float());
+        break;
       case AttrValue::Kind::Str:
         if (embedded_nul(a.raw_bytes) || !valid_utf8(a.value.as_text())) {
           throw Error("E18", "\"" + path + "\": the string " + a.name + " is not valid UTF-8 "
@@ -62,7 +87,11 @@ Dict read_dict_group(const File& f, const std::string& path, bool top_level, int
                              "; a reader never follows one");
     }
     if (m.is_group) {
-      d[m.name] = Value::dict(read_dict_group(f, child, false, depth + 1));
+      if (m.links > 1) {
+        throw Error("E18", "\"" + child + "\" is a group reachable by more than one hard link, "
+                           "which model data, a tree, cannot represent");
+      }
+      d[m.name] = Value::dict(read_dict(f, child, false, depth + 1, left));
       continue;
     }
     if (!m.is_dataset) continue;
@@ -80,7 +109,9 @@ Dict read_dict_group(const File& f, const std::string& path, bool top_level, int
     }
     if (t == DType::String) {
       if (shape.size() != 1) throw Error("E18", "\"" + child + "\": a list of strings is one-dimensional");
-      d[m.name] = Value::strings(shape, f.read_strings(child));
+      std::vector<std::string> list = f.read_strings(child, kMaxDatasetElements, *left);
+      *left -= list.size() * info.type.size;
+      d[m.name] = Value::strings(shape, std::move(list));
       continue;
     }
     // The shape comes from the file: counted against the eager caps (spec
@@ -95,12 +126,19 @@ Dict read_dict_group(const File& f, const std::string& path, bool top_level, int
       throw Error("E23", "\"" + child + "\" declares more elements than this reader reads "
                          "at once");
     }
+    if (n * dtype_size(t) > *left) {
+      throw Error("E23", "\"" + child + "\": the model's arrays together declare more bytes "
+                         "than this reader reads at once");
+    }
+    *left -= n * dtype_size(t);
     std::vector<unsigned char> bytes(n * dtype_size(t));
     if (n > 0) f.read(child, t, {}, bytes.data(), bytes.size());
     d[m.name] = Value::numbers(t, shape, std::move(bytes));
   }
   return d;
 }
+
+}  // namespace
 
 void check_dict(const Dict& d, bool top_level, int depth, const std::string& where) {
   if (depth >= kMaxDictDepth) {

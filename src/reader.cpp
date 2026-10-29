@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <set>
 
 #include "codec.hpp"
@@ -125,10 +126,19 @@ Schema load_schema(const File& f, const std::string& path) {
                                std::string("/mesh"), std::string("/models")}) {
     for (const Member& m : f.members(g)) hard(m, g);
   }
+  // Tables are read at open, so their size is capped as structure: one budget
+  // for all of them, as for one table, so many tables cannot add up (E23).
+  std::size_t entries_left = kMaxTableEntries, bytes_left = kMaxTableBytes;
   for (const Member& m : f.members("/categories")) {
     if (!m.is_dataset) continue;
-    // Tables are read at open, so their size is capped as structure.
-    s.tables[m.name] = f.read_strings("/categories/" + m.name, kMaxTableEntries, kMaxTableBytes);
+    const std::string p = "/categories/" + m.name;
+    s.tables[m.name] = f.read_strings(p, entries_left, bytes_left);
+    entries_left -= s.tables[m.name].size();
+    bytes_left -= s.tables[m.name].size() * f.dataset_info(p, false).type.size;
+    for (const std::string& entry : s.tables[m.name]) {
+      need(entry.find('\0') == std::string::npos && valid_utf8(entry), "E4",
+           p + ": a category name is not valid UTF-8 or holds a NUL", p);
+    }
   }
   for (const Member& m : f.members("/")) {
     if (m.kind != LinkKind::Hard) continue;
@@ -389,6 +399,8 @@ std::vector<std::pair<std::string, std::string>> Reader::describe(
     add("per", s.mesh.per);
     add("model", s.mesh.coordinate_model);
     add("output", s.mesh.coordinate_output);
+  } else if (path == "coordinates") {
+    throw Error("", path + ": the file has no mesh", path);
   } else {
     throw Error("", "nothing is called \"" + path + "\"", path);
   }
@@ -401,7 +413,7 @@ std::pair<std::int64_t, std::int64_t> Reader::span(const std::string& cumulative
   const DsetInfo info = file_->dataset_info(cumulative, false);
   const std::int64_t len =
       info.is_dataset && info.shape.size() == 1 ? static_cast<std::int64_t>(info.shape[0]) : 0;
-  need(k >= 0 && k + 1 < len, "E21",
+  need(k >= 0 && k < len - 1, "E21",
        path + ": instance " + std::to_string(k) + " does not exist", path);
   std::int64_t v[2] = {0, 0};
   file_->read(cumulative, DType::Int64, {Selection::range(k, k + 2)}, v, sizeof v);
@@ -443,6 +455,9 @@ std::int64_t single_run(const Selection& runs, std::int64_t rows,
 Selection shifted(const Selection& sites, std::int64_t length,
                   std::int64_t offset, const std::string& path) {
   sites.count(length, path);
+  // offset comes from the file; with this, no sum below can overflow.
+  need(offset >= 0 && offset <= std::numeric_limits<std::int64_t>::max() - length, "E21",
+       path + ": the run's start in the file is out of range", path);
   switch (sites.kind) {
     case Selection::All: return Selection::range(offset, offset + length);
     case Selection::Range:
@@ -537,11 +552,13 @@ std::vector<std::int64_t> Reader::unchecked_shape(const std::string& path,
     if (m.has_cells == 0) return {0};
     const auto c = span("/mesh/instance_cells", k, path);
     if (path == "cells/types") return {c.second - c.first};
+    need(c.second - c.first < std::numeric_limits<std::int64_t>::max(), "E21",
+         path + ": the instance has too many cells", path);
     if (path == "cells/offsets") return {c.second - c.first + 1};
     std::int64_t lo = 0, hi = 0;
     file_->read("/mesh/cell_offsets", DType::Int64, {Selection::range(c.first, c.first + 1)}, &lo, 8);
     file_->read("/mesh/cell_offsets", DType::Int64, {Selection::range(c.second, c.second + 1)}, &hi, 8);
-    need(hi >= lo, "E21", path + ": /mesh/cell_offsets decreases", path);
+    need(lo >= 0 && hi >= lo, "E21", path + ": /mesh/cell_offsets decreases", path);
     return {hi - lo};
   }
   throw Error("", "nothing is called \"" + path + "\"", path);
@@ -599,6 +616,7 @@ void Reader::read(const std::string& path, const Selection& runs,
     std::vector<std::int64_t> offs(checked_count(path, 8, {c1 - c0 + 1}));
     f.read("/mesh/cell_offsets", DType::Int64, {Selection::range(c0, c1 + 1)},
            offs.data(), offs.size() * 8);
+    need(offs.front() >= 0, "E21", path + ": /mesh/cell_offsets is negative", path);
     for (std::size_t i = 1; i < offs.size(); ++i) {
       need(offs[i] >= offs[i - 1], "E21", path + ": /mesh/cell_offsets decreases", path);
     }

@@ -151,7 +151,8 @@ std::vector<std::int64_t> as_i64(const Column& c, const std::string& what) {
 }
 
 // Spec section 11.3: keep `bits` explicit mantissa bits, round half to
-// even, NaN and infinities unchanged.
+// even, NaN and infinities unchanged. A value that would round up into
+// infinity is cut toward zero instead, the largest finite value kept.
 void bitround(std::vector<unsigned char>* bytes, DType t, int bits) {
   if (bits < 0) return;
   if (t == DType::Float32) {
@@ -163,9 +164,9 @@ void bitround(std::vector<unsigned char>* bytes, DType t, int bits) {
       std::uint32_t u;
       std::memcpy(&u, &(*bytes)[i], 4);
       if ((u & 0x7f800000u) == 0x7f800000u) continue;
-      u += half - 1 + ((u >> drop) & 1u);
-      u &= mask;
-      std::memcpy(&(*bytes)[i], &u, 4);
+      std::uint32_t r = (u + half - 1 + ((u >> drop) & 1u)) & mask;
+      if ((r & 0x7f800000u) == 0x7f800000u) r = u & mask;
+      std::memcpy(&(*bytes)[i], &r, 4);
     }
   } else if (t == DType::Float64) {
     if (bits >= 52) return;
@@ -176,9 +177,9 @@ void bitround(std::vector<unsigned char>* bytes, DType t, int bits) {
       std::uint64_t u;
       std::memcpy(&u, &(*bytes)[i], 8);
       if ((u & 0x7ff0000000000000ull) == 0x7ff0000000000000ull) continue;
-      u += half - 1 + ((u >> drop) & 1u);
-      u &= mask;
-      std::memcpy(&(*bytes)[i], &u, 8);
+      std::uint64_t r = (u + half - 1 + ((u >> drop) & 1u)) & mask;
+      if ((r & 0x7ff0000000000000ull) == 0x7ff0000000000000ull) r = u & mask;
+      std::memcpy(&(*bytes)[i], &r, 8);
     }
   }
 }
@@ -419,19 +420,40 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
     w->filters_ = pipeline_of(f.dataset_info("/row", false));
     w->datasets_ready_ = true;
     w->schema_.mesh.set_done = !w->schema_.mesh.kind.empty();
+    // A fixed layout is valid and read-only (spec section 11.5): everything an
+    // append grows, the scales of what it grows included, is checked first.
+    auto growable = [&](const std::string& p, const DsetInfo& info) {
+      need(info.chunked && !info.maxshape.empty() && info.maxshape[0] == H5S_UNLIMITED, "E20",
+           "\"" + p + "\" has a fixed size, so this file is read-only; write_copy makes a copy "
+           "runs can be added to");
+    };
     auto resume = [&](const std::string& p) {
       const DsetInfo info = f.dataset_info(p, false);
       if (!info.is_dataset || info.shape.empty()) return;
       DType t;
       if (!dtype_of(info.type, &t) || t == DType::String) return;
-      need(info.chunked && info.maxshape[0] == H5S_UNLIMITED, "E20",
-           "\"" + p + "\" grows by a row with each run, so it must be chunked with an "
-           "unlimited first axis");
+      growable(p, info);
       w->pending_[p] = make_pending(
           p, t, std::vector<hsize_t>(info.shape.begin() + 1, info.shape.end()),
           info.chunk[0], static_cast<std::int64_t>(info.shape[0]));
     };
     const Schema& s = w->schema_;
+    for (const auto& kv : s.tables) {   // a table grows when a run brings a new name
+      for (const std::string& p : {"/categories/" + kv.first, "/category_" + kv.first}) {
+        growable(p, f.dataset_info(p, false));
+      }
+    }
+    // The mesh scales flush() extends, whatever datasets use them.
+    std::vector<std::string> scales;
+    if (s.mesh.kind == "shared" && !s.mesh.per_group().empty()) scales = {"/mesh/instance"};
+    if (s.mesh.kind == "changing") {
+      scales = {"/mesh/instance_plus_one", "/mesh/node", "/mesh/node_value"};
+      if (f.exists("/mesh/cell_types")) {
+        scales.insert(scales.end(), {"/mesh/cell", "/mesh/cell_plus_one", "/mesh/index",
+                                     "/mesh/cell_value"});
+      }
+    }
+    for (const auto& p : scales) growable(p, f.dataset_info(p, false));
     resume("/row");
     for (const auto& x : s.parameters) resume(root(x.name));
     for (const auto& x : s.labels) resume(root(x.name));
@@ -1469,7 +1491,7 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
         need(static_cast<std::int64_t>(it->second.size()) == len, "E5",
              who + ": mesh label " + ml.name + " expects " + std::to_string(len) + " values", p);
         for (const std::int64_t v : it->second) {
-          need(v >= INT32_MIN && v <= INT32_MAX, "E4",
+          need(ml.dtype == DType::Int64 || (v >= INT32_MIN && v <= INT32_MAX), "E4",
                who + ": a mesh-label code does not fit in int32", p);
           if (!ml.category.empty()) {
             need(v >= 0 && v < static_cast<std::int64_t>(s.tables.at(ml.category).size()), "E9",
@@ -1537,11 +1559,18 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
   if (!batch.ids.empty()) ids = batch.ids;
   append_rows("/row", reinterpret_cast<const unsigned char*>(ids.data()), n, DType::Int64);
   for (const auto& p : s.parameters) append_rows(root(p.name), root_bytes[p.name].data(), n, p.dtype);
-  for (const auto& l : s.labels) {
-    std::vector<std::int32_t> v(N);
-    for (std::size_t i = 0; i < N; ++i) v[i] = static_cast<std::int32_t>(codes[l.name][i]);
-    append_rows(root(l.name), reinterpret_cast<const unsigned char*>(v.data()), n, DType::Int32);
-  }
+  // Codes in the label's own dtype: a file another writer made may hold int64 (§10.1).
+  auto append_codes = [&](const std::string& path, const std::vector<std::int64_t>& codes_in,
+                          DType dtype) {
+    const auto rows = static_cast<std::int64_t>(codes_in.size());
+    if (dtype == DType::Int64) {
+      append_rows(path, reinterpret_cast<const unsigned char*>(codes_in.data()), rows, dtype);
+      return;
+    }
+    std::vector<std::int32_t> v(codes_in.begin(), codes_in.end());
+    append_rows(path, reinterpret_cast<const unsigned char*>(v.data()), rows, DType::Int32);
+  };
+  for (const auto& l : s.labels) append_codes(root(l.name), codes[l.name], l.dtype);
   for (const auto& r : s.results) {
     if (r.where == "scalar") append_rows(root(r.name), root_bytes[r.name].data(), n, r.dtype);
   }
@@ -1557,13 +1586,7 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
       if (!g.offsets.empty()) offs.assign(g.offsets.begin() + 1, g.offsets.end());
       for (auto& o : offs) o += base;
       append_rows("/mesh/coordinates", b.data(), g.n_nodes, m.coordinate_dtype);
-      for (const auto& ml : m.labels) {
-        const auto& vals = g.labels.at(ml.name);
-        std::vector<std::int32_t> v(vals.size());
-        for (std::size_t i = 0; i < v.size(); ++i) v[i] = static_cast<std::int32_t>(vals[i]);
-        append_rows(label_dataset(ml), reinterpret_cast<const unsigned char*>(v.data()),
-                    static_cast<std::int64_t>(v.size()), DType::Int32);
-      }
+      for (const auto& ml : m.labels) append_codes(label_dataset(ml), g.labels.at(ml.name), ml.dtype);
       const std::int64_t total_nodes = pending_.at("/mesh/coordinates")->total();
       append_rows("/mesh/instance_nodes", reinterpret_cast<const unsigned char*>(&total_nodes), 1,
                   DType::Int64);
@@ -1636,7 +1659,8 @@ bool Writer::has_member(const std::string& name) const {
 
 std::string Writer::geometry_print(const Geometry& g) const {
   // What is stored: the points at the coordinates' dtype, then the cells
-  // and the mesh labels (by name, as int32).
+  // and the mesh labels (by name, at full width, so values out of a label's
+  // range never collide with stored ones).
   const Mesh& m = schema_.mesh;
   Sha256 h;
   const std::vector<unsigned char> points = convert(g.points, m.coordinate_dtype, "coordinates");
@@ -1651,9 +1675,8 @@ std::string Writer::geometry_print(const Geometry& g) const {
   for (const auto& ml : m.labels) {
     const auto it = g.labels.find(ml.name);
     if (it == g.labels.end()) continue;
-    std::vector<std::int32_t> v(it->second.begin(), it->second.end());
     h.update(ml.name.data(), ml.name.size() + 1);
-    h.update(v.data(), v.size() * 4);
+    h.update(it->second.data(), it->second.size() * 8);
   }
   return h.hex();
 }

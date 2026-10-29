@@ -200,6 +200,7 @@ struct Member {
   LinkKind kind = LinkKind::Missing;
   bool is_group = false;
   bool is_dataset = false;
+  unsigned links = 0;   // hard links to the object; a group with more is not a tree
 };
 
 class File {
@@ -222,6 +223,9 @@ class File {
   // never read (E22).
   std::string stored_outside(const std::string& path) const;
   std::vector<Member> members(const std::string& path) const;
+  // What identifies the object at `path` in this file, whatever link reaches
+  // it; empty when it cannot be read.
+  std::string object_key(const std::string& path) const;
 
   std::vector<RawAttr> attributes(const std::string& path) const;
   // `scales = false` skips the dimension-scale lookups, for reads.
