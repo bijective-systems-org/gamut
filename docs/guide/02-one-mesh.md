@@ -92,6 +92,8 @@ stands for the solver, returning `cp` at every node.
   This one marks the nodes on the cylinder's wall.
 - Fields live at nodes or at cells; `at` says which, and the length of
   every run's values is checked against it.
+- Each run gives its parameters and its fields: here `gamma`, and `cp`
+  at every node.
 
 ## Adding runs
 

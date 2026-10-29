@@ -9,8 +9,8 @@ and positions counted from 1. The package needs the core library
 There are two examples: `sweep.jl`, the [README](../../README.md#example)'s
 run table, and `one_mesh.jl`, eight runs of flow past a cylinder on one
 mesh, with a ninth added, then the run count, the lowest `cp` on the wall
-and `cp` at the top read back. From a working
-folder: `julia --project=<checkout>/julia <checkout>/examples/julia/sweep.jl`.
+and `cp` at the top read back. Run either from a working folder:
+`julia --project=<checkout>/julia <checkout>/examples/julia/one_mesh.jl`.
 
 ## A run table
 

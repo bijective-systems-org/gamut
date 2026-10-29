@@ -15,7 +15,9 @@ There are three examples: [`sweep.cpp`](../../examples/cpp/sweep.cpp), the
 past a cylinder on one mesh, with a ninth added, then the run count, the
 lowest `cp` on the wall and `cp` at the top read back (a shorter C
 version prints the last line); and [`nearest.cpp`](../../examples/cpp/nearest.cpp),
-a model fitted in Python and evaluated in C++.
+a model fitted in Python and evaluated in C++. Without CMake, one builds
+as `c++ -std=c++17 one_mesh.cpp -I<prefix>/include -L<prefix>/lib -lgamut
+-o one_mesh`, `<prefix>` being where the library is installed.
 
 ## C++
 
