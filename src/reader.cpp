@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <set>
 
 #include "codec.hpp"
@@ -408,7 +409,7 @@ std::pair<std::int64_t, std::int64_t> Reader::span(const std::string& cumulative
   const DsetInfo info = file_->dataset_info(cumulative, false);
   const std::int64_t len =
       info.is_dataset && info.shape.size() == 1 ? static_cast<std::int64_t>(info.shape[0]) : 0;
-  need(k >= 0 && k + 1 < len, "E21",
+  need(k >= 0 && k < len - 1, "E21",
        path + ": instance " + std::to_string(k) + " does not exist", path);
   std::int64_t v[2] = {0, 0};
   file_->read(cumulative, DType::Int64, {Selection::range(k, k + 2)}, v, sizeof v);
@@ -450,6 +451,9 @@ std::int64_t single_run(const Selection& runs, std::int64_t rows,
 Selection shifted(const Selection& sites, std::int64_t length,
                   std::int64_t offset, const std::string& path) {
   sites.count(length, path);
+  // offset comes from the file; with this, no sum below can overflow.
+  need(offset >= 0 && offset <= std::numeric_limits<std::int64_t>::max() - length, "E21",
+       path + ": the run's start in the file is out of range", path);
   switch (sites.kind) {
     case Selection::All: return Selection::range(offset, offset + length);
     case Selection::Range:
@@ -544,11 +548,13 @@ std::vector<std::int64_t> Reader::unchecked_shape(const std::string& path,
     if (m.has_cells == 0) return {0};
     const auto c = span("/mesh/instance_cells", k, path);
     if (path == "cells/types") return {c.second - c.first};
+    need(c.second - c.first < std::numeric_limits<std::int64_t>::max(), "E21",
+         path + ": the instance has too many cells", path);
     if (path == "cells/offsets") return {c.second - c.first + 1};
     std::int64_t lo = 0, hi = 0;
     file_->read("/mesh/cell_offsets", DType::Int64, {Selection::range(c.first, c.first + 1)}, &lo, 8);
     file_->read("/mesh/cell_offsets", DType::Int64, {Selection::range(c.second, c.second + 1)}, &hi, 8);
-    need(hi >= lo, "E21", path + ": /mesh/cell_offsets decreases", path);
+    need(lo >= 0 && hi >= lo, "E21", path + ": /mesh/cell_offsets decreases", path);
     return {hi - lo};
   }
   throw Error("", "nothing is called \"" + path + "\"", path);

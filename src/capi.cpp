@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <exception>
+#include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -1040,8 +1041,11 @@ int gamut_tree_set_array(gamut_tree* t, const char* key, int dtype_code, const v
     int64_t n = 1;
     for (const auto e : s) {
       need(e >= 0, "a negative extent");
+      need(e == 0 || n <= std::numeric_limits<int64_t>::max() / e, "an array too large");
       n *= e;
     }
+    need(n <= std::numeric_limits<int64_t>::max() / static_cast<int64_t>(gamut_core::dtype_size(d)),
+         "an array too large");
     need(n == 0 || data != nullptr, "the array's data is NULL");
     const auto* p = static_cast<const unsigned char*>(data);
     std::vector<unsigned char> bytes(p, p + static_cast<std::size_t>(n) * gamut_core::dtype_size(d));

@@ -37,6 +37,23 @@ the core, in every language. MATLAB kept the first geometry silently.
 and MATLAB; the file stayed open, and a later append to it failed. MATLAB's
 `'compression', false` works; it always failed with an unknown command.
 
+Appending two files in which one name is a parameter in one and a label
+in the other is refused; it crashed the process. A `where` text with
+parentheses nested deeper than 64 levels is refused; deep enough nesting
+overflowed the stack and crashed. Appending to a file whose label codes
+are int64, as §10.1 allows another writer to store them, works; it failed
+with an internal error and left the file's columns of different lengths.
+
+A changing mesh's start of a run, read from the file, is checked before
+any arithmetic on it, so a damaged file is refused (E21) instead of
+overflowing. `select` compares an int64 parameter or scalar exactly with
+an integer literal; as doubles, values above 2⁵³ that differ compared
+equal. BitRound no longer rounds a value near the largest finite float up
+to infinity. Names are checked against ASCII letters and digits whatever
+locale the host program has set. The header names `gamut_units_parse`,
+which returns 1 when its units parse, as the one function that does not
+return 0 on success.
+
 ## 1.3.0 (2026-10-25)
 
 A file may carry a portion marking: a new optional root attribute,

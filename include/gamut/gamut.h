@@ -4,7 +4,8 @@
  * failure.  No C++ type and no HDF5 identifier crosses it.
  *
  * Every function returning int returns 0 on success and nonzero on
- * failure, when it fills *err if err is not NULL.  No function keeps a
+ * failure, when it fills *err if err is not NULL.  The one exception is
+ * gamut_units_parse, a test that returns 1 when its units parse.  No function keeps a
  * pointer the caller passed after it returns.
  *
  * Any function may be called from any thread.  Calls that reach a file

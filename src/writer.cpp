@@ -151,7 +151,8 @@ std::vector<std::int64_t> as_i64(const Column& c, const std::string& what) {
 }
 
 // Spec section 11.3: keep `bits` explicit mantissa bits, round half to
-// even, NaN and infinities unchanged.
+// even, NaN and infinities unchanged. A value that would round up into
+// infinity is cut toward zero instead, the largest finite value kept.
 void bitround(std::vector<unsigned char>* bytes, DType t, int bits) {
   if (bits < 0) return;
   if (t == DType::Float32) {
@@ -163,9 +164,9 @@ void bitround(std::vector<unsigned char>* bytes, DType t, int bits) {
       std::uint32_t u;
       std::memcpy(&u, &(*bytes)[i], 4);
       if ((u & 0x7f800000u) == 0x7f800000u) continue;
-      u += half - 1 + ((u >> drop) & 1u);
-      u &= mask;
-      std::memcpy(&(*bytes)[i], &u, 4);
+      std::uint32_t r = (u + half - 1 + ((u >> drop) & 1u)) & mask;
+      if ((r & 0x7f800000u) == 0x7f800000u) r = u & mask;
+      std::memcpy(&(*bytes)[i], &r, 4);
     }
   } else if (t == DType::Float64) {
     if (bits >= 52) return;
@@ -176,9 +177,9 @@ void bitround(std::vector<unsigned char>* bytes, DType t, int bits) {
       std::uint64_t u;
       std::memcpy(&u, &(*bytes)[i], 8);
       if ((u & 0x7ff0000000000000ull) == 0x7ff0000000000000ull) continue;
-      u += half - 1 + ((u >> drop) & 1u);
-      u &= mask;
-      std::memcpy(&(*bytes)[i], &u, 8);
+      std::uint64_t r = (u + half - 1 + ((u >> drop) & 1u)) & mask;
+      if ((r & 0x7ff0000000000000ull) == 0x7ff0000000000000ull) r = u & mask;
+      std::memcpy(&(*bytes)[i], &r, 8);
     }
   }
 }
@@ -1537,11 +1538,18 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
   if (!batch.ids.empty()) ids = batch.ids;
   append_rows("/row", reinterpret_cast<const unsigned char*>(ids.data()), n, DType::Int64);
   for (const auto& p : s.parameters) append_rows(root(p.name), root_bytes[p.name].data(), n, p.dtype);
-  for (const auto& l : s.labels) {
-    std::vector<std::int32_t> v(N);
-    for (std::size_t i = 0; i < N; ++i) v[i] = static_cast<std::int32_t>(codes[l.name][i]);
-    append_rows(root(l.name), reinterpret_cast<const unsigned char*>(v.data()), n, DType::Int32);
-  }
+  // Codes in the label's own dtype: a file another writer made may hold int64 (§10.1).
+  auto append_codes = [&](const std::string& path, const std::vector<std::int64_t>& codes_in,
+                          DType dtype) {
+    const auto rows = static_cast<std::int64_t>(codes_in.size());
+    if (dtype == DType::Int64) {
+      append_rows(path, reinterpret_cast<const unsigned char*>(codes_in.data()), rows, dtype);
+      return;
+    }
+    std::vector<std::int32_t> v(codes_in.begin(), codes_in.end());
+    append_rows(path, reinterpret_cast<const unsigned char*>(v.data()), rows, DType::Int32);
+  };
+  for (const auto& l : s.labels) append_codes(root(l.name), codes[l.name], l.dtype);
   for (const auto& r : s.results) {
     if (r.where == "scalar") append_rows(root(r.name), root_bytes[r.name].data(), n, r.dtype);
   }
@@ -1557,13 +1565,7 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
       if (!g.offsets.empty()) offs.assign(g.offsets.begin() + 1, g.offsets.end());
       for (auto& o : offs) o += base;
       append_rows("/mesh/coordinates", b.data(), g.n_nodes, m.coordinate_dtype);
-      for (const auto& ml : m.labels) {
-        const auto& vals = g.labels.at(ml.name);
-        std::vector<std::int32_t> v(vals.size());
-        for (std::size_t i = 0; i < v.size(); ++i) v[i] = static_cast<std::int32_t>(vals[i]);
-        append_rows(label_dataset(ml), reinterpret_cast<const unsigned char*>(v.data()),
-                    static_cast<std::int64_t>(v.size()), DType::Int32);
-      }
+      for (const auto& ml : m.labels) append_codes(label_dataset(ml), g.labels.at(ml.name), ml.dtype);
       const std::int64_t total_nodes = pending_.at("/mesh/coordinates")->total();
       append_rows("/mesh/instance_nodes", reinterpret_cast<const unsigned char*>(&total_nodes), 1,
                   DType::Int64);

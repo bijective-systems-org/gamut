@@ -8,17 +8,22 @@
 namespace gamut_core {
 namespace internal {
 
+// ASCII letters and digits, whatever locale the host program set.
+static bool ascii_alnum(unsigned char c) {
+  return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
 bool legal_netcdf_name(const std::string& name) {
   if (name.empty()) return false;
   if (name.front() == ' ' || name.back() == ' ') return false;
   // Section 18: the first character is a letter, a digit or an
   // underscore, as netCDF-C requires.
   const unsigned char first = static_cast<unsigned char>(name.front());
-  if (!std::isalnum(first) && first != '_') return false;
+  if (!ascii_alnum(first) && first != '_') return false;
   for (const char raw : name) {
     const unsigned char c = static_cast<unsigned char>(raw);
     if (c == '\0' || c == '/') return false;
-    if (std::isalnum(c) || c == '_' || c == '-' || c == '.' || c == '+') {
+    if (ascii_alnum(c) || c == '_' || c == '-' || c == '.' || c == '+') {
       continue;
     }
     // Section 18 lists the ASCII set a name is built from; anything

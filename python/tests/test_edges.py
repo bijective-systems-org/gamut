@@ -612,3 +612,85 @@ def test_a_member_repeated_with_equal_points_in_another_dtype_is_accepted(tmp_pa
                    points=[pts.astype(np.float32), pts.astype(np.float64)])
     with gamut.open(str(tmp_path / "fam.gamut")) as f:
         assert f.row_count == 2
+
+
+def test_append_refuses_a_name_that_is_a_parameter_in_one_file_and_a_label_in_the_other(tmp_path):
+    dst, src = str(tmp_path / "dst.gamut"), str(tmp_path / "src.gamut")
+    with gamut.create(dst, writer="w", parameters={"x": "1", "z": "1"}, scalars={"y": "1"}) as s:
+        s.add_run({"x": 1.0, "z": 0.0, "y": 2.0})
+    with gamut.create(src, writer="w", parameters={"z": "1"},
+                      labels={"x": {"categories": ["a"]}}, scalars={"y": "1"}) as s:
+        s.add_run({"z": 1.0, "x": "a", "y": 3.0})
+    with pytest.raises(gamut.GamutError, match="what x is"):
+        gamut.append(dst, src)
+    with gamut.open(dst) as f:
+        assert f.row_count == 1
+
+
+def test_selection_parentheses_nest_64_deep_and_no_deeper(tmp_path):
+    with gamut.create(str(tmp_path / "a.gamut"), writer="w", parameters={"x": "1"}) as s:
+        s.add_run({"x": 1.0})
+    with gamut.open(str(tmp_path / "a.gamut")) as f:
+        assert list(f.select("(" * 64 + "x == 1" + ")" * 64)) == [0]
+        for depth in (65, 20000):
+            with pytest.raises(gamut.GamutError, match="nested deeper than 64"):
+                f.select("(" * depth + "x == 1" + ")" * depth)
+
+
+def test_appending_to_a_file_with_an_int64_label_writes_int64_codes(tmp_path):
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "corpus"))
+    try:
+        import generate as g
+    finally:
+        sys.path.pop(0)
+    p = str(tmp_path / "int64label.gamut")
+    s = g.Study(p)
+    s.row(2)
+    s.parameter("mach", [0.3, 0.4], "condition", "1")
+    s.table("run", ["a", "b"])
+    s.column("run", [0, 1], "<i8", {"role": "group", "category": "run"})
+    s.scalar("cl", [0.1, 0.2], "1")
+    s.finish()
+    assert not gamut.validate(p).findings
+    with gamut.open(p, mode="a") as st:
+        st.add_run({"mach": 0.5, "run": "b", "cl": 0.3})
+    assert not gamut.validate(p).findings
+    with gamut.open(p) as f:
+        assert list(f.get_label("run")) == ["a", "b", "b"]
+
+
+def test_a_run_start_out_of_range_in_the_file_is_refused(tmp_path):
+    p = str(tmp_path / "c.gamut")
+    pts, cells = grid(2, 2)
+    with gamut.create(p, writer="t", mesh="changing", per="run", coordinates={"units": "m", "axes": 2},
+                      parameters={"r": "m"}, fields={"q": {"units": "1", "at": "node"}}) as s:
+        s.add_run({"r": 1.0}, fields={"q": np.arange(4.0)}, points=pts, cells=cells)
+    with h5py.File(p, "r+") as f:
+        f["mesh/row_node_start"][0] = 2**63 - 2
+    with gamut.open(p) as f:
+        with pytest.raises(gamut.GamutError) as e:
+            f.get_field("q", rows=0)
+    assert e.value.rule == "E21"
+
+
+def test_int64_parameters_select_exactly(tmp_path):
+    with gamut.create(str(tmp_path / "n.gamut"), writer="t",
+                      parameters={"n": {"units": "1", "dtype": "int64"}}) as s:
+        s.add_runs({"n": np.array([2**53, 2**53 + 1], dtype=np.int64)})
+    with gamut.open(str(tmp_path / "n.gamut")) as f:
+        assert list(f.select(f"n == {2**53 + 1}")) == [1]
+        assert list(f.select(f"n < {2**53 + 1}")) == [0]
+        assert list(f.select("n > 1.5")) == [0, 1]
+
+
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+def test_bitround_keeps_the_largest_value_finite(tmp_path, dtype):
+    big = np.finfo(dtype).max
+    with gamut.create(str(tmp_path / "b.gamut"), writer="t", parameters={"x": "1"},
+                      scalars={"y": {"units": "1"}}, precision={"y": dtype},
+                      round_bits={"y": 10}) as s:
+        s.add_runs({"x": [1.0, 2.0], "y": np.array([big, -big], dtype=dtype)})
+    with gamut.open(str(tmp_path / "b.gamut")) as f:
+        y = f.get_scalar("y")
+    assert np.all(np.isfinite(y)) and y[0] <= big and y[0] > big * 0.99 and y[1] == -y[0]
