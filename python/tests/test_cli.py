@@ -80,7 +80,7 @@ def test_build_info_validate_get(tmp_path, capsys):
     assert z["p"].shape == (2, 6) and z["row"].tolist() == [1, 2]
     # A zone of cells cannot select the nodes of a node field.
     code, out, _ = run(capsys, "get", target, "p", "--zone", "zone=inlet", "-o", npz, "--json")
-    assert code == 1 and "at nodes" in json.loads(out)["problems"][0]["message"]
+    assert code == 2 and "at nodes" in json.loads(out)["problems"][0]["message"]   # the arguments'
 
 
 def test_vtk_command_without_its_extra_says_what_to_install():
@@ -271,3 +271,56 @@ def test_a_malformed_document_or_argument_is_reported_not_raised(tmp_path, capsy
     assert code == 0, out
     z = np.load(tmp_path / "r.npz")
     assert z["row"].tolist() == [0, 1] and z["x"].tolist() == [1.0, 2.0]
+
+
+def test_the_contract_holds_for_odd_documents_files_and_arguments(tmp_path, capsys):
+    import h5py
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"x": "1"}, scalars={"y": "1"}) as s:
+        s.add_runs({"x": [1.0, 2.0], "y": [3.0, 4.0]})
+    mesh = str(tmp_path / "m.gamut")
+    with gamut.create(mesh, writer="t", mesh="shared", per="fixed", coordinates={"units": "m", "axes": 2},
+                      parameters={"x": "1"}, fields={"q": {"units": "1", "at": "node"}}) as s:
+        s.set_mesh(np.zeros((2, 2)))
+        s.add_runs({"x": [1.0]}, fields={"q": np.zeros((1, 2))})
+    np.save(tmp_path / "ok.npy", np.zeros(2))
+    (tmp_path / "empty.npy").write_bytes(b"")
+
+    def doc(name, body, csv_text="x,y\n1,2\n"):
+        (tmp_path / f"{name}.csv").write_text(csv_text)
+        (tmp_path / f"{name}.json").write_text(json.dumps({"writer": "t", "parameters": {"x": "1"},
+                                                           "scalars": {"y": "1"}, **body,
+                                                           "runs": f"{name}.csv"}))
+        return str(tmp_path / f"{name}.json")
+
+    documents = [
+        doc("meshfile", {"mesh": {"kind": "shared", "per": "fixed", "units": "m", "file": ["m.npz"]}}),
+        doc("axes", {"mesh": {"kind": "shared", "per": "fixed", "units": "m", "axes": 1e300}}),
+        doc("emptynpy", {"fields": {"q": "1"}}, "x,q\n1,empty.npy\n"),
+        doc("missing", {}, "x,y,points\n1,2,missing.npy\n"),
+        doc("wide", {}, "x,y\n1," + "1" * 140000 + "\n"),
+    ]
+    for path in documents:
+        code, out, err = run(capsys, "build", path, "-o", str(tmp_path / "o.gamut"), "--json")
+        assert code == 1 and json.loads(out)["problems"], (path, out, err)
+        assert not (tmp_path / "o.gamut").exists()
+    code, out, _ = run(capsys, "build", documents[0], "-o", p, "--json")         # an existing output
+    assert code == 2 and "never replaced" in json.loads(out)["problems"][0]["message"]
+
+    for argv in (["get", p, "absent", "-o", str(tmp_path / "a.csv")],
+                 ["get", mesh, "q", "--zone", "absent=a", "-o", str(tmp_path / "z.csv")]):
+        code, out, _ = run(capsys, *argv, "--json")
+        assert code == 2 and json.loads(out)["problems"], (argv, out)
+
+    # A value that is not one per row is refused for CSV, and --force keeps the output until then.
+    kept = tmp_path / "coords.csv"
+    kept.write_text("kept")
+    code, out, _ = run(capsys, "get", mesh, "coordinates", "-o", str(kept), "--force", "--json")
+    assert code == 2 and "not one per row" in json.loads(out)["problems"][0]["message"]
+    assert kept.read_text() == "kept"
+
+    # Text stored as invalid UTF-8 is shown, not raised; the validator calls it E3.
+    with h5py.File(p, "r+") as f:
+        f.attrs.create("writer", np.bytes_(b"\xff"))
+    code, out, _ = run(capsys, "info", p, "--json")
+    assert code == 0, out

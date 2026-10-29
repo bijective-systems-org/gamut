@@ -203,7 +203,8 @@ def strings_out(name: str, *args: Any) -> list[str]:
     call(name, *args, ctypes.byref(handle))
     try:
         n = _lib.gamut_strings_count(handle)
-        return [_lib.gamut_strings_get(handle, i).decode("utf-8") for i in range(n)]
+        # Text the file stores as invalid UTF-8 (E3 to the validator) is shown, not raised.
+        return [_lib.gamut_strings_get(handle, i).decode("utf-8", "replace") for i in range(n)]
     finally:
         _lib.gamut_strings_free(handle)
 
@@ -215,7 +216,7 @@ def two_strings_out(name: str, *args: Any) -> tuple[list[str], list[str]]:
         out = []
         for h in (keys, values):
             n = _lib.gamut_strings_count(h)
-            out.append([_lib.gamut_strings_get(h, i).decode("utf-8") for i in range(n)])
+            out.append([_lib.gamut_strings_get(h, i).decode("utf-8", "replace") for i in range(n)])
         return out[0], out[1]
     finally:
         _lib.gamut_strings_free(keys)

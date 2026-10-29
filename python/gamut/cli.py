@@ -23,6 +23,7 @@ import csv
 import json
 import os
 import sys
+import tempfile
 from typing import Any
 
 import numpy as np
@@ -348,10 +349,17 @@ def _check_document(doc: dict, base: str, appending: bool) -> list[tuple[str, st
                 problems.append((f"constants.{name}", "is [number, units]"))
     mesh = doc.get("mesh") if "mesh" not in wrong else None
     if mesh:
+        for k in ("kind", "per", "units", "file"):
+            if mesh.get(k) is not None and not isinstance(mesh[k], str):
+                problems.append((f"mesh.{k}", f"is {_json_kind(mesh[k])}; it is text"))
+        axes = mesh.get("axes")
+        if axes is not None and (isinstance(axes, bool) or not isinstance(axes, int)):
+            problems.append(("mesh.axes", f"is {_json_kind(axes)}; it is 1, 2 or 3"))
         for k in ("kind", "per", "units"):
             if not appending and k not in mesh:
                 problems.append((f"mesh.{k}", "is required"))
-        if mesh.get("file") and not os.path.exists(os.path.join(base, mesh["file"])):
+        if isinstance(mesh.get("file"), str) and mesh["file"] and \
+                not os.path.exists(os.path.join(base, mesh["file"])):
             problems.append(("mesh.file", f"{mesh['file']} does not exist next to the document"))
     runs = doc.get("runs")
     if "runs" in wrong:
@@ -361,6 +369,14 @@ def _check_document(doc: dict, base: str, appending: bool) -> list[tuple[str, st
     elif not os.path.exists(os.path.join(base, runs)):
         problems.append(("runs", f"{runs} does not exist next to the document"))
     return problems
+
+
+def _checked(doc: dict, base: str, appending: bool) -> list[tuple[str, str]]:
+    """_check_document, whose own reading of an odd document is the document's problem."""
+    try:
+        return _check_document(doc, base, appending)
+    except Exception as e:
+        return [("document", _what_failed(e))]
 
 
 def _read_runs(doc: dict, base: str, study_fields: set[str], labels: set[str],
@@ -424,9 +440,11 @@ def cmd_build(args: argparse.Namespace) -> int:
         return 0
     if not args.document or not args.output:
         raise _Usage("", "gamut build DOC.json -o FILE (or gamut build --example)")
+    if os.path.exists(args.output):
+        raise _Usage("", f"{args.output} exists; a .gamut output is never replaced")
     doc = _document(args.document)
     base = os.path.dirname(os.path.abspath(args.document))
-    problems = _check_document(doc, base, appending=False)
+    problems = _checked(doc, base, appending=False)
     if problems:
         return _report_problems(args, problems)
     mesh = doc.get("mesh") or {}
@@ -455,9 +473,10 @@ def cmd_build(args: argparse.Namespace) -> int:
         study.close()
     except Problems as e:
         return _report_problems(args, e.problems)
-    except (TypeError, ValueError, AttributeError, KeyError) as e:
-        # A value inside a declaration of the wrong JSON type: the document's.
-        return _report_problems(args, [("document", f"a value the API cannot take: {e}")])
+    except GamutError:
+        raise
+    except Exception as e:      # anything wrong in the document or a file it names: the document's
+        return _report_problems(args, [("document", _what_failed(e))])
     finally:
         if study is not None:
             study._abandon(remove=True)
@@ -475,7 +494,7 @@ def cmd_append(args: argparse.Namespace) -> int:
         return 0
     doc = _document(args.document)
     base = os.path.dirname(os.path.abspath(args.document))
-    problems = _check_document(doc, base, appending=True)
+    problems = _checked(doc, base, appending=True)
     if problems:
         return _report_problems(args, problems)
     try:
@@ -486,8 +505,10 @@ def cmd_append(args: argparse.Namespace) -> int:
             n = _add_rows(study, doc, base, fields, labels)
     except Problems as e:
         return _report_problems(args, e.problems)
-    except (TypeError, ValueError, AttributeError, KeyError) as e:
-        return _report_problems(args, [("document", f"a value the API cannot take: {e}")])
+    except GamutError:
+        raise
+    except Exception as e:      # as for build: the document's
+        return _report_problems(args, [("document", _what_failed(e))])
     _emit(args, {"appended": args.file, "rows": n},
           f"appended {_counted(n, 'run')} to {args.file}")
     return 0
@@ -497,6 +518,13 @@ def _problems_json(problems: list[tuple[str, str, str]]) -> str:
     """Every failure's one shape under --json: {"problems": [{"rule", "path", "message"}]}."""
     return json.dumps({"problems": [{"rule": r, "path": k, "message": m} for r, k, m in problems]},
                       indent=1)
+
+
+def _what_failed(e: Exception) -> str:
+    """An exception from reading a document or a file it names, as one line."""
+    if isinstance(e, OSError) and e.filename:
+        return f"{e.filename}: {e.strerror}"
+    return f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
 
 
 def _report_problems(args: argparse.Namespace, problems: list[tuple[str, str]]) -> int:
@@ -610,15 +638,9 @@ def _savez(path: str, arrays: dict[str, np.ndarray]) -> None:
                 np.lib.format.write_array(fh, np.asanyarray(value), allow_pickle=False)
 
 
-def cmd_get(args: argparse.Namespace) -> int:
-    """--json: {"wrote": OUT, "names": [...], "rows": n, "shape": {name: [...]},
-    "units": {name: units}}"""
-    out = args.output
-    ext = os.path.splitext(out)[1].lower()
-    if ext == ".gamut":
-        return _get_study(args)
-    if not args.names:
-        raise _Usage("", "name what to write (or write a smaller study file: -o NAME.gamut)")
+def _gather(args: argparse.Namespace) -> tuple[dict[str, np.ndarray], dict[str, str], np.ndarray]:
+    """The arrays `gamut get` writes, their units and the row ids, all read
+    before any output exists."""
     with open_file(args.file) as f:
         rows = _rows_arg(args.rows)
         if rows is not None:
@@ -680,6 +702,45 @@ def cmd_get(args: argparse.Namespace) -> int:
                 data[name] = f.get_scalar(name, rows=rows)
             units[name] = f.describe(name).get("units", "") if name != "row" else ""
         ids = f.get_row_ids(rows)
+    return data, units, ids
+
+
+def _write(path: str, ext: str, data: dict[str, np.ndarray], ids: np.ndarray) -> None:
+    """One output: a CSV line per row, one array (.npy), or every array by name (.npz)."""
+    if ext == ".csv":
+        with open(path, "w", newline="") as fh:
+            w = csv.writer(fh)
+            if any(v.ndim > 1 for v in data.values()):
+                (name, arr), = data.items()
+                w.writerow(["row"] + [f"{name}[{j}]" for j in range(arr.shape[1])])
+                for i, r in enumerate(arr):
+                    w.writerow([int(ids[i])] + [repr(float(x)) for x in r])
+            else:
+                w.writerow(["row"] + list(data))
+                for i in range(len(ids)):
+                    w.writerow([int(ids[i])] + [str(v[i]) for v in data.values()])
+    elif ext == ".npy":
+        np.save(path, next(iter(data.values())))
+    else:
+        _savez(path, {"row": ids, **data})
+
+
+def cmd_get(args: argparse.Namespace) -> int:
+    """--json: {"wrote": OUT, "names": [...], "rows": n, "shape": {name: [...]},
+    "units": {name: units}}"""
+    out = args.output
+    ext = os.path.splitext(out)[1].lower()
+    if ext == ".gamut":
+        return _get_study(args)
+    if not args.names:
+        raise _Usage("", "name what to write (or write a smaller study file: -o NAME.gamut)")
+    try:
+        data, units, ids = _gather(args)
+    except GamutError as e:
+        # A refusal without a rule is the arguments' (exit 2); one with a rule the file's.
+        if e.rule or isinstance(e, _Usage):
+            raise
+        raise _Usage("", e.message, e.path) from None
     if ext in (".npy", ".npz") and not out.endswith(ext):
         out += ext                                # the name NumPy writes, whatever case was given
     if ext in (".csv", ".npy", ".npz") and os.path.exists(out) and not args.force:
@@ -695,22 +756,20 @@ def cmd_get(args: argparse.Namespace) -> int:
                          "write it to .npz or .npy")
     if ext == ".npy" and len(data) != 1:
         raise _Usage("", "a .npy holds one array; use .npz for several")
-    if ext == ".csv":
-        with open(out, "w", newline="") as fh:
-            w = csv.writer(fh)
-            if any(v.ndim > 1 for v in data.values()):
-                (name, arr), = data.items()
-                w.writerow(["row"] + [f"{name}[{j}]" for j in range(arr.shape[1])])
-                for i, r in enumerate(arr):
-                    w.writerow([int(ids[i])] + [repr(float(x)) for x in r])
-            else:
-                w.writerow(["row"] + list(data))
-                for i in range(len(ids)):
-                    w.writerow([int(ids[i])] + [str(v[i]) for v in data.values()])
-    elif ext == ".npy":
-        np.save(out, next(iter(data.values())))
-    else:
-        _savez(out, {"row": ids, **data})
+    for name, v in data.items():
+        if ext == ".csv" and v.ndim and v.shape[0] != len(ids):
+            raise _Usage("", f"{name} has {v.shape[0]} entries, not one per row as a CSV line is; "
+                             "write it to .npz or .npy")
+    # Written beside the output and moved into place, so a failure leaves
+    # the output as it was.
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(out)), suffix=ext)
+    os.close(fd)
+    try:
+        _write(tmp, ext, data, ids)
+        os.replace(tmp, out)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
     doc = {"wrote": out, "names": list(data), "rows": int(len(ids)),
            "shape": {k: list(v.shape) for k, v in data.items()}, "units": units}
     _emit(args, doc, f"wrote {out}: " + ", ".join(
