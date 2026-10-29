@@ -428,16 +428,11 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
            "runs can be added to");
     };
     auto resume = [&](const std::string& p) {
-      const DsetInfo info = f.dataset_info(p);
+      const DsetInfo info = f.dataset_info(p, false);
       if (!info.is_dataset || info.shape.empty()) return;
       DType t;
       if (!dtype_of(info.type, &t) || t == DType::String) return;
       growable(p, info);
-      if (!info.scales.empty() && info.scales[0].size() == 1 && p != "/row") {
-        const std::string& name = info.scales[0][0];
-        const std::string scale = f.exists("/mesh/" + name) ? "/mesh/" + name : "/" + name;
-        growable(scale, f.dataset_info(scale, false));
-      }
       w->pending_[p] = make_pending(
           p, t, std::vector<hsize_t>(info.shape.begin() + 1, info.shape.end()),
           info.chunk[0], static_cast<std::int64_t>(info.shape[0]));
@@ -448,6 +443,17 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
         growable(p, f.dataset_info(p, false));
       }
     }
+    // The mesh scales flush() extends, whatever datasets use them.
+    std::vector<std::string> scales;
+    if (s.mesh.kind == "shared" && !s.mesh.per_group().empty()) scales = {"/mesh/instance"};
+    if (s.mesh.kind == "changing") {
+      scales = {"/mesh/instance_plus_one", "/mesh/node", "/mesh/node_value"};
+      if (f.exists("/mesh/cell_types")) {
+        scales.insert(scales.end(), {"/mesh/cell", "/mesh/cell_plus_one", "/mesh/index",
+                                     "/mesh/cell_value"});
+      }
+    }
+    for (const auto& p : scales) growable(p, f.dataset_info(p, false));
     resume("/row");
     for (const auto& x : s.parameters) resume(root(x.name));
     for (const auto& x : s.labels) resume(root(x.name));

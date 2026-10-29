@@ -438,3 +438,39 @@ def test_an_empty_attribute_is_not_an_absent_one(tmp_path):
     assert "E6" in emptied("kind", "mesh", "kind", mesh=True)
     rules = emptied("support", "mesh", "support_id", mesh=True)
     assert "E11" in rules and "E2" not in rules
+
+
+def _changing_file(p):
+    pts, cells = grid(3, 2)
+    with gamut.create(p, writer="t", mesh="changing", per="run", coordinates={"units": "m", "axes": 2},
+                      parameters={"r": "m"}) as s:
+        s.add_run({"r": 1.0}, points=pts, cells=cells)
+    return pts, cells
+
+
+def test_a_fixed_value_scale_makes_the_file_read_only_before_anything_changes(tmp_path):
+    p = str(tmp_path / "c.gamut")
+    _changing_file(p)                       # no node fields: nothing uses node_value
+    with h5py.File(p, "r+") as f:
+        old = f["mesh/node_value"]
+        n, attrs = old.shape[0], {k: old.attrs[k] for k in old.attrs if k not in ("CLASS", "NAME")}
+        del f["mesh/node_value"]
+        d = f["mesh"].create_dataset("node_value", shape=(n,), dtype=">f4", track_order=True)
+        d.make_scale("This is a netCDF dimension but not a netCDF variable.%10d" % n)
+        for k, v in attrs.items():
+            d.attrs[k] = v
+    assert not gamut.validate(p).findings
+    before = open(p, "rb").read()
+    with pytest.raises(gamut.GamutError, match="read-only"):
+        gamut.open(p, mode="a")
+    assert open(p, "rb").read() == before
+
+
+def test_an_ignored_dataset_named_like_a_scale_does_not_make_a_file_read_only(tmp_path):
+    p = str(tmp_path / "c.gamut")
+    pts, cells = _changing_file(p)
+    with h5py.File(p, "r+") as f:
+        f["mesh/row"] = np.zeros(1)         # fixed, named like the row scale; nothing grows it
+    with gamut.open(p, mode="a") as s:
+        s.add_run({"r": 2.0}, points=pts, cells=cells)
+    assert not [x for x in gamut.validate(p).findings if x.severity == "error"]
