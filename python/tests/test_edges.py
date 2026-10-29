@@ -694,3 +694,14 @@ def test_bitround_keeps_the_largest_value_finite(tmp_path, dtype):
     with gamut.open(str(tmp_path / "b.gamut")) as f:
         y = f.get_scalar("y")
     assert np.all(np.isfinite(y)) and y[0] <= big and y[0] > big * 0.99 and y[1] == -y[0]
+
+
+def test_a_repeat_with_out_of_range_mesh_labels_is_not_taken_for_the_same(tmp_path):
+    pts, cells = grid(2, 2)
+    with gamut.create(str(tmp_path / "fam.gamut"), writer="t", mesh="changing", per="group:member",
+                      coordinates={"units": "m", "axes": 2}, labels={"member": "group"},
+                      parameters={"mach": "1"}, mesh_labels={"zone": {"at": "node"}}) as s:
+        with pytest.raises(gamut.GamutError, match="two different geometries"):
+            s.add_runs({"member": ["a", "a"], "mach": [1.0, 2.0]}, points=[pts, pts],
+                       cells=[cells, cells],
+                       mesh_labels=[{"zone": np.array([2**32, 0, 0, 0])}, {"zone": np.zeros(4, int)}])

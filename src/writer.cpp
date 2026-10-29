@@ -1638,7 +1638,8 @@ bool Writer::has_member(const std::string& name) const {
 
 std::string Writer::geometry_print(const Geometry& g) const {
   // What is stored: the points at the coordinates' dtype, then the cells
-  // and the mesh labels (by name, as int32).
+  // and the mesh labels (by name, at full width, so values out of a label's
+  // range never collide with stored ones).
   const Mesh& m = schema_.mesh;
   Sha256 h;
   const std::vector<unsigned char> points = convert(g.points, m.coordinate_dtype, "coordinates");
@@ -1653,9 +1654,8 @@ std::string Writer::geometry_print(const Geometry& g) const {
   for (const auto& ml : m.labels) {
     const auto it = g.labels.find(ml.name);
     if (it == g.labels.end()) continue;
-    std::vector<std::int32_t> v(it->second.begin(), it->second.end());
     h.update(ml.name.data(), ml.name.size() + 1);
-    h.update(v.data(), v.size() * 4);
+    h.update(it->second.data(), it->second.size() * 8);
   }
   return h.hex();
 }
