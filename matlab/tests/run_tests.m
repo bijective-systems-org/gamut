@@ -439,7 +439,7 @@ gamut_mex('geometry_cells', d.Handle, uint8([9 9]), single([0 4 8]), int16([0 2 
 gamut_mex('set_mesh', d.Handle);
 d.addRun(struct('k', 1));
 d.setNote('author', "Alice");
-d.setNote('big', uint64(2)^62);                 % any integer class is an integer note
+d.setNote('big', uint64(2)^62 + 1);             % any integer class is an integer note
 try
     d.setNote('huge', intmax('uint64'));
     ok(false, 'a uint64 note above int64 refused');
@@ -453,6 +453,8 @@ catch err
     ok(contains(err.message, 'one number'), ['empty int64 note: ' err.message]);
 end
 d.close();
+big = h5readatt(dp, '/notes', 'big');
+ok(isa(big, 'int64') && big == int64(2)^62 + 1, 'a uint64 note is stored as int64, exactly');
 r = gamut.open(dp);
 [~, offsets, conn] = r.getCells();
 ok(isequal(double(offsets(:))', [0 4 8]) && isequal(double(conn(:))', [0 2 3 1 2 4 5 3]), ...

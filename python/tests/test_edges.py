@@ -1023,15 +1023,26 @@ def test_integers_past_2_53_are_refused_on_every_path_to_a_float64(tmp_path):
         with pytest.raises(gamut.GamutError, match="not exact as a float64") as e:
             gamut.evaluate(model, {"x": given})
         assert e.value.rule == "E4"
+    with pytest.raises(gamut.GamutError, match="coordinates: 9007199254740993 is not exact"):
+        gamut.evaluate(model, {"x": [0.5]}, coordinates=np.array([[[big, 0]]]))
     p = str(tmp_path / "t.gamut")
     with gamut.create(p, writer="t", parameters={"x": {"units": "m"}, "n": {"units": "1", "dtype": "int64"}}) as s:
-        for value in ((big, "m"), (big, "km")):
-            with pytest.raises(gamut.GamutError, match="not exact as a float64"):
-                s.add_run({"x": value, "n": 1})
-        s.add_run({"x": (2, "km"), "n": (big, "1")})          # int64 in its own units is exact
+        with pytest.raises(gamut.GamutError, match="not exact as a float64"):
+            s.add_run({"x": (big, "m"), "n": 1})
+        s.add_run({"x": (2, "m"), "n": (big, "1")})           # int64 in its own units is exact
     with gamut.open(p) as f:
-        assert f.get_parameter("x").tolist() == [2000.0]
+        assert f.get_parameter("x").tolist() == [2.0]
         assert f.get_parameter("n").tolist() == [big]
+
+
+def test_an_integer_past_2_53_is_refused_before_a_unit_conversion(tmp_path):
+    pytest.importorskip("pint")
+    with gamut.create(str(tmp_path / "t.gamut"), writer="t", parameters={"x": {"units": "m"}}) as s:
+        with pytest.raises(gamut.GamutError, match="not exact as a float64"):
+            s.add_run({"x": (2**53 + 1, "km")})
+        s.add_run({"x": (2, "km")})
+    with gamut.open(str(tmp_path / "t.gamut")) as f:
+        assert f.get_parameter("x").tolist() == [2000.0]
 
 
 def test_integer_constants_and_notes_stay_exact_or_are_refused(tmp_path):

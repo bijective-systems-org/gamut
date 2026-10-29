@@ -1129,7 +1129,7 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
             label_names[name] = names_given
         end
         if coordinates !== nothing
-            tbl["coordinates"] = Float64.(coordinates)
+            tbl["coordinates"] = float64_exactly(coordinates, "coordinates")
         elseif !isempty(m.mesh_kind) && m.per == "fixed"
             pts = get_points(m)
             tbl["coordinates"] = permutedims(repeat(reshape(pts, size(pts)..., 1), 1, 1, n), (3, 1, 2))

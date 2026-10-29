@@ -82,7 +82,7 @@ for k = 1:numel(labels)
     labelNames.(name) = names(:);
 end
 if ~isempty(coordinates)
-    tbl.coordinates = double(coordinates);
+    tbl.coordinates = exactDouble(coordinates, 'coordinates');
 elseif ~isempty(m.MeshKind) && strcmp(m.Per, 'fixed')
     pts = m.getPoints();
     tbl.coordinates = repmat(reshape(pts, [1 size(pts)]), [n 1 1]);

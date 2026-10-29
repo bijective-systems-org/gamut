@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+**Upgrading from 1.3.** The file format is unchanged (`gamut/1`), so
+files move freely between 1.3 and 2.0. These changes can stop, or change
+the result of, code written for 1.3:
+
+- Creating a file never replaces an existing one: `create`, `extract`,
+  `write_copy`, `evaluate` with a path, `gamut build`, and `gamut get`
+  without `--force`.
+- A parameter is float64 unless declared int64; integers given to it no
+  longer make it int64.
+- In MATLAB, `[]` as rows, nodes or cells selects none; `':'`, or leaving
+  them out, selects every one.
+- A field given sites × runs, a label given `None` or NaN, and an integer
+  that float64 would round are refused instead of stored wrongly.
+- In C, `gamut_batch_values` takes a `first_axis` argument.
+
+The rest of this section says what changed and why.
+
 Creating a Gamut file never replaces an existing one. `create`,
 `create_model`, `evaluate`, `extract` and `write_copy`, in every language
 and in C, `gamut build` and `gamut-vtk import` refuse a destination that

@@ -448,7 +448,7 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
         if unknown_inputs:
             raise GamutError("E2", f"{sorted(unknown_inputs)[0]} is not an input of this model")
         if coordinates is not None:
-            table["coordinates"] = np.asarray(coordinates, dtype=np.float64)
+            table["coordinates"] = _lib.float64_exactly(coordinates, "coordinates")
         elif m._mesh_kind and m._per == "fixed":
             pts = m.get_points()
             table["coordinates"] = np.broadcast_to(pts, (n,) + pts.shape)
