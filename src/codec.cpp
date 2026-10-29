@@ -9,6 +9,12 @@
 namespace gamut_core {
 namespace internal {
 
+std::string scale_name(const std::string& dataset, std::size_t axis) {
+  char buffer[32];
+  std::snprintf(buffer, sizeof buffer, "_d%zu", axis);
+  return "gamut_" + dataset + buffer;
+}
+
 namespace {
 
 // Spec section 12: one NUL byte then "null", size 5.
@@ -18,12 +24,6 @@ const std::set<std::string> kMachinery = {
     "CLASS", "NAME", "DIMENSION_LIST", "REFERENCE_LIST", "DIMENSION_LABELS",
     "_Netcdf4Dimid", "_Netcdf4Coordinates", "_nc3_strict", "_NCProperties"};
 const std::set<std::string> kTopLevel = {"type", "inputs", "repr"};
-
-std::string scale_name(const std::string& dataset, std::size_t axis) {
-  char buffer[32];
-  std::snprintf(buffer, sizeof buffer, "_d%zu", axis);
-  return "gamut_" + dataset + buffer;
-}
 
 // One budget for all of a model's arrays: each is capped as one read, and
 // together they are capped the same, so many arrays cannot add up (E23).
@@ -56,8 +56,20 @@ Dict read_dict(const File& f, const std::string& path, bool top_level, int depth
     }
     switch (a.value.kind()) {
       case AttrValue::Kind::Bool: d[a.name] = Value::boolean(a.value.as_bool()); break;
-      case AttrValue::Kind::Int: d[a.name] = Value::integer(a.value.as_int()); break;
-      case AttrValue::Kind::Float: d[a.name] = Value::real(a.value.as_float()); break;
+      case AttrValue::Kind::Int:
+        if (!is_spec_int64(a.type)) {
+          throw Error("E18", "\"" + path + "\": the integer " + a.name + " is not int64, as "
+                             "section 12 stores integers");
+        }
+        d[a.name] = Value::integer(a.value.as_int());
+        break;
+      case AttrValue::Kind::Float:
+        if (!is_spec_float64(a.type)) {
+          throw Error("E18", "\"" + path + "\": the number " + a.name + " is not float64, as "
+                             "section 12 stores numbers");
+        }
+        d[a.name] = Value::real(a.value.as_float());
+        break;
       case AttrValue::Kind::Str:
         if (embedded_nul(a.raw_bytes) || !valid_utf8(a.value.as_text())) {
           throw Error("E18", "\"" + path + "\": the string " + a.name + " is not valid UTF-8 "

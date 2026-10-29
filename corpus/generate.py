@@ -272,6 +272,23 @@ def case_table(path):
     ]}
 
 
+def case_wide_integers(path):
+    # An int64 parameter and int64 label codes, as §10.1 allows another
+    # writer to store them; values above 2**53 select exactly.
+    s = Study(path)
+    s.row(3)
+    s.parameter("n", [2**53, 2**53 + 1, 7], "design", "1", dtype="<i8")
+    s.table("run", ["a", "b"])
+    s.column("run", [0, 1, 1], "<i8", {"role": "group", "category": "run"})
+    s.params_and_labels.append("run")
+    s.scalar("cl", [0.1, 0.2, 0.3], "1")
+    s.finish()
+    return {"probes": [
+        {"select": f"n == {2**53 + 1}", "positions": [1]},
+        {"label": "run", "rows": None, "names": ["a", "b", "b"]},
+    ]}
+
+
 def case_shared_fixed(path):
     pts, cells = quad_grid(3, 3)
     s = Study(path)
@@ -458,7 +475,7 @@ def case_marked_model(path):
 VALID = {"table": case_table, "shared_fixed": case_shared_fixed, "point_cloud": case_point_cloud,
          "shared_group": case_shared_group, "changing": case_changing,
          "model_nearest": case_model_nearest, "marked_table": case_marked_table,
-         "marked_model": case_marked_model}
+         "marked_model": case_marked_model, "wide_integers": case_wide_integers}
 
 
 # --- rule cases: a valid file broken to break one rule ---------------------------------
@@ -471,17 +488,17 @@ def _replace(obj, name, maker):
 
 
 RULES = {
-    # name: (base case, rule, edit)
+    # name: (base case, rule or the exact rules the edit breaks, edit)
     "E1_format": ("table", "E1", lambda f: sattr(f, "format", "mestra/0")),
     "E1_kind": ("table", "E1", lambda f: sattr(f, "kind", "both")),
     "E2_file_id": ("table", "E2", lambda f: f.attrs.__delitem__("file_id")),
     "E3_lower_int": ("table", "E3", lambda f: _replace(f["mach"], "lower", lambda o: iattr(o, "lower", 0))),
     "E3_ascii_units": ("table", "E3", lambda f: _replace(f["cl"], "units", lambda o: o.attrs.create("units", np.bytes_(b"1")))),
     "E4_param_int32": ("table", "E4", lambda f: _swap(f, "mach", "<i4")),
-    "E5_short_column": ("table", "E5", lambda f: f["cl"].resize((3,))),
+    "E5_short_column": ("table", ("E5", "E19"), lambda f: f["cl"].resize((3,))),
     "E6_mesh_kind": ("shared_fixed", "E6", lambda f: sattr(f["mesh"], "kind", "wobbly")),
     "E6_cell_type": ("shared_fixed", "E6", lambda f: f["mesh/cell_types"].__setitem__(0, 42)),
-    "E7_units": ("table", "E7", lambda f: sattr(f["cl"], "units", "m//s")),
+    "E7_units": ("table", "E7", lambda f: sattr(f["cd"], "units", "m//s")),
     "E7_no_units": ("table", "E7", lambda f: f["mach"].attrs.__delitem__("units")),
     "E8_reserved": ("table", "E8", lambda f: f.move("cd", "category_cd")),
     "E9_code": ("table", "E9", lambda f: f["run"].__setitem__(0, 7)),
@@ -493,13 +510,13 @@ RULES = {
     "E12_units": ("table", "E12", lambda f: sattr(f["cl_std"], "units", "m")),
     "E13_axis": ("shared_fixed", "E13", lambda f: sattr(f["mesh/cell_fields/v"], "axis", "x")),
     "E14_ids": ("table", "E14", lambda f: f["row"].__setitem__(1, 0)),
-    "E15_run_group": ("table", "E15", lambda f: sattr(f["t"], "run_group", "status")),
-    "E16_bounds": ("table", "E16", lambda f: fattr(f["mach"], "lower", 2.0)),
+    "E15_run_group": ("table", ("E15", "W9"), lambda f: sattr(f["t"], "run_group", "status")),
+    "E16_bounds": ("table", ("E16", "W4"), lambda f: fattr(f["mach"], "lower", 2.0)),
     "E16_model_attr": ("table", "E16", lambda f: sattr(f["cl"], "model", "m")),
     "E16_coordinate_model": ("shared_fixed", "E16", lambda f: sattr(f["mesh/coordinates"], "model", "m")),
     "E17_input": ("model_nearest", "E17", lambda f: sattr(f["models/fit"], "inputs", "alpha mach beta")),
     "E17_nearest_bounds": ("model_nearest", "E17", lambda f: f["models/fit/upper"].__setitem__(0, 9.0)),
-    "E18_codec": ("model_nearest", "E18", lambda f: f["models/fit"].create_dataset("bad", data=np.zeros(2, "<f4"))),
+    "E18_codec": ("model_nearest", ("E18", "E19"), lambda f: f["models/fit"].create_dataset("bad", data=np.zeros(2, "<f4"))),
     "E19_scale": ("table", "E19", lambda f: f["cl"].dims[0].detach_scale(f["row"])),
     "E19_extent": ("shared_group", "E19", lambda f: f["mesh/instance"].resize((5,))),
     "E20_filter": ("table", "E20", lambda f: _swap(f, "cl", "<f8", compression="lzf")),
@@ -524,7 +541,9 @@ RULES = {
 
 def _swap(f, name, dtype, compression="gzip", chunks=None):
     data = f[name][:]
-    attrs = {k: f[name].attrs[k] for k in f[name].attrs if k not in ("DIMENSION_LIST",)}
+    # Each attribute keeps its stored type, so the swap breaks one rule only.
+    attrs = {k: (f[name].attrs[k], f[name].attrs.get_id(k).dtype)
+             for k in f[name].attrs if k not in ("DIMENSION_LIST",)}
     f[name].dims[0].detach_scale(f["row"])
     del f[name]
     kw = {"compression": compression}
@@ -532,8 +551,8 @@ def _swap(f, name, dtype, compression="gzip", chunks=None):
         kw.update(compression_opts=1, shuffle=True)
     d = f.create_dataset(name, data=data.astype(dtype), maxshape=(None,),
                          chunks=chunks or leading_chunk(np.dtype(dtype).itemsize, ()), **kw)
-    for k, v in attrs.items():
-        d.attrs.create(k, v)
+    for k, (v, t) in attrs.items():
+        d.attrs.create(k, v, dtype=t)
     d.dims[0].attach_scale(f["row"])
 
 
@@ -610,6 +629,25 @@ def hostile_cases(out):
                              compression="gzip", compression_opts=1, shuffle=True)
         t.dims[0].attach_scale(f["category_huge"])
     cases["hostile_table_huge"] = {"rules": ["E23"]}
+    # Three tables of 128 MiB each, none stored: each is under the cap one
+    # table has, and the tables a file opens with share it, so the third is
+    # refused.
+    p = os.path.join(out, "hostile_tables_together.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
+    with h5py.File(p, "r+") as f:
+        n = 1 << 15
+        dim(f, "category_many", n, True)
+        for i in range(3):
+            t = f.create_dataset(f"categories/many{i}", shape=(n,), maxshape=(None,),
+                                 dtype=h5py.string_dtype("utf-8", 4096), chunks=(256,),
+                                 compression="gzip", compression_opts=1, shuffle=True)
+            t.dims[0].attach_scale(f["category_many"])
+    cases["hostile_tables_together"] = {"rules": ["E23"]}
+    # A where text nested 20,000 parentheses deep: refused, not a crash.
+    p = os.path.join(out, "hostile_where_deep.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
+    cases["hostile_where_deep"] = {"rules": [],
+                                   "reads": [{"select": "(" * 20000 + "mach > 0.5" + ")" * 20000}]}
     # 2**33 rows declared, none stored: reading a label's names must not
     # allocate for them.
     p = os.path.join(out, "hostile_rows_huge.gamut")
@@ -757,7 +795,7 @@ def main() -> None:
         shutil.copy(os.path.join(out, f"{base}.gamut"), p)
         with h5py.File(p, "r+") as f:
             edit(f)
-        expected[name] = {"group": "rules", "rules": [rule]}
+        expected[name] = {"group": "rules", "rules": [rule] if isinstance(rule, str) else list(rule)}
     for name, e in hostile_cases(out).items():
         e["group"] = "hostile"
         expected[name] = e

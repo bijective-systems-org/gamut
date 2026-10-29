@@ -425,9 +425,10 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
       if (!info.is_dataset || info.shape.empty()) return;
       DType t;
       if (!dtype_of(info.type, &t) || t == DType::String) return;
+      // A fixed layout is valid and read-only (spec section 11.5).
       need(info.chunked && info.maxshape[0] == H5S_UNLIMITED, "E20",
-           "\"" + p + "\" grows by a row with each run, so it must be chunked with an "
-           "unlimited first axis");
+           "\"" + p + "\" has a fixed size, so this file is read-only; write_copy makes a copy "
+           "runs can be added to");
       w->pending_[p] = make_pending(
           p, t, std::vector<hsize_t>(info.shape.begin() + 1, info.shape.end()),
           info.chunk[0], static_cast<std::int64_t>(info.shape[0]));

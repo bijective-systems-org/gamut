@@ -16,7 +16,7 @@ static bool ascii_alnum(unsigned char c) {
 bool legal_netcdf_name(const std::string& name) {
   if (name.empty()) return false;
   if (name.front() == ' ' || name.back() == ' ') return false;
-  // Section 18: the first character is a letter, a digit or an
+  // Section 9.3: the first character is a letter, a digit or an
   // underscore, as netCDF-C requires.
   const unsigned char first = static_cast<unsigned char>(name.front());
   if (!ascii_alnum(first) && first != '_') return false;
@@ -26,7 +26,7 @@ bool legal_netcdf_name(const std::string& name) {
     if (ascii_alnum(c) || c == '_' || c == '-' || c == '.' || c == '+') {
       continue;
     }
-    // Section 18 lists the ASCII set a name is built from; anything
+    // Section 9.3 lists the ASCII set a name is built from; anything
     // outside it, including a space in the middle, is not a legal
     // netCDF-4 name for this format's purposes.
     return false;

@@ -73,6 +73,32 @@ not in the label's table, or a `--rows` position outside the file exits 2.
 `--rows` positions are checked by the core for every output type; for a
 `.gamut` output, `-1` meant the last row.
 
+The validator checks what SPEC.md says and it did not: a model-data
+array without its dimension scale (E19); an integer that is not int64 or
+a number that is not float64 in model data (E18, which reading model data
+now refuses too); a string attribute stored wider than its UTF-8 bytes
+(E3); a derivative with respect to `coordinates` along an axis the
+coordinates do not have (E13); and the vector and axis of a result whose
+statistic this version does not define. A required object or attribute
+that is absent is E2, whatever rule its contents would break: a label's
+`category`, the mesh's `kind` and `support_id`, a changing mesh's
+`instance_nodes`, the cell arrays. A table's repeated entry is reported
+once.
+
+SPEC.md settles where an independent reader could diverge. A units string
+holding a space outside ASCII, such as a no-break space pasted from a web
+page, does not parse (E7). Names use ASCII letters and digits. A scale's
+encoding is what a writer produces, not a rule. A root dataset without a
+`role` is ignored (W5). A file whose growable dimensions are fixed, as
+some netCDF writers leave them, is valid and read-only: appending says so
+and points to `write_copy`, which makes a copy that grows.
+
+The corpus requires each rule case to break exactly its rules, in Python,
+Julia and MATLAB; it accepted any extra finding. Its rule cases no longer
+break rules by accident, every valid data file is appended to itself, and
+it gains a valid file of int64 columns and hostile files of several large
+tables and a deeply nested `where`.
+
 ## 1.3.0 (2026-10-25)
 
 A file may carry a portion marking: a new optional root attribute,

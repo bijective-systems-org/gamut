@@ -34,10 +34,14 @@ for k = 1:numel(names)
     else
         rules = e.rules;
         if ischar(rules), rules = {rules}; end
-        for j = 1:numel(rules)
-            if ~any(strcmp(found, rules{j}))
-                fails{end + 1} = sprintf('%s: expected %s, found %s', name, rules{j}, strjoin(found, ' ')); %#ok<SAGROW>
-            end
+        if isempty(rules), rules = {}; end   % jsondecode gives [] for an empty list
+        % A rule case breaks exactly its rules; a hostile case may draw more.
+        missing = setdiff(rules, found);
+        extra = {};
+        if strcmp(e.group, 'rules'), extra = setdiff(found, rules); end
+        if ~isempty(missing) || ~isempty(extra)
+            fails{end + 1} = sprintf('%s: expected %s, found %s', name, strjoin(rules, ' '), ...
+                strjoin(unique(found), ' ')); %#ok<SAGROW>
         end
         if strcmp(e.group, 'hostile')
             why = hostile(path, e);

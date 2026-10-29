@@ -258,3 +258,130 @@ def test_unreadable_file_is_one_finding(tmp_path):
     p.write_bytes(b"not an hdf5 file")
     r = gamut.validate(str(p))
     assert r.error_ids == ["E1"] and len(r.findings) == 1
+
+
+# --- rules the 2.0 pass made the validator check (#99, #100, #110) ---------
+
+def _rules(p):
+    return {f.rule for f in gamut.validate(p).findings}
+
+
+def _model(p):
+    with gamut.create_model(p, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
+                            scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as mf:
+        mf.add_model("fit", gamut.Nearest(["x"], [0.0], [1.0], [[0.1], [0.9]], {"y": [1.0, 2.0]}),
+                     ["x"])
+
+
+def _sweep(p, mesh=False):
+    pts, cells = grid(3, 2)
+    with gamut.create(p, writer="t", parameters={"mach": "1"}, scalars={"cl": "1"},
+                      labels={"status": {"role": "status", "categories": ["converged", "failed"]}},
+                      **({"mesh": "shared", "per": "fixed", "coordinates": {"units": "m", "axes": 2},
+                          "fields": {"p": {"units": "Pa", "at": "node"}}} if mesh else {})) as s:
+        if mesh:
+            s.set_mesh(pts, cells)
+        s.add_runs({"mach": [0.3, 0.4], "cl": [0.1, 0.2], "status": ["converged", "converged"]},
+                   **({"fields": {"p": np.ones((2, 6))}} if mesh else {}))
+    assert not gamut.validate(p).findings
+
+
+def test_model_data_needs_its_scales_and_its_widths(tmp_path):
+    a, b_ = str(tmp_path / "a.gamut"), str(tmp_path / "b.gamut")
+    _model(a), _model(b_)
+    with h5py.File(a, "r+") as f:
+        f["models/fit"].create_dataset("extra", data=np.arange(3.0))
+    with h5py.File(b_, "r+") as f:
+        f["models/fit"].attrs.create("k", np.int32(3))
+    assert "E19" in _rules(a)
+    assert "E18" in _rules(b_)
+
+
+def test_a_string_attribute_is_sized_to_its_bytes(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    _sweep(p)
+    with h5py.File(p, "r+") as f:
+        del f["cl"].attrs["units"]
+        f["cl"].attrs.create("units", np.array(b"1", dtype=h5py.string_dtype("utf-8", 8)))
+    assert _rules(p) == {"E3"}
+
+
+def test_a_derivative_along_an_axis_the_coordinates_lack_is_e13(tmp_path):
+    p = str(tmp_path / "m.gamut")
+    pts, cells = grid(3, 2)
+    with gamut.create(p, writer="t", mesh="shared", per="fixed", coordinates={"units": "m", "axes": 2},
+                      parameters={"mach": "1"}, scalars={"s": "1"},
+                      fields={"ds": {"units": "m-1", "at": "node", "of": "s",
+                                     "with_respect_to": "coordinates", "axis": "x"}}) as s:
+        s.set_mesh(pts, cells)
+        s.add_run({"mach": 0.3, "s": 1.0}, fields={"ds": np.zeros(6)})
+    assert not gamut.validate(p).findings
+    with h5py.File(p, "r+") as f:
+        d = f["mesh/node_fields/ds"]
+        del d.attrs["axis"]
+        d.attrs.create("axis", np.array(b"z", dtype=h5py.string_dtype("utf-8", 1)))
+    assert _rules(p) == {"E13"}
+
+
+def test_an_unknown_statistic_still_has_its_vector_and_axis_checked(tmp_path):
+    p = str(tmp_path / "t.gamut")
+    _sweep(p)
+    with h5py.File(p, "r+") as f:
+        for k, v in (("of", b"cl"), ("statistic", b"skew"), ("axis", b"q")):
+            f["cl"].attrs.create(k, np.array(v, dtype=h5py.string_dtype("utf-8", len(v))))
+    assert _rules(p) == {"W5", "E13"}
+
+
+@pytest.mark.parametrize("units", ["m s", "m s", "m　s", "m s"])
+def test_a_space_outside_ascii_does_not_parse_in_units(units):
+    from gamut import _lib
+    assert _lib.units_parse("m s") and not _lib.units_parse(units)
+    assert _lib.units_parse("µm") and _lib.units_parse("Å")
+
+
+def test_absent_required_objects_are_e2(tmp_path):
+    def broken(name, edit, mesh=False):
+        p = str(tmp_path / f"{name}.gamut")
+        _sweep(p, mesh=mesh)
+        with h5py.File(p, "r+") as f:
+            edit(f)
+        return _rules(p)
+    assert "E2" in broken("category", lambda f: f["status"].attrs.__delitem__("category"))
+    assert "E2" in broken("kind", lambda f: f["mesh"].attrs.__delitem__("kind"), mesh=True)
+    assert "E2" in broken("support", lambda f: f["mesh"].attrs.__delitem__("support_id"), mesh=True)
+    rules = broken("offsets", lambda f: f.__delitem__("mesh/cell_offsets"), mesh=True)
+    assert "E2" in rules and "E4" not in rules
+
+
+def test_a_fixed_layout_is_valid_and_read_only_until_rewritten(tmp_path):
+    p, grow = str(tmp_path / "fixed.gamut"), str(tmp_path / "grow.gamut")
+    _sweep(p)
+    with h5py.File(p, "r+") as f:
+        cols = ["mach", "cl", "status"]
+        saved = {}
+        for n in cols:
+            saved[n] = (f[n][:], [(k, f[n].attrs[k], f[n].attrs.get_id(k).dtype)
+                                  for k in f[n].attrs if k != "DIMENSION_LIST"])
+            f[n].dims[0].detach_scale(f["row"])
+            del f[n]
+        ids = f["row"][:]
+        row_attrs = [(k, f["row"].attrs[k], f["row"].attrs.get_id(k).dtype)
+                     for k in f["row"].attrs if k not in ("CLASS", "NAME", "REFERENCE_LIST")]
+        del f["row"]
+        r = f.create_dataset("row", data=ids, track_order=True)
+        r.make_scale("row")
+        for k, v, t in row_attrs:
+            r.attrs.create(k, v, dtype=t)
+        for n, (data, attrs) in saved.items():
+            d = f.create_dataset(n, data=data)
+            for k, v, t in attrs:
+                d.attrs.create(k, v, dtype=t)
+            d.dims[0].attach_scale(f["row"])
+    assert not gamut.validate(p).findings
+    with pytest.raises(gamut.GamutError, match="this file is read-only; write_copy makes a copy"):
+        with gamut.open(p, mode="a") as s:
+            s.add_run({"mach": 0.5, "cl": 0.3, "status": "converged"})
+    gamut.write_copy(p, grow)
+    with gamut.open(grow, mode="a") as s:
+        s.add_run({"mach": 0.5, "cl": 0.3, "status": "converged"})
+    assert not gamut.validate(grow).findings

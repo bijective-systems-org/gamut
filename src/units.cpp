@@ -4,13 +4,13 @@
 // uses: "furlong fortnight-1" parses and "m//s" does not.  This is the
 // grammar and not a units database, and it says whether a string
 // matches and nothing else.  Each method below is one production of
-// section 32; it returns true and moves past what it matched, or
+// section 13; it returns true and moves past what it matched, or
 // returns false and leaves the position for its caller to restore.
 //
 // The string is read byte by byte.  Every byte of a UTF-8 sequence for
 // a character outside ASCII is 0x80 or above, and every such character
-// is a letter of a name, so reading bytes gives the verdict reading
-// characters would.
+// but a space is a letter of a name, so once the spaces are refused,
+// reading bytes gives the verdict reading characters would.
 
 #include "units.hpp"
 
@@ -20,7 +20,7 @@
 namespace gamut_core {
 namespace {
 
-// The bounds of section 32: the string comes out of a file, and the
+// The bounds of section 13: the string comes out of a file, and the
 // recursion through parentheses is bounded rather than trusted.
 const std::size_t kMaxBytes = 4096;
 const int kMaxDepth = 32;
@@ -285,10 +285,31 @@ class Grammar {
   std::size_t at_ = 0;
 };
 
+// A space outside ASCII (Unicode White_Space), which section 13 refuses:
+// U+0085, U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F,
+// U+205F and U+3000, as UTF-8.  A no-break space pasted from a web page
+// would otherwise read as a letter.
+bool has_wide_space(const std::string& s) {
+  for (std::size_t i = 0; i < s.size(); ++i) {
+    const auto b = [&](std::size_t k) {
+      return i + k < s.size() ? static_cast<unsigned char>(s[i + k]) : 0u;
+    };
+    if (b(0) == 0xC2 && (b(1) == 0x85 || b(1) == 0xA0)) return true;
+    if (b(0) == 0xE1 && b(1) == 0x9A && b(2) == 0x80) return true;
+    if (b(0) == 0xE2 && b(1) == 0x80 &&
+        ((b(2) >= 0x80 && b(2) <= 0x8A) || b(2) == 0xA8 || b(2) == 0xA9 || b(2) == 0xAF)) {
+      return true;
+    }
+    if (b(0) == 0xE2 && b(1) == 0x81 && b(2) == 0x9F) return true;
+    if (b(0) == 0xE3 && b(1) == 0x80 && b(2) == 0x80) return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 bool units_parse(const std::string& units) {
-  if (units.size() > kMaxBytes) return false;
+  if (units.size() > kMaxBytes || has_wide_space(units)) return false;
   return Grammar(units).whole();
 }
 
