@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <set>
 #include <string>
 #include <vector>
@@ -17,25 +18,58 @@ namespace {
 
 std::set<std::uintptr_t> g_files;
 
+// An error for MATLAB, thrown so the stack unwinds and every guard below
+// frees what it holds; mexFunction reports it once nothing is left to free
+// (mexErrMsgIdAndTxt itself leaves without running destructors).
+struct Refusal {
+  std::string id, message;
+};
+
 [[noreturn]] void raise(const gamut_error& e) {
-  const std::string id = std::string("gamut:") + (e.rule[0] ? e.rule : "error");
   std::string msg = e.message;
   if (e.path[0]) msg = std::string(e.path) + ": " + msg;
-  mexErrMsgIdAndTxt(id.c_str(), "%s", msg.c_str());
-  throw 0;  // not reached
+  throw Refusal{std::string("gamut:") + (e.rule[0] ? e.rule : "error"), msg};
 }
 
-[[noreturn]] void usage(const std::string& why) {
-  mexErrMsgIdAndTxt("gamut:usage", "%s", why.c_str());
-  throw 0;
+[[noreturn]] void usage(const std::string& why) { throw Refusal{"gamut:usage", why}; }
+
+// Open handles keep the gateway loaded, so clear mex cannot orphan them;
+// at exit, each is finished as close would, or abandoned.
+void forget(gamut_file* f) {
+  g_files.erase(reinterpret_cast<std::uintptr_t>(f));
+  if (g_files.empty()) mexUnlock();
+}
+
+void finish_open_files() {
+  for (const std::uintptr_t p : g_files) {
+    gamut_file* f = reinterpret_cast<gamut_file*>(p);
+    gamut_error e{};
+    if (gamut_close(f, &e) != 0) gamut_abandon(f, 0);
+  }
+  g_files.clear();
 }
 
 void check(int status, const gamut_error& e) {
   if (status != 0) raise(e);
 }
 
+// A string scalar ("x.gamut", the usual text since R2017a) as a char row.
+mxArray* char_of_string(const mxArray* a, const char* what) {
+  if (mxGetNumberOfElements(a) != 1) usage(std::string(what) + " must be one string");
+  mxArray* in = const_cast<mxArray*>(a);
+  mxArray* out = nullptr;
+  if (mexCallMATLABWithTrap(1, &out, 1, &in, "char") != nullptr) usage(std::string(what) + " must be text");
+  return out;
+}
+
 std::string text(const mxArray* a, const char* what) {
   if (a == nullptr) usage(std::string(what) + " is missing");
+  if (mxIsClass(a, "string")) {
+    mxArray* c = char_of_string(a, what);
+    const std::string out = text(c, what);
+    mxDestroyArray(c);
+    return out;
+  }
   if (mxIsEmpty(a)) return std::string();
   if (!mxIsChar(a)) usage(std::string(what) + " must be text");
   char* s = mxArrayToUTF8String(a);
@@ -43,6 +77,55 @@ std::string text(const mxArray* a, const char* what) {
   mxFree(s);
   return out;
 }
+
+// Integers given in any numeric class, converted by that class; a value that is
+// not a whole number, or out of int64's range, is refused.
+std::vector<int64_t> integers(const mxArray* a, const char* what) {
+  if (a == nullptr || !mxIsNumeric(a) || mxIsComplex(a)) usage(std::string(what) + " must be integers");
+  const mwSize n = mxGetNumberOfElements(a);
+  std::vector<int64_t> out(n);
+  const void* d = mxGetData(a);
+  for (mwSize i = 0; i < n; ++i) {
+    switch (mxGetClassID(a)) {
+      case mxDOUBLE_CLASS:
+      case mxSINGLE_CLASS: {
+        const double x = mxGetClassID(a) == mxDOUBLE_CLASS ? static_cast<const double*>(d)[i]
+                                                           : static_cast<const float*>(d)[i];
+        if (!(x == std::floor(x) && x >= -9.2233720368547758e18 && x < 9.2233720368547758e18)) {
+          usage(std::string(what) + " must be whole numbers");
+        }
+        out[i] = static_cast<int64_t>(x);
+        break;
+      }
+      case mxINT8_CLASS: out[i] = static_cast<const int8_t*>(d)[i]; break;
+      case mxUINT8_CLASS: out[i] = static_cast<const uint8_t*>(d)[i]; break;
+      case mxINT16_CLASS: out[i] = static_cast<const int16_t*>(d)[i]; break;
+      case mxUINT16_CLASS: out[i] = static_cast<const uint16_t*>(d)[i]; break;
+      case mxINT32_CLASS: out[i] = static_cast<const int32_t*>(d)[i]; break;
+      case mxUINT32_CLASS: out[i] = static_cast<const uint32_t*>(d)[i]; break;
+      case mxINT64_CLASS: out[i] = static_cast<const int64_t*>(d)[i]; break;
+      case mxUINT64_CLASS: {
+        const uint64_t u = static_cast<const uint64_t*>(d)[i];
+        if (u > static_cast<uint64_t>(INT64_MAX)) usage(std::string(what) + " are out of range");
+        out[i] = static_cast<int64_t>(u);
+        break;
+      }
+      default: usage(std::string(what) + " must be integers");
+    }
+  }
+  return out;
+}
+
+// A model tree, freed on every path out, a thrown usage error included.
+struct Tree {
+  gamut_tree* t = nullptr;
+  Tree() = default;
+  Tree(const Tree&) = delete;
+  Tree& operator=(const Tree&) = delete;
+  ~Tree() {
+    if (t != nullptr) gamut_tree_free(t);
+  }
+};
 
 double scalar(const mxArray* a, const char* what) {
   if (a == nullptr || !mxIsNumeric(a) && !mxIsLogical(a) || mxGetNumberOfElements(a) != 1) {
@@ -59,6 +142,7 @@ gamut_file* file(const mxArray* a) {
 }
 
 mxArray* handle_out(gamut_file* f) {
+  if (g_files.empty()) mexLock();
   g_files.insert(reinterpret_cast<std::uintptr_t>(f));
   mxArray* out = mxCreateNumericMatrix(1, 1, mxUINT64_CLASS, mxREAL);
   *static_cast<std::uint64_t*>(mxGetData(out)) = reinterpret_cast<std::uintptr_t>(f);
@@ -68,6 +152,17 @@ mxArray* handle_out(gamut_file* f) {
 std::vector<std::string> cellstr(const mxArray* a, const char* what) {
   std::vector<std::string> out;
   if (a == nullptr || mxIsEmpty(a)) return out;
+  if (mxIsClass(a, "string")) {   // a string array: one name per element
+    const mwSize n = mxGetNumberOfElements(a);
+    mxArray* in = const_cast<mxArray*>(a);
+    mxArray* cells = nullptr;
+    if (mexCallMATLABWithTrap(1, &cells, 1, &in, "cellstr") != nullptr) {
+      usage(std::string(what) + " must be text");
+    }
+    for (mwSize i = 0; i < n; ++i) out.push_back(text(mxGetCell(cells, i), what));
+    mxDestroyArray(cells);
+    return out;
+  }
   if (mxIsChar(a)) {
     out.push_back(text(a, what));
     return out;
@@ -418,7 +513,7 @@ mxArray* struct_from(const gamut_tree* t, const std::string& prefix) {
 
 }  // namespace
 
-void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
+static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
   (void)nlhs;
   if (nrhs < 1) usage("gamut_mex(command, ...)");
   const std::string cmd = text(prhs[0], "command");
@@ -444,11 +539,11 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
     gamut_file* f = file(arg(1));
     const int status = gamut_close(f, &e);
     // A refused close keeps the handle open (fix and close again, or abandon).
-    if (status == 0) g_files.erase(reinterpret_cast<std::uintptr_t>(f));
+    if (status == 0) forget(f);
     check(status, e);
   } else if (cmd == "abandon") {
     gamut_file* f = file(arg(1));
-    g_files.erase(reinterpret_cast<std::uintptr_t>(f));
+    forget(f);
     gamut_abandon(f, nrhs > 2 && mxIsLogicalScalarTrue(prhs[2]) ? 1 : 0);
   } else if (cmd == "info" || cmd == "names" || cmd == "table") {
     gamut_strings* s = nullptr;
@@ -598,33 +693,24 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
   } else if (cmd == "geometry_cells") {
     // types (uint8), offsets (int64), connectivity (int64, 0-based as VTK)
     std::vector<uint8_t> types;
-    std::vector<int64_t> offsets, conn;
-    auto ints = [&](const mxArray* a, std::vector<int64_t>* out) {
-      const mwSize n = mxGetNumberOfElements(a);
-      for (mwSize i = 0; i < n; ++i) {
-        out->push_back(mxIsDouble(a) ? static_cast<int64_t>(mxGetPr(a)[i]) : static_cast<int64_t*>(mxGetData(a))[i]);
-      }
-    };
-    std::vector<int64_t> t64;
-    ints(arg(2), &t64);
-    for (const auto v : t64) types.push_back(static_cast<uint8_t>(v));
-    ints(arg(3), &offsets);
-    ints(arg(4), &conn);
+    for (const auto v : integers(arg(2), "cell types")) {
+      if (v < 0 || v > 255) usage("cell types are 0 to 255");
+      types.push_back(static_cast<uint8_t>(v));
+    }
+    const std::vector<int64_t> offsets = integers(arg(3), "cell offsets");
+    const std::vector<int64_t> conn = integers(arg(4), "connectivity");
     // The core reads one more offset than there are cells and cannot see the length.
     if (!types.empty() && offsets.size() != types.size() + 1) {
       const std::string why = "cells: offsets need one more entry than there are cells (" +
                               std::to_string(types.size() + 1) + "), not " +
                               std::to_string(offsets.size());
-      mexErrMsgIdAndTxt("gamut:E5", "%s", why.c_str());
+      throw Refusal{"gamut:E5", why};
     }
     check(gamut_geometry_cells(file(arg(1)), types.data(), static_cast<int64_t>(types.size()), offsets.data(),
                              conn.data(), static_cast<int64_t>(conn.size()), &e),
           e);
   } else if (cmd == "geometry_label") {
-    std::vector<int64_t> v;
-    const mxArray* a = arg(3);
-    const mwSize n = mxGetNumberOfElements(a);
-    for (mwSize i = 0; i < n; ++i) v.push_back(static_cast<int64_t>(mxGetPr(a)[i]));
+    const std::vector<int64_t> v = integers(arg(3), "mesh-label codes");
     check(gamut_geometry_label(file(arg(1)), text(arg(2), "name").c_str(), v.data(), static_cast<int64_t>(v.size()), &e), e);
   } else if (cmd == "set_mesh") {
     check(gamut_set_mesh(file(arg(1)), &e), e);
@@ -670,89 +756,59 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
       check(gamut_set_note_float(f, key.c_str(), scalar(v, "value"), &e), e);
     }
   } else if (cmd == "model_numbers") {
-    gamut_tree* t = nullptr;
-    check(gamut_model_numbers(file(arg(1)), text(arg(2), "id").c_str(), &t, &e), e);
-    plhs[0] = struct_from(t, "");
-    gamut_tree_free(t);
+    Tree t;
+    check(gamut_model_numbers(file(arg(1)), text(arg(2), "id").c_str(), &t.t, &e), e);
+    plhs[0] = struct_from(t.t, "");
   } else if (cmd == "add_model") {
     // f, id, type, inputs, numbers (struct), repr
-    gamut_tree* t = nullptr;
-    check(gamut_tree_new(&t, &e), e);
-    try {
-      if (text(arg(3), "type") == "nearest") {
-        nearest_tree(t, arg(5));
-      } else {
-        tree_from(t, "", arg(5));
-      }
-    } catch (...) {
-      gamut_tree_free(t);
-      throw;
+    Tree t;
+    check(gamut_tree_new(&t.t, &e), e);
+    if (text(arg(3), "type") == "nearest") {
+      nearest_tree(t.t, arg(5));
+    } else {
+      tree_from(t.t, "", arg(5));
     }
     const auto inputs = cellstr(arg(4), "inputs");
     const auto p = pointers(inputs);
-    const int status = gamut_add_model(file(arg(1)), text(arg(2), "id").c_str(), text(arg(3), "type").c_str(),
-                                     p.data(), static_cast<int64_t>(p.size()), t, text(arg(6), "repr").c_str(), &e);
-    gamut_tree_free(t);
-    check(status, e);
+    check(gamut_add_model(file(arg(1)), text(arg(2), "id").c_str(), text(arg(3), "type").c_str(),
+                          p.data(), static_cast<int64_t>(p.size()), t.t, text(arg(6), "repr").c_str(), &e),
+          e);
   } else if (cmd == "nearest_check") {
-    gamut_tree* t = nullptr;
-    check(gamut_tree_new(&t, &e), e);
-    try {
-      nearest_tree(t, arg(1));
-    } catch (...) {
-      gamut_tree_free(t);
-      throw;
-    }
-    const int status = gamut_nearest_check(t, &e);
-    gamut_tree_free(t);
-    check(status, e);
+    Tree t;
+    check(gamut_tree_new(&t.t, &e), e);
+    nearest_tree(t.t, arg(1));
+    check(gamut_nearest_check(t.t, &e), e);
   } else if (cmd == "nearest_call") {
     // numbers (struct), inputNames (cell), columns (cell of double vectors), output
-    gamut_tree* t = nullptr;
-    check(gamut_tree_new(&t, &e), e);
-    try {
-      nearest_tree(t, arg(1));
-    } catch (...) {
-      gamut_tree_free(t);
-      throw;
-    }
-    std::vector<std::string> names;
+    Tree t;
+    check(gamut_tree_new(&t.t, &e), e);
+    nearest_tree(t.t, arg(1));
+    const std::vector<std::string> names = cellstr(arg(2), "input names");
     std::vector<std::vector<double>> data;
     int64_t rows = 0;
-    try {
-      names = cellstr(arg(2), "input names");
-      const mxArray* cols = arg(3);
-      if (!mxIsCell(cols) || mxGetNumberOfElements(cols) != names.size()) {
-        usage("one column per input name");
+    const mxArray* cols = arg(3);
+    if (!mxIsCell(cols) || mxGetNumberOfElements(cols) != names.size()) {
+      usage("one column per input name");
+    }
+    for (std::size_t j = 0; j < names.size(); ++j) {
+      const mxArray* c = mxGetCell(cols, static_cast<mwIndex>(j));
+      if (c == nullptr || !mxIsDouble(c) || mxIsComplex(c)) usage("input columns are real double");
+      data.emplace_back(mxGetPr(c), mxGetPr(c) + mxGetNumberOfElements(c));
+      if (j > 0 && static_cast<int64_t>(data.back().size()) != rows) {
+        usage("input columns have one length");
       }
-      for (std::size_t j = 0; j < names.size(); ++j) {
-        const mxArray* c = mxGetCell(cols, static_cast<mwIndex>(j));
-        if (c == nullptr || !mxIsDouble(c) || mxIsComplex(c)) usage("input columns are real double");
-        data.emplace_back(mxGetPr(c), mxGetPr(c) + mxGetNumberOfElements(c));
-        if (j > 0 && static_cast<int64_t>(data.back().size()) != rows) {
-          usage("input columns have one length");
-        }
-        rows = static_cast<int64_t>(data.back().size());
-      }
-    } catch (...) {
-      gamut_tree_free(t);
-      throw;
+      rows = static_cast<int64_t>(data.back().size());
     }
     std::vector<const double*> ptrs;
     for (const auto& d : data) ptrs.push_back(d.data());
     const auto np = pointers(names);
     const std::string output = text(arg(4), "output");
     int64_t per = 0;
-    int status = gamut_nearest_output_size(t, output.c_str(), &per, &e);
-    if (status != 0) {
-      gamut_tree_free(t);
-      raise(e);
-    }
+    check(gamut_nearest_output_size(t.t, output.c_str(), &per, &e), e);
     std::vector<double> out(static_cast<std::size_t>(rows * per));
-    status = gamut_nearest_call(t, np.data(), ptrs.data(), static_cast<int>(names.size()), rows, output.c_str(),
-                              out.data(), static_cast<int64_t>(out.size()), &e);
-    gamut_tree_free(t);
-    check(status, e);
+    check(gamut_nearest_call(t.t, np.data(), ptrs.data(), static_cast<int>(names.size()), rows, output.c_str(),
+                             out.data(), static_cast<int64_t>(out.size()), &e),
+          e);
     std::vector<int64_t> dims = {rows, per};
     plhs[0] = from_c_order(reinterpret_cast<const unsigned char*>(out.data()), dims, GAMUT_FLOAT64);
   } else if (cmd == "append") {
@@ -776,4 +832,19 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
   } else {
     usage("unknown command \"" + cmd + "\"");
   }
+}
+
+void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
+  static const bool at_exit = (mexAtExit(finish_open_files), true);
+  (void)at_exit;
+  Refusal r;
+  try {
+    dispatch(nlhs, plhs, nrhs, prhs);
+    return;
+  } catch (const Refusal& x) {
+    r = x;
+  } catch (const std::exception& x) {
+    r = {"gamut:error", x.what()};
+  }
+  mexErrMsgIdAndTxt(r.id.c_str(), "%s", r.message.c_str());
 }

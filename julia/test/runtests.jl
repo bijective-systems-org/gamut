@@ -304,6 +304,10 @@ mktempdir() do tmp
         out = @test_logs (:warn, r"W4") Gamut.evaluate(mp, Dict("alpha" => [-2.0, 5.0, 12.0]))
         @test Gamut.outside(out, "alpha") == [-2.0, 0.0, 2.0]
         close(out)
+        # An answer never closed is removed when the GC finalizes it, as close removes it.
+        left = (() -> Gamut.evaluate(mp, Dict("alpha" => [1.0])).path)()
+        GC.gc(); GC.gc()
+        @test !isfile(left)
         numbers = Gamut.open(s -> Gamut.model_numbers(s, "fit"), mp)
         @test numbers["lower"] == [0.0] && numbers["columns"] == ["alpha"]
     end

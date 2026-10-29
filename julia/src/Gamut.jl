@@ -21,6 +21,9 @@ export GamutError
 
 const HANDLE = Ref{Ptr{Cvoid}}(C_NULL)
 const SYMBOLS = Dict{Symbol,Ptr{Cvoid}}()
+# The cache is filled lazily from any task, so every look-up takes the lock;
+# finalizers never look up (they use pointers taken when the study opened).
+const SYMBOLS_LOCK = ReentrantLock()
 
 function library_path()
     p = get(ENV, "GAMUT_LIBRARY", "")
@@ -30,17 +33,19 @@ function library_path()
 end
 
 function sym(name::Symbol)
-    get!(SYMBOLS, name) do
-        if HANDLE[] == C_NULL
-            p = library_path()
-            isfile(p) || error("the Gamut core library ($p) was not found; set " *
-                               "GAMUT_LIBRARY to its path: the Python wheel's (pip install " *
-                               "gamut-format, then python -c \"import gamut; " *
-                               "print(gamut.library_path())\"), or one built from a " *
-                               "checkout with cmake -S . -B build && cmake --build build")
-            HANDLE[] = Libdl.dlopen(p)
+    lock(SYMBOLS_LOCK) do
+        get!(SYMBOLS, name) do
+            if HANDLE[] == C_NULL
+                p = library_path()
+                isfile(p) || error("the Gamut core library ($p) was not found; set " *
+                                   "GAMUT_LIBRARY to its path: the Python wheel's (pip install " *
+                                   "gamut-format, then python -c \"import gamut; " *
+                                   "print(gamut.library_path())\"), or one built from a " *
+                                   "checkout with cmake -S . -B build && cmake --build build")
+                HANDLE[] = Libdl.dlopen(p)
+            end
+            Libdl.dlsym(HANDLE[], name)
         end
-        Libdl.dlsym(HANDLE[], name)
     end
 end
 
@@ -192,16 +197,22 @@ mutable struct Study
         s = new(h, path, writing, mesh_kind, per,
                 startswith(per, "group:") ? per[7:end] : "", 3,
                 Dict{String,Dict{String,String}}(), false)
+        close_ptr, abandon_ptr = sym(:gamut_close), sym(:gamut_abandon)
         finalizer(s) do x
-            # A study left open is finished as close would; errors have no
-            # one to go to here.
+            # A study left open is finished as close would, its temporary file
+            # removed as close removes it; errors have no one to go to here.
             h = getfield(x, :handle)
             h == C_NULL && return
             err = Ref{CError}()
-            if ccall(sym(:gamut_close), Cint, (Ptr{Cvoid}, Ref{CError}), h, err) != 0
-                ccall(sym(:gamut_abandon), Cvoid, (Ptr{Cvoid}, Cint), h, 0)
+            if ccall(close_ptr, Cint, (Ptr{Cvoid}, Ref{CError}), h, err) != 0
+                ccall(abandon_ptr, Cvoid, (Ptr{Cvoid}, Cint), h, 0)
             end
             setfield!(x, :handle, C_NULL)
+            p = getfield(x, :path)
+            getfield(x, :remove_on_close) && try
+                isfile(p) && rm(p)
+            catch
+            end
         end
         return s
     end

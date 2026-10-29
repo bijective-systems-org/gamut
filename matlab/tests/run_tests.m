@@ -403,6 +403,23 @@ q = r.getField('q', 'rows', 1);
 ok(isequal(q(:), (1:6)'), 'a changing mesh takes a field as a column');
 r.close();
 
+% Strings as text, integer classes for cells, and a gateway kept loaded while a
+% study is open.
+sp = fullfile(tmp, 'strings.gamut');
+s = gamut.create(string(sp), 'writer', "matlab tests", 'mesh', "shared", 'per', "fixed", ...
+    'coordinates', struct('units', "m", 'axes', 2), 'parameters', struct('k', "1"), ...
+    'fields', struct('pf', struct('units', "Pa", 'at', "node")));
+s.setMesh(pts, {uint8([9 9]), int32([0 4 8]), int32([0 2 3 1 2 4 5 3])});
+s.addRuns(struct('k', [1; 2; 3]), 'fields', struct("pf", P));
+s.close();
+r = gamut.open(string(sp));
+ok(isequal(r.getField("pf"), P), 'a string path and name read like char ones');
+[types, offsets] = r.getCells();
+ok(isequal(double(offsets(:))', [0 4 8]), 'int32 offsets are read by their class');
+clear mex
+ok(isequal(r.getField("pf", 'rows', 1), P(1, :)), 'an open study survives clear mex');
+r.close();
+
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end
 end

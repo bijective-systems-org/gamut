@@ -100,6 +100,15 @@ break rules by accident, every valid data file is appended to itself, and
 it gains a valid file of int64 columns and hostile files of several large
 tables and a deeply nested `where`.
 
+MATLAB takes `"double-quoted"` strings wherever it takes text, and cell
+arrays given as any integer class, read by their class; integer arrays
+that were not double were read as int64, past the end of their buffer.
+An open study keeps the MATLAB gateway loaded, so `clear mex` no longer
+orphans it, and MATLAB finishes open files when it exits. A refused call
+frees what it built before MATLAB reports the error. In Julia, the
+library's symbols are looked up under a lock from any thread, and a study
+left to the garbage collector removes its temporary file as `close` does.
+
 ## 1.3.0 (2026-10-25)
 
 A file may carry a portion marking: a new optional root attribute,
