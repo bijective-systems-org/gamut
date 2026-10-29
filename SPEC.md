@@ -483,8 +483,10 @@ groups and model data at a depth it states (64 recommended), an eager
 read at an element count it states (2³¹ recommended), the category tables
 read when a file opens at one budget they share (2²⁴ entries and 256 MiB
 recommended), the arrays of one model's data at one budget they share
-(the eager read's), and the chunks one
-read touches when its chunks are smaller than §11.4's defaults (2²⁰
+(the eager read's), one chunk decoded (1 GiB recommended; HDF5's own
+limit is 4 GiB), the chunks of one dataset's grid (2⁴⁸ recommended), and
+the chunks one read touches when its chunks are smaller than §11.4's
+defaults (2²⁰
 recommended: libraries keep state per chunk, so a file of tiny chunks makes
 a small read costly); beyond any it reports E26, and for an object it
 cannot read E23, with the path, and goes on. Every count taken
@@ -845,7 +847,7 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 | E23 | an object the reader cannot read: a chunk index it cannot use, a chunk not stored whole or of another size than the chunk's, stored or decoded, or a filter that fails (§9.6) |
 | E24 | coordinates with other than one to three axes |
 | E25 | on appending, a growable dimension that is fixed: the file is valid and read-only (§11.5); a refusal, never a finding of validation |
-| E26 | a count past a cap §9.6 has a reader or writer state: nesting deeper than its cap, an eager read above its element limit, tables or a model's arrays above the budget they share, more chunks than it indexes or than one read may touch, more rows than a selection scans, or `where` nested past its cap |
+| E26 | a count past a cap §9.6 has a reader or writer state: nesting deeper than its cap, an eager read above its element limit, tables or a model's arrays above the budget they share, a chunk larger than it decodes, a chunk grid larger than it indexes, more chunks than one read may touch, more rows than a selection scans, or `where` nested past its cap |
 
 **Warnings**
 

@@ -393,11 +393,10 @@ class Study {
   // The positions of the rows a condition selects ("mach > 0.7 and
   // status == converged"), in increasing order.
   std::vector<int64_t> select(const std::string& where) const {
+    // Room for every row up to the core's cap; past it the core refuses (E26)
+    // before writing any, so no buffer is sized from the file's count.
     const int64_t rows = row_count();
-    if (rows > detail::kMaxRowsSelected)
-      throw Error("E23", "where: the file has " + std::to_string(rows) + " rows, more than the " +
-                         std::to_string(detail::kMaxRowsSelected) + " a selection scans");
-    std::vector<int64_t> out(static_cast<size_t>(std::max<int64_t>(rows, 1)));
+    std::vector<int64_t> out(static_cast<size_t>(rows > 0 && rows <= detail::kMaxRowsSelected ? rows : 1));
     int64_t n = 0;
     gamut_error e{};
     detail::check(gamut_select(f_, where.c_str(), out.data(), static_cast<int64_t>(out.size()), &n, &e), e);
@@ -410,8 +409,13 @@ class Study {
                           const Selection& sites = all) const {
     return read<double>(name, rows, sites);
   }
-  std::vector<double> get_parameter(const std::string& name, const Selection& rows = all) const {
-    return read<double>(name, rows, all).values;
+  // A parameter in the type it is stored as: get_parameter<double> for a
+  // float64 one, get_parameter<int64_t> for one declared int64. Another type
+  // is refused rather than converted, which would round or truncate.
+  template <class T>
+  std::vector<T> get_parameter(const std::string& name, const Selection& rows = all) const {
+    stored_as<T>(name);
+    return read<T>(name, rows, all).values;
   }
   std::vector<double> get_scalar(const std::string& name, const Selection& rows = all) const {
     return read<double>(name, rows, all).values;
@@ -439,7 +443,13 @@ class Study {
                   e);
     return out;
   }
-  double get_constant(const std::string& name) const { return read<double>(name, all, all).values.at(0); }
+  // A constant in its type, as get_parameter: double (float32 widens
+  // exactly) or int64_t.
+  template <class T>
+  T get_constant(const std::string& name) const {
+    stored_as<T>(name);
+    return read<T>(name, all, all).values.at(0);
+  }
   std::vector<int64_t> get_row_ids(const Selection& rows = all) const {
     return read<int64_t>("row", rows, all).values;
   }
@@ -519,6 +529,19 @@ class Study {
                                        GAMUT_AS_GIVEN, r.of.c_str(), r.statistic.c_str(), r.q ? 1 : 0,
                                        r.q.value_or(0.0), "", r.with_respect_to.c_str(), r.axis.c_str(), "",
                                        -1, "", "", &e), e);
+  }
+  // Refuses to read `name` as T unless T holds its stored type exactly.
+  template <class T>
+  void stored_as(const std::string& name) const {
+    static_assert(std::is_same_v<T, double> || std::is_same_v<T, int64_t>,
+                  "a parameter or constant is read as double or int64_t");
+    const auto d = describe(name);
+    const auto it = d.find("dtype");
+    const std::string stored = it == d.end() ? "float64" : it->second;
+    const bool fits = std::is_same_v<T, int64_t> ? stored == "int64" : stored != "int64";
+    if (!fits)
+      throw Error("", name + " is stored as " + stored + "; read it as " +
+                          (stored == "int64" ? "int64_t" : "double"));
   }
   void stage(const std::vector<double>& points, const Cells* cells, const MeshLabels& labels) {
     gamut_error e{};

@@ -11,6 +11,7 @@ import sys
 
 import numpy as np
 
+import gamut
 from gamut import cli
 
 
@@ -48,7 +49,7 @@ def test_build_info_validate_get(tmp_path, capsys):
     target = str(tmp_path / "study.gamut")
     code, out, _ = run(capsys, "build", str(tmp_path / "doc.json"), "-o", target, "--json")
     assert code == 0, out
-    assert json.loads(out) == {"wrote": target, "rows": 4, "problems": []}
+    assert json.loads(out) == {"wrote": target, "rows": 4}
 
     code, out, _ = run(capsys, "info", target, "--json")
     info = json.loads(out)
@@ -79,7 +80,7 @@ def test_build_info_validate_get(tmp_path, capsys):
     assert z["p"].shape == (2, 6) and z["row"].tolist() == [1, 2]
     # A zone of cells cannot select the nodes of a node field.
     code, out, _ = run(capsys, "get", target, "p", "--zone", "zone=inlet", "-o", npz, "--json")
-    assert code == 1 and "at nodes" in json.loads(out)["error"]["message"]
+    assert code == 1 and "at nodes" in json.loads(out)["problems"][0]["message"]
 
 
 def test_vtk_command_without_its_extra_says_what_to_install():
@@ -154,7 +155,7 @@ def test_a_zone_code_that_is_not_a_number_is_a_usage_error(tmp_path, capsys):
     for bad in ("--1", "\u00b2", "1.5"):
         code, out, _ = run(capsys, "get", p, "q", "--zone", f"zone={bad}", "-o",
                            str(tmp_path / "z.csv"), "--json")
-        assert code == 2 and json.loads(out)["error"]["message"].startswith("--zone"), (bad, out)
+        assert code == 2 and json.loads(out)["problems"][0]["message"].startswith("--zone"), (bad, out)
 
 
 def test_rows_of_a_huge_file_are_checked_without_an_array_of_every_row(tmp_path, capsys):
@@ -189,3 +190,31 @@ def test_an_npy_output_named_in_capitals_is_checked_where_numpy_writes(tmp_path,
     written.write_bytes(b"keep me")
     code, _, err = run(capsys, "get", m, "x", "-o", str(tmp_path / "x.NPY"))
     assert code == 2 and "--force" in err and written.read_bytes() == b"keep me"
+
+
+def test_every_json_failure_has_one_shape_and_its_exit_status(tmp_path, capsys):
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"x": "1"}, scalars={"y": "1"}) as s:
+        s.add_runs({"x": [1.0, 2.0], "y": [3.0, 4.0]})
+    bad_doc = tmp_path / "bad.json"
+    bad_doc.write_text(json.dumps({"writer": "t"}))
+    cases = [
+        (1, ["validate", str(tmp_path / "none.gamut"), "--json"], None),     # validate reports, never fails
+        (1, ["info", str(tmp_path / "none.gamut"), "--json"], "there is no file"),
+        (1, ["build", str(bad_doc), "-o", str(tmp_path / "b.gamut"), "--json"], ""),
+        (2, ["get", p, "x", "y", "-o", str(tmp_path / "two.npy"), "--json"], "a .npy holds one array"),
+        (2, ["get", p, "x", "-o", str(tmp_path / "x.txt"), "--json"], "OUT ends in"),
+        (2, ["get", p, "x", "--json"], "-o/--output"),                       # argparse's own mistake
+        (2, ["build", "--json"], "gamut build DOC.json"),
+    ]
+    for status, argv, says in cases:
+        code, out, err = run(capsys, *argv)
+        if says is None:
+            assert code == 1 and "findings" in json.loads(out)
+            continue
+        doc = json.loads(out)
+        assert code == status, (argv, out, err)
+        assert list(doc) == ["problems"] and doc["problems"], (argv, out)
+        assert all(set(x) == {"rule", "path", "message"} for x in doc["problems"]), (argv, out)
+        assert says in doc["problems"][0]["message"], (argv, out)
+    assert not (tmp_path / "two.npy").exists() and not (tmp_path / "x.txt").exists()

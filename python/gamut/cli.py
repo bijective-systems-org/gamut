@@ -8,9 +8,10 @@
 
 Readable text by default; `--json` prints one document of the shape given
 in each command's docstring, kept stable across versions for scripts and
-agents.  Big data goes to files; every problem is reported at once with
-where it is and what to do.  Exit status: 0 success, 1 the file or document
-has errors, 2 a usage error.
+agents, and every failure as {"problems": [{"rule", "path", "message"}]}.
+Big data goes to files; every problem is reported at once with where it is
+and what to do.  Exit status: 0 success, 1 the file or document has errors,
+2 a usage error.
 """
 
 from __future__ import annotations
@@ -385,14 +386,13 @@ def _add_rows(study: Any, doc: dict, base: str, fields: set[str], labels: set[st
 
 
 def cmd_build(args: argparse.Namespace) -> int:
-    """--json: {"wrote": FILE, "rows": n, "problems": [{key, message}]}"""
+    """--json: {"wrote": FILE, "rows": n}"""
     if args.example:
         print(json.dumps(EXAMPLE, indent=1))
         print(EXAMPLE_NOTES, file=sys.stderr)
         return 0
     if not args.document or not args.output:
-        print("gamut build DOC.json -o FILE (or gamut build --example)", file=sys.stderr)
-        return 2
+        raise _Usage("", "gamut build DOC.json -o FILE (or gamut build --example)")
     doc = _document(args.document)
     base = os.path.dirname(os.path.abspath(args.document))
     problems = _check_document(doc, base, appending=False)
@@ -424,25 +424,19 @@ def cmd_build(args: argparse.Namespace) -> int:
         study.close()
     except Problems as e:
         return _report_problems(args, e.problems)
-    except GamutError as e:
-        return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
     finally:
         if study is not None:
             study._abandon(remove=True)
-    _emit(args, {"wrote": args.output, "rows": n, "problems": []},
+    _emit(args, {"wrote": args.output, "rows": n},
           f"wrote {args.output}: {_counted(n, 'run')}")
     return 0
 
 
 def cmd_append(args: argparse.Namespace) -> int:
-    """--json: {"appended": FILE, "rows": n, "problems": [{key, message}]}"""
+    """--json: {"appended": FILE, "rows": n}"""
     if args.document.lower().endswith(".gamut"):
-        # Every row of another study file.
-        try:
-            n = gamut_append(args.file, args.document)
-        except GamutError as e:
-            return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
-        _emit(args, {"appended": args.file, "rows": n, "problems": []},
+        n = gamut_append(args.file, args.document)      # every row of another study file
+        _emit(args, {"appended": args.file, "rows": n},
               f"appended {_counted(n, 'run')} from {args.document} to {args.file}")
         return 0
     doc = _document(args.document)
@@ -458,20 +452,24 @@ def cmd_append(args: argparse.Namespace) -> int:
             n = _add_rows(study, doc, base, fields, labels)
     except Problems as e:
         return _report_problems(args, e.problems)
-    except GamutError as e:
-        return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
-    _emit(args, {"appended": args.file, "rows": n, "problems": []},
+    _emit(args, {"appended": args.file, "rows": n},
           f"appended {_counted(n, 'run')} to {args.file}")
     return 0
 
 
+def _problems_json(problems: list[tuple[str, str, str]]) -> str:
+    """Every failure's one shape under --json: {"problems": [{"rule", "path", "message"}]}."""
+    return json.dumps({"problems": [{"rule": r, "path": k, "message": m} for r, k, m in problems]},
+                      indent=1)
+
+
 def _report_problems(args: argparse.Namespace, problems: list[tuple[str, str]]) -> int:
-    doc = {"problems": [{"key": k, "message": m} for k, m in problems]}
-    text = f"{_counted(len(problems), 'problem')}:\n" + "\n".join(f"  {k}: {m}" for k, m in problems)
+    """A document's problems, each with its key: exit status 1."""
     if args.json:
-        print(json.dumps(doc, indent=1))
+        print(_problems_json([("", k, m) for k, m in problems]))
     else:
-        print(text, file=sys.stderr)
+        print(f"{_counted(len(problems), 'problem')}:\n" + "\n".join(f"  {k}: {m}" for k, m in problems),
+              file=sys.stderr)
     return 1
 
 
@@ -624,12 +622,17 @@ def cmd_get(args: argparse.Namespace) -> int:
         out += ext                                # the name NumPy writes, whatever case was given
     if ext in (".csv", ".npy", ".npz") and os.path.exists(out) and not args.force:
         raise _Usage("", f"{out} exists; give --force to replace it")   # as .gamut is never replaced
+    # The output's shape is checked before it is created.
+    if ext not in (".csv", ".npy", ".npz"):
+        raise _Usage("", f"OUT ends in .csv, .npy or .npz (got {ext or 'nothing'})")
+    if ext == ".csv" and len(data) != 1 and any(v.ndim > 1 for v in data.values()):
+        raise _Usage("", "a field goes to CSV alone (one line per row)")
+    if ext == ".npy" and len(data) != 1:
+        raise _Usage("", "a .npy holds one array; use .npz for several")
     if ext == ".csv":
         with open(out, "w", newline="") as fh:
             w = csv.writer(fh)
             if any(v.ndim > 1 for v in data.values()):
-                if len(data) != 1:
-                    raise SystemExit("a field goes to CSV alone (one line per row)")
                 (name, arr), = data.items()
                 w.writerow(["row"] + [f"{name}[{j}]" for j in range(arr.shape[1])])
                 for i, r in enumerate(arr):
@@ -639,15 +642,9 @@ def cmd_get(args: argparse.Namespace) -> int:
                 for i in range(len(ids)):
                     w.writerow([int(ids[i])] + [str(v[i]) for v in data.values()])
     elif ext == ".npy":
-        if len(data) != 1:
-            print("a .npy holds one array; use .npz for several", file=sys.stderr)
-            return 2
         np.save(out, next(iter(data.values())))
-    elif ext == ".npz":
-        np.savez(out, row=ids, **data)
     else:
-        print(f"OUT ends in .csv, .npy or .npz (got {ext or 'nothing'})", file=sys.stderr)
-        return 2
+        np.savez(out, row=ids, **data)
     doc = {"wrote": out, "names": list(data), "rows": int(len(ids)),
            "shape": {k: list(v.shape) for k, v in data.items()}, "units": units}
     _emit(args, doc, f"wrote {out}: " + ", ".join(
@@ -658,8 +655,21 @@ def cmd_get(args: argparse.Namespace) -> int:
 # --- entry ------------------------------------------------------------------------------------
 
 
+class _Parser(argparse.ArgumentParser):
+    """argparse's mistakes reported as every failure is, JSON under --json."""
+
+    wants_json = False
+
+    def error(self, message: str) -> None:  # type: ignore[override]
+        if _Parser.wants_json:
+            raise _Usage("", message)
+        super().error(message)
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="gamut", description=__doc__.split("\n\n")[0])
+    given = sys.argv[1:] if argv is None else argv
+    _Parser.wants_json = "--json" in given
+    parser = _Parser(prog="gamut", description=__doc__.split("\n\n")[0])
     from . import __version__, FORMAT
     parser.add_argument("--version", action="version",
                         version=f"gamut {__version__} (files {FORMAT})")
@@ -695,13 +705,12 @@ def main(argv: list[str] | None = None) -> int:
                    help="replace an existing .csv, .npy or .npz output (a .gamut one is never replaced)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_get)
-    args = parser.parse_args(argv)
     try:
+        args = parser.parse_args(given)
         return args.func(args)
     except GamutError as e:
-        if getattr(args, "json", False):
-            print(json.dumps({"error": {"rule": e.rule, "path": e.path, "message": e.message}},
-                             indent=1))
+        if _Parser.wants_json:
+            print(_problems_json([(e.rule, e.path, e.message)]))
         else:
             print(f"error: {e}", file=sys.stderr)
         return 2 if isinstance(e, _Usage) else 1

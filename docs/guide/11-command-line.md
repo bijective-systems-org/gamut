@@ -96,7 +96,9 @@ both explained.
 
 - `--json` makes any command print one JSON document instead, of a shape
   that stays the same across versions; `gamut get` still writes its data
-  to the output file.
+  to the output file. Every failure under `--json` is one shape,
+  `{"problems": [{"rule", "path", "message"}]}`, a misused command
+  included.
 - The exit status is 0 on success, 1 when a file or document has errors,
   and 2 for a command used wrongly.
 - `gamut --version` gives the package version and the format version it

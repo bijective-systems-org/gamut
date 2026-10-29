@@ -30,6 +30,14 @@ the fixes further down also correct results that were wrong, such as a
   and `gamut_nearest_call` take counts; `gamut_shape` and
   `gamut_tree_array_info` take `rank, shape, capacity`.
   `gamut_units_parse` is `gamut_units_valid`.
+- On the command line, every failure under `--json` is
+  `{"problems": [{"rule", "path", "message"}]}`; it was `{"error": {...}}`
+  or `{"problems": [{"key", "message"}]}` by command, and argparse's own
+  mistakes printed text. Success documents no longer carry an empty
+  `problems`. A misused `gamut get` exits 2 before creating its output.
+- In C++, `get_parameter<T>` and `get_constant<T>` name the type: `double`,
+  or `int64_t` for a value declared int64. Another type is refused rather
+  than rounded or truncated.
 - Two rules each split in two: appending to a file whose growable
   dimensions are fixed is E25 (it was E20, which keeps storage the format
   forbids), and a limit reached is E26 (it was E23, which keeps storage a
