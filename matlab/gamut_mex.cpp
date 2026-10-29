@@ -118,6 +118,12 @@ std::vector<int64_t> integers(const mxArray* a, const char* what) {
   return out;
 }
 
+// One int64 value, read only when there is exactly one.
+int64_t one_int64(const mxArray* v) {
+  if (mxGetNumberOfElements(v) != 1) usage("an int64 value is one number");
+  return *static_cast<const int64_t*>(mxGetData(v));
+}
+
 // A model tree, freed on every path out, a thrown usage error included.
 struct Tree {
   gamut_tree* t = nullptr;
@@ -351,7 +357,7 @@ void tree_set(gamut_tree* t, const std::string& key, const mxArray* v) {
     if (mxIsLogical(v)) {
       check(gamut_tree_set_bool(t, key.c_str(), mxIsLogicalScalarTrue(v) ? 1 : 0, &e), e);
     } else if (mxIsInt64(v)) {
-      check(gamut_tree_set_int(t, key.c_str(), *static_cast<int64_t*>(mxGetData(v)), &e), e);
+      check(gamut_tree_set_int(t, key.c_str(), one_int64(v), &e), e);
     } else {
       check(gamut_tree_set_float(t, key.c_str(), mxGetScalar(v), &e), e);
     }
@@ -684,7 +690,7 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     const mxArray* v = arg(4);
     if (v != nullptr && mxIsInt64(v)) {
       check(gamut_set_constant(file(arg(1)), text(arg(2), "name").c_str(), text(arg(3), "units").c_str(),
-                             GAMUT_INT64, 0.0, *static_cast<int64_t*>(mxGetData(v)), &e), e);
+                             GAMUT_INT64, 0.0, one_int64(v), &e), e);
     } else {
       check(gamut_set_constant(file(arg(1)), text(arg(2), "name").c_str(), text(arg(3), "units").c_str(),
                              GAMUT_FLOAT64, scalar(v, "value"), 0, &e), e);
@@ -768,7 +774,7 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     if (v != nullptr && (mxIsChar(v) || mxIsClass(v, "string"))) {
       check(gamut_set_note_text(f, key.c_str(), text(v, "value").c_str(), &e), e);
     } else if (v != nullptr && mxIsInt64(v)) {
-      check(gamut_set_note_int(f, key.c_str(), *static_cast<int64_t*>(mxGetData(v)), &e), e);
+      check(gamut_set_note_int(f, key.c_str(), one_int64(v), &e), e);
     } else {
       check(gamut_set_note_float(f, key.c_str(), scalar(v, "value"), &e), e);
     }

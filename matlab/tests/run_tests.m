@@ -439,6 +439,12 @@ gamut_mex('geometry_cells', d.Handle, uint8([9 9]), single([0 4 8]), int16([0 2 
 gamut_mex('set_mesh', d.Handle);
 d.addRun(struct('k', 1));
 d.setNote('author', "Alice");
+try
+    gamut_mex('set_note', d.Handle, 'n', int64([]));
+    ok(false, 'an empty int64 note refused');
+catch err
+    ok(contains(err.message, 'one number'), ['empty int64 note: ' err.message]);
+end
 d.close();
 r = gamut.open(dp);
 [~, offsets, conn] = r.getCells();
