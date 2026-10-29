@@ -277,8 +277,16 @@ def cmd_info(args: argparse.Namespace) -> int:
     "scalars": [{name, ...describe}], "constants": [...], "mesh"?: {kind, per,
     coordinate_units, axes, precision, nodes?, cells?, support_id?, node_fields,
     cell_fields, mesh_labels}, "models": [{id, type, inputs, repr?}]}"""
-    doc = _summary(args.file)
-    _emit(args, doc, _human(doc))
+    try:
+        doc = _summary(args.file)
+        text = "" if args.json else _human(doc)
+    except GamutError:
+        raise
+    except (KeyError, ValueError, TypeError, IndexError) as e:
+        # A damaged file: an attribute info reads is absent or malformed. The file's fault.
+        raise GamutError("", f"{args.file}: an attribute info reads is absent or malformed ({e!r}); "
+                             "gamut validate says what the file breaks", args.file) from None
+    _emit(args, doc, text)
     return 0
 
 
@@ -440,8 +448,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         return 0
     if not args.document or not args.output:
         raise _Usage("", "gamut build DOC.json -o FILE (or gamut build --example)")
-    if os.path.exists(args.output):
-        raise _Usage("", f"{args.output} exists; a .gamut output is never replaced")
+    _usable_output(args.output)
     doc = _document(args.document)
     base = os.path.dirname(os.path.abspath(args.document))
     problems = _checked(doc, base, appending=False)
@@ -552,6 +559,8 @@ def _document(path: str) -> Any:
             doc = json.load(fh)
     except OSError as e:
         raise _Usage("", f"cannot read {path}: {e.strerror}") from None
+    except RecursionError:
+        raise GamutError("", f"{path} nests deeper than a document is read", path) from None
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         where = f" at line {e.lineno}, column {e.colno}" if isinstance(e, json.JSONDecodeError) else ""
         raise GamutError("", f"{path} is not JSON{where}: {getattr(e, 'msg', e)}", path) from None
@@ -610,12 +619,20 @@ def _get_study(args: argparse.Namespace) -> int:
         positions = _positions(f, _rows_arg(args.rows))
         if args.where:
             positions = np.intersect1d(_select(f, args.where), positions)
-    if os.path.exists(args.output):
-        raise _Usage("", f"{args.output} exists; a .gamut output is never replaced")
+    _usable_output(args.output)
     gamut_extract(args.file, args.output, np.asarray(positions, dtype=np.int64))
     _emit(args, {"wrote": args.output, "rows": int(len(positions))},
           f"wrote {_counted(len(positions), 'run')} to {args.output}")
     return 0
+
+
+def _usable_output(path: str) -> None:
+    """A .gamut output the command can create: a new name in a folder that exists."""
+    if os.path.exists(path):
+        raise _Usage("", f"{path} exists; a .gamut output is never replaced")
+    folder = os.path.dirname(os.path.abspath(path))
+    if not os.path.isdir(folder):
+        raise _Usage("", f"{folder} does not exist; the output goes in a folder that does")
 
 
 def _select(f: Any, where: str) -> np.ndarray:
@@ -691,7 +708,9 @@ def _gather(args: argparse.Namespace) -> tuple[dict[str, np.ndarray], dict[str, 
                 if zone_at and at != zone_at:
                     raise GamutError("", f"the zone {args.zone} marks {zone_at}s and {name} is at "
                                           f"{at}s; choose a zone at {at}s")
-                data[name] = f.get_field(name, rows=rows, nodes=sites)
+                arr = f.get_field(name, rows=rows, nodes=sites)
+                # A changing mesh's one row comes back as its sites: one row of them.
+                data[name] = arr.reshape(1, -1) if f.type == "changing" and arr.ndim == 1 else arr
             elif name in labels:
                 data[name] = f.get_label(name, rows=rows)
             elif name in params:

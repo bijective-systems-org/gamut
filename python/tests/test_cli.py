@@ -324,3 +324,31 @@ def test_the_contract_holds_for_odd_documents_files_and_arguments(tmp_path, caps
         f.attrs.create("writer", np.bytes_(b"\xff"))
     code, out, _ = run(capsys, "info", p, "--json")
     assert code == 0, out
+
+
+def test_damaged_files_deep_documents_and_missing_folders(tmp_path, capsys):
+    import h5py
+    p = str(tmp_path / "t.gamut")
+    with gamut.create(p, writer="t", parameters={"x": "1"}, scalars={"y": "1"},
+                      labels={"status": {"role": "status", "categories": ["converged"]}}) as s:
+        s.add_runs({"x": [1.0], "y": [2.0], "status": ["converged"]})
+    damaged = str(tmp_path / "d.gamut")
+    with open(p, "rb") as src, open(damaged, "wb") as dst:
+        dst.write(src.read())
+    with h5py.File(damaged, "r+") as f:
+        del f["y"].attrs["units"]
+        del f["status"].attrs["category"]
+    code, out, err = run(capsys, "info", damaged)                       # text: no traceback
+    assert code == 1 and "gamut validate" in err, (out, err)
+    code, out, _ = run(capsys, "get", damaged, "status", "-o", str(tmp_path / "s.csv"), "--json")
+    assert code == 1 and json.loads(out)["problems"][0]["rule"] == "E2"     # the file's, not a usage error
+
+    deep = tmp_path / "deep.json"
+    deep.write_text('{"writer":' + "[" * 1100 + "0" + "]" * 1100 + "}")
+    code, out, _ = run(capsys, "build", str(deep), "-o", str(tmp_path / "n.gamut"), "--json")
+    assert code == 1 and "nests deeper" in json.loads(out)["problems"][0]["message"]
+
+    for argv in (["get", p, "-o", str(tmp_path / "no" / "x.gamut")],
+                 ["build", str(deep), "-o", str(tmp_path / "no" / "y.gamut")]):
+        code, out, _ = run(capsys, *argv, "--json")
+        assert code == 2 and "does not exist" in json.loads(out)["problems"][0]["message"], (argv, out)

@@ -741,6 +741,10 @@ std::vector<std::string> Reader::label_names(const std::string& name,
                                              const Selection& runs) const {
   const Label* l = schema_.label(name);
   need(l != nullptr, "", "no label \"" + name + "\"", name);
+  // The file's fault, as the validator reports it: no category (E2), or one naming no table (E9).
+  need(!l->category.empty(), "E2", name + ": the label has no category", name);
+  need(schema_.tables.count(l->category) == 1, "E9",
+       name + ": its category names no table (\"" + l->category + "\")", name);
   const std::vector<std::string>& entries = table(l->category);
   const std::int64_t n = runs.count(schema_.rows, name);
   need(n <= kMaxNamesRead, "E26",
