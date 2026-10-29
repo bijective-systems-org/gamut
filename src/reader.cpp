@@ -127,7 +127,7 @@ Schema load_schema(const File& f, const std::string& path) {
     for (const Member& m : f.members(g)) hard(m, g);
   }
   // Tables are read at open, so their size is capped as structure: one budget
-  // for all of them, as for one table, so many tables cannot add up (E23).
+  // for all of them, as for one table, so many tables cannot add up (E26).
   std::size_t entries_left = kMaxTableEntries, bytes_left = kMaxTableBytes;
   for (const Member& m : f.members("/categories")) {
     if (!m.is_dataset) continue;
@@ -484,7 +484,7 @@ std::vector<std::int64_t> Reader::shape(const std::string& path,
   for (const std::int64_t d : out) {
     need(d >= 0, "E21", path + ": a negative count", path);
     const std::size_t x = static_cast<std::size_t>(d);
-    need(x == 0 || n <= limit / x, "E23",
+    need(x == 0 || n <= limit / x, "E26",
          path + ": a read of more than " + std::to_string(limit) +
              " values (8 GiB) is refused; read a part at a time",
          path);
@@ -741,9 +741,13 @@ std::vector<std::string> Reader::label_names(const std::string& name,
                                              const Selection& runs) const {
   const Label* l = schema_.label(name);
   need(l != nullptr, "", "no label \"" + name + "\"", name);
+  // The file's fault, as the validator reports it: no category (E2), or one naming no table (E9).
+  need(!l->category.empty(), "E2", name + ": the label has no category", name);
+  need(schema_.tables.count(l->category) == 1, "E9",
+       name + ": its category names no table (\"" + l->category + "\")", name);
   const std::vector<std::string>& entries = table(l->category);
   const std::int64_t n = runs.count(schema_.rows, name);
-  need(n <= kMaxNamesRead, "E23",
+  need(n <= kMaxNamesRead, "E26",
        name + ": names for " + std::to_string(n) + " rows are more than the " +
            std::to_string(kMaxNamesRead) + " read at once; read the codes, or fewer rows",
        name);

@@ -90,7 +90,7 @@ _SS = ctypes.POINTER(ctypes.c_char_p)
 _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "gamut_version": (_S, []),
     "gamut_format": (_S, []),
-    "gamut_units_parse": (_I, [_S]),
+    "gamut_units_valid": (_I, [_S]),
     "gamut_create": (_I, [_S, _S, _S, _S, _PP, _E]),
     "gamut_open_append": (_I, [_S, _PP, _E]),
     "gamut_set_attribute": (_I, [_P, _S, _S, _E]),
@@ -107,27 +107,28 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "gamut_tree_set_int": (_I, [_P, _S, _L, _E]),
     "gamut_tree_set_float": (_I, [_P, _S, _D, _E]),
     "gamut_tree_set_string": (_I, [_P, _S, _S, _E]),
-    "gamut_tree_set_array": (_I, [_P, _S, _I, _P, _I, ctypes.POINTER(_L), _E]),
+    "gamut_tree_set_array": (_I, [_P, _S, _I, _P, _L, _I, ctypes.POINTER(_L), _E]),
     "gamut_tree_set_strings": (_I, [_P, _S, _SS, _L, _E]),
     "gamut_tree_set_dict": (_I, [_P, _S, _E]),
     "gamut_tree_keys": (_I, [_P, _S, _PP, _E]),
     "gamut_tree_kind": (_I, [_P, _S, ctypes.POINTER(_I), _E]),
     "gamut_tree_scalar": (_I, [_P, _S, ctypes.POINTER(_L), ctypes.POINTER(_D), _E]),
     "gamut_tree_strings": (_I, [_P, _S, _PP, _E]),
-    "gamut_tree_array_info": (_I, [_P, _S, ctypes.POINTER(_I), ctypes.POINTER(_I), ctypes.POINTER(_L), _E]),
+    "gamut_tree_array_info": (_I, [_P, _S, ctypes.POINTER(_I), ctypes.POINTER(_I), ctypes.POINTER(_L), _I, _E]),
     "gamut_tree_array": (_I, [_P, _S, _P, _L, _E]),
     "gamut_add_model": (_I, [_P, _S, _S, _SS, _L, _P, _S, _E]),
     "gamut_model_numbers": (_I, [_P, _S, _PP, _E]),
     "gamut_nearest_check": (_I, [_P, _E]),
     "gamut_nearest_output_size": (_I, [_P, _S, ctypes.POINTER(_L), _E]),
-    "gamut_nearest_call": (_I, [_P, _SS, ctypes.POINTER(ctypes.POINTER(_D)), _I, _L, _S, ctypes.POINTER(_D), _L, _E]),
+    "gamut_nearest_call": (_I, [_P, _SS, ctypes.POINTER(ctypes.POINTER(_D)), ctypes.POINTER(_L), _I, _L, _S,
+                               ctypes.POINTER(_D), _L, _E]),
     "gamut_evaluate_begin": (_I, [_P, _S, _PP, _E]),
     "gamut_set_constant": (_I, [_P, _S, _S, _I, _D, _L, _E]),
     "gamut_set_generalisation_group": (_I, [_P, _S, _E]),
     "gamut_set_compression": (_I, [_P, _I, _I, _E]),
     "gamut_geometry_begin": (_I, [_P, _E]),
-    "gamut_geometry_points": (_I, [_P, _I, _P, _L, _I, _E]),
-    "gamut_geometry_cells": (_I, [_P, _P, _L, _P, _P, _L, _E]),
+    "gamut_geometry_points": (_I, [_P, _I, _P, _L, _L, _I, _E]),
+    "gamut_geometry_cells": (_I, [_P, _P, _L, _P, _L, _P, _L, _E]),
     "gamut_geometry_label": (_I, [_P, _S, _P, _L, _E]),
     "gamut_set_mesh": (_I, [_P, _E]),
     "gamut_batch_begin": (_I, [_P, _L, _E]),
@@ -154,7 +155,7 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "gamut_info": (_I, [_P, _S, _PP, _E]),
     "gamut_names": (_I, [_P, _S, _PP, _E]),
     "gamut_describe": (_I, [_P, _S, _PP, _PP, _E]),
-    "gamut_shape": (_I, [_P, _S, _SEL, _SEL, ctypes.POINTER(_L), ctypes.POINTER(_I), _E]),
+    "gamut_shape": (_I, [_P, _S, _SEL, _SEL, ctypes.POINTER(_I), ctypes.POINTER(_L), _I, _E]),
     "gamut_read": (_I, [_P, _S, _SEL, _SEL, _I, _P, _L, _E]),
     "gamut_label_names": (_I, [_P, _S, _SEL, _PP, _E]),
     "gamut_outside": (_I, [_P, _S, _SEL, _P, _L, _E]),
@@ -180,7 +181,9 @@ def b(text: str | None) -> bytes | None:
     NUL, so text holding one is refused rather than cut short."""
     if text is None:
         return None
-    raw = str(text).encode("utf-8")
+    # surrogateescape keeps a file name that is not UTF-8 as the bytes it was
+    # given; the core refuses such bytes in a name (E8) and opens such a path.
+    raw = str(text).encode("utf-8", "surrogateescape")
     if b"\0" in raw:
         raise GamutError("", f"{text!r} holds a NUL character, which no name or text may hold")
     return raw
@@ -202,7 +205,8 @@ def strings_out(name: str, *args: Any) -> list[str]:
     call(name, *args, ctypes.byref(handle))
     try:
         n = _lib.gamut_strings_count(handle)
-        return [_lib.gamut_strings_get(handle, i).decode("utf-8") for i in range(n)]
+        # Text the file stores as invalid UTF-8 (E3 to the validator) is shown, not raised.
+        return [_lib.gamut_strings_get(handle, i).decode("utf-8", "replace") for i in range(n)]
     finally:
         _lib.gamut_strings_free(handle)
 
@@ -214,7 +218,7 @@ def two_strings_out(name: str, *args: Any) -> tuple[list[str], list[str]]:
         out = []
         for h in (keys, values):
             n = _lib.gamut_strings_count(h)
-            out.append([_lib.gamut_strings_get(h, i).decode("utf-8") for i in range(n)])
+            out.append([_lib.gamut_strings_get(h, i).decode("utf-8", "replace") for i in range(n)])
         return out[0], out[1]
     finally:
         _lib.gamut_strings_free(keys)
@@ -369,7 +373,7 @@ class Selection:
 def read(handle: Any, name: str, rows: Selection, sites: Selection, dtype: np.dtype) -> np.ndarray:
     shape = (ctypes.c_int64 * 4)()
     rank = ctypes.c_int()
-    call("gamut_shape", handle, b(name), rows.pointer(), sites.pointer(), shape, ctypes.byref(rank))
+    call("gamut_shape", handle, b(name), rows.pointer(), sites.pointer(), ctypes.byref(rank), shape, len(shape))
     dims = tuple(shape[i] for i in range(rank.value))
     out = np.empty(dims, dtype=dtype)
     call("gamut_read", handle, b(name), rows.pointer(), sites.pointer(), _DTYPE_CODE[np.dtype(dtype)],
@@ -380,7 +384,7 @@ def read(handle: Any, name: str, rows: Selection, sites: Selection, dtype: np.dt
 def outside(handle: Any, name: str, rows: Selection) -> np.ndarray:
     shape = (ctypes.c_int64 * 4)()
     rank = ctypes.c_int()
-    call("gamut_shape", handle, b(name), rows.pointer(), None, shape, ctypes.byref(rank))
+    call("gamut_shape", handle, b(name), rows.pointer(), None, ctypes.byref(rank), shape, len(shape))
     # Sized as a read of the parameter; for any other name the core refuses.
     out = np.empty(shape[0] if rank.value == 1 else 0, dtype=np.float64)
     call("gamut_outside", handle, b(name), rows.pointer(), out.ctypes.data_as(ctypes.c_void_p),
@@ -388,8 +392,8 @@ def outside(handle: Any, name: str, rows: Selection) -> np.ndarray:
     return out
 
 
-def units_parse(units: str) -> bool:
-    return bool(_lib.gamut_units_parse(b(units)))
+def units_valid(units: str) -> bool:
+    return bool(_lib.gamut_units_valid(b(units)))
 
 
 def version() -> str:

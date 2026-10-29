@@ -335,8 +335,8 @@ def test_an_unknown_statistic_still_has_its_vector_and_axis_checked(tmp_path):
 @pytest.mark.parametrize("units", ["m s", "m s", "m　s", "m s"])
 def test_a_space_outside_ascii_does_not_parse_in_units(units):
     from gamut import _lib
-    assert _lib.units_parse("m s") and not _lib.units_parse(units)
-    assert _lib.units_parse("µm") and _lib.units_parse("Å")
+    assert _lib.units_valid("m s") and not _lib.units_valid(units)
+    assert _lib.units_valid("µm") and _lib.units_valid("Å")
 
 
 def test_absent_required_objects_are_e2(tmp_path):
@@ -378,9 +378,14 @@ def test_a_fixed_layout_is_valid_and_read_only_until_rewritten(tmp_path):
                 d.attrs.create(k, v, dtype=t)
             d.dims[0].attach_scale(f["row"])
     assert not gamut.validate(p).findings
-    with pytest.raises(gamut.GamutError, match="this file is read-only; write_copy makes a copy"):
+    with pytest.raises(gamut.GamutError, match="this file is read-only; write_copy makes a copy") as e:
         with gamut.open(p, mode="a") as s:
             s.add_run({"mach": 0.5, "cl": 0.3, "status": "converged"})
+    assert e.value.rule == "E25"                  # valid and read-only, not E20's bad storage
+    from gamut import cli                         # the command's mistake on the command line: exit 2
+    source = str(tmp_path / "source.gamut")
+    gamut.write_copy(p, source)
+    assert cli.main(["append", p, source, "--json"]) == 2
     gamut.write_copy(p, grow)
     with gamut.open(grow, mode="a") as s:
         s.add_run({"mach": 0.5, "cl": 0.3, "status": "converged"})

@@ -36,6 +36,8 @@ path of what it concerns.
 |---|---|
 | a read of one array into memory | 2³⁰ values (8 GiB at 8 bytes a value) |
 | a read touching small chunks | 2²⁰ chunks |
+| one chunk, decoded | 1 GiB |
+| the chunks of one dataset's grid | 2⁴⁸ chunks |
 | a selection scanning rows | 2²⁷ rows |
 | label names read at once | 2²⁵ rows |
 | category tables read when a file opens, all together | 2²⁴ entries or 256 MiB |
@@ -43,7 +45,7 @@ path of what it concerns.
 | groups nested inside each other | 64 levels |
 | parentheses nested in a `where` selection | 64 levels |
 
-Each refusal is rule E23, with the path of what was refused. The limits are
+Each refusal is rule E26, with the path of what was refused. The limits are
 far above what a study needs: a field of 8 GiB is read a part at a time,
 which any of the reads in the [guide](guide/08-reading-parts.md) does. The
 [corpus](../corpus) holds hostile files built to cross each limit, and

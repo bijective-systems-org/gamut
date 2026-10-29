@@ -139,6 +139,7 @@ nodes (or cells) to read: `gamut::all`, positions such as `{12}`, or
 | `study.add_run(values, fields=...)` | `study.add_run({{"gamma", 0.5}}, {{"cp", cp}})` |
 | `gamut.open(path, mode="a")` | `gamut::open(path, "a")` |
 | `study.get_field("p", rows=r, nodes=n)` | `study.get_field("p", r, n)` |
+| `study.get_parameter("alpha")`, `study.get_constant("area")` | `study.get_parameter<double>("alpha")`, `study.get_constant<double>("area")`: the type the value is stored as, `int64_t` for one declared int64 |
 | `study.outside("alpha", rows=r)` | `study.outside("alpha", r)` |
 | `study.select("mach > 0.7")`, `study.get_label(...)`, `study.describe(...)` | the same names |
 | `gamut.append`, `extract`, `write_copy`, `validate` | `gamut::append`, `extract`, `write_copy`, `validate` |
@@ -162,8 +163,9 @@ const std::unique_ptr<gamut_tree, void (*)(gamut_tree*)> numbers(tree, gamut_tre
 const char* inputs[] = {"alpha"};
 const double alpha[] = {2.2, 7.9};
 const double* columns[] = {alpha};
+const int64_t lengths[] = {2};
 double lift[2];
-if (gamut_nearest_call(numbers.get(), inputs, columns, 1, 2, "cl", lift, 2, &err) != 0)
+if (gamut_nearest_call(numbers.get(), inputs, columns, lengths, 1, 2, "cl", lift, 2, &err) != 0)
   throw gamut::Error(err);
 ```
 
@@ -190,7 +192,10 @@ runs in C, with no wall label, and prints the last line.
   what it concerns, and a message. No call keeps a pointer it was given.
 - Handles are opaque: `gamut_file` for an open file, `gamut_strings` for a
   list of names.
-- Arrays are the caller's, in C order. Positions count from 0.
+- Arrays are the caller's, in C order. Positions count from 0. Each array
+  comes with its length, and each array the core fills with its capacity,
+  so the core can check them: `gamut_geometry_points` takes the count of
+  coordinates as well as the nodes and axes they make.
 
 ```c
 static gamut_error err;
@@ -217,8 +222,9 @@ CHECK(gamut_declare_parameter(f, "gamma", "design", "m2 s-1", GAMUT_FLOAT64, 0, 
 CHECK(gamut_declare_result(f, "cp", "node", "1", GAMUT_FLOAT64, "", "", 0, 0, "", "", "", "", -1,
                          "", "", &err));
 CHECK(gamut_geometry_begin(f, &err));
-CHECK(gamut_geometry_points(f, GAMUT_FLOAT64, points, N_NODES, 2, &err));
-CHECK(gamut_geometry_cells(f, types, N_CELLS, offsets, connectivity, 4 * N_CELLS, &err));
+CHECK(gamut_geometry_points(f, GAMUT_FLOAT64, points, 2 * N_NODES, N_NODES, 2, &err));
+CHECK(gamut_geometry_cells(f, types, N_CELLS, offsets, N_CELLS + 1, connectivity, 4 * N_CELLS,
+                           &err));
 CHECK(gamut_set_mesh(f, &err));
 ```
 

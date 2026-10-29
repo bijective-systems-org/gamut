@@ -436,7 +436,7 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
     // A fixed layout is valid and read-only (spec section 11.5): everything an
     // append grows, the scales of what it grows included, is checked first.
     auto growable = [&](const std::string& p, const DsetInfo& info) {
-      need(info.chunked && !info.maxshape.empty() && info.maxshape[0] == H5S_UNLIMITED, "E20",
+      need(info.chunked && !info.maxshape.empty() && info.maxshape[0] == H5S_UNLIMITED, "E25",
            "\"" + p + "\" has a fixed size, so this file is read-only; write_copy makes a copy "
            "runs can be added to");
     };

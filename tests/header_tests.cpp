@@ -100,8 +100,9 @@ void test_table() {
   CHECK(s.names("parameters").size() == 2);
   CHECK(s.categories("status") == (std::vector<std::string>{"converged", "failed"}));
   CHECK(s.get_label("status", {5}) == std::vector<std::string>{"failed"});
-  CHECK(s.get_parameter("alpha", gamut::Selection::range(1, 3)) == (std::vector<double>{-2.0, 0.0}));
-  CHECK(std::fabs(s.get_constant("reference_area") - 12.5) < 1e-12);
+  CHECK(s.get_parameter<double>("alpha", gamut::Selection::range(1, 3)) == (std::vector<double>{-2.0, 0.0}));
+  CHECK(std::fabs(s.get_constant<double>("reference_area") - 12.5) < 1e-12);
+  CHECK(refused([&] { s.get_parameter<int64_t>("alpha"); }) == "error");   // float64 is not truncated
   CHECK(s.get_row_ids() == (std::vector<int64_t>{0, 1, 2, 3, 4, 5}));
   CHECK(s.select("alpha > 0 and status == converged") == (std::vector<int64_t>{3, 4}));
   CHECK(s.select("mach > 9").empty());
@@ -279,7 +280,7 @@ void test_integers_batches_and_reads() {
     w.close();
     const auto r = gamut::open("whole.gamut");
     CHECK(r.describe("k")["dtype"] == "float64");
-    CHECK((r.get_parameter("k", gamut::all) == std::vector<double>{2.0, 2.5}));
+    CHECK((r.get_parameter<double>("k", gamut::all) == std::vector<double>{2.0, 2.5}));
   }
   {
     auto s = gamut::open("batches.gamut", "a");                    // a table, no mesh
@@ -290,6 +291,8 @@ void test_integers_batches_and_reads() {
   CHECK(s.row_count() == 5);
   CHECK(s.describe("n")["dtype"] == "int64");
   CHECK(s.describe("t")["dtype"] == "float64");
+  CHECK((s.get_parameter<int64_t>("n") == std::vector<int64_t>{3, 3, 4, 4, 5}));
+  CHECK(refused([&] { s.get_parameter<double>("n"); }) == "error");       // int64 is not rounded
   CHECK((s.read<int64_t>("n", gamut::all, gamut::all).values == std::vector<int64_t>{3, 3, 4, 4, 5}));
   CHECK((s.read<int32_t>("n", {4}, gamut::all).values == std::vector<int32_t>{5}));
   CHECK(std::fabs(s.read<float>("cl", {1}, gamut::all).values[0] - 0.6f) < 1e-6f);

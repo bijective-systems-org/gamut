@@ -403,7 +403,7 @@ def test_refused_coordinate_declaration_changes_nothing(tmp_path):
         _lib.call("gamut_declare_coordinates", h, b"m", _lib.GAMUT_FLOAT64, 2, b"", b"")
         pts = np.zeros((3, 2))
         _lib.call("gamut_geometry_begin", h)
-        _lib.call("gamut_geometry_points", h, _lib.GAMUT_FLOAT64, pts.ctypes.data_as(ctypes.c_void_p), 3, 2)
+        _lib.call("gamut_geometry_points", h, _lib.GAMUT_FLOAT64, pts.ctypes.data_as(ctypes.c_void_p), 6, 3, 2)
         _lib.call("gamut_set_mesh", h)
     finally:
         _lib.call("gamut_close", h)
@@ -528,7 +528,7 @@ def test_select_sizes_nothing_from_a_declared_row_count(tmp_path):
         peak = tracemalloc.get_traced_memory()[1]
     finally:
         tracemalloc.stop()
-    assert e.value.rule == "E23"
+    assert e.value.rule == "E26"
     assert peak < 1 << 20
 
 
@@ -636,7 +636,7 @@ def test_selection_parentheses_nest_64_deep_and_no_deeper(tmp_path):
         for depth in (65, 20000):
             with pytest.raises(gamut.GamutError, match="nested deeper than 64") as e:
                 f.select("(" * depth + "x == 1" + ")" * depth)
-            assert e.value.rule == "E23"        # a cap, as docs/security.md lists it
+            assert e.value.rule == "E26"        # a cap, as docs/security.md lists it
 
 
 def test_appending_to_a_file_with_an_int64_label_writes_int64_codes(tmp_path):
@@ -755,7 +755,7 @@ def test_category_tables_share_one_budget_at_open(tmp_path):
                              compression="gzip")
     with pytest.raises(gamut.GamutError) as e:
         gamut.open(p)
-    assert e.value.rule == "E23"
+    assert e.value.rule == "E26"
 
 
 def _widen_to_int64(f, path):
@@ -1061,3 +1061,90 @@ def test_integer_constants_and_notes_stay_exact_or_are_refused(tmp_path):
         with pytest.raises(gamut.GamutError, match="outside int64's range"):
             gamut.create(str(tmp_path / "d.gamut"), writer="t", parameters={"x": "1"},
                          constants={"c": (value, "1")})
+
+
+def test_the_c_interface_checks_every_length_it_is_given(tmp_path):
+    p = str(tmp_path / "c.gamut")
+    pts, cells = grid(3, 2)
+    h = ctypes.c_void_p()
+    _lib.call("gamut_create", _lib.b(p), b"t", b"shared", b"fixed", ctypes.byref(h))
+    try:
+        _lib.call("gamut_declare_coordinates", h, b"m", _lib.GAMUT_FLOAT64, 2, b"", b"")
+        _lib.call("gamut_declare_result", h, b"q", b"node", b"1", _lib.GAMUT_FLOAT64, b"", b"", 0, 0.0,
+                  b"", b"", b"", b"", -1, b"", b"")
+        _lib.call("gamut_geometry_begin", h)
+        buf = pts.ctypes.data_as(ctypes.c_void_p)
+        for count in (pts.size - 1, pts.size + 2):        # a count that is not nodes x axes
+            with pytest.raises(gamut.GamutError, match="coordinates given for 6 nodes of 2 axes") as e:
+                _lib.call("gamut_geometry_points", h, _lib.GAMUT_FLOAT64, buf, count, 6, 2)
+            assert e.value.rule == "E5"
+        _lib.call("gamut_geometry_points", h, _lib.GAMUT_FLOAT64, buf, pts.size, 6, 2)
+        _lib.call("gamut_set_mesh", h)
+    finally:
+        _lib.call("gamut_close", h)
+    with gamut.open(p) as f:
+        rank, shape = ctypes.c_int(), (ctypes.c_int64 * 4)()
+        everything = _lib.Selection(None, "rows")
+        with pytest.raises(gamut.GamutError, match="has 2 axes and room was given for 1"):
+            _lib.call("gamut_shape", f._handle(), b"coordinates", everything.pointer(),
+                      _lib.Selection(None, "sites").pointer(), ctypes.byref(rank), shape, 1)
+        assert rank.value == 2                              # the rank needed is still given
+
+    t = ctypes.c_void_p()
+    _lib.call("gamut_tree_new", ctypes.byref(t))
+    try:
+        data = np.arange(6.0)
+        dims = (ctypes.c_int64 * 2)(2, 3)
+        with pytest.raises(gamut.GamutError, match="5 values given for a shape of 6"):
+            _lib.call("gamut_tree_set_array", t, b"a", _lib.GAMUT_FLOAT64,
+                      data.ctypes.data_as(ctypes.c_void_p), 5, 2, dims)
+        _lib.call("gamut_tree_set_array", t, b"a", _lib.GAMUT_FLOAT64,
+                  data.ctypes.data_as(ctypes.c_void_p), 6, 2, dims)
+        dtype, rank, out = ctypes.c_int(), ctypes.c_int(), (ctypes.c_int64 * 8)()
+        with pytest.raises(gamut.GamutError, match="has 2 axes and room was given for 1"):
+            _lib.call("gamut_tree_array_info", t, b"a", ctypes.byref(dtype), ctypes.byref(rank), out, 1)
+        assert rank.value == 2
+        _lib.call("gamut_tree_array_info", t, b"a", ctypes.byref(dtype), ctypes.byref(rank), out, 8)
+        assert (rank.value, out[0], out[1]) == (2, 2, 3)
+    finally:
+        _lib._lib.gamut_tree_free(t)
+
+
+def test_cell_arrays_are_counted_by_their_elements_and_rank_is_always_given(tmp_path):
+    pts = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    with gamut.create(str(tmp_path / "m.gamut"), writer="t", mesh="shared", per="fixed",
+                      coordinates={"units": "m", "axes": 2}) as s:
+        # Two rows of no offsets are no offsets, not two.
+        with pytest.raises(gamut.GamutError, match=r"one more entry than there are cells \(2\), not 0") as e:
+            s.set_mesh(pts, ([5], np.empty((2, 0), dtype=np.int64), [0, 1, 2]))
+        assert e.value.rule == "E5"
+        s.set_mesh(pts, ([5], [0, 3], [0, 1, 2]))
+    t = ctypes.c_void_p()
+    _lib.call("gamut_tree_new", ctypes.byref(t))
+    try:
+        data, dims = np.zeros(6), (ctypes.c_int64 * 2)(2, 3)
+        _lib.call("gamut_tree_set_array", t, b"a", _lib.GAMUT_FLOAT64,
+                  data.ctypes.data_as(ctypes.c_void_p), 6, 2, dims)
+        dtype, rank = ctypes.c_int(), ctypes.c_int(-123)
+        with pytest.raises(gamut.GamutError, match="room was given for 0"):
+            _lib.call("gamut_tree_array_info", t, b"a", ctypes.byref(dtype), ctypes.byref(rank), None, 0)
+        assert rank.value == 2                              # asked with no room, the rank is still given
+    finally:
+        _lib._lib.gamut_tree_free(t)
+
+
+
+def test_related_lists_a_vector_s_parts_not_their_statistics(tmp_path):
+    # As Julia does: a std field that shares its source's vector is the std, not a part.
+    p = str(tmp_path / "v.gamut")
+    with gamut.create(p, writer="t", mesh="shared", per="fixed", coordinates={"units": "m", "axes": 3},
+                      parameters={"x": "1"},
+                      fields={"u_x": {"units": "m s-1", "at": "node", "vector": "u", "axis": "x"},
+                              "u_y": {"units": "m s-1", "at": "node", "vector": "u", "axis": "y"},
+                              "s_x": {"units": "m s-1", "at": "node", "of": "u_x", "statistic": "std",
+                                      "vector": "u", "axis": "z"}}) as s:
+        s.set_mesh(np.zeros((2, 3)))
+        s.add_runs({"x": [1.0]}, fields={k: np.ones((1, 2)) for k in ("u_x", "u_y", "s_x")})
+    with gamut.open(p) as f:
+        r = f.related("u_x")
+    assert r["std"] == "s_x" and sorted(r["vector"]) == ["u_x", "u_y"]

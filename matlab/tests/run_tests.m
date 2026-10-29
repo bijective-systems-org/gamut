@@ -434,6 +434,13 @@ for bad = {{uint64(2)^63, 'out of range'}, {[0 4.5 8], 'whole numbers'}, {sparse
     end
 end
 gamut_mex('geometry_begin', d.Handle);
+% Points are counted by their own elements: three axes of 2 x 2 x 3 are not 2 x 2.
+try
+    gamut_mex('geometry_points', d.Handle, reshape(1:12, [2, 2, 3]));
+    ok(false, 'points of three axes refused');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E5'), ['points of three axes: ' err.message]);
+end
 gamut_mex('geometry_points', d.Handle, pts);
 gamut_mex('geometry_cells', d.Handle, uint8([9 9]), single([0 4 8]), int16([0 2 3 1 2 4 5 3]));
 gamut_mex('set_mesh', d.Handle);

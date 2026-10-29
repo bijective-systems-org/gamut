@@ -26,7 +26,7 @@ const std::set<std::string> kMachinery = {
 const std::set<std::string> kTopLevel = {"type", "inputs", "repr"};
 
 // One budget for all of a model's arrays: each is capped as one read, and
-// together they are capped the same, so many arrays cannot add up (E23).
+// together they are capped the same, so many arrays cannot add up (E26).
 Dict read_dict(const File& f, const std::string& path, bool top_level, int depth,
                std::size_t* left);
 
@@ -42,7 +42,7 @@ namespace {
 Dict read_dict(const File& f, const std::string& path, bool top_level, int depth,
                std::size_t* left) {
   if (depth >= kMaxDictDepth) {
-    throw Error("E23", "\"" + path + "\" is nested deeper than this reader walks");
+    throw Error("E26", "\"" + path + "\" is nested deeper than this reader walks");
   }
   Dict d;
   for (const RawAttr& a : f.attributes(path)) {
@@ -123,11 +123,11 @@ Dict read_dict(const File& f, const std::string& path, bool top_level, int depth
       else n *= x;
     }
     if (n > kMaxDatasetElements || n > kMaxDatasetBytes / dtype_size(t)) {
-      throw Error("E23", "\"" + child + "\" declares more elements than this reader reads "
+      throw Error("E26", "\"" + child + "\" declares more elements than this reader reads "
                          "at once");
     }
     if (n * dtype_size(t) > *left) {
-      throw Error("E23", "\"" + child + "\": the model's arrays together declare more bytes "
+      throw Error("E26", "\"" + child + "\": the model's arrays together declare more bytes "
                          "than this reader reads at once");
     }
     *left -= n * dtype_size(t);
@@ -142,7 +142,7 @@ Dict read_dict(const File& f, const std::string& path, bool top_level, int depth
 
 void check_dict(const Dict& d, bool top_level, int depth, const std::string& where) {
   if (depth >= kMaxDictDepth) {
-    throw Error("E23", "\"" + where + "\" is nested deeper than this writer walks");
+    throw Error("E26", "\"" + where + "\" is nested deeper than this writer walks");
   }
   auto clean = [](const std::string& s) {
     return s.find('\0') == std::string::npos && valid_utf8(s);
@@ -177,7 +177,7 @@ void check_dict(const Dict& d, bool top_level, int depth, const std::string& whe
 void write_dict_group(File& f, const std::string& path, const Dict& d, bool top_level,
                       int depth) {
   if (depth >= kMaxDictDepth) {
-    throw Error("E23", "\"" + path + "\" is nested deeper than this writer walks");
+    throw Error("E26", "\"" + path + "\" is nested deeper than this writer walks");
   }
   for (const auto& entry : d) {
     const std::string& key = entry.first;

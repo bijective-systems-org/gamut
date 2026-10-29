@@ -100,7 +100,7 @@ def appends_to_itself(path: str) -> str:
         try:
             gamut.append(copy, path)
         except gamut.GamutError as exc:
-            if not (exc.rule == "E20" and "read-only" in exc.message):
+            if not (exc.rule == "E25" and "read-only" in exc.message):
                 return f"appending it to itself was refused: {exc}"
             os.remove(copy)
             gamut.write_copy(path, copy)

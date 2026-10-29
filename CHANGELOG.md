@@ -22,9 +22,32 @@ the fixes further down also correct results that were wrong, such as a
   group member given two different geometries in one batch, and a
   negative `--rows` position on the command line.
 - A file whose category tables together, or a model whose arrays
-  together, pass the cap one table or array had is refused (E23) when it
+  together, pass the cap one table or array had is refused (E26) when it
   is opened or read; 1.3 allocated for them without limit.
-- In C, `gamut_batch_values` takes a `first_axis` argument.
+- In C, every array argument comes with its length, and every array the
+  core fills with its capacity: `gamut_batch_values` takes `first_axis`;
+  `gamut_geometry_points`, `gamut_geometry_cells`, `gamut_tree_set_array`
+  and `gamut_nearest_call` take counts; `gamut_shape` and
+  `gamut_tree_array_info` take `rank, shape, capacity`.
+  `gamut_units_parse` is `gamut_units_valid`.
+- On the command line, every failure under `--json` is
+  `{"problems": [{"rule", "path", "message"}]}`; it was `{"error": {...}}`
+  or `{"problems": [{"key", "message"}]}` by command, and argparse's own
+  mistakes printed text (`validate` still prints its findings). Success documents no longer carry an empty
+  `problems`. A misused `gamut get` exits 2 before creating its output.
+- In Python, `related(name)["vector"]` lists the vector's parts only, as
+  Julia did; a statistic or derivative of a part that carries the same
+  `vector` was listed among them.
+- NumPy 1.26 or later is required (it was 1.24, never tested); the
+  oldest supported NumPy and Python 3.14 are now tested.
+- In C++, `get_parameter<T>` and `get_constant<T>` name the type: `double`,
+  or `int64_t` for a value declared int64. Another type is refused rather
+  than rounded or truncated.
+- Two rules each split in two: appending to a file whose growable
+  dimensions are fixed is E25 (it was E20, which keeps storage the format
+  forbids), and a limit reached is E26 (it was E23, which keeps storage a
+  reader cannot read). Code that tests for E20 or E23 checks the new
+  codes too.
 
 The rest of this section says what changed and why.
 
@@ -88,9 +111,25 @@ range included; as doubles, values above 2⁵³ that differ compared equal.
 Appending a changing mesh's geometry to int64 mesh labels takes codes
 beyond int32. BitRound no longer rounds a value near the largest finite float up
 to infinity. Names are checked against ASCII letters and digits whatever
-locale the host program has set. The header names `gamut_units_parse`,
-which returns 1 when its units parse, as the one function that does not
-return 0 on success.
+locale the host program has set.
+
+E20 and E23 each meant two things a caller handles differently. E20 is
+now storage the format forbids, and appending to a valid file whose
+growable dimensions are fixed is E25: the file is read-only, and
+`write_copy` makes one that grows. E23 is now an object a reader cannot
+read (a chunk index it cannot use, a chunk of the wrong size, a filter
+that fails), and E26 is a count past one of the caps in
+`docs/security.md`. SPEC.md, the corpus and every language follow.
+
+The C interface states the length of every array it reads and the
+capacity of every array it fills, so the core checks what a binding passes
+instead of trusting it: the points' count, the offsets' count (one more
+than the cells), a model array's count against its shape, and each
+nearest-model column's length. `gamut_shape` and `gamut_tree_array_info`
+take the rank, the shape and the shape's capacity, in that order, and
+refuse a capacity below the rank. `gamut_units_parse` is renamed
+`gamut_units_valid`, which says what its 1 means; it is the one function
+that does not return 0 on success.
 
 A group reachable by more than one hard link is walked once; a chain of
 such groups made validation, append, extract and `write_copy` take time
@@ -98,7 +137,7 @@ that doubled with every level. `/private` may hold them, as §8 lets it
 hold any structure; model data, a tree, refuses them (E18). The category
 tables read when a file opens share one budget, the cap one table had, and
 so does validation; a model's arrays read together share one budget, the
-cap one array had (E23). Many tables, or many arrays, each under its own
+cap one array had (E26). Many tables, or many arrays, each under its own
 cap could make opening a file, or reading or validating a model,
 allocate gigabytes.
 
@@ -169,7 +208,7 @@ A group member repeated with the same values in another shape (4 × 2 and
 2 × 4 points) is refused as a different geometry. Replacing an attribute
 works however many one-character names the object already holds. The
 validator checks a model-data scale's extent and attribute creation order
-as it checks every scale. A `where` nested past the cap is E23, as the
+as it checks every scale. A `where` nested past the cap is E26, as the
 limits in `docs/security.md` are. `gamut get` refuses to write over an
 existing `.csv`, `.npy` or `.npz` output unless given `--force`, and
 checks `--rows` without reading the rows.

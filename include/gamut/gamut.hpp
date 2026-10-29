@@ -289,7 +289,7 @@ class Study {
   void set_mesh(int64_t n_nodes, const Cells& cells, const MeshLabels& labels = {}) {
     gamut_error e{};
     detail::check(gamut_geometry_begin(need_writer(), &e), e);
-    detail::check(gamut_geometry_points(f_, GAMUT_FLOAT64, nullptr, n_nodes, axes_, &e), e);
+    detail::check(gamut_geometry_points(f_, GAMUT_FLOAT64, nullptr, 0, n_nodes, axes_, &e), e);
     stage({}, &cells, labels);
     detail::check(gamut_set_mesh(f_, &e), e);
   }
@@ -393,11 +393,10 @@ class Study {
   // The positions of the rows a condition selects ("mach > 0.7 and
   // status == converged"), in increasing order.
   std::vector<int64_t> select(const std::string& where) const {
+    // Room for every row up to the core's cap; past it the core refuses (E26)
+    // before writing any, so no buffer is sized from the file's count.
     const int64_t rows = row_count();
-    if (rows > detail::kMaxRowsSelected)
-      throw Error("E23", "where: the file has " + std::to_string(rows) + " rows, more than the " +
-                         std::to_string(detail::kMaxRowsSelected) + " a selection scans");
-    std::vector<int64_t> out(static_cast<size_t>(std::max<int64_t>(rows, 1)));
+    std::vector<int64_t> out(static_cast<size_t>(rows > 0 && rows <= detail::kMaxRowsSelected ? rows : 1));
     int64_t n = 0;
     gamut_error e{};
     detail::check(gamut_select(f_, where.c_str(), out.data(), static_cast<int64_t>(out.size()), &n, &e), e);
@@ -410,8 +409,13 @@ class Study {
                           const Selection& sites = all) const {
     return read<double>(name, rows, sites);
   }
-  std::vector<double> get_parameter(const std::string& name, const Selection& rows = all) const {
-    return read<double>(name, rows, all).values;
+  // A parameter in the type it is stored as: get_parameter<double> for a
+  // float64 one, get_parameter<int64_t> for one declared int64. Another type
+  // is refused rather than converted, which would round or truncate.
+  template <class T>
+  std::vector<T> get_parameter(const std::string& name, const Selection& rows = all) const {
+    stored_as<T>(name);
+    return read<T>(name, rows, all).values;
   }
   std::vector<double> get_scalar(const std::string& name, const Selection& rows = all) const {
     return read<double>(name, rows, all).values;
@@ -432,14 +436,20 @@ class Study {
     const gamut_sel r = rows.c();
     int64_t shape[4] = {0, 0, 0, 0};
     int rank = 0;
-    detail::check(gamut_shape(need_reader(), name.c_str(), &r, nullptr, shape, &rank, &e), e);
+    detail::check(gamut_shape(need_reader(), name.c_str(), &r, nullptr, &rank, shape, 4, &e), e);
     std::vector<double> out(rank == 1 ? static_cast<size_t>(shape[0]) : 0);
     detail::check(gamut_outside(f_, name.c_str(), &r, out.data(),
                                 static_cast<int64_t>(out.size() * sizeof(double)), &e),
                   e);
     return out;
   }
-  double get_constant(const std::string& name) const { return read<double>(name, all, all).values.at(0); }
+  // A constant in its type, as get_parameter: double (float32 widens
+  // exactly) or int64_t.
+  template <class T>
+  T get_constant(const std::string& name) const {
+    stored_as<T>(name);
+    return read<T>(name, all, all).values.at(0);
+  }
   std::vector<int64_t> get_row_ids(const Selection& rows = all) const {
     return read<int64_t>("row", rows, all).values;
   }
@@ -466,7 +476,7 @@ class Study {
     const gamut_sel r = rows.c(), s = sites.c();
     int64_t shape[4] = {0, 0, 0, 0};
     int rank = 0;
-    detail::check(gamut_shape(need_reader(), name.c_str(), &r, &s, shape, &rank, &e), e);
+    detail::check(gamut_shape(need_reader(), name.c_str(), &r, &s, &rank, shape, 4, &e), e);
     Array<T> a;
     a.shape.assign(shape, shape + rank);
     int64_t n = 1;
@@ -520,23 +530,30 @@ class Study {
                                        r.q.value_or(0.0), "", r.with_respect_to.c_str(), r.axis.c_str(), "",
                                        -1, "", "", &e), e);
   }
+  // Refuses to read `name` as T unless T holds its stored type exactly.
+  template <class T>
+  void stored_as(const std::string& name) const {
+    static_assert(std::is_same_v<T, double> || std::is_same_v<T, int64_t>,
+                  "a parameter or constant is read as double or int64_t");
+    const auto d = describe(name);
+    const auto it = d.find("dtype");
+    const std::string stored = it == d.end() ? "float64" : it->second;
+    const bool fits = std::is_same_v<T, int64_t> ? stored == "int64" : stored != "int64";
+    if (!fits)
+      throw Error("", name + " is stored as " + stored + "; read it as " +
+                          (stored == "int64" ? "int64_t" : "double"));
+  }
   void stage(const std::vector<double>& points, const Cells* cells, const MeshLabels& labels) {
     gamut_error e{};
     if (!points.empty()) {
-      if (axes_ < 1 || points.size() % static_cast<size_t>(axes_) != 0)
-        throw Error("E5", "points are nodes x axes, and " + std::to_string(points.size()) +
-                          " values are not a whole number of nodes of " + std::to_string(axes_) + " axes");
-      detail::check(gamut_geometry_points(f_, GAMUT_FLOAT64, points.data(),
-                                          static_cast<int64_t>(points.size()) / axes_, axes_, &e), e);
+      const int64_t count = static_cast<int64_t>(points.size());
+      detail::check(gamut_geometry_points(f_, GAMUT_FLOAT64, points.data(), count,
+                                          axes_ > 0 ? count / axes_ : 0, axes_, &e), e);
     }
-    // Cells, when there are any (none is a point cloud), need one more offset
-    // than cells.
-    if (cells && !cells->types.empty() && cells->offsets.size() != cells->types.size() + 1)
-      throw Error("E5", "cells: offsets need one more entry than there are cells (" +
-                        std::to_string(cells->types.size() + 1) + "), not " + std::to_string(cells->offsets.size()));
     if (cells)
       detail::check(gamut_geometry_cells(f_, cells->types.data(), static_cast<int64_t>(cells->types.size()),
-                                         cells->offsets.data(), cells->connectivity.data(),
+                                         cells->offsets.data(), static_cast<int64_t>(cells->offsets.size()),
+                                         cells->connectivity.data(),
                                          static_cast<int64_t>(cells->connectivity.size()), &e), e);
     for (const auto& [name, values] : labels)
       detail::check(gamut_geometry_label(f_, name.c_str(), values.data(), static_cast<int64_t>(values.size()),

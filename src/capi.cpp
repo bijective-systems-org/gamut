@@ -108,6 +108,11 @@ void need(bool ok, const std::string& message) {
   if (!ok) throw Error("", message);
 }
 
+// A refusal of the data given, under a rule of the specification.
+void need(bool ok, const char* rule, const std::string& message) {
+  if (!ok) throw Error(rule, message);
+}
+
 DType dtype(int code) {
   DType t;
   need(gamut_core::dtype_from_int(code, &t) && t != DType::String,
@@ -213,7 +218,7 @@ extern "C" {
 const char* gamut_version(void) { return kVersion; }
 const char* gamut_format(void) { return kFormat; }
 
-int gamut_units_parse(const char* units) {
+int gamut_units_valid(const char* units) {
   try {
     return units != nullptr && gamut_core::units_parse(units) ? 1 : 0;
   } catch (...) {
@@ -437,17 +442,21 @@ int gamut_geometry_begin(gamut_file* f, gamut_error* err) {
   }
 }
 
-int gamut_geometry_points(gamut_file* f, int dtype_code, const void* points, int64_t n_nodes,
-                        int axes, gamut_error* err) {
+int gamut_geometry_points(gamut_file* f, int dtype_code, const void* points, int64_t count,
+                        int64_t n_nodes, int axes, gamut_error* err) {
   try {
     const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f);
     need(f->geometry_open, "call gamut_geometry_begin first");
     need(n_nodes >= 0 && axes >= 1 && axes <= 3, "points are n_nodes x 1 to 3 axes");
+    need(n_nodes <= std::numeric_limits<int64_t>::max() / axes, "too many points");
     // NULL points give the node count alone: the cells of a shared mesh
     // whose coordinates come with the runs.
-    f->geometry.points = points == nullptr ? Column() : column(dtype_code, points, n_nodes * axes);
+    need(points == nullptr ? count == 0 : count == n_nodes * axes, "E5",
+         std::to_string(count) + " coordinates given for " + std::to_string(n_nodes) +
+             " nodes of " + std::to_string(axes) + (axes == 1 ? " axis" : " axes"));
+    f->geometry.points = points == nullptr ? Column() : column(dtype_code, points, count);
     f->geometry.n_nodes = n_nodes;
     f->geometry.axes = axes;
     return 0;
@@ -457,14 +466,18 @@ int gamut_geometry_points(gamut_file* f, int dtype_code, const void* points, int
 }
 
 int gamut_geometry_cells(gamut_file* f, const uint8_t* types, int64_t n_cells,
-                       const int64_t* offsets, const int64_t* connectivity,
+                       const int64_t* offsets, int64_t n_offsets, const int64_t* connectivity,
                        int64_t n_connectivity, gamut_error* err) {
   try {
     const Lock lock(hdf5_mutex());
     clear(err);
     writer_of(f);
     need(f->geometry_open, "call gamut_geometry_begin first");
-    need(n_cells >= 0 && n_connectivity >= 0, "a negative count");
+    need(n_cells >= 0 && n_offsets >= 0 && n_connectivity >= 0, "a negative count");
+    need(n_cells < std::numeric_limits<int64_t>::max(), "too many cells");
+    need(n_cells == 0 ? n_offsets <= 1 : n_offsets == n_cells + 1, "E5",
+         "cells: offsets need one more entry than there are cells (" + std::to_string(n_cells + 1) +
+             "), not " + std::to_string(n_offsets));
     need(n_cells == 0 || (types != nullptr && offsets != nullptr), "cells need types and offsets");
     need(n_connectivity == 0 || connectivity != nullptr, "connectivity is NULL");
     f->geometry.types.assign(types, types + n_cells);
@@ -845,15 +858,18 @@ int gamut_describe(const gamut_file* f, const char* name, gamut_strings** keys, 
 }
 
 int gamut_shape(const gamut_file* f, const char* name, const gamut_sel* rows, const gamut_sel* sites,
-              int64_t* shape, int* rank, gamut_error* err) {
+              int* rank, int64_t* shape, int capacity, gamut_error* err) {
   try {
     const Lock lock(hdf5_mutex());
     clear(err);
-    need(shape != nullptr && rank != nullptr, "shape or rank is NULL");
+    need(rank != nullptr, "rank is NULL");
     const Reader& r = reader_of(f);
     const auto s = r.shape(path_of(r.schema(), str(name)), selection(rows), selection(sites));
-    need(s.size() <= 4, "internal: more than four axes");
     *rank = static_cast<int>(s.size());
+    need(static_cast<int>(s.size()) <= capacity,
+         "the shape has " + std::to_string(s.size()) + " axes and room was given for " +
+             std::to_string(capacity));
+    need(shape != nullptr || s.empty(), "shape is NULL");
     for (std::size_t i = 0; i < s.size(); ++i) shape[i] = s[i];
     return 0;
   } catch (...) {
@@ -1034,8 +1050,8 @@ int gamut_tree_set_dict(gamut_tree* t, const char* key, gamut_error* err) {
   GAMUT_TREE_SET(gamut_core::internal::Value::dict(gamut_core::internal::Dict()))
 }
 
-int gamut_tree_set_array(gamut_tree* t, const char* key, int dtype_code, const void* data, int rank,
-                       const int64_t* shape, gamut_error* err) {
+int gamut_tree_set_array(gamut_tree* t, const char* key, int dtype_code, const void* data,
+                       int64_t count, int rank, const int64_t* shape, gamut_error* err) {
   try {
     clear(err);
     const DType d = dtype(dtype_code);
@@ -1049,6 +1065,8 @@ int gamut_tree_set_array(gamut_tree* t, const char* key, int dtype_code, const v
     }
     need(n <= std::numeric_limits<int64_t>::max() / static_cast<int64_t>(gamut_core::dtype_size(d)),
          "an array too large");
+    need(count == n, str(key) + ": " + std::to_string(count) + " values given for a shape of " +
+                         std::to_string(n));
     need(n == 0 || data != nullptr, "the array's data is NULL");
     const auto* p = static_cast<const unsigned char*>(data);
     std::vector<unsigned char> bytes(p, p + static_cast<std::size_t>(n) * gamut_core::dtype_size(d));
@@ -1139,15 +1157,18 @@ int gamut_tree_strings(const gamut_tree* t, const char* key, gamut_strings** out
 }
 
 int gamut_tree_array_info(const gamut_tree* t, const char* key, int* dtype_out, int* rank,
-                        int64_t* shape, gamut_error* err) {
+                        int64_t* shape, int capacity, gamut_error* err) {
   try {
     clear(err);
-    need(dtype_out != nullptr && rank != nullptr && shape != nullptr, "an output is NULL");
+    need(dtype_out != nullptr && rank != nullptr, "an output is NULL");
     const auto& v = value_at(t, key);
     need(v.kind() == gamut_core::internal::Value::Kind::Numbers, "\"" + str(key) + "\" is not an array");
-    need(v.shape().size() <= 8, "more than 8 axes");
     *dtype_out = static_cast<int>(v.dtype());
     *rank = static_cast<int>(v.shape().size());
+    need(static_cast<int>(v.shape().size()) <= capacity,
+         "the array has " + std::to_string(v.shape().size()) + " axes and room was given for " +
+             std::to_string(capacity));
+    need(shape != nullptr || v.shape().empty(), "shape is NULL");
     for (std::size_t i = 0; i < v.shape().size(); ++i) shape[i] = v.shape()[i];
     return 0;
   } catch (...) {
@@ -1221,15 +1242,22 @@ int gamut_nearest_output_size(const gamut_tree* numbers, const char* output, int
 }
 
 int gamut_nearest_call(const gamut_tree* numbers, const char* const* input_names,
-                     const double* const* columns, int n_inputs, int64_t n_rows,
-                     const char* output, double* out, int64_t out_count, gamut_error* err) {
+                     const double* const* columns, const int64_t* column_lengths, int n_inputs,
+                     int64_t n_rows, const char* output, double* out, int64_t out_count,
+                     gamut_error* err) {
   try {
     clear(err);
     need(n_inputs >= 0 && n_rows >= 0, "a negative count");
-    need(n_inputs == 0 || (input_names != nullptr && columns != nullptr), "inputs are NULL");
+    need(n_inputs == 0 || (input_names != nullptr && columns != nullptr && column_lengths != nullptr),
+         "inputs are NULL");
     const auto m = gamut_core::internal::nearest_from(tree_of(numbers));
     std::map<std::string, const double*> table;
-    for (int j = 0; j < n_inputs; ++j) table[str(input_names[j])] = columns[j];
+    for (int j = 0; j < n_inputs; ++j) {
+      need(column_lengths[j] == n_rows, "E5",
+           "nearest needs " + std::to_string(n_rows) + " values of every input, one per row; " +
+               str(input_names[j]) + " has " + std::to_string(column_lengths[j]));
+      table[str(input_names[j])] = columns[j];
+    }
     const auto idx = gamut_core::internal::nearest_indices(m, table, n_rows);
     const auto values = gamut_core::internal::nearest_values(m, str(output), idx);
     need(out_count == static_cast<int64_t>(values.size()),

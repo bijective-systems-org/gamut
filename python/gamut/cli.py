@@ -8,9 +8,11 @@
 
 Readable text by default; `--json` prints one document of the shape given
 in each command's docstring, kept stable across versions for scripts and
-agents.  Big data goes to files; every problem is reported at once with
-where it is and what to do.  Exit status: 0 success, 1 the file or document
-has errors, 2 a usage error.
+agents, and every failure as {"problems": [{"rule", "path", "message"}]};
+`validate` always prints its findings, a file it cannot open among them.
+Big data goes to files; every problem is reported at once with where it is
+and what to do.  Exit status: 0 success, 1 the file or document has errors,
+2 a usage error, appending to a valid read-only file (E25) among them.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ import csv
 import json
 import os
 import sys
+import tempfile
 from typing import Any
 
 import numpy as np
@@ -274,8 +277,16 @@ def cmd_info(args: argparse.Namespace) -> int:
     "scalars": [{name, ...describe}], "constants": [...], "mesh"?: {kind, per,
     coordinate_units, axes, precision, nodes?, cells?, support_id?, node_fields,
     cell_fields, mesh_labels}, "models": [{id, type, inputs, repr?}]}"""
-    doc = _summary(args.file)
-    _emit(args, doc, _human(doc))
+    try:
+        doc = _summary(args.file)
+        text = "" if args.json else _human(doc)
+    except GamutError:
+        raise
+    except (KeyError, ValueError, TypeError, IndexError) as e:
+        # A damaged file: an attribute info reads is absent or malformed. The file's fault.
+        raise GamutError("", f"{args.file}: an attribute info reads is absent or malformed ({e!r}); "
+                             "gamut validate says what the file breaks", args.file) from None
+    _emit(args, doc, text)
     return 0
 
 
@@ -303,6 +314,11 @@ _KNOWN_KEYS = {"writer", "title", "license", "references", "source", "portion_ma
                "generalisation_group"}
 
 
+def _json_kind(value: Any) -> str:
+    return {dict: "an object", list: "a list", str: "text", bool: "true or false",
+            type(None): "null"}.get(type(value), "a number")
+
+
 def _check_document(doc: dict, base: str, appending: bool) -> list[tuple[str, str]]:
     """Every problem a document has, before anything is written."""
     problems: list[tuple[str, str]] = []
@@ -312,27 +328,63 @@ def _check_document(doc: dict, base: str, appending: bool) -> list[tuple[str, st
                                   f"{', '.join(sorted(_KNOWN_KEYS))}"))
     if not appending and not doc.get("writer"):
         problems.append(("writer", "name the program writing the file"))
+    # Each section's JSON type first: the checks below read inside them.
+    shapes = {"parameters": dict, "labels": dict, "scalars": dict, "fields": dict,
+              "mesh_labels": dict, "constants": dict, "mesh": dict, "runs": str, "writer": str,
+              "title": str, "license": str, "references": str, "source": str,
+              "portion_marking": str, "generalisation_group": str}
+    wrong = {k for k, kind in shapes.items() if doc.get(k) is not None and not isinstance(doc[k], kind)}
+    for key in sorted(wrong):
+        problems.append((key, f"is {_json_kind(doc[key])}; it is " +
+                              ("an object of names" if shapes[key] is dict else "text")))
     for group in ("parameters", "scalars", "fields"):
+        if group in wrong:
+            continue
         for name, spec in (doc.get(group) or {}).items():
+            if not isinstance(spec, (str, dict)):
+                problems.append((f"{group}.{name}", f"is {_json_kind(spec)}; give its units, "
+                                                     "or an object with \"units\""))
+                continue
             units = spec if isinstance(spec, str) else (spec or {}).get("units")
             if not units:
                 problems.append((f"{group}.{name}.units", "units are required (e.g. Pa, m s-1, 1)"))
-            elif not _lib.units_parse(units):
+            elif not _lib.units_valid(units):
                 problems.append((f"{group}.{name}.units",
                                  f"\"{units}\" does not parse; use UDUNITS form such as m s-1"))
-    mesh = doc.get("mesh")
+    if "constants" not in wrong:
+        for name, value in (doc.get("constants") or {}).items():
+            if not (isinstance(value, list) and len(value) == 2 and isinstance(value[1], str)):
+                problems.append((f"constants.{name}", "is [number, units]"))
+    mesh = doc.get("mesh") if "mesh" not in wrong else None
     if mesh:
+        for k in ("kind", "per", "units", "file"):
+            if mesh.get(k) is not None and not isinstance(mesh[k], str):
+                problems.append((f"mesh.{k}", f"is {_json_kind(mesh[k])}; it is text"))
+        axes = mesh.get("axes")
+        if axes is not None and (isinstance(axes, bool) or not isinstance(axes, int)):
+            problems.append(("mesh.axes", f"is {_json_kind(axes)}; it is 1, 2 or 3"))
         for k in ("kind", "per", "units"):
             if not appending and k not in mesh:
                 problems.append((f"mesh.{k}", "is required"))
-        if mesh.get("file") and not os.path.exists(os.path.join(base, mesh["file"])):
+        if isinstance(mesh.get("file"), str) and mesh["file"] and \
+                not os.path.exists(os.path.join(base, mesh["file"])):
             problems.append(("mesh.file", f"{mesh['file']} does not exist next to the document"))
     runs = doc.get("runs")
-    if not runs:
+    if "runs" in wrong:
+        pass
+    elif not runs:
         problems.append(("runs", "name the CSV holding one line per run"))
     elif not os.path.exists(os.path.join(base, runs)):
         problems.append(("runs", f"{runs} does not exist next to the document"))
     return problems
+
+
+def _checked(doc: dict, base: str, appending: bool) -> list[tuple[str, str]]:
+    """_check_document, whose own reading of an odd document is the document's problem."""
+    try:
+        return _check_document(doc, base, appending)
+    except Exception as e:
+        return [("document", _what_failed(e))]
 
 
 def _read_runs(doc: dict, base: str, study_fields: set[str], labels: set[str],
@@ -346,6 +398,10 @@ def _read_runs(doc: dict, base: str, study_fields: set[str], labels: set[str],
     points: list = []
     cells: list = []
     for i, row in enumerate(rows, start=2):
+        if None in row or None in row.values():
+            problems.append((f"runs line {i}", "has more cells than the header" if None in row
+                                               else "has fewer cells than the header"))
+            continue
         for key, value in row.items():
             where = f"runs line {i}, column {key}"
             if key in study_fields:
@@ -385,17 +441,17 @@ def _add_rows(study: Any, doc: dict, base: str, fields: set[str], labels: set[st
 
 
 def cmd_build(args: argparse.Namespace) -> int:
-    """--json: {"wrote": FILE, "rows": n, "problems": [{key, message}]}"""
+    """--json: {"wrote": FILE, "rows": n}"""
     if args.example:
         print(json.dumps(EXAMPLE, indent=1))
         print(EXAMPLE_NOTES, file=sys.stderr)
         return 0
     if not args.document or not args.output:
-        print("gamut build DOC.json -o FILE (or gamut build --example)", file=sys.stderr)
-        return 2
+        raise _Usage("", "gamut build DOC.json -o FILE (or gamut build --example)")
+    _usable_output(args.output)
     doc = _document(args.document)
     base = os.path.dirname(os.path.abspath(args.document))
-    problems = _check_document(doc, base, appending=False)
+    problems = _checked(doc, base, appending=False)
     if problems:
         return _report_problems(args, problems)
     mesh = doc.get("mesh") or {}
@@ -424,54 +480,87 @@ def cmd_build(args: argparse.Namespace) -> int:
         study.close()
     except Problems as e:
         return _report_problems(args, e.problems)
-    except GamutError as e:
-        return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
+    except GamutError:
+        raise
+    except Exception as e:      # anything wrong in the document or a file it names: the document's
+        return _report_problems(args, [("document", _what_failed(e))])
     finally:
         if study is not None:
             study._abandon(remove=True)
-    _emit(args, {"wrote": args.output, "rows": n, "problems": []},
+    _emit(args, {"wrote": args.output, "rows": n},
           f"wrote {args.output}: {_counted(n, 'run')}")
     return 0
 
 
 def cmd_append(args: argparse.Namespace) -> int:
-    """--json: {"appended": FILE, "rows": n, "problems": [{key, message}]}"""
+    """--json: {"appended": FILE, "rows": n}"""
     if args.document.lower().endswith(".gamut"):
-        # Every row of another study file.
+        if os.path.exists(args.document) and os.path.exists(args.file) and \
+                os.path.samefile(args.document, args.file):
+            raise _Usage("", "the source and the destination are one file")
+        for path in (args.file, args.document):
+            with open_file(path) as f:
+                _rows_kept(f, "appending")
         try:
-            n = gamut_append(args.file, args.document)
+            n = gamut_append(args.file, args.document)  # every row of another study file
         except GamutError as e:
-            return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
-        _emit(args, {"appended": args.file, "rows": n, "problems": []},
+            # Two valid files that do not fit together (no rule): the command's mistake.
+            if e.rule:
+                raise
+            raise _Usage("", e.message, e.path) from None
+        _emit(args, {"appended": args.file, "rows": n},
               f"appended {_counted(n, 'run')} from {args.document} to {args.file}")
         return 0
     doc = _document(args.document)
     base = os.path.dirname(os.path.abspath(args.document))
-    problems = _check_document(doc, base, appending=True)
+    problems = _checked(doc, base, appending=True)
     if problems:
         return _report_problems(args, problems)
     try:
         with open_file(args.file) as f:
+            _rows_kept(f, "appending")
             fields = set(f.names("node_fields") + f.names("cell_fields"))
             labels = set(f.names("labels"))
-        with open_file(args.file, mode="a") as study:
+        try:
+            appending = open_file(args.file, mode="a")
+        except GamutError as e:
+            # A valid destination it cannot write (no rule): the command's, as an output is.
+            if e.rule:
+                raise
+            raise _Usage("", e.message, e.path) from None
+        with appending as study:
             n = _add_rows(study, doc, base, fields, labels)
     except Problems as e:
         return _report_problems(args, e.problems)
-    except GamutError as e:
-        return _report_problems(args, [(e.path or "file", f"{e.rule + ': ' if e.rule else ''}{e.message}")])
-    _emit(args, {"appended": args.file, "rows": n, "problems": []},
+    except GamutError:
+        raise
+    except Exception as e:      # as for build: the document's
+        return _report_problems(args, [("document", _what_failed(e))])
+    _emit(args, {"appended": args.file, "rows": n},
           f"appended {_counted(n, 'run')} to {args.file}")
     return 0
 
 
+def _problems_json(problems: list[tuple[str, str, str]]) -> str:
+    """Every failure's one shape under --json: {"problems": [{"rule", "path", "message"}]}."""
+    return json.dumps({"problems": [{"rule": r, "path": k, "message": m} for r, k, m in problems]},
+                      indent=1)
+
+
+def _what_failed(e: Exception) -> str:
+    """An exception from reading a document or a file it names, as one line."""
+    if isinstance(e, OSError) and e.filename:
+        return f"{e.filename}: {e.strerror}"
+    return f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+
+
 def _report_problems(args: argparse.Namespace, problems: list[tuple[str, str]]) -> int:
-    doc = {"problems": [{"key": k, "message": m} for k, m in problems]}
-    text = f"{_counted(len(problems), 'problem')}:\n" + "\n".join(f"  {k}: {m}" for k, m in problems)
+    """A document's problems, each with its key: exit status 1."""
     if args.json:
-        print(json.dumps(doc, indent=1))
+        print(_problems_json([("", k, m) for k, m in problems]))
     else:
-        print(text, file=sys.stderr)
+        print(f"{_counted(len(problems), 'problem')}:\n" + "\n".join(f"  {k}: {m}" for k, m in problems),
+              file=sys.stderr)
     return 1
 
 
@@ -483,16 +572,24 @@ class _Usage(GamutError):
 
 
 def _document(path: str) -> Any:
-    """A build or append document, parsed; one that does not parse is a document with
-    errors (exit 1), one that cannot be read a command used wrongly."""
+    """A build or append document, parsed; one that cannot be read or does not
+    parse is a document with errors (exit 1), as a data file that cannot be is."""
     try:
         with open(path, encoding="utf-8") as fh:
-            return json.load(fh)
+            doc = json.load(fh)
     except OSError as e:
-        raise _Usage("", f"cannot read {path}: {e.strerror}") from None
-    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        raise GamutError("", f"cannot read {path}: {e.strerror}", path) from None
+    except RecursionError:
+        raise GamutError("", f"{path} nests deeper than a document is read", path) from None
+    except ValueError as e:                    # JSON and UTF-8 errors, and numbers too long
+        if not isinstance(e, (json.JSONDecodeError, UnicodeDecodeError)):
+            raise GamutError("", f"{path} is not a JSON document that can be read: {e}", path) from None
         where = f" at line {e.lineno}, column {e.colno}" if isinstance(e, json.JSONDecodeError) else ""
         raise GamutError("", f"{path} is not JSON{where}: {getattr(e, 'msg', e)}", path) from None
+    if not isinstance(doc, dict):
+        raise GamutError("", f"{path} holds {type(doc).__name__}, not a JSON object of keys "
+                              "(gamut build --example shows one)", path)
+    return doc
 
 
 def _check_rows(f: Any, rows: Any) -> None:
@@ -503,7 +600,7 @@ def _check_rows(f: Any, rows: Any) -> None:
         sel.resolve(f.row_count)
         shape, rank = (ctypes.c_int64 * 4)(), ctypes.c_int()
         _lib.call("gamut_shape", f._handle(), _lib.b("row"), sel.pointer(),
-                  _lib.Selection(None, "sites").pointer(), shape, ctypes.byref(rank))
+                  _lib.Selection(None, "sites").pointer(), ctypes.byref(rank), shape, len(shape))
     except GamutError as e:
         if e.rule:          # the file itself is at fault (exit 1), not the positions
             raise
@@ -538,33 +635,68 @@ def _get_study(args: argparse.Namespace) -> int:
     """get -o NAME.gamut: the selected rows as a smaller study file, every name
     kept (gamut.extract). --json: {"wrote": OUT, "rows": n}"""
     if args.names or args.zone:
-        raise GamutError("", "a smaller study file keeps every name and every node; give no "
-                              "names and no --zone")
+        raise _Usage("", "a smaller study file keeps every name and every node; give no "
+                          "names and no --zone")
+    _usable_output(args.output)                     # the output first, before any reading
     with open_file(args.file) as f:
+        _rows_kept(f, "a smaller study file")
         positions = _positions(f, _rows_arg(args.rows))
         if args.where:
-            positions = np.intersect1d(f.select(args.where), positions)
+            positions = np.intersect1d(_select(f, args.where), positions)
     gamut_extract(args.file, args.output, np.asarray(positions, dtype=np.int64))
     _emit(args, {"wrote": args.output, "rows": int(len(positions))},
           f"wrote {_counted(len(positions), 'run')} to {args.output}")
     return 0
 
 
-def cmd_get(args: argparse.Namespace) -> int:
-    """--json: {"wrote": OUT, "names": [...], "rows": n, "shape": {name: [...]},
-    "units": {name: units}}"""
-    out = args.output
-    ext = os.path.splitext(out)[1].lower()
-    if ext == ".gamut":
-        return _get_study(args)
-    if not args.names:
-        raise GamutError("", "name what to write (or write a smaller study file: -o NAME.gamut)")
+def _rows_kept(f: Any, what: str) -> None:
+    """A model file holds a model, not rows: asking it for rows is the command's mistake."""
+    if f.kind == "model":
+        raise _Usage("", f"{f.path} is a model file, with no rows; {what} takes data files")
+
+
+def _usable_output(path: str) -> None:
+    """A .gamut output the command can create: a new name it may make, which is
+    tried (and removed) so a folder, a permission or a name the system refuses
+    is the argument's (exit 2) before any work."""
+    if os.path.exists(path):
+        raise _Usage("", f"{path} exists; a .gamut output is never replaced")
+    try:
+        os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except OSError as e:
+        raise _Usage("", f"cannot create {path}: {e.strerror}") from None
+    os.remove(path)
+
+
+def _select(f: Any, where: str) -> np.ndarray:
+    """--where, whose mistakes are the argument's (exit 2); a refusal with a rule
+    is the file's (exit 1)."""
+    try:
+        return f.select(where)
+    except GamutError as e:
+        if e.rule:
+            raise
+        raise _Usage("", e.message, e.path) from None
+
+
+def _savez(path: str, arrays: dict[str, np.ndarray]) -> None:
+    """np.savez with any names: its own keyword `file` cannot clash with one."""
+    import zipfile
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED, allowZip64=True) as z:
+        for name, value in arrays.items():
+            with z.open(name + ".npy", "w", force_zip64=True) as fh:
+                np.lib.format.write_array(fh, np.asanyarray(value), allow_pickle=False)
+
+
+def _gather(args: argparse.Namespace) -> tuple[dict[str, np.ndarray], dict[str, str], np.ndarray]:
+    """The arrays `gamut get` writes, their units and the row ids, all read
+    before any output exists."""
     with open_file(args.file) as f:
         rows = _rows_arg(args.rows)
         if rows is not None:
             _check_rows(f, rows)
         if args.where:
-            chosen = f.select(args.where)
+            chosen = _select(f, args.where)
             if rows is not None:
                 chosen = np.intersect1d(chosen, _positions(f, rows))
             rows = chosen
@@ -609,7 +741,9 @@ def cmd_get(args: argparse.Namespace) -> int:
                 if zone_at and at != zone_at:
                     raise GamutError("", f"the zone {args.zone} marks {zone_at}s and {name} is at "
                                           f"{at}s; choose a zone at {at}s")
-                data[name] = f.get_field(name, rows=rows, nodes=sites)
+                arr = f.get_field(name, rows=rows, nodes=sites)
+                # A changing mesh's one row comes back as its sites: one row of them.
+                data[name] = arr.reshape(1, -1) if f.type == "changing" and arr.ndim == 1 else arr
             elif name in labels:
                 data[name] = f.get_label(name, rows=rows)
             elif name in params:
@@ -620,16 +754,15 @@ def cmd_get(args: argparse.Namespace) -> int:
                 data[name] = f.get_scalar(name, rows=rows)
             units[name] = f.describe(name).get("units", "") if name != "row" else ""
         ids = f.get_row_ids(rows)
-    if ext in (".npy", ".npz") and not out.endswith(ext):
-        out += ext                                # the name NumPy writes, whatever case was given
-    if ext in (".csv", ".npy", ".npz") and os.path.exists(out) and not args.force:
-        raise _Usage("", f"{out} exists; give --force to replace it")   # as .gamut is never replaced
+    return data, units, ids
+
+
+def _write(path: str, ext: str, data: dict[str, np.ndarray], ids: np.ndarray) -> None:
+    """One output: a CSV line per row, one array (.npy), or every array by name (.npz)."""
     if ext == ".csv":
-        with open(out, "w", newline="") as fh:
+        with open(path, "w", newline="") as fh:
             w = csv.writer(fh)
             if any(v.ndim > 1 for v in data.values()):
-                if len(data) != 1:
-                    raise SystemExit("a field goes to CSV alone (one line per row)")
                 (name, arr), = data.items()
                 w.writerow(["row"] + [f"{name}[{j}]" for j in range(arr.shape[1])])
                 for i, r in enumerate(arr):
@@ -639,15 +772,59 @@ def cmd_get(args: argparse.Namespace) -> int:
                 for i in range(len(ids)):
                     w.writerow([int(ids[i])] + [str(v[i]) for v in data.values()])
     elif ext == ".npy":
-        if len(data) != 1:
-            print("a .npy holds one array; use .npz for several", file=sys.stderr)
-            return 2
-        np.save(out, next(iter(data.values())))
-    elif ext == ".npz":
-        np.savez(out, row=ids, **data)
+        np.save(path, next(iter(data.values())))
     else:
-        print(f"OUT ends in .csv, .npy or .npz (got {ext or 'nothing'})", file=sys.stderr)
-        return 2
+        _savez(path, {"row": ids, **data})
+
+
+def cmd_get(args: argparse.Namespace) -> int:
+    """--json: {"wrote": OUT, "names": [...], "rows": n, "shape": {name: [...]},
+    "units": {name: units}}"""
+    out = args.output
+    ext = os.path.splitext(out)[1].lower()
+    if ext == ".gamut":
+        return _get_study(args)
+    if not args.names:
+        raise _Usage("", "name what to write (or write a smaller study file: -o NAME.gamut)")
+    try:
+        data, units, ids = _gather(args)
+    except GamutError as e:
+        # A refusal without a rule is the arguments' (exit 2); one with a rule the file's.
+        if e.rule or isinstance(e, _Usage):
+            raise
+        raise _Usage("", e.message, e.path) from None
+    if ext in (".npy", ".npz") and not out.endswith(ext):
+        out += ext                                # the name NumPy writes, whatever case was given
+    if ext in (".csv", ".npy", ".npz") and os.path.exists(out) and not args.force:
+        raise _Usage("", f"{out} exists; give --force to replace it")   # as .gamut is never replaced
+    # The output's shape is checked before it is created.
+    if ext not in (".csv", ".npy", ".npz"):
+        raise _Usage("", f"OUT ends in .csv, .npy or .npz (got {ext or 'nothing'})")
+    if ext == ".csv" and len(data) != 1 and any(v.ndim > 1 for v in data.values()):
+        raise _Usage("", "a field goes to CSV alone (one line per row)")
+    if ext == ".csv" and any(v.ndim == 0 for v in data.values()):
+        name = next(k for k, v in data.items() if v.ndim == 0)
+        raise _Usage("", f"{name} is a constant, one value, and a CSV has a line per row; "
+                         "write it to .npz or .npy")
+    if ext == ".npy" and len(data) != 1:
+        raise _Usage("", "a .npy holds one array; use .npz for several")
+    for name, v in data.items():
+        if ext == ".csv" and v.ndim > 2:
+            raise _Usage("", f"{name} has {v.ndim} axes, more than a CSV's rows and columns; "
+                             "write it to .npz or .npy")
+        if ext == ".csv" and v.ndim and v.shape[0] != len(ids):
+            raise _Usage("", f"{name} has {v.shape[0]} entries, not one per row as a CSV line is; "
+                             "write it to .npz or .npy")
+    # Written beside the output and moved into place, so a failure leaves
+    # the output as it was.
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(out)), suffix=ext)
+    os.close(fd)
+    try:
+        _write(tmp, ext, data, ids)
+        os.replace(tmp, out)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
     doc = {"wrote": out, "names": list(data), "rows": int(len(ids)),
            "shape": {k: list(v.shape) for k, v in data.items()}, "units": units}
     _emit(args, doc, f"wrote {out}: " + ", ".join(
@@ -658,8 +835,21 @@ def cmd_get(args: argparse.Namespace) -> int:
 # --- entry ------------------------------------------------------------------------------------
 
 
+class _Parser(argparse.ArgumentParser):
+    """argparse's mistakes reported as every failure is, JSON under --json."""
+
+    wants_json = False
+
+    def error(self, message: str) -> None:  # type: ignore[override]
+        if _Parser.wants_json:
+            raise _Usage("", message)
+        super().error(message)
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="gamut", description=__doc__.split("\n\n")[0])
+    given = sys.argv[1:] if argv is None else argv
+    _Parser.wants_json = "--json" in given
+    parser = _Parser(prog="gamut", description=__doc__.split("\n\n")[0])
     from . import __version__, FORMAT
     parser.add_argument("--version", action="version",
                         version=f"gamut {__version__} (files {FORMAT})")
@@ -695,16 +885,24 @@ def main(argv: list[str] | None = None) -> int:
                    help="replace an existing .csv, .npy or .npz output (a .gamut one is never replaced)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_get)
-    args = parser.parse_args(argv)
     try:
+        args = parser.parse_args(given)
         return args.func(args)
     except GamutError as e:
-        if getattr(args, "json", False):
-            print(json.dumps({"error": {"rule": e.rule, "path": e.path, "message": e.message}},
-                             indent=1))
+        if _Parser.wants_json:
+            print(_problems_json([(e.rule, e.path, e.message)]))
         else:
             print(f"error: {e}", file=sys.stderr)
-        return 2 if isinstance(e, _Usage) else 1
+        # E25 is a valid file this command cannot grow: the command's, as a usage error is.
+        return 2 if isinstance(e, _Usage) or e.rule == "E25" else 1
+    except OSError as e:             # a file named that cannot be read or written: which, and why
+        where = str(e.filename or "")
+        message = f"{where}: {e.strerror}" if where else str(e)
+        if _Parser.wants_json:
+            print(_problems_json([("", where, message)]))
+        else:
+            print(f"error: {message}", file=sys.stderr)
+        return 2
 
 
 def vtk_main(argv: list[str] | None = None) -> int:

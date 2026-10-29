@@ -15,7 +15,7 @@ namespace internal {
 // Reads the dictionary on the group `path`.  At the top level the group's
 // own attributes `type`, `inputs` and `repr` are not dictionary entries.
 // Anything section 12 cannot represent raises E18; a link that is not hard
-// raises E22; nesting past kMaxDictDepth raises E23.
+// raises E22; nesting past kMaxDictDepth raises E26.
 Dict read_dict_group(const File& f, const std::string& path, bool top_level, int depth = 0);
 
 // The link name of the scale on `axis` of the model-data dataset `dataset`.

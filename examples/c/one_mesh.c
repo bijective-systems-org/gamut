@@ -73,8 +73,9 @@ int main(void) {
   CHECK(gamut_declare_result(f, "cp", "node", "1", GAMUT_FLOAT64, "", "", 0, 0, "", "", "", "", -1,
                            "", "", &err));
   CHECK(gamut_geometry_begin(f, &err));
-  CHECK(gamut_geometry_points(f, GAMUT_FLOAT64, points, N_NODES, 2, &err));
-  CHECK(gamut_geometry_cells(f, types, N_CELLS, offsets, connectivity, 4 * N_CELLS, &err));
+  CHECK(gamut_geometry_points(f, GAMUT_FLOAT64, points, 2 * N_NODES, N_NODES, 2, &err));
+  CHECK(gamut_geometry_cells(f, types, N_CELLS, offsets, N_CELLS + 1, connectivity, 4 * N_CELLS,
+                             &err));
   CHECK(gamut_set_mesh(f, &err));
   for (int run = 0; run < 8; ++run) add_run(f, 0.5 * run);
   CHECK(gamut_close(f, &err));

@@ -184,7 +184,7 @@ class Study:
             if n_nodes is None:
                 raise GamutError("", "give the points, or n_nodes when the coordinates "
                                       "come with the runs")
-            call("gamut_geometry_points", h, _lib.GAMUT_FLOAT64, None, int(n_nodes), self._axes)
+            call("gamut_geometry_points", h, _lib.GAMUT_FLOAT64, None, 0, int(n_nodes), self._axes)
         self._stage_geometry(points, cells, labels or {}, nodes_hint=n_nodes)
         call("gamut_set_mesh", h)
 
@@ -196,7 +196,7 @@ class Study:
             if pts.ndim != 2:
                 raise GamutError("E5", "points are nodes x axes")
             call("gamut_geometry_points", h, _lib.dtype_code(pts), pts.ctypes.data_as(ctypes.c_void_p),
-                 pts.shape[0], pts.shape[1])
+                 pts.size, pts.shape[0], pts.shape[1])
         elif nodes_hint is None and cells is not None:
             raise GamutError("", "give the points, or n_nodes through points of the right shape")
         if cells is not None:
@@ -204,12 +204,8 @@ class Study:
             t = np.ascontiguousarray(np.asarray(types, dtype=np.uint8))
             o = np.ascontiguousarray(np.asarray(offsets, dtype=np.int64))
             c = np.ascontiguousarray(np.asarray(conn, dtype=np.int64))
-            # The core reads one more offset than there are cells and cannot see the length.
-            if len(t) and len(o) != len(t) + 1:
-                raise GamutError("E5", f"cells: offsets need one more entry than there are cells "
-                                        f"({len(t) + 1}), not {len(o)}")
-            call("gamut_geometry_cells", h, t.ctypes.data_as(ctypes.c_void_p), len(t),
-                 o.ctypes.data_as(ctypes.c_void_p), c.ctypes.data_as(ctypes.c_void_p), len(c))
+            call("gamut_geometry_cells", h, t.ctypes.data_as(ctypes.c_void_p), t.size,
+                 o.ctypes.data_as(ctypes.c_void_p), o.size, c.ctypes.data_as(ctypes.c_void_p), c.size)
         for name, values in labels.items():
             v = np.ascontiguousarray(np.asarray(values, dtype=np.int64))
             call("gamut_geometry_label", h, b(name), v.ctypes.data_as(ctypes.c_void_p), len(v))
@@ -407,8 +403,8 @@ class Study:
         shape = (ctypes.c_int64 * 4)()
         rank = ctypes.c_int()
         all_sites = Selection(None, "sites")
-        call("gamut_shape", self._handle(), b(name), one.pointer(), all_sites.pointer(), shape,
-             ctypes.byref(rank))
+        call("gamut_shape", self._handle(), b(name), one.pointer(), all_sites.pointer(),
+             ctypes.byref(rank), shape, len(shape))
         dims = [shape[i] for i in range(rank.value)]
         if name == "coordinates":
             return dims[-2]
@@ -608,7 +604,8 @@ class Study:
                         if wrt == "coordinates":
                             wrt = f"coordinates:{d.get('axis', '')}"
                         out["derivatives"][wrt] = other
-                if mine.get("vector") and d.get("vector") == mine.get("vector"):
+                # The vector's parts, not the statistics or derivatives of them.
+                if mine.get("vector") and d.get("vector") == mine.get("vector") and not d.get("of"):
                     out["vector"].append(other)
         return out
 

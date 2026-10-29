@@ -124,7 +124,7 @@ class Parser {
   Parser(const Reader& r, const std::string& where) : r_(r), toks_(tokenize(where)) {
     rows_ = r.schema().rows;
     if (rows_ > kMaxRowsScanned) {
-      throw Error("E23", "where: the file has " + std::to_string(rows_) + " rows, more than the " +
+      throw Error("E26", "where: the file has " + std::to_string(rows_) + " rows, more than the " +
                              std::to_string(kMaxRowsScanned) + " a selection scans");
     }
   }
@@ -174,8 +174,8 @@ class Parser {
 
   std::vector<bool> parse_atom() {
     if (peek().kind == Token::Open) {
-      if (++depth_ > kMaxNesting) {   // a cap (docs/security.md), so E23
-        throw Error("E23", "where: parentheses are nested deeper than " +
+      if (++depth_ > kMaxNesting) {   // a cap (docs/security.md), so E26
+        throw Error("E26", "where: parentheses are nested deeper than " +
                                std::to_string(kMaxNesting) + " levels at character " +
                                std::to_string(peek().at));
       }
