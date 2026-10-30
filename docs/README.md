@@ -111,8 +111,8 @@ lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
 
 ## Start with a study
 
-- [Overview and examples](../README.md): write, append and read a study in four languages.
-- [Guide](guide/README.md): one concept per page, quoting runnable programs in [examples](../examples).
+- [Overview and examples](https://github.com/bijective-systems-org/gamut/blob/main/README.md): write, append and read a study in four languages.
+- [Guide](guide/README.md): one concept per page, quoting runnable programs in [examples](https://github.com/bijective-systems-org/gamut/tree/main/examples).
 - [Run tables](guide/01-run-tables.md): inputs, status and results with units.
 - [Shared meshes](guide/02-one-mesh.md): fields as runs by nodes or cells.
 - [Fitted models](guide/07-models.md): store a model's numbers and evaluate new inputs.
@@ -120,23 +120,23 @@ lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
 
 ## Reference and interoperability
 
-- [File format specification](../SPEC.md): the authoritative layout, meaning, validation rules and format versions.
+- [File format specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md): the authoritative layout, meaning, validation rules and format versions.
 - [Selecting rows](reference/selecting.md): the query grammar.
-- [C API](../include/gamut/gamut.h) and [C++ API](../include/gamut/gamut.hpp): public headers.
-- [Python API](../python/gamut/__init__.py): public functions and docstrings, also available through `help(gamut)`.
-- [Conformance corpus](../corpus): valid, invalid and hostile files with expected outcomes.
+- [C API](https://github.com/bijective-systems-org/gamut/blob/main/include/gamut/gamut.h) and [C++ API](https://github.com/bijective-systems-org/gamut/blob/main/include/gamut/gamut.hpp): public headers.
+- [Python API](https://github.com/bijective-systems-org/gamut/blob/main/python/gamut/__init__.py): public functions and docstrings, also available through `help(gamut)`.
+- [Conformance corpus](https://github.com/bijective-systems-org/gamut/tree/main/corpus): valid, invalid and hostile files with expected outcomes.
 - [Files from outside](security.md): validation and process boundaries for untrusted files.
 - [Comparison](comparison.md) and [benchmarks](benchmarks.md): scope, trade-offs and measured workloads.
 
 The package version and file format version are separate: a file declares
-`gamut/1`. [The specification's version rules](../SPEC.md#17-versions-and-additions)
-define compatibility. [Release history](../CHANGELOG.md) describes package changes.
+`gamut/1`. [The specification's version rules](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md#17-versions-and-additions)
+define compatibility. [Release history](https://github.com/bijective-systems-org/gamut/blob/main/CHANGELOG.md) describes package changes.
 
 ## Plain-text entry points
 
 [llms.txt](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/llms.txt)
 collects API patterns and raw documentation links for coding agents.
 The [raw specification](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/SPEC.md)
-defines the format; the [citation metadata](../CITATION.cff) identifies the software.
+defines the format; the [citation metadata](https://github.com/bijective-systems-org/gamut/blob/main/CITATION.cff) identifies the software.
 The canonical source and documentation live in the
 [Gamut repository](https://github.com/bijective-systems-org/gamut).

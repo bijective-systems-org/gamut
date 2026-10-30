@@ -48,7 +48,7 @@ path of what it concerns.
 Each refusal is rule E26, with the path of what was refused. The limits are
 far above what a study needs: a field of 8 GiB is read a part at a time,
 which any of the reads in the [guide](guide/08-reading-parts.md) does. The
-[corpus](../corpus) holds hostile files built to cross each limit, and
+[corpus](https://github.com/bijective-systems-org/gamut/tree/main/corpus) holds hostile files built to cross each limit, and
 every language is tested against them. Below the limits, validating takes
 time in proportion to what a file declares: a small file that declares two
 billion cells keeps `gamut validate` busy for about a minute before it
@@ -62,7 +62,7 @@ the array as unchecked (W11).
 The HDF5 library reads a file's own bookkeeping before any code of this
 repository sees it, and a damaged or crafted file can make HDF5 itself
 fault or spin. `tools/damaged_files.py` measures this: it damages every
-valid file of the [corpus](../corpus) 140 ways (truncated, with single
+valid file of the [corpus](https://github.com/bijective-systems-org/gamut/tree/main/corpus) 140 ways (truncated, with single
 bits flipped, or with runs of bytes zeroed), then validates each copy and
 makes every read on it, each in a child process.
 
@@ -83,7 +83,7 @@ kill.
 ## Reporting a problem
 
 A file that crashes or hangs a reader outside HDF5, or that a reader
-accepts against the [specification](../SPEC.md), is a bug. Please report it
+accepts against the [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md), is a bug. Please report it
 privately through GitHub's
 [vulnerability reporting](https://github.com/bijective-systems-org/gamut/security/advisories/new)
 for this repository, with the file if you can share it.

@@ -198,11 +198,11 @@ python bench/study_formats.py run capsule-triangles.gamut WORK_DIR bench/results
 Preparation checks the complete retained arrays and records source/output
 hashes and the connectivity transformation. The capsule source hash and
 preparation receipt are also in `capsule_tri_native.json`. The scripts and results are in
-[`bench/`](../bench); `python bench/figures.py` regenerates tables and figures.
+[`bench/`](https://github.com/bijective-systems-org/gamut/tree/main/bench); `python bench/figures.py` regenerates tables and figures.
 
 ## Reading the study, in the same vocabulary
 
-The [README's examples](../README.md#example) write, append and read the
+The [README's examples](https://github.com/bijective-systems-org/gamut/blob/main/README.md#example) write, append and read the
 same study in four languages, with matching numeric output. The runnable
 [reading-parts example](guide/08-reading-parts.md) selects converged runs,
 reads a named surface region and converts pressure to kilopascals. Those
@@ -331,6 +331,6 @@ For every read, every format returns the same numbers.
 Apple M3, 8 GB, macOS-27.0.1-arm64-arm-64bit; Python 3.11.11; gamut 1.0.0.dev0, numpy 2.4.6, h5py 3.16.0, netCDF4 1.7.5, xarray 2026.9.0, zarr 3.1.6, pyarrow 26.0.0, pandas 3.0.6, pyvista 0.49.1, vtk 9.7.1; Gamut built from 0893621.
 <!-- end -->
 
-The scripts are in [`bench/`](../bench), the results beside them in
+The scripts are in [`bench/`](https://github.com/bijective-systems-org/gamut/tree/main/bench), the results beside them in
 `bench/results/`, and this page's tables and figures are generated from
 those results by `bench/figures.py`.

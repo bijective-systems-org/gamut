@@ -21,7 +21,7 @@ calls as any other file and checked by `gamut validate`.
 ## The pattern
 
 The model here is a quadratic fitted to the runs of the
-[README's sweep](../../README.md#example) that converged. `Polynomial` is
+[README's sweep](https://github.com/bijective-systems-org/gamut/blob/main/README.md#example) that converged. `Polynomial` is
 its type, a class of a few lines [defined below](#a-model-type-of-your-own).
 
 ```python
@@ -175,7 +175,7 @@ end
 
 In MATLAB the class is registered by name. The file written in Python is
 then evaluated with no Python involved, and
-[`evaluate_model.m`](../../examples/matlab/evaluate_model.m) prints the
+[`evaluate_model.m`](https://github.com/bijective-systems-org/gamut/blob/main/examples/matlab/evaluate_model.m) prints the
 same line:
 
 ```matlab

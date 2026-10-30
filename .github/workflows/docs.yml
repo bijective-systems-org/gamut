@@ -3,8 +3,8 @@ name: docs
 # The documentation site (mkdocs.yml): built from main and published to
 # GitHub Pages, and built without publishing for a pull request that
 # changes it, so a broken link fails there first. The build is strict:
-# any warning, a link to a page or anchor that is not there among them,
-# stops it.
+# any warning, a link to a page or heading that is not there among them
+# (mkdocs.yml's validation), stops it.
 #
 # Every action is pinned to a full commit SHA with its tag beside it. The
 # build job only reads this repository; the deploy job may write Pages
@@ -13,13 +13,20 @@ name: docs
 on:
   push:
     branches: [main]
-    paths: ['docs/**', mkdocs.yml, tools/docs_links.py, .github/workflows/docs.yml]
+    paths: ['docs/**', mkdocs.yml, .github/workflows/docs.yml]
   pull_request:
-    paths: ['docs/**', mkdocs.yml, tools/docs_links.py, .github/workflows/docs.yml]
+    paths: ['docs/**', mkdocs.yml, .github/workflows/docs.yml]
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# One run at a time on each branch, so that on main the site a deploy
+# leaves is the newest one started; a newer run on a pull request
+# replaces an older one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -43,9 +50,6 @@ jobs:
     permissions:
       pages: write
       id-token: write
-    concurrency:
-      group: pages
-      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

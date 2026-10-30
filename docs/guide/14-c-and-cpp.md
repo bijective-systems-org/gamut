@@ -1,20 +1,20 @@
 # 14. C++ and C
 
 The library every language uses is a C++ core behind a C interface,
-[`gamut/gamut.h`](../../include/gamut/gamut.h). C++ programs use
-[`gamut/gamut.hpp`](../../include/gamut/gamut.hpp), a header over that
+[`gamut/gamut.h`](https://github.com/bijective-systems-org/gamut/blob/main/include/gamut/gamut.h). C++ programs use
+[`gamut/gamut.hpp`](https://github.com/bijective-systems-org/gamut/blob/main/include/gamut/gamut.hpp), a header over that
 interface with the names of the Python package, exceptions for errors and
 standard containers for data; C programs, and other languages that call C,
 use `gamut.h` directly. Both are installed with the library
 ([installing](../install.md#c-and-c)); with CMake, `find_package(gamut)`
 and `gamut::gamut` are all a project needs.
 
-There are three examples: [`sweep.cpp`](../../examples/cpp/sweep.cpp), the
-[README](../../README.md#example)'s run table;
-[`one_mesh.cpp`](../../examples/cpp/one_mesh.cpp), eight runs of flow
+There are three examples: [`sweep.cpp`](https://github.com/bijective-systems-org/gamut/blob/main/examples/cpp/sweep.cpp), the
+[README](https://github.com/bijective-systems-org/gamut/blob/main/README.md#example)'s run table;
+[`one_mesh.cpp`](https://github.com/bijective-systems-org/gamut/blob/main/examples/cpp/one_mesh.cpp), eight runs of flow
 past a cylinder on one mesh, with a ninth added, then the run count, the
 lowest `cp` on the wall and `cp` at the top read back (a shorter C
-version prints the last line); and [`nearest.cpp`](../../examples/cpp/nearest.cpp),
+version prints the last line); and [`nearest.cpp`](https://github.com/bijective-systems-org/gamut/blob/main/examples/cpp/nearest.cpp),
 a model fitted in Python and evaluated in C++. Without CMake, one builds
 as `c++ -std=c++17 one_mesh.cpp -I<prefix>/include -L<prefix>/lib -lgamut
 -o one_mesh`, `<prefix>` being where the library is installed.
@@ -182,7 +182,7 @@ writes a data file, as `evaluate` does in Python, MATLAB and Julia.
 
 ## C
 
-[`examples/c/one_mesh.c`](../../examples/c/one_mesh.c) writes the same
+[`examples/c/one_mesh.c`](https://github.com/bijective-systems-org/gamut/blob/main/examples/c/one_mesh.c) writes the same
 runs in C, with no wall label, and prints the last line.
 
 ### The conventions
@@ -280,4 +280,4 @@ cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -
   HDF5 never meets a second copy.
 
 Build it: `cc one_mesh.c -I<prefix>/include -L<prefix>/lib -lgamut -lm`.
-The full program is [`examples/c/one_mesh.c`](../../examples/c/one_mesh.c).
+The full program is [`examples/c/one_mesh.c`](https://github.com/bijective-systems-org/gamut/blob/main/examples/c/one_mesh.c).
