@@ -1,0 +1,10 @@
+[workspace]
+members = ["gamut-sys", "gamut"]
+resolver = "2"
+
+[workspace.package]
+version = "2.0.0"
+edition = "2021"
+rust-version = "1.70"
+license = "Apache-2.0"
+repository = "https://github.com/bijective-systems-org/gamut"

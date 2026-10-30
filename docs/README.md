@@ -3,7 +3,7 @@
 Gamut, by [Bijective Systems](https://github.com/bijective-systems-org), is
 an open file format for parametric simulation studies and the models
 fitted to them. A `.gamut` file is HDF5 laid out as valid netCDF-4, with
-libraries for Python, MATLAB, Julia, C++ and C.
+libraries for Python, MATLAB, Julia, C++, C and Rust.
 
 ## A study in four languages
 
@@ -111,6 +111,30 @@ study.close();
 study = gamut::open("sweep.gamut");
 const std::vector<double> lift =
     study.get_scalar("cl", study.select("status == converged"));
+```
+
+///
+
+/// tab | Rust
+
+```rust
+let alpha = vec![0.0, 2.0, 4.0, 6.0, 8.0, 10.0];   // angles of attack, degrees
+let cl: Vec<f64> = alpha.iter().map(|a| 0.11 * a).collect();   // stands for the solver's lift coefficients
+
+let mut study = gamut::create("sweep.gamut", "example sweep", "", "")?;
+study.declare_parameter("alpha", "condition", "degree")?;
+study.declare_label("status", "status", &["converged", "failed"])?;
+study.declare_scalar("cl", "1")?;
+let status = vec!["converged"; alpha.len()];
+study.add_runs(&[("alpha", alpha.into()), ("cl", cl.into()), ("status", status.into())], &[])?;
+study.close()?;
+
+let mut study = gamut::open_append("sweep.gamut")?;
+study.add_run(&[("alpha", 12.0.into()), ("status", "failed".into())], &[])?;
+study.close()?;
+
+let study = gamut::open("sweep.gamut")?;
+let lift = study.get_scalar("cl", study.select("status == converged")?)?;
 ```
 
 ///

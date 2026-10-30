@@ -1,0 +1,15 @@
+[package]
+name = "gamut-sys"
+description = "The C interface of the Gamut core (gamut.h), declared for Rust"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+links = "gamut"
+build = "build.rs"
+
+# Declarations only: the gamut crate tests them.
+[lib]
+test = false
+doctest = false

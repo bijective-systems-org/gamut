@@ -1,10 +1,10 @@
 # Gamut: the simulation study file format by Bijective Systems
 
-> Gamut is an open file format, with one library for Python, MATLAB, Julia, C++ and C, for the results of a parametric simulation study: a sweep, a design of experiments, a CFD or FEA campaign, and the models fitted to it. One `.gamut` file holds every run's inputs, status and results, and the mesh and every field on it, all with units. Files are HDF5 laid out as netCDF-4, so h5py, xarray and the netCDF tools read them without Gamut.
+> Gamut is an open file format, with one library for Python, MATLAB, Julia, C++, C and Rust, for the results of a parametric simulation study: a sweep, a design of experiments, a CFD or FEA campaign, and the models fitted to it. One `.gamut` file holds every run's inputs, status and results, and the mesh and every field on it, all with units. Files are HDF5 laid out as netCDF-4, so h5py, xarray and the netCDF tools read them without Gamut.
 
 Use Gamut when many runs of one simulation setup should live in one file that people using different languages read the same way, when the runs feed a surrogate, reduced-order or machine-learning model (a field on a shared mesh is one block of runs × nodes; a file can publish its train/test split and the group a fair test holds out), when a fitted model should travel as a file with its units, input bounds and provenance and no code (rather than a pickle), or when whoever receives the file must be able to check it (`gamut validate` names each broken rule). It is not a solver's output or restart format (use CGNS, VTK or Exodus for one run), and not a general array store (use Zarr or HDF5 directly).
 
-Install: `pip install gamut-format`, then `import gamut` (Python 3.11 or later; the wheel carries its own HDF5). The command line is `gamut`. MATLAB R2023b or later: open `Gamut.mltbx` from the latest GitHub release (no compiler). Julia, C and C++ use the same core library, from each release's `gamut-core-<version>-<platform>` archive: see the install page.
+Install: `pip install gamut-format`, then `import gamut` (Python 3.11 or later; the wheel carries its own HDF5). The command line is `gamut`. MATLAB R2023b or later: open `Gamut.mltbx` from the latest GitHub release (no compiler). Julia, C, C++ and Rust use the same core library, from each release's `gamut-core-<version>-<platform>` archive: see the install page.
 
 ## Identity and authoritative sources
 
@@ -38,7 +38,7 @@ Every name is declared in `create`, with its units and role; then each run gives
 
 ## A fitted model as a file
 
-A model fitted to a study (a response surface, a reduced-order model, a Gaussian process) is saved as a model file: no runs; parameters with the bounds the model was fitted on; each result naming the model and output that computes it; the model's numbers as plain data, never code. The model's type is a class registered in each program that evaluates the file (Python with `gamut.register_model_type`, MATLAB with `gamut.registerModelType` and a class; Julia evaluates only the built-in `Nearest`). `evaluate` returns an ordinary data file. The example in `help(gamut.create_model)`:
+A model fitted to a study (a response surface, a reduced-order model, a Gaussian process) is saved as a model file: no runs; parameters with the bounds the model was fitted on; each result naming the model and output that computes it; the model's numbers as plain data, never code. The model's type is a class registered in each program that evaluates the file (Python with `gamut.register_model_type`, MATLAB with `gamut.registerModelType` and a class; Julia and Rust evaluate only the built-in nearest model). `evaluate` returns an ordinary data file. The example in `help(gamut.create_model)`:
 
 ```python
 import numpy as np
@@ -79,7 +79,7 @@ with gamut.evaluate("lift.gamut", {"alpha": [1.0, 5.0]}) as answer:   # an ordin
 - Only the status category `converged` marks a run as usable; read usable runs with `select("status == converged")`.
 - A label's category name that was not declared is added, so a misspelt name becomes a new category.
 - Values must be numbers: text such as `"4.0"` from a CSV is refused for a parameter or result.
-- Rows are positions counted from 0 in Python and C++ and from 1 in MATLAB and Julia. Row ids (`get_row_ids`) are separate and survive extracting runs to another file.
+- Rows are positions counted from 0 in Python, C++ and Rust and from 1 in MATLAB and Julia. Row ids (`get_row_ids`) are separate and survive extracting runs to another file.
 - A file from someone else: check it with `gamut validate FILE`, and open files nobody vouches for in a child process.
 - A model file's parameters need both `lower` and `upper`, and each result both `model` (the id given to `add_model`) and `output` (a key of what `call` returns).
 - A model type is registered in every process that evaluates its files, before `evaluate`. Without it the file still opens and reads, and `evaluate` is refused with the type's name. Name types after the project (`"mylab.polynomial"`): the name is all a file records.
@@ -90,7 +90,7 @@ with gamut.evaluate("lift.gamut", {"alpha": [1.0, 5.0]}) as answer:   # an ordin
 
 ## Docs
 
-- [README](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/README.md): what Gamut is, one program in Python, MATLAB, Julia and C++, benchmarks, install
+- [README](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/README.md): what Gamut is, one program in Python, MATLAB, Julia, C++ and Rust, benchmarks, install
 - [Guide](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/README.md): one page per concept, each running one script from `examples/`, and the words used throughout
 - [Run tables](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/01-run-tables.md): inputs, results and status with units, no mesh
 - [One mesh](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/02-one-mesh.md): every run on one mesh, fields as runs × nodes, zones
@@ -103,7 +103,7 @@ with gamut.evaluate("lift.gamut", {"alpha": [1.0, 5.0]}) as answer:   # an ordin
 - [Combining files](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/09-combining-files.md): append, extract, rewrite
 - [VTK](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/10-vtk.md): a folder of VTK files as one study, and back
 - [Command line](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/command-line.md): inspect, validate, build from CSV and extract without code
-- [MATLAB](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/matlab.md), [Julia](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/julia.md), [C++ and C](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/c-and-cpp.md): the same calls in each language
+- [MATLAB](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/matlab.md), [Julia](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/julia.md), [C++ and C](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/c-and-cpp.md), [Rust](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/rust.md): the same calls in each language
 - [Selecting rows](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/selecting.md): the grammar of `select`
 - [Installing](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/install.md): every language, and xarray
 

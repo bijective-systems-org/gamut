@@ -66,6 +66,17 @@ def test_julia_install_names_this_release():
         assert revs == {version}, f"{page.name} adds Julia at {sorted(revs)}, not v{version}"
 
 
+@pytest.mark.skipif(not PAGES, reason="the documentation is not beside this test (an installed package)")
+def test_rust_install_names_this_release():
+    # The crates carry the package's version and are added from its tag.
+    package = re.search(r'^version = "(.+)"', (ROOT / "pyproject.toml").read_text(), re.M)[1]
+    crates = re.search(r'^version = "(.+)"', (ROOT / "rust" / "Cargo.toml").read_text(), re.M)[1]
+    assert crates == package, f"the Rust crates are {crates}, the package {package}"
+    for page in (ROOT / "README.md", ROOT / "docs" / "install.md"):
+        tags = set(re.findall(r'gamut", tag = "v([^"]+)"', page.read_text(encoding="utf-8")))
+        assert tags <= {package}, f"{page.name} adds the Rust crate at {sorted(tags)}, not v{package}"
+
+
 def test_the_package_overview_runs(tmp_path, monkeypatch):
     # help(gamut) opens on the whole pattern; it runs as shown.
     code = re.search(r"The whole pattern:\n\n(.*?)\n\n\S", gamut.__doc__, re.S)[1]

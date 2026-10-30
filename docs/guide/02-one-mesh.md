@@ -74,6 +74,23 @@ study.close();
 
 ///
 
+/// tab | Rust
+
+```rust
+let mut study = gamut::create("cylinder.gamut", "example sweep", "shared", "fixed")?;
+study.declare_coordinates("m", 2)?;
+study.declare_parameter("gamma", "design", "m2 s-1")?;
+study.declare_mesh_label("surface", "node", &["field", "wall"])?;
+study.declare_field("cp", "node", "1")?;
+study.set_mesh(&points, &cells, &[("surface", &surface)])?;
+for gamma in (0..8).map(|i| 0.5 * i as f64) {
+    study.add_run(&[("gamma", gamma.into())], &[("cp", &solve(&t, &r, gamma))])?;
+}
+study.close()?;
+```
+
+///
+
 `points`, `cells` and `surface` (a code per node: 1 on the wall, 0
 elsewhere) are built at the top of each example program, and `solve`
 stands for the solver, returning `cp` at every node.
@@ -134,6 +151,16 @@ end
 study = gamut::open("cylinder.gamut", "a");
 study.add_run({{"gamma", 4.0}}, {{"cp", solve(4.0)}});
 study.close();
+```
+
+///
+
+/// tab | Rust
+
+```rust
+let mut study = gamut::open_append("cylinder.gamut")?;
+study.add_run(&[("gamma", 4.0.into())], &[("cp", &solve(&t, &r, 4.0))])?;
+study.close()?;
 ```
 
 ///
@@ -216,6 +243,27 @@ std::printf("\n");
 
 ///
 
+/// tab | Rust
+
+```rust
+let study = gamut::open("cylinder.gamut")?;
+println!("{} mesh, {} runs, {} nodes", study.type_()?, study.row_count()?, study.get_points(None)?.shape[0]);
+let names = study.categories("surface")?;
+// The code that means "wall" is its place in the table.
+let wall = names.iter().position(|n| n == "wall").unwrap() as i64;
+let label = study.get_mesh_label("surface", None)?;
+let on_wall: Vec<usize> = (0..label.len()).filter(|&k| label[k] == wall).collect();
+let block = study.get_field("cp", .., on_wall)?;   // runs x wall nodes
+let lowest = (0..block.shape[0])
+    .map(|run| (0..block.shape[1]).map(|k| block[[run, k]]).fold(f64::INFINITY, f64::min));
+println!("lowest cp on the wall, by run:{}", lowest.map(|v| format!(" {v:.2}")).collect::<String>());
+let top = study.get_field("cp", .., 12)?;   // node 12, the top, in every run
+println!("cp at the top of the cylinder, run by run:{}",
+         top.values.iter().map(|v| format!(" {v:.2}")).collect::<String>());
+```
+
+///
+
 Each prints:
 
 ```text
@@ -225,9 +273,10 @@ cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -
 ```
 
 `get_field` (`getField` in MATLAB) takes the rows and the nodes (or cells)
-to read, all of them when left out; in C++ the rows come first, and
-`gamut::all` reads every run. MATLAB and Julia count positions from 1, so
-the top of the cylinder is node 13 there and node 12 in Python and C++. A
+to read, all of them when left out; in C++ and Rust the rows come first,
+and `gamut::all` (`..` in Rust) reads every run. MATLAB and Julia count
+positions from 1, so the top of the cylinder is node 13 there and node 12
+in Python, C++ and Rust. A
 mesh label is stored as a code per node, counted from 0 in every language,
 and `categories` says which name each code stands for: in MATLAB and
 Julia the wall's code is its place in `categories` minus one. A read

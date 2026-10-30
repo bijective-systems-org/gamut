@@ -7,8 +7,8 @@ that own each subject and repeats none of them.
 
 An open file format, HDF5 laid out as valid netCDF-4, for the results of a
 parametric simulation study and the models fitted to it; one C++ core that
-implements it, with a C interface; Python, MATLAB, Julia and C++ layers
-over that interface; a validator; a command line; VTK conversion.
+implements it, with a C interface; Python, MATLAB, Julia, C++ and Rust
+layers over that interface; a validator; a command line; VTK conversion.
 
 ## Where things are
 
@@ -22,7 +22,8 @@ over that interface; a validator; a command line; VTK conversion.
 | `tests/` | the core's C++ tests; `two_hdf5_linux.sh`, two HDF5 copies in one process |
 | `python/gamut/` | the Python layer (ctypes), the command line (`cli.py`), VTK conversion (`vtk.py`) |
 | `matlab/`, `julia/` | the MATLAB and Julia layers and their tests; `matlab/package_toolbox.m` packages the MATLAB toolbox |
-| `examples/` | runnable examples; each guide page quotes one, and the README quotes `00_readme.py`, `07_models.py` and the MATLAB, Julia and C++ examples; the MATLAB, Julia and C++ model examples evaluate the files `07_models.py` writes |
+| `rust/` | the Rust crates: `gamut-sys`, the declarations of `gamut.h` that `generate.py` writes, and `gamut` over it, with its tests and the corpus check |
+| `examples/` | runnable examples; each guide page quotes one, and the README quotes `00_readme.py`, `07_models.py` and the MATLAB, Julia, C++ and Rust examples; the MATLAB, Julia, C++ and Rust model examples evaluate the files `07_models.py` writes |
 | `docs/` | install, the guide, reference, security, comparison, benchmarks |
 | `bench/` | benchmark scripts and results; `bench/figures.py` writes the page's tables and figures |
 | `tools/` | `build_deps.sh` (static zlib and HDF5), `build_core.sh` (the core as a release carries it), `damaged_files.py` |
@@ -46,8 +47,8 @@ over that interface; a validator; a command line; VTK conversion.
   public C++ header owns `gamut`. They meet only through the C interface,
   and the shared library exports only `gamut_*`.
 - **Models hold no code.** A model's numbers are plain data; the software
-  that owns a model type registers it (Python and MATLAB; Julia evaluates
-  the built-in nearest model only). An unregistered type opens and reads;
+  that owns a model type registers it (Python and MATLAB; Julia and Rust
+  evaluate the built-in nearest model only). An unregistered type opens and reads;
   evaluating it is refused with the type's name.
 - **Correspondence is the producer's claim.** A shared mesh says node k is
   the same point in every run; the file cannot check physical meaning.

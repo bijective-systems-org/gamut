@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 318" width="760" height="318" role="img" aria-labelledby="languages-title">
-<title id="languages-title">Python (with the command line), MATLAB, Julia, C++ and C each read and write a .gamut file through the C interface of the one C++ core; Rust and Fortran are planned.</title>
+<title id="languages-title">Python (with the command line), MATLAB, Julia, C++, C and Rust each read and write a .gamut file through the C interface of the one C++ core; Fortran is planned.</title>
 <rect width="760" height="318" fill="#FFFFFF"/>
 <rect x="10" y="10" width="156" height="34" rx="6" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1.5"/>
 <text x="88.0" y="32.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" text-anchor="middle"><tspan fill="#1F2328">Python</tspan><tspan fill="#59636E"> · CLI</tspan></text>
@@ -16,10 +16,9 @@
 <rect x="10" y="186" width="156" height="34" rx="6" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1.5"/>
 <text x="88.0" y="208.0" fill="#1F2328" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="400" text-anchor="middle">C</text>
 <line x1="180.0" y1="203.0" x2="272.0" y2="203.0" stroke="#0070DC" stroke-width="1.6"/><path d="M174.0 203.0l8 -4.5v9z" fill="#0070DC"/><path d="M278.0 203.0l-8 -4.5v9z" fill="#0070DC"/>
-<rect x="10" y="230" width="156" height="34" rx="6" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1.5" stroke-dasharray="4 3"/>
-<text x="26.0" y="252.0" fill="#8C959F" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="400" text-anchor="start">Rust</text>
-<text x="152.0" y="251.0" fill="#8C959F" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="end" font-style="italic">planned</text>
-<line x1="180.0" y1="247.0" x2="272.0" y2="247.0" stroke="#D0D7DE" stroke-width="1.6" stroke-dasharray="4 4"/><path d="M174.0 247.0l8 -4.5v9z" fill="#D0D7DE"/><path d="M278.0 247.0l-8 -4.5v9z" fill="#D0D7DE"/>
+<rect x="10" y="230" width="156" height="34" rx="6" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1.5"/>
+<text x="88.0" y="252.0" fill="#1F2328" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="400" text-anchor="middle">Rust</text>
+<line x1="180.0" y1="247.0" x2="272.0" y2="247.0" stroke="#0070DC" stroke-width="1.6"/><path d="M174.0 247.0l8 -4.5v9z" fill="#0070DC"/><path d="M278.0 247.0l-8 -4.5v9z" fill="#0070DC"/>
 <rect x="10" y="274" width="156" height="34" rx="6" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1.5" stroke-dasharray="4 3"/>
 <text x="26.0" y="296.0" fill="#8C959F" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="400" text-anchor="start">Fortran</text>
 <text x="152.0" y="295.0" fill="#8C959F" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="end" font-style="italic">planned</text>

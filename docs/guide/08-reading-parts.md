@@ -82,6 +82,25 @@ std::printf("\n");
 
 ///
 
+/// tab | Rust
+
+```rust
+let study = gamut::open("parts.gamut")?;
+let rows = study.select("speed >= 20 and gamma > 1 and status == converged")?;
+println!("chosen: {} runs", rows.len());
+let names = study.categories("surface")?;
+let wall = names.iter().position(|n| n == "wall").unwrap() as i64;
+let label = study.get_mesh_label("surface", None)?;
+let on_wall: Vec<usize> = (0..label.len()).filter(|&k| label[k] == wall).collect();
+let p_wall = study.get_field("p", &rows, on_wall)?;   // stored in Pa
+let lowest = p_wall.values.iter().copied().fold(f64::INFINITY, f64::min) / 1000.0;
+println!("wall pressure: {} runs x {} nodes, lowest {lowest:.3} kPa", p_wall.shape[0], p_wall.shape[1]);
+let speeds: Vec<f64> = study.get_parameter("speed", &rows)?;   // stored in m s-1
+println!("speeds in km/h:{}", speeds.iter().map(|v| format!(" {:.1}", v * 3.6)).collect::<String>());
+```
+
+///
+
 Each prints:
 
 ```text
@@ -113,7 +132,7 @@ Values are stored in the units they were written in, which
 `describe(name)` names. In Python, every read takes `units` and converts
 from the stored units; this needs the `units` extra
 (`pip install "gamut-format[units]"`, which brings pint), and without it
-a read that asks for other units is refused. MATLAB, Julia and C++
+a read that asks for other units is refused. MATLAB, Julia, C++ and Rust
 return the stored units, and the programs above convert them.
 
 ## Notes
@@ -121,7 +140,8 @@ return the stored units, and the programs above convert them.
 - In Python, writing converts too: a value given as `(number, "units")`
   in `add_run` is converted to the declared units before it is stored.
 - Opening a file with four threads (`threads=4` in Python and Julia,
-  `'threads', 4` in MATLAB, `gamut::open(path, "r", 4)` in C++)
+  `'threads', 4` in MATLAB, `gamut::open(path, "r", 4)` in C++,
+  `study.set_threads(4)` in Rust)
   decompresses large field reads in four threads, with the same result as
   one.
 - Studies can be opened and read from several threads at once. Their calls

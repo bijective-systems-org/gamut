@@ -13,7 +13,7 @@ were.
 
 MATLAB spells them `gamut.append`, `gamut.extract` and `gamut.writeCopy`,
 Julia `Gamut.append!`, `Gamut.extract` and `Gamut.write_copy`, and C++
-`gamut::append`, `gamut::extract` and `gamut::write_copy`. Row ids are the
+and Rust `gamut::append`, `gamut::extract` and `gamut::write_copy`. Row ids are the
 file's own and count from 0 in every language.
 
 The example writes two days of a Mach sweep, appends the second to the
@@ -114,6 +114,29 @@ std::printf("valid: %s\n", gamut::validate("converged.gamut").ok ? "yes" : "no")
 
 ///
 
+/// tab | Rust
+
+```rust
+sweep("monday.gamut", &[0.5, 0.6, 0.7])?;
+sweep("tuesday.gamut", &[0.8, 0.9])?;
+println!("appended {} runs", gamut::append("monday.gamut", "tuesday.gamut")?);
+
+let good = gamut::open("monday.gamut")?.select("status == converged")?;
+gamut::extract("monday.gamut", "converged.gamut", good)?;
+gamut::write_copy("converged.gamut", "converged_copy.gamut")?;
+
+let (study, copy) = (gamut::open("converged.gamut")?, gamut::open("converged_copy.gamut")?);
+let ids = study.get_row_ids(..)?;
+let machs: Vec<f64> = study.get_parameter("mach", ..)?;
+println!("kept ids:{} at mach{}", ids.iter().map(|id| format!(" {id}")).collect::<String>(),
+         machs.iter().map(|m| format!(" {m}")).collect::<String>());
+let same = study.describe("")?["file_id"] == copy.describe("")?["file_id"];
+println!("same file id after the rewrite: {}", if same { "yes" } else { "no" });
+println!("valid: {}", if gamut::validate("converged.gamut")?.ok { "yes" } else { "no" });
+```
+
+///
+
 Each prints:
 
 ```text
@@ -156,7 +179,7 @@ identity: its `file_id` and creation time.
   write each job's runs to a file of its own and `append` them at the end.
 - `validate` checks a file against the rules of the specification. Each
   finding has its rule, the path of what it concerns and a message; Python
-  and C++ return a report with `ok`, `errors` and `warnings`, MATLAB and
+  C++ and Rust return a report with `ok`, `errors` and `warnings`, MATLAB and
   Julia the findings, each with its severity.
 
 Run it: `python examples/09_combining_files.py`, or `combining` from

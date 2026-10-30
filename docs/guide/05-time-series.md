@@ -89,6 +89,25 @@ study.close();
 
 ///
 
+/// tab | Rust
+
+```rust
+let mut study = gamut::create("transient.gamut", "example transient", "", "")?;
+study.declare_label("run", "group", &[])?;
+study.declare_parameter_with("t", "time", "s", Parameter::default().run_group("run"))?;
+study.declare_parameter("speed", "condition", "m s-1")?;
+study.declare_scalar("cl", "1")?;
+for (name, speed) in [("slow", 20.0), ("fast", 35.0)] {
+    let frequency = 0.2 * speed / 10.0;   // shedding, Strouhal 0.2
+    let cl: Vec<f64> = steps.iter().map(|t| 0.8 * (2.0 * PI * frequency * t).sin() * (1.0 - (-t).exp())).collect();
+    study.add_runs(&[("run", vec![name; steps.len()].into()), ("t", steps.clone().into()),
+                     ("speed", vec![speed; steps.len()].into()), ("cl", cl.into())], &[])?;
+}
+study.close()?;
+```
+
+///
+
 - The parameter `t` has the role `time`, and its run group names the
   label that groups its rows into runs.
 - The label `run` declares no categories: its table grows as new names
@@ -151,6 +170,20 @@ size_t peak = 0;
 for (size_t k = 1; k < cl.size(); ++k)
   if (std::abs(cl[k]) > std::abs(cl[peak])) peak = k;
 std::printf("fast run: %zu steps, peak |cl| %.2f at t = %.1f s\n", fast.size(), std::abs(cl[peak]), t[peak]);
+```
+
+///
+
+/// tab | Rust
+
+```rust
+let study = gamut::open("transient.gamut")?;
+println!("{} rows, {} runs", study.row_count()?, study.categories("run")?.len());
+let fast = study.select("run == fast")?;
+let t: Vec<f64> = study.get_parameter("t", &fast)?;
+let cl = study.get_scalar("cl", &fast)?;
+let peak = (0..cl.len()).fold(0, |p, k| if cl[k].abs() > cl[p].abs() { k } else { p });
+println!("fast run: {} steps, peak |cl| {:.2} at t = {:.1} s", fast.len(), cl[peak].abs(), t[peak]);
 ```
 
 ///

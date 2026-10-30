@@ -68,6 +68,21 @@ study.set_attribute("title", "Wing A polar");
 
 ///
 
+/// tab | Rust
+
+```rust
+let mut study = gamut::create("polar.gamut", "example sweep", "", "")?;
+study.declare_parameter("mach", "condition", "1")?;
+study.declare_parameter("alpha", "condition", "degree")?;
+study.declare_label("status", "status", &["converged", "failed"])?;
+study.declare_scalar("cl", "1")?;
+study.declare_scalar("cd", "1")?;
+study.set_constant("reference_area", 12.5, "m2")?;
+study.set_attribute("title", "Wing A polar")?;
+```
+
+///
+
 Parameters place a run in the study. Their role is `condition` (how it is
 operated: Mach, incidence, altitude), `design` (the shape: a geometry or
 design variable) or `time`. Tools use the role: a geometry model takes the
@@ -157,13 +172,32 @@ study.close();
 
 ///
 
+/// tab | Rust
+
+```rust
+for mach in [0.6_f64, 0.7, 0.8] {
+    for alpha in (-2..=8).step_by(2).map(f64::from) {
+        let cl = 0.11 * alpha / (1.0 - mach * mach).sqrt(); // stand-in for a solver
+        let cd = 0.008 + 0.04 * cl * cl;
+        let failed = mach == 0.8 && alpha == 8.0;
+        study.add_run(&[("mach", mach.into()), ("alpha", alpha.into()),
+                        ("status", if failed { "failed" } else { "converged" }.into()),
+                        ("cl", if failed { f64::NAN } else { cl }.into()),
+                        ("cd", if failed { f64::NAN } else { cd }.into())], &[])?;
+    }
+}
+study.close()?;
+```
+
+///
+
 A result a run does not have is NaN, and so is one it leaves out.
 Parameters and labels are never missing. A category name a label has not
 seen is added to its categories, so a misspelt `"convereged"` becomes a
 new category rather than an error; `categories("status")` lists them.
 
 Closing the file finishes it: leaving the `with` block in Python or the
-`do` block in Julia, `close` in MATLAB and C++. When a Python or Julia
+`do` block in Julia, `close` in MATLAB, C++ and Rust. When a Python or Julia
 block ends with an error, the runs added so far are kept if the file can
 still be finished, and the file is removed if it cannot.
 
@@ -239,6 +273,23 @@ std::printf("reference area: %g %s\n", study.get_constant<double>("reference_are
 
 ///
 
+/// tab | Rust
+
+```rust
+let study = gamut::open("polar.gamut")?;
+println!("{} runs; {}", study.row_count()?, study.describe("")?["title"]);
+let cl = study.get_scalar("cl", study.select("mach == 0.7")?)?;
+println!("lift at Mach 0.7:{}", cl.iter().map(|v| format!(" {v:.3}")).collect::<String>());
+let failed = study.select("status == failed")?;
+let mach: Vec<f64> = study.get_parameter("mach", failed.clone())?;
+let alpha: Vec<f64> = study.get_parameter("alpha", failed)?;
+println!("failed: Mach {:.1}, alpha {} degree", mach[0], alpha[0]);
+println!("reference area: {} {}", study.get_constant::<f64>("reference_area")?,
+         study.describe("reference_area")?["units"]);
+```
+
+///
+
 Each prints:
 
 ```text
@@ -249,7 +300,7 @@ reference area: 12.5 m2
 ```
 
 `select` takes a condition and returns the positions of the rows that meet
-it, counted from 0 in Python and C++ and from 1 in MATLAB and Julia; every
+it, counted from 0 in Python, C++ and Rust and from 1 in MATLAB and Julia; every
 `get_` call takes such positions as its rows. Conditions compare
 parameters, scalars and labels, joined by `and`, `or` and `not`
 ([selecting runs](../reference/selecting.md)). `describe` returns what the
@@ -259,7 +310,8 @@ file says about a name, or about the file itself.
 
 - `create` refuses a path that exists and leaves that file as it was. To
   add runs to a study, open it to append: `mode="a"` in Python and Julia,
-  `'mode', 'a'` in MATLAB, `gamut::open(path, "a")` in C++.
+  `'mode', 'a'` in MATLAB, `gamut::open(path, "a")` in C++,
+  `gamut::open_append(path)` in Rust.
 - Every row gets an id when it is written, unique in the file and never
   reused. Runs extracted to another file keep their ids; runs appended to
   another file get new ones there ([combining files](09-combining-files.md)).

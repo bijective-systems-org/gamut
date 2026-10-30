@@ -9,7 +9,7 @@
 # Gamut: an open file format for parametric simulation studies
 
 By [Bijective Systems](https://github.com/bijective-systems-org), with
-libraries for Python, MATLAB, Julia, C++ and C.
+libraries for Python, MATLAB, Julia, C++, C and Rust.
 
 [Documentation](https://bijective-systems-org.github.io/gamut/) ·
 [Installing](https://bijective-systems-org.github.io/gamut/install.html) ·
@@ -36,7 +36,7 @@ value.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/languages-dark.svg">
-    <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/languages.svg" alt="Python (with the command line), MATLAB, Julia, C++ and C each read and write a .gamut file through the C interface of the one C++ core; Rust and Fortran are planned." width="760">
+    <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/languages.svg" alt="Python (with the command line), MATLAB, Julia, C++, C and Rust each read and write a .gamut file through the C interface of the one C++ core; Fortran is planned." width="760">
   </picture>
 </p>
 
@@ -147,7 +147,32 @@ const std::vector<double> lift =
 
 </details>
 
-All four print the same line:
+<details>
+<summary>Rust</summary>
+
+```rust
+let alpha = vec![0.0, 2.0, 4.0, 6.0, 8.0, 10.0];   // angles of attack, degrees
+let cl: Vec<f64> = alpha.iter().map(|a| 0.11 * a).collect();   // stands for the solver's lift coefficients
+
+let mut study = gamut::create("sweep.gamut", "example sweep", "", "")?;
+study.declare_parameter("alpha", "condition", "degree")?;
+study.declare_label("status", "status", &["converged", "failed"])?;
+study.declare_scalar("cl", "1")?;
+let status = vec!["converged"; alpha.len()];
+study.add_runs(&[("alpha", alpha.into()), ("cl", cl.into()), ("status", status.into())], &[])?;
+study.close()?;
+
+let mut study = gamut::open_append("sweep.gamut")?;
+study.add_run(&[("alpha", 12.0.into()), ("status", "failed".into())], &[])?;
+study.close()?;
+
+let study = gamut::open("sweep.gamut")?;
+let lift = study.get_scalar("cl", study.select("status == converged")?)?;
+```
+
+</details>
+
+All five print the same line:
 
 ```text
 lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
@@ -181,6 +206,7 @@ another approach is faster.
 | MATLAB R2023b or later | open `Gamut.mltbx` from the [latest release](https://github.com/bijective-systems-org/gamut/releases/latest) |
 | Julia 1.10 or later | `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v2.0.0")` |
 | C++ and C | CMake build and install, then `find_package(gamut)`; include `gamut/gamut.hpp` (C++17) or `gamut/gamut.h` (C) |
+| Rust 1.70 or later | `gamut = { git = "https://github.com/bijective-systems-org/gamut", tag = "v2.0.0" }`, with `GAMUT_LIB_DIR` at a release's core |
 
 In Python, install `gamut-format`, then `import gamut`; the PyPI project
 named `gamut` is a different package. [Installing](https://bijective-systems-org.github.io/gamut/install.html) has
