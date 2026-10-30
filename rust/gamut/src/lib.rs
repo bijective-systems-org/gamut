@@ -1165,7 +1165,7 @@ pub fn evaluate(model_path: &str, inputs: &[(&str, Column)], path: &str) -> Resu
     Ok((open(path)?, warnings.take()))
 }
 
-/// The library's version ("2.0.0").
+/// The library's version ("2.1.0").
 pub fn version() -> String {
     unsafe { CStr::from_ptr(sys::gamut_version()) }.to_string_lossy().into_owned()
 }

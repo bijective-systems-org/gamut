@@ -5,8 +5,8 @@ message: >-
   `format`, for example "gamut/1").
 title: "Gamut: an open file format for simulation studies"
 type: software
-version: 2.0.0
-date-released: 2026-10-29
+version: 2.1.0
+date-released: 2026-10-30
 authors:
   - name: "Bijective Systems"
 repository-code: "https://github.com/bijective-systems-org/gamut"
@@ -20,8 +20,8 @@ abstract: >-
   its units), the mesh the fields live on, the fields themselves as one
   block of runs by nodes when the runs share a mesh, uncertainty and
   gradients beside the values they describe, and fitted models in the
-  same terms as the data. One C++ core, with Python, MATLAB, Julia and C
-  interfaces, implements the specification, and a shared corpus of
+  same terms as the data. One C++ core, with Python, MATLAB, Julia, C and
+  Rust interfaces, implements the specification, and a shared corpus of
   valid, broken and hostile files holds every language to it.
 keywords:
   - simulation data

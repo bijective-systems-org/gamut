@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 2.1.0 (2026-10-30)
+
+**Upgrading from 2.0.** The file format (`gamut/1`) is unchanged, and the
+C interface only adds calls, so programs written for 2.0 build and run
+against 2.1; what `evaluate` now does differently is listed below. Install
+`bijective-gamut` where you installed `gamut-format`.
 
 - The Python package is now `bijective-gamut` on PyPI, and the Rust crates
   are `bijective-gamut` and `bijective-gamut-sys`; the code still says
