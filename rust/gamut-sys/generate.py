@@ -66,7 +66,12 @@ def split_type(decl: str, where: str) -> tuple[str, str]:
 
 
 def main() -> None:
-    text = re.sub(r"/\*.*?\*/", " ", HEADER.read_text(), flags=re.S)
+    text = HEADER.read_text()
+    # C joins lines at a backslash, and reads ??/ as one, before it sees
+    # comments; gamut.h has neither, so neither is read here.
+    if "\\" in text or "??" in text:
+        refuse("a backslash or ?? sequence")
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
     if "//" in text:
         refuse("a // comment")
     body, directives, open_blocks = [], [], []
