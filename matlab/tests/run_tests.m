@@ -307,9 +307,11 @@ if isfile(fullfile(examples, 'one_mesh.m'))
     addpath(examples);
     unpath = onCleanup(@() rmpath(examples));
     for example = {'run_table', 'polar'; 'family', 'family'; 'refinement', 'refinement'; ...
-                   'transient', 'transient'}'
-        run_example(fullfile(examples, [example{1} '.m']), exampleDir);
-        found = gamut.validate(fullfile(exampleDir, [example{2} '.gamut']));
+                   'transient', 'transient'; 'uncertain', 'uncertain'; 'models', 'lift_model'; ...
+                   'parts', 'parts'}'
+        folder = fullfile(exampleDir, example{1}); mkdir(folder);    % each its own: they share names
+        run_example(fullfile(examples, [example{1} '.m']), folder);
+        found = gamut.validate(fullfile(folder, [example{2} '.gamut']));
         ok(isempty(found) || ~any(startsWith({found.rule}, 'E')), ...
             sprintf('the MATLAB example %s writes a valid file', example{1}));
     end

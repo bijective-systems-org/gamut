@@ -122,7 +122,7 @@ jobs:
           julia --project=julia -e 'include("julia/test/runtests.jl")'
           mkdir -p "$RUNNER_TEMP/jexample/sweep" "$RUNNER_TEMP/jexample/models" "$RUNNER_TEMP/jprinted"
           # What each example prints is kept, and held to the pages that show it.
-          for example in run_table one_mesh family refinement transient; do
+          for example in run_table one_mesh family refinement transient uncertain parts; do
             mkdir -p "$RUNNER_TEMP/jexample/$example"
             (cd "$RUNNER_TEMP/jexample/$example" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/$example.jl") | tee "$RUNNER_TEMP/jprinted/$example.txt"
           done

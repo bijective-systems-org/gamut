@@ -3,7 +3,8 @@
 Each run stores a lift coefficient with its standard deviation and two
 quantiles (from an ensemble), and its derivative with respect to angle of
 attack (from an adjoint). Each statistic names the result it describes, so
-a reader finds them without naming conventions.
+a reader finds them without naming conventions. The MATLAB, Julia and C++
+examples uncertain are the same program and print the same lines.
 """
 import numpy as np
 
@@ -12,7 +13,7 @@ import gamut
 alpha = np.linspace(0.0, 8.0, 9)
 cl = 0.11 * alpha
 with gamut.create("uncertain.gamut", writer="example ensemble",
-                   parameters={"alpha": {"units": "degree"}},
+                   parameters={"alpha": {"units": "degree", "role": "condition"}},
                    scalars={"cl": "1",
                             "cl_std": {"units": "1", "of": "cl", "statistic": "std"},
                             "cl_p05": {"units": "1", "of": "cl", "statistic": "quantile", "q": 0.05},
@@ -26,7 +27,9 @@ with gamut.create("uncertain.gamut", writer="example ensemble",
 
 with gamut.open("uncertain.gamut") as study:
     related = study.related("cl")
-    print("what describes cl:", related)
+    print("the std of cl:", related["std"])
+    print("its 0.05 and 0.95 quantiles:", related["quantiles"][0.05], related["quantiles"][0.95])
+    print("its derivative with respect to alpha:", related["derivatives"]["alpha"])
     low = study.get_scalar(related["quantiles"][0.05])
     high = study.get_scalar(related["quantiles"][0.95])
-    print("90 % band at 8 degrees:", round(float(low[-1]), 3), "to", round(float(high[-1]), 3))
+    print(f"90 % band at 8 degrees: {low[-1]:.3f} to {high[-1]:.3f}")
