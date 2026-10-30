@@ -2,7 +2,7 @@ name: publish
 
 # A version tag (v1.2.3) publishes the Python package to PyPI: one wheel per
 # platform, each with the core and HDF5 linked in and serving every Python
-# 3.10 and later, and the sdist. It also attaches to the tag's GitHub release
+# 3.11 and later, and the sdist. It also attaches to the tag's GitHub release
 # the MATLAB toolbox, Gamut.mltbx, which installs with no compiler, and the
 # core on its own for each platform (gamut-core-<version>-<platform>, with
 # its headers and CMake package), for Julia, C and C++.

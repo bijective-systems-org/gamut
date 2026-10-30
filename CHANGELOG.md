@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.0.0 (2026-10-29)
 
 **Upgrading from 1.3.** The file format is unchanged (`gamut/1`), so
 files move between 1.3 and 2.0, short of the new limits below. Code
@@ -33,13 +33,17 @@ the fixes further down also correct results that were wrong, such as a
 - On the command line, every failure under `--json` is
   `{"problems": [{"rule", "path", "message"}]}`; it was `{"error": {...}}`
   or `{"problems": [{"key", "message"}]}` by command, and argparse's own
-  mistakes printed text (`validate` still prints its findings). Success documents no longer carry an empty
-  `problems`. A misused `gamut get` exits 2 before creating its output.
+  mistakes printed text (`validate` still prints its findings). Success
+  documents no longer carry an empty `problems`. A misused `gamut get`
+  exits 2 before creating its output.
 - In Python, `related(name)["vector"]` lists the vector's parts only, as
   Julia did; a statistic or derivative of a part that carries the same
   `vector` was listed among them.
-- NumPy 1.26 or later is required (it was 1.24, never tested); the
-  oldest supported NumPy and Python 3.14 are now tested.
+- Python 3.11 or later is required (3.10 reaches its end of life this
+  month), NumPy 1.26 or later (it was 1.24, never tested) and Julia 1.10
+  or later (it was 1.9, never tested). MATLAB R2023b or later is
+  unchanged. Each minimum is now tested, with Python 3.14 too, and **none
+  of them rises within 2.x**.
 - In C++, `get_parameter<T>` and `get_constant<T>` name the type: `double`,
   or `int64_t` for a value declared int64. Another type is refused rather
   than rounded or truncated.
