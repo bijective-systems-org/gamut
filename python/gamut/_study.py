@@ -670,8 +670,8 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
     - `constants`: one number for the whole study, as
       `{"area": (12.5, "m2")}`.
     - `mesh`, `per`: no mesh (a run table); "shared" (one mesh for every
-      run) with per "fixed", "run" or "group:<label>"; or "changing" (a
-      mesh per run) with per "run" or "group:<label>". With a mesh,
+      run) with per "fixed", "run" or `"group:<label>"`; or "changing" (a
+      mesh per run) with per "run" or `"group:<label>"`. With a mesh,
       `coordinates={"units": "m", "axes": 2}`.
     - `mesh_labels`: zones or patches, as
       `{"surface": {"at": "node", "categories": ["field", "wall"]}}`.
