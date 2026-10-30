@@ -308,7 +308,7 @@ if isfile(fullfile(examples, 'one_mesh.m'))
     unpath = onCleanup(@() rmpath(examples));
     for example = {'run_table', 'polar'; 'family', 'family'; 'refinement', 'refinement'; ...
                    'transient', 'transient'; 'uncertain', 'uncertain'; 'models', 'lift_model'; ...
-                   'parts', 'parts'}'
+                   'parts', 'parts'; 'combining', 'converged'}'
         folder = fullfile(exampleDir, example{1}); mkdir(folder);    % each its own: they share names
         run_example(fullfile(examples, [example{1} '.m']), folder);
         found = gamut.validate(fullfile(folder, [example{2} '.gamut']));

@@ -3,6 +3,8 @@
 `append` adds one file's runs to another (the same declarations; category
 names merged); `extract` keeps chosen runs as a new file, their ids kept;
 `write_copy` rewrites a file with the default layout, keeping its identity.
+The MATLAB, Julia and C++ examples combining are the same program and print
+the same lines.
 """
 import gamut
 
@@ -27,6 +29,7 @@ gamut.extract("monday.gamut", "converged.gamut", good)
 gamut.write_copy("converged.gamut", "converged_copy.gamut")
 
 with gamut.open("converged.gamut") as study, gamut.open("converged_copy.gamut") as copy:
-    print("kept ids:", study.get_row_ids(), "mach:", study.get_parameter("mach"))
-    print("same file id after the rewrite:", study.describe()["file_id"] == copy.describe()["file_id"])
-print("valid:", gamut.validate("converged.gamut").ok)
+    print("kept ids:", *study.get_row_ids(), "at mach", *(f"{m:g}" for m in study.get_parameter("mach")))
+    same = study.describe()["file_id"] == copy.describe()["file_id"]
+    print("same file id after the rewrite:", "yes" if same else "no")
+print("valid:", "yes" if gamut.validate("converged.gamut").ok else "no")
