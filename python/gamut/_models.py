@@ -467,39 +467,39 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
             out_path = os.path.join(directory.name, "result.gamut")
         ev = ctypes.c_void_p()
         try:
-            call("gamut_evaluation_begin", m._handle(), n, b(out_path), ctypes.byref(ev))
-            for name, given in inputs.items():
-                if name in labels:
-                    names = [str(x) for x in np.atleast_1d(np.asarray(given))]
-                    call("gamut_evaluation_names", ev, b(name), _lib.string_array(names), len(names))
-                elif name not in params:          # the core says what it is not
-                    call("gamut_evaluation_values", ev, b(name), _lib.GAMUT_FLOAT64, None, 0)
-                else:
-                    int64 = m.describe(name).get("dtype") == "int64"
-                    col = np.ascontiguousarray(np.atleast_1d(
-                        _lib.int64_exactly(given, name) if int64 else _lib.float64_exactly(given, name)))
-                    call("gamut_evaluation_values", ev, b(name), _lib.dtype_code(col),
-                         col.ctypes.data_as(ctypes.c_void_p), col.size)
-            if coordinates is not None:
-                pts = np.ascontiguousarray(_lib.float64_exactly(coordinates, "coordinates"))
-                call("gamut_evaluation_coordinates", ev, _lib.GAMUT_FLOAT64,
-                     pts.ctypes.data_as(ctypes.c_void_p), pts.size)
-            found, models = _lib.lists_out("gamut_evaluation_ready", 2, ev)
-            for finding in found:
-                warnings.warn(finding, stacklevel=2)
-            for model_id in models:
-                _run(m, ev, model_id)
-            call("gamut_evaluation_finish", ev)
+            try:
+                call("gamut_evaluation_begin", m._handle(), n, b(out_path), ctypes.byref(ev))
+                for name, given in inputs.items():
+                    if name in labels:
+                        names = [str(x) for x in np.atleast_1d(np.asarray(given))]
+                        call("gamut_evaluation_names", ev, b(name), _lib.string_array(names), len(names))
+                    elif name not in params:          # the core says what it is not
+                        call("gamut_evaluation_values", ev, b(name), _lib.GAMUT_FLOAT64, None, 0)
+                    else:
+                        int64 = m.describe(name).get("dtype") == "int64"
+                        col = np.ascontiguousarray(np.atleast_1d(
+                            _lib.int64_exactly(given, name) if int64 else _lib.float64_exactly(given, name)))
+                        call("gamut_evaluation_values", ev, b(name), _lib.dtype_code(col),
+                             col.ctypes.data_as(ctypes.c_void_p), col.size)
+                if coordinates is not None:
+                    pts = np.ascontiguousarray(_lib.float64_exactly(coordinates, "coordinates"))
+                    call("gamut_evaluation_coordinates", ev, _lib.GAMUT_FLOAT64,
+                         pts.ctypes.data_as(ctypes.c_void_p), pts.size)
+                found, models = _lib.lists_out("gamut_evaluation_ready", 2, ev)
+                for finding in found:
+                    warnings.warn(finding, stacklevel=2)
+                for model_id in models:
+                    _run(m, ev, model_id)
+                call("gamut_evaluation_finish", ev)
+            finally:
+                # Freed once, before the folder goes: an unfinished evaluation
+                # removes its file, and Windows removes no folder holding an
+                # open file.
+                _lib._lib.gamut_evaluation_free(ev)
         except BaseException:
-            # Freed first: an unfinished evaluation removes its file, and
-            # Windows removes no folder while a file in it is open.
-            _lib._lib.gamut_evaluation_free(ev)
-            ev = ctypes.c_void_p()
             if directory is not None:
                 directory.cleanup()
             raise
-        finally:
-            _lib._lib.gamut_evaluation_free(ev)
     if temporary:
         handle = ctypes.c_void_p()
         call("gamut_open", b(out_path), ctypes.byref(handle))
