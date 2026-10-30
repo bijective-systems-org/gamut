@@ -202,3 +202,5 @@ cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -
 
 Build it: `cc one_mesh.c -I<prefix>/include -L<prefix>/lib -lgamut -lm`.
 The full program is [`examples/c/one_mesh.c`](https://github.com/bijective-systems-org/gamut/blob/main/examples/c/one_mesh.c).
+
+Next: [Rust](rust.md).

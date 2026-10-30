@@ -147,3 +147,26 @@ program may load one, link HDF5 into the library with
 Python wheels are built that way.
 
 ///
+
+/// tab | Rust
+
+Rust 1.70 or later. Add the crate from this repository, at the release
+that matches the core it links, and point the build at a core library:
+
+```toml
+[dependencies]
+gamut = { git = "https://github.com/bijective-systems-org/gamut", tag = "v2.0.0" }
+```
+
+```bash
+GAMUT_LIB_DIR=/path/to/gamut-core/lib cargo build
+```
+
+The core is in each release's `gamut-core-<version>-<platform>` archive;
+`GAMUT_LIB_DIR` is its `lib/` folder. A program finds the library when it
+runs through the library path (`LD_LIBRARY_PATH` on Linux,
+`DYLD_LIBRARY_PATH` on macOS, `PATH` with the archive's `bin/` on Windows)
+or an rpath. From a checkout, `cargo test` and
+`cargo run --example run_table` in `rust/` find it without either.
+
+///

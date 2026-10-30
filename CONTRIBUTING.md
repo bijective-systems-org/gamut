@@ -1,8 +1,8 @@
 # Contributing
 
 The [specification](SPEC.md) and the [corpus](corpus) define Gamut. The
-C++ core in `src/` implements them once; Python, MATLAB, Julia and the C++
-header are thin layers over its C interface. A change of behaviour starts from the
+C++ core in `src/` implements them once; Python, MATLAB, Julia, Rust and
+the C++ header are thin layers over its C interface. A change of behaviour starts from the
 specification and the corpus, never from one language.
 
 ## A bug
@@ -59,6 +59,17 @@ julia --project=julia -e 'include("julia/test/runtests.jl")'
 python corpus/generate.py /tmp/corpus
 GAMUT_LIBRARY=build/libgamut.so python corpus/check.py /tmp/corpus
 julia --project=<an environment with JSON and Gamut> julia/test/check_corpus.jl /tmp/corpus
+```
+
+Rust's tests, the corpus from Rust, and the check that `gamut-sys`
+declares what `gamut.h` does, from `rust/` with the core built in
+`build/` (`_pages.py rust FOLDER` checks the examples' output against
+their pages, as for MATLAB and Julia):
+
+```bash
+GAMUT_LIB_DIR=$PWD/../build GAMUT_CORPUS=/tmp/corpus cargo test
+GAMUT_LIB_DIR=$PWD/../build cargo run --example run_table
+python gamut-sys/generate.py --check
 ```
 
 In MATLAB, from `matlab/`: `build_mex`, then `run_tests`, then

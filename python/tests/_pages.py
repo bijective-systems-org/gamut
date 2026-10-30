@@ -2,7 +2,7 @@
 
 Run as a script, it checks what one language's examples printed against
 the pages that show them, for the lanes that run those examples outside
-pytest (MATLAB, Julia):
+pytest (MATLAB, Julia, Rust):
 
     python python/tests/_pages.py LANGUAGE FOLDER
 
@@ -62,29 +62,30 @@ def contiguous(part: str, whole: str) -> bool:
 # checks must have run, except the files a page quotes that print nothing.
 PROGRAMS = {
     "guide/01-run-tables.md": {"matlab": ["matlab/run_table.m"], "julia": ["julia/run_table.jl"],
-                               "cpp": ["cpp/run_table.cpp"]},
+                               "cpp": ["cpp/run_table.cpp"], "rust": ["rust/run_table.rs"]},
     "guide/02-one-mesh.md": {"matlab": ["matlab/one_mesh.m"], "julia": ["julia/one_mesh.jl"],
-                             "cpp": ["cpp/one_mesh.cpp"]},
+                             "cpp": ["cpp/one_mesh.cpp"], "rust": ["rust/one_mesh.rs"]},
     "guide/03-geometry-families.md": {"matlab": ["matlab/family.m"], "julia": ["julia/family.jl"],
-                                      "cpp": ["cpp/family.cpp"]},
+                                      "cpp": ["cpp/family.cpp"], "rust": ["rust/family.rs"]},
     "guide/04-changing-meshes.md": {"matlab": ["matlab/refinement.m"], "julia": ["julia/refinement.jl"],
-                                    "cpp": ["cpp/refinement.cpp"]},
+                                    "cpp": ["cpp/refinement.cpp"], "rust": ["rust/refinement.rs"]},
     "guide/05-time-series.md": {"matlab": ["matlab/transient.m"], "julia": ["julia/transient.jl"],
-                                "cpp": ["cpp/transient.cpp"]},
+                                "cpp": ["cpp/transient.cpp"], "rust": ["rust/transient.rs"]},
     "guide/06-uncertainty-and-gradients.md": {"matlab": ["matlab/uncertain.m"], "julia": ["julia/uncertain.jl"],
-                                              "cpp": ["cpp/uncertain.cpp"]},
+                                              "cpp": ["cpp/uncertain.cpp"], "rust": ["rust/uncertain.rs"]},
     "guide/07-models.md": {"matlab": ["matlab/Polynomial.m", "matlab/models.m"], "julia": ["julia/nearest.jl"],
-                           "cpp": ["cpp/nearest.cpp"]},
+                           "cpp": ["cpp/nearest.cpp"], "rust": ["rust/nearest.rs"]},
     "guide/08-reading-parts.md": {"matlab": ["matlab/parts.m"], "julia": ["julia/parts.jl"],
-                                  "cpp": ["cpp/parts.cpp"]},
+                                  "cpp": ["cpp/parts.cpp"], "rust": ["rust/parts.rs"]},
     "guide/09-combining-files.md": {"matlab": ["matlab/combining.m"], "julia": ["julia/combining.jl"],
-                                    "cpp": ["cpp/combining.cpp"]},
+                                    "cpp": ["cpp/combining.cpp"], "rust": ["rust/combining.rs"]},
     "reference/matlab.md": {"matlab": ["matlab/read_with_ncread.m", "matlab/evaluate_model.m"]},
     "reference/julia.md": {"julia": ["julia/nearest.jl"]},
     "reference/c-and-cpp.md": {"cpp": ["cpp/nearest.cpp"], "c": ["c/one_mesh.c"]},
+    "reference/rust.md": {"rust": ["rust/nearest.rs"]},
 }
 QUOTED_ONLY = {"matlab/Polynomial.m"}       # a class the model example uses
-TABS = {"Python": "python", "MATLAB": "matlab", "Julia": "julia", "C++": "cpp", "C": "c"}
+TABS = {"Python": "python", "MATLAB": "matlab", "Julia": "julia", "C++": "cpp", "Rust": "rust", "C": "c"}
 CODE = set(TABS.values())
 
 

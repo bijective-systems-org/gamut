@@ -25,7 +25,7 @@ THEMES = {
 FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
 MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
 LANGUAGES = [("Python", True), ("MATLAB", True), ("Julia", True), ("C++", True), ("C", True),
-             ("Rust", False), ("Fortran", False)]
+             ("Rust", True), ("Fortran", False)]
 STRIP = 30                                            # the C interface, on the core's edge
 W, M = 760, 10
 BOX_W, BOX_H, GAP = 156, 34, 10                       # a language
@@ -61,8 +61,8 @@ def mark(x, y, size):
 def draw(c: dict) -> str:
     o = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" '
          f'role="img" aria-labelledby="languages-title">',
-         '<title id="languages-title">Python (with the command line), MATLAB, Julia, C++ and C each read '
-         'and write a .gamut file through the C interface of the one C++ core; Rust and Fortran are '
+         '<title id="languages-title">Python (with the command line), MATLAB, Julia, C++, C and Rust each '
+         'read and write a .gamut file through the C interface of the one C++ core; Fortran is '
          'planned.</title>',
          f'<rect width="{W}" height="{H}" fill="{c["page"]}"/>']
     core_y, core_h = M, H - 2 * M

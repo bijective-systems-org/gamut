@@ -82,13 +82,30 @@ study.close();
 
 ///
 
+/// tab | Rust
+
+```rust
+let mut study = gamut::create("uncertain.gamut", "example ensemble", "", "")?;
+study.declare_parameter("alpha", "condition", "degree")?;
+study.declare_scalar("cl", "1")?;
+study.declare_scalar_of("cl_std", "1", std_of("cl"))?;
+study.declare_scalar_of("cl_p05", "1", quantile_of("cl", 0.05))?;
+study.declare_scalar_of("cl_p95", "1", quantile_of("cl", 0.95))?;
+study.declare_scalar_of("dcl_dalpha", "degree-1", derivative_of("cl", "alpha"))?;
+study.add_runs(&[("alpha", alpha.into()), ("cl", cl.into()), ("cl_std", spread.into()), ("cl_p05", p05.into()),
+                 ("cl_p95", p95.into()), ("dcl_dalpha", vec![0.11; 9].into())], &[])?;
+study.close()?;
+```
+
+///
+
 - `of` names the result being described.
 - `statistic` is `std` (a standard deviation, never negative) or
   `quantile` with `q` between 0 and 1. A symmetric interval is two
-  quantiles. Its units are those of the result it describes. In C++,
-  `std_of` and `quantile_of` make these declarations.
+  quantiles. Its units are those of the result it describes. In C++ and
+  Rust, `std_of` and `quantile_of` make these declarations.
 - A derivative names what it is taken with respect to (`with_respect_to`;
-  `withRespectTo` in MATLAB, `derivative_of` in C++): a parameter, as
+  `withRespectTo` in MATLAB, `derivative_of` in C++ and Rust): a parameter, as
   here, or node position (`coordinates` with an `axis`), which is an
   adjoint shape sensitivity stored as a node field per axis.
 - Anything else, such as an RMS, a time average or a maximum, is an
@@ -155,6 +172,21 @@ std::printf("its derivative with respect to alpha: %s\n", related.derivatives.at
 const std::vector<double> low = study.get_scalar(related.quantiles.at(0.05));
 const std::vector<double> high = study.get_scalar(related.quantiles.at(0.95));
 std::printf("90 %% band at 8 degrees: %.3f to %.3f\n", low.back(), high.back());
+```
+
+///
+
+/// tab | Rust
+
+```rust
+let study = gamut::open("uncertain.gamut")?;
+let related = study.related("cl")?;
+let (q05, q95) = (related.quantile(0.05).unwrap(), related.quantile(0.95).unwrap());
+println!("the std of cl: {}", related.std.as_deref().unwrap_or(""));
+println!("its 0.05 and 0.95 quantiles: {q05} {q95}");
+println!("its derivative with respect to alpha: {}", related.derivatives["alpha"]);
+let (low, high) = (study.get_scalar(q05, ..)?, study.get_scalar(q95, ..)?);
+println!("90 % band at 8 degrees: {:.3} to {:.3}", low[low.len() - 1], high[high.len() - 1]);
 ```
 
 ///

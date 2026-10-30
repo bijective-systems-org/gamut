@@ -1,7 +1,8 @@
 """The README quotes the examples exactly: its Python blocks are lines of the
-example scripts, its MATLAB, Julia and C++ blocks lines of the language
-examples, and its output blocks what those examples print: the sweep's
-line (00_readme.py, and the MATLAB, Julia and C++ sweeps) and the model's
+example scripts, its MATLAB, Julia, C++ and Rust blocks lines of the
+language examples, and its output blocks what those examples print: the
+sweep's line (00_readme.py, and the MATLAB, Julia, C++ and Rust sweeps,
+Rust's checked in its CI lane) and the model's
 (07_models.py, and the MATLAB example that evaluates its file)."""
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ README = ROOT / "README.md"
 SOURCES = {"python": sorted(EXAMPLES.glob("[0-9][0-9]_*.py")),
            "matlab": [EXAMPLES / "matlab" / "sweep.m", EXAMPLES / "matlab" / "evaluate_model.m"],
            "julia": [EXAMPLES / "julia" / "sweep.jl"],
-           "cpp": [EXAMPLES / "cpp" / "sweep.cpp"]}
+           "cpp": [EXAMPLES / "cpp" / "sweep.cpp"],
+           "rust": [EXAMPLES / "rust" / "sweep.rs"]}
 
 pytestmark = pytest.mark.skipif(not (README.is_file() and EXAMPLES.is_dir()),
                                 reason="the README and examples are not beside this test (an installed package)")

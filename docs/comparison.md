@@ -47,7 +47,7 @@ Exodus and CGNS already supply scientific data models and established
 language interfaces. Gamut's particular focus is the study across runs:
 design and condition parameters, status, published splits, the unit of
 generalisation and shared-mesh correspondence. Its Python, MATLAB, Julia,
-C++ and C interfaces use that study vocabulary. This is a scope comparison,
+C++, C and Rust interfaces use that study vocabulary. This is a scope comparison,
 not a claim that other formats cannot carry metadata or be read across languages.
 
 ## Storage foundations and baselines

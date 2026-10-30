@@ -139,6 +139,26 @@ jobs:
           julia --project="$RUNNER_TEMP/jcorpus" julia/test/check_corpus.jl "$RUNNER_TEMP/corpus" | tee "$RUNNER_TEMP/jcorpus.txt"
           grep -qE '^[1-9][0-9]* cases' "$RUNNER_TEMP/jcorpus.txt"
 
+      - name: Rust, its examples, and the corpus from Rust
+        # The runner's stable Rust; clippy holds the code to the crates'
+        # rust-version, and gamut-sys to the declarations of gamut.h.
+        env:
+          GAMUT_LIB_DIR: ${{ github.workspace }}/build
+          GAMUT_CORPUS: ${{ runner.temp }}/corpus
+        run: |
+          python rust/gamut-sys/generate.py --check
+          (cd rust && cargo clippy --all-targets -- -D warnings && cargo test)
+          # What each example prints is kept, and held to the pages that show it.
+          mkdir -p "$RUNNER_TEMP/rprinted"
+          for example in run_table one_mesh family refinement transient uncertain parts combining sweep; do
+            mkdir -p "$RUNNER_TEMP/rexample/$example"
+            (cd "$RUNNER_TEMP/rexample/$example" && "$GITHUB_WORKSPACE/rust/target/debug/examples/$example") | tee "$RUNNER_TEMP/rprinted/$example.txt"
+          done
+          grep -qxF "$(grep -m1 '^lift of the runs that converged:' README.md)" "$RUNNER_TEMP/rprinted/sweep.txt"
+          # The nearest model fitted in Python, in the folder the Julia step made.
+          (cd "$RUNNER_TEMP/jexample/models" && "$GITHUB_WORKSPACE/rust/target/debug/examples/nearest") | tee "$RUNNER_TEMP/rprinted/nearest.txt"
+          "$RUNNER_TEMP/venv-3.12/bin/python" python/tests/_pages.py rust "$RUNNER_TEMP/rprinted"
+
       - name: Two HDF5 copies in one process
         if: github.event_name == 'push'
         env:

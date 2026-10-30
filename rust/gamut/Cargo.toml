@@ -1,0 +1,59 @@
+[package]
+name = "gamut"
+description = "Gamut files from Rust: parametric simulation studies and the models fitted to them"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+build = "build.rs"
+
+[lib]
+name = "gamut"
+
+[dependencies]
+gamut-sys = { path = "../gamut-sys", version = "=2.0.0" }
+
+# The examples of the documentation, one program per page.
+[[example]]
+name = "run_table"
+path = "../../examples/rust/run_table.rs"
+
+[[example]]
+name = "one_mesh"
+path = "../../examples/rust/one_mesh.rs"
+
+[[example]]
+name = "family"
+path = "../../examples/rust/family.rs"
+
+[[example]]
+name = "refinement"
+path = "../../examples/rust/refinement.rs"
+
+[[example]]
+name = "transient"
+path = "../../examples/rust/transient.rs"
+
+[[example]]
+name = "uncertain"
+path = "../../examples/rust/uncertain.rs"
+
+[[example]]
+name = "nearest"
+path = "../../examples/rust/nearest.rs"
+
+[[example]]
+name = "parts"
+path = "../../examples/rust/parts.rs"
+
+[[example]]
+name = "combining"
+path = "../../examples/rust/combining.rs"
+
+[dev-dependencies]
+serde_json = "1"
+
+[[example]]
+name = "sweep"
+path = "../../examples/rust/sweep.rs"

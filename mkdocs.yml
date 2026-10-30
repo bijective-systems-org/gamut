@@ -112,6 +112,7 @@ nav:
       - reference/matlab.md
       - reference/julia.md
       - reference/c-and-cpp.md
+      - reference/rust.md
       - reference/selecting.md
       - Specification: reference/specification.md
       - comparison.md

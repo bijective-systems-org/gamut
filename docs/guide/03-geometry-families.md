@@ -108,6 +108,31 @@ study.close();
 
 ///
 
+/// tab | Rust
+
+```rust
+let mut study = gamut::create("family.gamut", "example family", "shared", "group:member")?;
+study.declare_coordinates("m", 2)?;
+study.declare_label("member", "group", &["slim", "base", "wide"])?;
+study.declare_label("split", "split", &["train", "test"])?;
+study.set_generalisation_group("member")?;
+study.declare_parameter("gamma", "condition", "m2 s-1")?;
+study.declare_field("cp", "node", "1")?;
+study.set_mesh_nodes(base.t.len(), &base.cells, &[])?;
+for (name, radius) in members {
+    let member = ring(48, 12, radius);
+    for gamma in [0.0, 2.0, 4.0] {
+        let split = if name == "wide" { "test" } else { "train" };
+        study.add_run_with_geometry(&[("member", name.into()), ("gamma", gamma.into()), ("split", split.into())],
+                                    &[("cp", &pressure(&member.t, &member.r, radius, gamma))],
+                                    &gamut::Geometry { points: &member.points, ..Default::default() })?;
+    }
+}
+study.close()?;
+```
+
+///
+
 - The mesh is `per` `group:member`: the geometry changes from one member
   of the `member` label to the next, and is the same for every run of a
   member. The label's role is `group`: rows that belong together.
@@ -197,6 +222,25 @@ const auto held = study.get_label("member", test);
 std::string names;
 for (const auto& name : std::set<std::string>(held.begin(), held.end())) names += (names.empty() ? "" : ", ") + name;
 std::printf("held out for testing: %zu runs of %s\n", test.size(), names.c_str());
+```
+
+///
+
+/// tab | Rust
+
+```rust
+let study = gamut::open("family.gamut")?;
+println!("{} runs on {} members of one topology", study.row_count()?, members.len());
+for (name, _) in members {
+    let first = study.select(&format!("member == {name}"))?[0];
+    println!("  {name}: first node at x = {:.2} m", study.get_points(Some(first))?[[0, 0]]);
+}
+let first_node = study.get_field("cp", .., 0)?;
+println!("cp at the first node, run by run:{}",
+         first_node.values.iter().map(|v| format!(" {v:.2}")).collect::<String>());
+let test = study.select("split == test")?;
+let held: BTreeSet<String> = study.get_label("member", &test)?.into_iter().collect();
+println!("held out for testing: {} runs of {}", test.len(), held.into_iter().collect::<Vec<_>>().join(", "));
 ```
 
 ///

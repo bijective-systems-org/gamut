@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Rust: the `gamut` crate, over `gamut-sys`, the declarations of `gamut.h`
+  that `rust/gamut-sys/generate.py` writes from it. It writes and reads
+  data files with the calls of the other languages, evaluates model files
+  whose models are the built-in nearest neighbour, and is held to the
+  corpus. Every example has a Rust tab, and the reference a Rust page.
+  The crates are added from this repository's release tag (not yet from
+  crates.io).
 - `related` in every language, read in the core: what describes a result
   (its standard deviation, quantiles and derivatives, and the parts of its
   vector) comes from `gamut_related` in the C interface. MATLAB
