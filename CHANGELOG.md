@@ -13,7 +13,18 @@
   message in every language), run the built-in models and write the data
   file. Python, MATLAB and Julia only call the registered model types, and
   a C program can evaluate a model file itself. `gamut_evaluate_begin`
-  stays for 2.0 callers.
+  stays for 2.0 callers. Along the way:
+  - coordinates given to `evaluate` are the data file's, per run, as
+    section 7.4 says; they were dropped for a model file whose mesh is
+    fixed;
+  - an int64 input past 2^53 is compared with its bounds exactly and
+    evaluated, where it was refused (E4);
+  - W4 says in how many rows an input lies outside, the same in every
+    language;
+  - a model file whose results read one model output at two widths (a
+    scalar and a field) is refused (E17) before any model runs;
+  - in Python, a complex, boolean or text input or coordinate is refused
+    (E4), where it was cast.
 
 ## 2.0.0 (2026-10-29)
 
