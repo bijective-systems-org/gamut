@@ -2,7 +2,8 @@
 
 Two transient runs, each saved at many time steps. Time is a parameter with
 the role `time`, and a group label says which run each step belongs to, so
-tools keep a run's steps together.
+tools keep a run's steps together. The MATLAB, Julia and C++ examples
+transient are the same program and print the same lines.
 """
 import numpy as np
 
@@ -21,7 +22,8 @@ with gamut.create("transient.gamut", writer="example transient",
                         "speed": np.full(len(steps), speed), "cl": cl})
 
 with gamut.open("transient.gamut") as study:
-    print(study.row_count, "rows; add-ons:", study.addons)
+    print(f"{study.row_count} rows, {len(study.categories('run'))} runs")
     fast = study.select("run == fast")
     t, cl = study.get_parameter("t", rows=fast), study.get_scalar("cl", rows=fast)
-    print(f"fast run: {len(fast)} steps, peak |cl| {np.abs(cl).max():.2f} after t = {t[np.abs(cl).argmax()]:.1f} s")
+    peak = np.abs(cl).argmax()
+    print(f"fast run: {len(fast)} steps, peak |cl| {abs(cl[peak]):.2f} at t = {t[peak]:.1f} s")

@@ -4,10 +4,9 @@ Three cylinders of different radius, meshed with the same topology, so node
 k is the same place on every member (a correspondence, which a mapping or
 morphing tool builds for real geometry). Each member is run at several circulations. The
 coordinates are stored once per member; fields stay one block of runs x
-nodes, comparable node by node across the whole family.
+nodes, comparable node by node across the whole family. The MATLAB, Julia
+and C++ examples family are the same program and print the same lines.
 """
-import numpy as np
-
 import gamut
 from _cylinder import pressure, ring
 
@@ -31,8 +30,10 @@ with gamut.create("family.gamut", writer="example family", mesh="shared", per="g
 
 with gamut.open("family.gamut") as study:
     print(study.row_count, "runs on", len(members), "members of one topology")
-    for row in (0, 3, 6):
-        member = study.get_label("member", rows=row)
-        print(f"  row {row}: {member}, node 0 at x = {study.get_points(row=row)[0, 0]:.2f} m")
-    print("cp at node 0 in every run:", study.get_field("cp", nodes=[0]).ravel().round(2))
-    print("held out for testing:", study.select("split == test"))
+    for name in members:
+        first = study.select(f"member == {name}")[0]
+        print(f"  {name}: first node at x = {study.get_points(row=first)[0, 0]:.2f} m")
+    cp = study.get_field("cp", nodes=[0]).ravel()
+    print("cp at the first node, run by run:", " ".join(f"{v:.2f}" for v in cp))
+    test = study.select("split == test")
+    print("held out for testing:", len(test), "runs of", ", ".join(sorted(set(study.get_label("member", rows=test)))))
