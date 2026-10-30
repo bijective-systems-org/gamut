@@ -59,9 +59,10 @@ env:
   # The MATLAB that builds the gateways and packages them, and so the oldest
   # release the toolbox claims (package_toolbox.m reads it from the MATLAB it
   # runs in): the first to run natively on Apple silicon. MathWorks lists
-  # Ubuntu 22.04 and macOS 14 as its newest systems; GitHub retired the
-  # macOS 14 runners in November 2026, so its macOS jobs run on macOS 15,
-  # where the toolbox test shows it installs and runs.
+  # Ubuntu 22.04 and macOS 14 as its newest systems; GitHub retires the
+  # macOS 14 runners on 2 November 2026, so its macOS jobs run on macOS 15,
+  # where the gateway builds and the toolbox test installs it and runs the
+  # example.
   MATLAB_RELEASE: R2023b
   MANYLINUX: quay.io/pypa/manylinux_2_28_x86_64:2026.10.16-1@sha256:1e7b8460ad8fb3fb0fbe1cd818845159ac896b4fd17452d56e892c291f3b97a8
 
