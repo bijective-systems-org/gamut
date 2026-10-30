@@ -6,8 +6,9 @@ it, and the model's own numbers are plain data. Evaluating it on new inputs
 gives an ordinary data file.
 
 The model here is a quadratic of a type of our own, `Polynomial`.
-examples/matlab/evaluate_model.m evaluates the same file in MATLAB, with
-a MATLAB class of the same type, and prints the same line. The built-in
+examples/matlab/models.m is the same program in MATLAB, with a MATLAB class
+of the same type, and prints the same lines; examples/matlab/evaluate_model.m
+evaluates the file this program writes. The built-in
 `Nearest` model answers with the closest run; examples/julia/nearest.jl
 and examples/cpp/nearest.cpp evaluate it too. Last, the model is asked
 about an angle outside the range it was fitted on, and the answer says so.
@@ -59,7 +60,7 @@ with gamut.create_model("lift_model.gamut", writer="example fit", trained_on=[sw
 with gamut.evaluate("lift_model.gamut", {"alpha": [2.2, 7.9]}, path="lift_answer.gamut") as answer:
     lift = answer.get_scalar("cl")
 print("the model's lift at 2.2 and 7.9 degrees:", " ".join(f"{v:.2f}" for v in lift))
-print("the answer is a valid study file:", gamut.validate("lift_answer.gamut").ok)
+print("the answer is a valid study file:", "yes" if gamut.validate("lift_answer.gamut").ok else "no")
 
 # The built-in model: the closest run, evaluated by the core in every language.
 with gamut.create_model("lift_nearest.gamut", writer="example fit", trained_on=[sweep_id],

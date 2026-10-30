@@ -2,7 +2,9 @@
 
 Runs are chosen with a small expression language; nodes by a mesh label;
 values arrive in the units asked for (unit conversion needs the `units`
-extra: pip install "gamut-format[units]").
+extra: pip install "gamut-format[units]"). The MATLAB, Julia and C++
+examples parts are the same program, converting units themselves, and print
+the same lines.
 """
 import numpy as np
 
@@ -13,7 +15,8 @@ points, cells, t, r = ring()
 surface = (r == r.min()).astype(int)                     # 1 on the wall
 with gamut.create("parts.gamut", writer="example parts", mesh="shared", per="fixed",
                    coordinates={"units": "m", "axes": 2},
-                   parameters={"gamma": {"units": "m2 s-1"}, "speed": {"units": "m s-1"}},
+                   parameters={"gamma": {"units": "m2 s-1", "role": "condition"},
+                               "speed": {"units": "m s-1", "role": "condition"}},
                    labels={"status": {"role": "status", "categories": ["converged", "failed"]}},
                    mesh_labels={"surface": {"at": "node", "categories": ["field", "wall"]}},
                    fields={"p": {"units": "Pa", "at": "node"}}) as study:
@@ -26,9 +29,10 @@ with gamut.create("parts.gamut", writer="example parts", mesh="shared", per="fix
 
 with gamut.open("parts.gamut") as study:
     rows = study.select("speed >= 20 and gamma > 1 and status == converged")
-    print("chosen rows:", rows)
+    print("chosen:", len(rows), "runs")
     wall = study.categories("surface").index("wall")
     on_wall = np.flatnonzero(study.get_mesh_label("surface") == wall)
     p_wall = study.get_field("p", rows=rows, nodes=on_wall, units="kPa")
-    print("wall pressure block:", p_wall.shape, "lowest", p_wall.min().round(3), "kPa")
-    print("speeds in km/h:", study.get_parameter("speed", rows=rows, units="km/h").round(1))
+    print(f"wall pressure: {p_wall.shape[0]} runs x {p_wall.shape[1]} nodes, lowest {p_wall.min():.3f} kPa")
+    speeds = study.get_parameter("speed", rows=rows, units="km/h")
+    print("speeds in km/h:", " ".join(f"{v:.1f}" for v in speeds))

@@ -25,9 +25,9 @@ the same lines; choosing a language shows it in every example.
 | 3 | [Geometry families](03-geometry-families.md) | several shapes meshed with one topology, and a train/test split | Python, MATLAB, Julia, C++ |
 | 4 | [Changing meshes](04-changing-meshes.md) | a different mesh per run | Python, MATLAB, Julia, C++ |
 | 5 | [Time series](05-time-series.md) | transient runs, a row per saved step | Python, MATLAB, Julia, C++ |
-| 6 | [Uncertainty and gradients](06-uncertainty-and-gradients.md) | a spread, quantiles or a derivative beside a result | Python |
-| 7 | [Models](07-models.md) | a fitted model to share and evaluate on new inputs | Python; evaluated in MATLAB and Julia |
-| 8 | [Reading parts](08-reading-parts.md) | more data than memory, regions, other units | Python |
+| 6 | [Uncertainty and gradients](06-uncertainty-and-gradients.md) | a spread, quantiles or a derivative beside a result | Python, MATLAB, Julia, C++ |
+| 7 | [Models](07-models.md) | a fitted model to share and evaluate on new inputs | Python, MATLAB; the built-in model in Julia and C++ too |
+| 8 | [Reading parts](08-reading-parts.md) | more data than memory, regions, other units | Python, MATLAB, Julia, C++ |
 | 9 | [Combining files](09-combining-files.md) | runs from several files, or a subset of one | Python |
 | 10 | [VTK](10-vtk.md) | a folder of VTK files to bring in, or to write back out | Python, command line |
 
