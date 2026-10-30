@@ -111,6 +111,11 @@ fn count(n: usize) -> i64 {
     n as i64
 }
 
+// A count the C interface takes as an int.
+fn int(n: usize, what: &str) -> Result<c_int> {
+    c_int::try_from(n).map_err(|_| Error::new("", format!("{what} {n} is more than a C int holds")))
+}
+
 // Owns a list of strings from the library until it is dropped.
 struct Strings(*mut sys::gamut_strings);
 
@@ -221,6 +226,8 @@ pub struct Array<T> {
 impl<T> Index<[usize; 2]> for Array<T> {
     type Output = T;
     fn index(&self, [i, j]: [usize; 2]) -> &T {
+        assert!(self.shape.len() == 2 && i < self.shape[0] && j < self.shape[1],
+                "[{i}, {j}] is outside an array of shape {:?}", self.shape);
         &self.values[i * self.shape[1] + j]
     }
 }
@@ -547,7 +554,7 @@ impl Study {
     pub fn declare_coordinates(&mut self, units: &str, axes: usize) -> Result<()> {
         let f = self.writer()?;
         let (units, none) = (c(units)?, c("")?);
-        let axes = axes as c_int;
+        let axes = int(axes, "axes")?;
         call(|e| unsafe {
             sys::gamut_declare_coordinates(f, units.as_ptr(), sys::GAMUT_AS_GIVEN, axes, none.as_ptr(), none.as_ptr(), e)
         })?;
@@ -989,7 +996,8 @@ impl Study {
     /// Decompresses field reads in that many threads.
     pub fn set_threads(&self, threads: usize) -> Result<()> {
         let f = self.reader()?;
-        call(|e| unsafe { sys::gamut_set_threads(f, threads as c_int, e) })
+        let threads = int(threads, "threads")?;
+        call(|e| unsafe { sys::gamut_set_threads(f, threads, e) })
     }
 
     // Refuses to read `name` as T unless T holds its stored type exactly.

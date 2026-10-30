@@ -58,6 +58,7 @@ fn reads_come_back_as_written() {
     assert_eq!(s.get_constant::<f64>("area").unwrap(), 2.5);
     assert_eq!(s.get_row_ids(..).unwrap(), [0, 1, 2, 3]);
     assert!(s.get_scalar("cl", ..).unwrap()[2].is_nan());
+    assert!(s.set_threads(usize::MAX).is_err());   // more than a C int, refused rather than cut
     let related = s.related("cl").unwrap();
     assert_eq!((related.std.as_deref(), related.quantile(0.95)), (Some("cl_std"), Some("cl_p95")));
     assert!(gamut::validate(&path).unwrap().ok);
@@ -104,4 +105,11 @@ fn only_a_model_file_is_evaluated() {
     let e = gamut::evaluate(&data, &[("alpha", vec![1.0].into())], &dir.path("a.gamut")).err().unwrap();
     assert_eq!(e.rule(), "E16");
     assert!(!std::path::Path::new(&dir.path("a.gamut")).exists());
+}
+
+#[test]
+#[should_panic(expected = "outside an array of shape [2, 2]")]
+fn an_array_index_stays_in_its_row() {
+    let a = gamut::Array { shape: vec![2, 2], values: vec![10.0, 20.0, 30.0, 40.0] };
+    let _ = a[[0, 2]];
 }
