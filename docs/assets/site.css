@@ -16,21 +16,22 @@
   --md-default-fg-color: var(--gamut-ink);
   --md-code-bg-color: #f5f7f9;
 }
+/* Dark pages take the ground the dark logo is drawn on (#0d1117). */
 [data-md-color-scheme="slate"] {
   --gamut-blue: #74bff8;
-  --gamut-ink: #e6e9ee;
-  --gamut-rule: #2c313a;
+  --gamut-ink: #e6edf3;
+  --gamut-rule: #30363d;
   --md-hue: 215;
-  --md-default-bg-color: #14171c;
-  --md-primary-fg-color: #14171c;
-  --md-primary-fg-color--light: #14171c;
-  --md-primary-fg-color--dark: #14171c;
+  --md-default-bg-color: #0d1117;
+  --md-primary-fg-color: #0d1117;
+  --md-primary-fg-color--light: #0d1117;
+  --md-primary-fg-color--dark: #0d1117;
   --md-primary-bg-color: var(--gamut-ink);
   --md-primary-bg-color--light: #9aa3b0;
   --md-accent-fg-color: var(--gamut-blue);
   --md-typeset-a-color: var(--gamut-blue);
   --md-default-fg-color: var(--gamut-ink);
-  --md-code-bg-color: #1b1f26;
+  --md-code-bg-color: #161b22;
 }
 
 /* The header and the section tabs under it: no colour band, a hairline below. */
@@ -136,3 +137,6 @@
     height: 1.6rem;
   }
 }
+
+/* The repository link names the repository, without its counts. */
+.md-source__facts { display: none; }
