@@ -1,4 +1,4 @@
-# 11. Command line
+# Command line
 
 `gamut` inspects, checks, builds and extracts study files without code:
 for a quick look at a file someone sent, for shell scripts, and for tools
@@ -85,7 +85,7 @@ $ gamut append sweep.gamut second_entry.json
 appended 2 runs to sweep.gamut
 ```
 
-The declarations are those of `gamut.create` ([run tables](01-run-tables.md)).
+The declarations are those of `gamut.create` ([run tables](../guide/01-run-tables.md)).
 An appended document needs only its `runs`; `gamut append` also takes
 another study file and adds all of its runs. For fields, the document names
 a mesh file (`.npz`), and each run's line names a `.npy` of its values;
@@ -106,4 +106,4 @@ both explained.
 - `gamut --version` gives the package version and the format version it
   writes.
 
-Next: [MATLAB](12-matlab.md).
+Next: [MATLAB](matlab.md).

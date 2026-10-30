@@ -1,7 +1,7 @@
 """The guide's pages quote their MATLAB, Julia, C++ and C examples exactly,
 and the C++ and C examples, built against the core this package loaded,
-print what their page shows.  (MATLAB and Julia run their examples in
-their own lanes.)"""
+print what their pages show.  (MATLAB and Julia run their examples in
+their own lanes, and check them with `python _pages.py`.)"""
 
 from __future__ import annotations
 
@@ -14,28 +14,19 @@ import sys
 import pytest
 
 import gamut
-from _pages import EXAMPLES, GUIDE, ROOT, blocks, contiguous
+from _pages import DOCS, EXAMPLES, PROGRAMS, ROOT, blocks, check, contiguous
 
-PAGES = {"02-one-mesh.md": [("matlab", [EXAMPLES / "matlab" / "one_mesh.m"]),
-                            ("julia", [EXAMPLES / "julia" / "one_mesh.jl"]),
-                            ("cpp", [EXAMPLES / "cpp" / "one_mesh.cpp"])],
-         "07-models.md": [("matlab", [EXAMPLES / "matlab" / "Polynomial.m",
-                                      EXAMPLES / "matlab" / "evaluate_model.m"]),
-                          ("julia", [EXAMPLES / "julia" / "nearest.jl"])],
-         "12-matlab.md": [("matlab", [EXAMPLES / "matlab" / "sweep.m", EXAMPLES / "matlab" / "one_mesh.m",
-                                      EXAMPLES / "matlab" / "read_with_ncread.m",
-                                      EXAMPLES / "matlab" / "evaluate_model.m"])],
-         "13-julia.md": [("julia", [EXAMPLES / "julia" / "sweep.jl", EXAMPLES / "julia" / "one_mesh.jl",
-                                    EXAMPLES / "julia" / "nearest.jl"])],
-         "14-c-and-cpp.md": [("cpp", [EXAMPLES / "cpp" / "sweep.cpp", EXAMPLES / "cpp" / "one_mesh.cpp",
-                                      EXAMPLES / "cpp" / "nearest.cpp"]),
-                             ("c", [EXAMPLES / "c" / "one_mesh.c"])]}
+# The examples each page quotes, by language (Python's are held to their
+# pages by test_examples).
+PAGES = {page: [(language, [EXAMPLES / p for p in programs])
+                for language, programs in by_language.items()]
+         for page, by_language in PROGRAMS.items()}
 
 
-@pytest.mark.skipif(not GUIDE.is_dir(), reason="the guide is not beside this test (an installed package)")
+@pytest.mark.skipif(not DOCS.is_dir(), reason="the guide is not beside this test (an installed package)")
 @pytest.mark.parametrize("page", sorted(PAGES))
 def test_language_page_quotes_its_example(page):
-    text = (GUIDE / page).read_text(encoding="utf-8")
+    text = (DOCS / page).read_text(encoding="utf-8")
     for language, examples in PAGES[page]:
         sources = [e.read_text(encoding="utf-8") for e in examples]
         shown = blocks(text, language)
@@ -45,7 +36,7 @@ def test_language_page_quotes_its_example(page):
                 f"{page} quotes {language} code no example has:\n{block}"
 
 
-@pytest.mark.skipif(not GUIDE.is_dir(), reason="the guide is not beside this test (an installed package)")
+@pytest.mark.skipif(not DOCS.is_dir(), reason="the guide is not beside this test (an installed package)")
 def test_examples_print_what_their_page_shows(tmp_path):
     if sys.platform.startswith("win") or not (shutil.which("cc") and shutil.which("c++")):
         pytest.skip("needs compilers named cc and c++")
@@ -57,18 +48,17 @@ def test_examples_print_what_their_page_shows(tmp_path):
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(package), env.get("PYTHONPATH")]))
     subprocess.run([sys.executable, str(EXAMPLES / "07_models.py")], cwd=tmp_path, env=env,
                    check=True, capture_output=True, timeout=300)
-    printed = []
-    for compiler, flags, source in [("cc", ["-std=c99"], EXAMPLES / "c" / "one_mesh.c"),
-                                    ("c++", ["-std=c++17"], EXAMPLES / "cpp" / "one_mesh.cpp"),
-                                    ("c++", ["-std=c++17"], EXAMPLES / "cpp" / "sweep.cpp"),
-                                    ("c++", ["-std=c++17"], EXAMPLES / "cpp" / "nearest.cpp")]:
+    printed = {}
+    for source in sorted({EXAMPLES / p for by_language in PROGRAMS.values()
+                          for language, programs in by_language.items() if language in ("c", "cpp")
+                          for p in programs}):
+        compiler, flags = ("cc", ["-std=c99"]) if source.suffix == ".c" else ("c++", ["-std=c++17"])
         program = tmp_path / f"{source.stem}_{source.suffix[1:]}"
         subprocess.run([compiler, *flags, "-Wall", "-Wextra", "-Werror", "-pedantic",
                         str(source), f"-I{ROOT / 'include'}",
                         f"-L{library.parent}", "-lgamut", "-lm", f"-Wl,-rpath,{library.parent}",
                         "-o", str(program)], check=True, capture_output=True)
-        directory = tmp_path / program.name
-        directory = directory.with_name(directory.name + "_files")
+        directory = tmp_path / (program.name + "_files")
         directory.mkdir()
         if source.stem == "nearest":
             for model in tmp_path.glob("*.gamut"):
@@ -76,8 +66,18 @@ def test_examples_print_what_their_page_shows(tmp_path):
         result = subprocess.run([str(program)], cwd=directory, capture_output=True, text=True,
                                 timeout=120)
         assert result.returncode == 0, f"{source.name}: {result.stderr}"
-        printed.append(result.stdout)
-    text = (GUIDE / "14-c-and-cpp.md").read_text(encoding="utf-8")
+        printed[source] = result.stdout
+    # The pages with language tabs, one language at a time.
+    for language, suffix in (("cpp", ".cpp"), ("c", ".c")):
+        kept = tmp_path / f"printed_{language}"
+        kept.mkdir()
+        for source, out in printed.items():
+            if source.suffix == suffix:
+                (kept / f"{source.stem}.txt").write_text(out, encoding="utf-8")
+        problems = check(language, kept)
+        assert not problems, "\n".join(problems)
+    # The C++ and C page, which shows both.
+    text = (DOCS / "reference" / "c-and-cpp.md").read_text(encoding="utf-8")
     for block in blocks(text, "text"):
-        assert any(contiguous(block, out) for out in printed), \
+        assert any(contiguous(block, out) for out in printed.values()), \
             f"the page shows output no example prints:\n{block}"

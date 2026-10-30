@@ -120,8 +120,11 @@ jobs:
         run: |
           julia --project=julia -e 'using Pkg; Pkg.instantiate()'
           julia --project=julia -e 'include("julia/test/runtests.jl")'
-          mkdir -p "$RUNNER_TEMP/jexample/mesh" "$RUNNER_TEMP/jexample/sweep" "$RUNNER_TEMP/jexample/models"
-          (cd "$RUNNER_TEMP/jexample/mesh" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/one_mesh.jl")
+          mkdir -p "$RUNNER_TEMP/jexample/table" "$RUNNER_TEMP/jexample/mesh" "$RUNNER_TEMP/jexample/sweep" \
+                   "$RUNNER_TEMP/jexample/models" "$RUNNER_TEMP/jprinted"
+          # What each example prints is kept, and held to the pages that show it.
+          (cd "$RUNNER_TEMP/jexample/table" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/run_table.jl") | tee "$RUNNER_TEMP/jprinted/run_table.txt"
+          (cd "$RUNNER_TEMP/jexample/mesh" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/one_mesh.jl") | tee "$RUNNER_TEMP/jprinted/one_mesh.txt"
           # The README's sweep prints the README's line.
           (cd "$RUNNER_TEMP/jexample/sweep" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/sweep.jl") | tee "$RUNNER_TEMP/jsweep.txt"
           grep -qxF "$(grep -m1 '^lift of the runs that converged:' README.md)" "$RUNNER_TEMP/jsweep.txt"
@@ -129,7 +132,8 @@ jobs:
           (cd "$RUNNER_TEMP/jexample/models" && "$RUNNER_TEMP/venv-3.12/bin/python" "$GITHUB_WORKSPACE/examples/07_models.py" > /dev/null)
           (cd "$RUNNER_TEMP/jexample/models" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/nearest.jl") | tee "$RUNNER_TEMP/jnearest.txt"
           grep -qxF "$(grep -m1 "^the nearest run's lift" docs/guide/07-models.md)" "$RUNNER_TEMP/jnearest.txt"
-          grep -qxF "$(grep -m1 "^degrees outside the fitted range" docs/guide/13-julia.md)" "$RUNNER_TEMP/jnearest.txt"
+          grep -qxF "$(grep -m1 "^degrees outside the fitted range" docs/reference/julia.md)" "$RUNNER_TEMP/jnearest.txt"
+          "$RUNNER_TEMP/venv-3.12/bin/python" python/tests/_pages.py julia "$RUNNER_TEMP/jprinted"
           julia --project="$RUNNER_TEMP/jcorpus" -e 'using Pkg; Pkg.add(name="JSON", version="1.10"); Pkg.develop(path="julia")'
           julia --project="$RUNNER_TEMP/jcorpus" julia/test/check_corpus.jl "$RUNNER_TEMP/corpus" | tee "$RUNNER_TEMP/jcorpus.txt"
           grep -qE '^[1-9][0-9]* cases' "$RUNNER_TEMP/jcorpus.txt"
@@ -176,6 +180,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/models"
           (cd "$RUNNER_TEMP/models" && PYTHONPATH="$GITHUB_WORKSPACE/python" python "$GITHUB_WORKSPACE/examples/07_models.py")
           echo "MODEL_FILES=$RUNNER_TEMP/models" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/printed"
+          echo "EXAMPLE_OUTPUT=$RUNNER_TEMP/printed" >> "$GITHUB_ENV"
 
       - uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d # v3.1.0
         with:
@@ -186,6 +192,9 @@ jobs:
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3.3.0
         with:
           command: "cd matlab; build_mex; addpath(fullfile(pwd, 'tests')); run_tests; corpus = getenv('CORPUS'); run(fullfile(pwd, 'tests', 'check_corpus.m'))"
+
+      - name: What the MATLAB examples printed, against their pages
+        run: python python/tests/_pages.py matlab "$RUNNER_TEMP/printed"
 
   macos:
     name: macos (core, wheel, Python)

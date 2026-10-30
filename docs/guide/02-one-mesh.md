@@ -244,6 +244,7 @@ decompresses only the stored chunks that hold what it asks for.
 - A `per = fixed` mesh's points and cells are written once however many
   runs the file holds.
 
-Run it: `python examples/02_one_mesh.py`. The [MATLAB](12-matlab.md),
-[Julia](13-julia.md) and [C++](14-c-and-cpp.md) pages say how to run
-`one_mesh` in theirs. Next: [geometry families](03-geometry-families.md).
+Run it: `python examples/02_one_mesh.py`, or `one_mesh` from
+`examples/matlab`, `examples/julia` and `examples/cpp`
+([installing](../install.md) says how to run each). Next:
+[geometry families](03-geometry-families.md).

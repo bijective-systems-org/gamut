@@ -295,11 +295,18 @@ for bound = {struct('units', '1', 'lower', 0), struct('units', '1', 'upper', 1)}
     end
 end
 
-% The examples in examples/matlab run: one_mesh writes a valid file, and
-% the README's sweep, and the same file read with ncread, print its line.
+% The examples in examples/matlab run: run_table and one_mesh write valid
+% files, and the README's sweep, and the same file read with ncread, print
+% its line. With EXAMPLE_OUTPUT naming a folder, what each prints is kept
+% there for `python python/tests/_pages.py matlab FOLDER`, which holds it
+% to the pages that show it.
 examples = fullfile(fileparts(fileparts(here)), 'examples', 'matlab');
 if isfile(fullfile(examples, 'one_mesh.m'))
     exampleDir = fullfile(tmp, 'examples'); mkdir(exampleDir);
+    run_example(fullfile(examples, 'run_table.m'), exampleDir);
+    found = gamut.validate(fullfile(exampleDir, 'polar.gamut'));
+    ok(~any(startsWith({found.rule}, 'E')), ...
+        'the MATLAB run table writes a valid file (its failed run is a warning)');
     run_example(fullfile(examples, 'one_mesh.m'), exampleDir);
     ok(isempty(gamut.validate(fullfile(exampleDir, 'cylinder.gamut'))), ...
         'the MATLAB example writes a valid file');
@@ -325,7 +332,7 @@ if isfile(fullfile(examples, 'one_mesh.m'))
         printed = splitlines(string(run_example(fullfile(examples, 'evaluate_model.m'), exampleDir)));
         ok(~isempty(line) && any(strcmp(printed, line)), ...
             'MATLAB evaluates the model fitted in Python and prints the README''s line');
-        page = fileread(fullfile(fileparts(fileparts(here)), 'docs', 'guide', '12-matlab.md'));
+        page = fileread(fullfile(fileparts(fileparts(here)), 'docs', 'reference', 'matlab.md'));
         marks = regexp(page, 'degrees outside the fitted range:[^\r\n]*', 'match', 'once');
         ok(~isempty(marks) && any(strcmp(printed, marks)), ...
             'the answer marks the angle outside the fitted range as the MATLAB page shows');
@@ -560,4 +567,10 @@ restore = onCleanup(@() cd(old));
 copyfile(example, folder);
 [~, name] = fileparts(example);
 out = evalc(name);
+keep = getenv('EXAMPLE_OUTPUT');
+if ~isempty(keep)
+    fid = fopen(fullfile(keep, [name '.txt']), 'w');
+    fwrite(fid, out);
+    fclose(fid);
+end
 end

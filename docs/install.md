@@ -1,17 +1,59 @@
-# Installing Gamut (gamut-format)
+# Installing
 
 Gamut is published by Bijective Systems as
-[`gamut-format` on PyPI](https://pypi.org/project/gamut-format/).
-Install `gamut-format`, then `import gamut`; the command line is `gamut`.
+[`gamut-format` on PyPI](https://pypi.org/project/gamut-format/):
+install `gamut-format`, then `import gamut`; the command line is `gamut`.
 The PyPI project named `gamut` is a different package.
 
 Every language uses the same core library, written in C++. The Python
-wheels include it, with HDF5 linked inside, so it never meets another HDF5
-in the same process: h5py's, MATLAB's or a solver's. MATLAB and Julia can
-use the wheel's copy; C++ and C programs build the core from source.
+wheels and the MATLAB toolbox carry it with HDF5 linked inside, so it
+never meets another HDF5 in the same process: h5py's, MATLAB's or a
+solver's. Julia uses a release's core or the wheel's; C++ and C programs
+build it from source. The oldest versions Gamut 2 supports are Python
+3.11, NumPy 1.26, MATLAB R2023b and Julia 1.10. Each is tested, and none
+of them rises within 2.x.
 
-The oldest versions Gamut 2 supports are Python 3.11, NumPy 1.26, MATLAB
-R2023b and Julia 1.10. Each is tested, and none of them rises within 2.x.
+/// tab | Python
+
+```bash
+pip install gamut-format
+gamut --version
+```
+
+///
+
+/// tab | MATLAB
+
+Download
+[`Gamut.mltbx`](https://github.com/bijective-systems-org/gamut/releases/latest/download/Gamut.mltbx)
+from the latest release, then
+
+```matlab
+matlab.addons.install('Gamut.mltbx')
+```
+
+///
+
+/// tab | Julia
+
+```julia
+using Pkg
+Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v2.0.0")
+ENV["GAMUT_LIBRARY"] = "/path/to/libgamut.dylib"   # .so on Linux, gamut.dll on Windows
+using Gamut
+```
+
+///
+
+/// tab | C++
+
+```bash
+cmake -S . -B build -DHDF5_ROOT=/path/to/hdf5
+cmake --build build
+cmake --install build --prefix /usr/local
+```
+
+///
 
 ## Python
 
@@ -22,10 +64,9 @@ pip install "gamut-format[vtk]"          # with VTK import and export (pyvista, 
 ```
 
 Wheels are built for macOS (arm64 and x86_64, macOS 11 and later), Linux
-(x86_64, glibc 2.28 and later) and Windows (x86_64). One wheel serves every Python version on its
-platform. The only required dependency is NumPy, 1.26 or later, 2.x included.
-
-Check the install:
+(x86_64, glibc 2.28 and later) and Windows (x86_64). One wheel serves
+every Python version on its platform. The only required dependency is
+NumPy, 1.26 or later, 2.x included. To check the install:
 
 ```bash
 gamut --version
@@ -69,15 +110,15 @@ CMAKE_ARGS="-DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT=$PWD/deps -DZLIB_ROOT=$PWD/deps" 
 
 ## MATLAB
 
-Download `Gamut.mltbx` from the
-[latest release](https://github.com/bijective-systems-org/gamut/releases/latest/download/Gamut.mltbx)
-and open it in MATLAB, or run `matlab.addons.install('Gamut.mltbx')`. It
-needs MATLAB R2023b or later on Linux, Windows or an Apple silicon Mac, and
-no compiler: it carries the library, with its own HDF5 linked in apart from
-MATLAB's. `matlab.addons.uninstall('Gamut')` removes it.
+The toolbox, `Gamut.mltbx` from the
+[latest release](https://github.com/bijective-systems-org/gamut/releases/latest/download/Gamut.mltbx),
+opens in MATLAB or installs with `matlab.addons.install('Gamut.mltbx')`.
+It needs MATLAB R2023b or later on Linux, Windows or an Apple silicon Mac,
+and no compiler: it carries the library, with its own HDF5 linked in apart
+from MATLAB's. `matlab.addons.uninstall('Gamut')` removes it.
 
 To read a file only, MATLAB needs nothing installed: its own `ncread`
-reads every array ([reading without the package](guide/12-matlab.md#reading-without-the-package)).
+reads every array ([reading without the package](reference/matlab.md#reading-without-the-package)).
 
 ### Compiling the gateway
 
@@ -107,44 +148,31 @@ folder is all MATLAB needs on its path.
 
 ## Julia
 
-Julia 1.10 or later. Add the package from this repository, at the release
-that matches the wheel's core, and point it at a core library:
-
-```julia
-using Pkg
-Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v2.0.0")
-ENV["GAMUT_LIBRARY"] = "/path/to/libgamut.dylib"   # .so on Linux, gamut.dll on Windows
-using Gamut
-Gamut.version()
-```
-
+Julia 1.10 or later. The package is added from this repository at the
+release that matches the core it calls, and finds the core through
+`GAMUT_LIBRARY`, set in the environment or in `ENV` before the first call.
 The core is in each release's `gamut-core-<version>-<platform>` archive
-(`lib/`, or `bin/` on Windows), and the Python wheel's serves too: set
-`GAMUT_LIBRARY` to its path (`gamut.library_path()` prints the wheel's), in
-the environment or in `ENV` before the first call. From a checkout, `julia --project=julia` uses the package in
-place, and without `GAMUT_LIBRARY` it looks in `build/` at the top of the
-checkout.
+(`lib/`, or `bin/` on Windows), and the Python wheel's serves too:
+`gamut.library_path()` prints its path. `Gamut.version()` says which core
+was loaded.
+
+From a checkout, `julia --project=julia` uses the package in place, and
+without `GAMUT_LIBRARY` it looks in `build/` at the top of the checkout.
 
 ## C++ and C
 
-With CMake 3.16 or later, a C++17 compiler and HDF5 1.14 or later:
-
-```bash
-cmake -S . -B build -DHDF5_ROOT=/path/to/hdf5
-cmake --build build
-cmake --install build --prefix /usr/local
-```
-
-This installs the library, the C++ header `include/gamut/gamut.hpp` (C++17)
-and the C header `include/gamut/gamut.h` beside it, and a CMake package:
+The core builds with CMake 3.16 or later, a C++17 compiler and HDF5 1.14
+or later. Installing it puts the library, the C++ header
+`include/gamut/gamut.hpp` (C++17), the C header `include/gamut/gamut.h`
+and a CMake package in the prefix:
 
 ```cmake
-find_package(gamut 1.0 REQUIRED)
+find_package(gamut 2.0 REQUIRED)
 target_link_libraries(my_tool PRIVATE gamut::gamut)
 ```
 
-On Linux, a core linked to a shared HDF5 can bind to another copy of HDF5
-in the same process (h5py's, MATLAB's, a solver's) and crash. If your
-program may load one, link HDF5 into the library with
-`-DGAMUT_STATIC_HDF5=ON` and `tools/build_deps.sh`, as above; the Python
-wheels are built that way.
+The package accepts any 2.x core. On Linux, a core linked to a shared
+HDF5 can bind to another copy of HDF5 in the same process (h5py's,
+MATLAB's, a solver's) and crash. If your program may load one, link HDF5
+into the library with `-DGAMUT_STATIC_HDF5=ON` and `tools/build_deps.sh`,
+as above; the Python wheels are built that way.

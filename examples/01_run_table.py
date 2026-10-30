@@ -2,7 +2,8 @@
 
 A sweep of a wing over Mach number and angle of attack. Each run records
 its inputs (parameters), whether the solver converged (a label), and its
-force coefficients (scalars), every one with its units.
+force coefficients (scalars), every one with its units. The MATLAB, Julia
+and C++ examples run_table are the same program and print the same lines.
 """
 import numpy as np
 
@@ -25,7 +26,11 @@ with gamut.create("polar.gamut", writer="example sweep",
                            "cl": np.nan if failed else cl, "cd": np.nan if failed else cd})
 
 with gamut.open("polar.gamut") as study:
-    print(study.row_count, "runs;", study.describe()["title"])
-    print("lift at Mach 0.7:", study.get_scalar("cl", rows=study.select("mach == 0.7")).round(3))
-    print("runs that failed:", study.select("status == failed"))
-    print("reference area:", study.get_constant("reference_area"), study.describe("reference_area")["units"])
+    print(f"{study.row_count} runs; {study.describe()['title']}")
+    cl = study.get_scalar("cl", rows=study.select("mach == 0.7"))
+    print("lift at Mach 0.7:", " ".join(f"{v:.3f}" for v in cl))
+    failed = study.select("status == failed")
+    mach, alpha = study.get_parameter("mach", rows=failed), study.get_parameter("alpha", rows=failed)
+    print(f"failed: Mach {mach[0]:.1f}, alpha {alpha[0]:g} degree")
+    area = study.get_constant("reference_area")
+    print(f"reference area: {area:g} {study.describe('reference_area')['units']}")
