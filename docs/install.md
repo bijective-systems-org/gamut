@@ -10,10 +10,13 @@ wheels include it, with HDF5 linked inside, so it never meets another HDF5
 in the same process: h5py's, MATLAB's or a solver's. MATLAB and Julia can
 use the wheel's copy; C++ and C programs build the core from source.
 
+The oldest versions Gamut 2 supports are Python 3.11, NumPy 1.26, MATLAB
+R2023b and Julia 1.10. Each is tested, and none of them rises within 2.x.
+
 ## Python
 
 ```bash
-pip install gamut-format                 # Python 3.10 or later
+pip install gamut-format                 # Python 3.11 or later
 pip install "gamut-format[units]"        # with unit conversion on reads and writes (pint)
 pip install "gamut-format[vtk]"          # with VTK import and export (pyvista, pandas)
 ```
@@ -104,12 +107,12 @@ folder is all MATLAB needs on its path.
 
 ## Julia
 
-Julia 1.9 or later. Add the package from this repository, at the release
+Julia 1.10 or later. Add the package from this repository, at the release
 that matches the wheel's core, and point it at a core library:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v1.3.0")
+Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v2.0.0")
 ENV["GAMUT_LIBRARY"] = "/path/to/libgamut.dylib"   # .so on Linux, gamut.dll on Windows
 using Gamut
 Gamut.version()

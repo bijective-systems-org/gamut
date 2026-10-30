@@ -43,7 +43,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: |
-            3.10
+            3.11
             3.13
             3.14
             3.12
@@ -88,16 +88,16 @@ jobs:
           CMAKE_ARGS="-DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT=$RUNNER_TEMP/deps -DZLIB_ROOT=$RUNNER_TEMP/deps" \
             python -m build --outdir dist .
 
-      - name: The Python suite on the installed wheel (3.12 with every extra; 3.10 on the oldest NumPy; 3.13, 3.14)
+      - name: The Python suite on the installed wheel (3.12 with every extra; 3.11 on the oldest NumPy; 3.13, 3.14)
         # From a directory outside the checkout, so `import gamut` is the
         # wheel; the tests reach the examples and docs by their own path.
         run: |
           wheel=$(ls dist/*.whl)
-          for v in 3.12 3.10 3.13 3.14; do
+          for v in 3.12 3.11 3.13 3.14; do
             spec="$wheel"; extras="pytest h5py"
             [ "$v" = 3.12 ] && { spec="$wheel[test]"; extras=""; }
             # The oldest NumPy pyproject.toml allows is tested, not only the newest.
-            [ "$v" = 3.10 ] && extras="pytest h5py numpy==1.26.*"
+            [ "$v" = 3.11 ] && extras="pytest h5py numpy==1.26.*"
             "python$v" -m venv "$RUNNER_TEMP/venv-$v"
             "$RUNNER_TEMP/venv-$v/bin/python" -m pip install -q "$spec" $extras
             (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/venv-$v/bin/python" -m pytest -q -p no:cacheprovider \
@@ -112,7 +112,7 @@ jobs:
 
       - uses: julia-actions/setup-julia@fa02766e078afaaf09b14210362cee14137e6a32 # v3.0.2
         with:
-          version: '1.11'
+          version: '1.10'                 # the oldest Julia 2.x supports (Project.toml)
 
       - name: Julia, its examples, and the corpus from Julia
         env:

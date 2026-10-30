@@ -4,13 +4,13 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "gamut-format"
-version = "1.3.0"
+version = "2.0.0"
 description = "Gamut by Bijective Systems: an open file format for parametric simulation studies and fitted models"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "licenses/*.txt"]
 authors = [{ name = "Bijective Systems" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["numpy>=1.26"]
 keywords = ["simulation", "parametric study", "design of experiments", "CFD", "FEA", "HDF5",
             "netCDF", "xarray", "surrogate model", "reduced-order model", "machine learning",
