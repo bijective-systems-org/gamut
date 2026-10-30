@@ -21,18 +21,20 @@ study.close();
 
 study = gamut.open('uncertain.gamut');
 quantiles = containers.Map('KeyType', 'double', 'ValueType', 'char');
+derivatives = containers.Map();
 names = study.names('scalars');
 for k = 1:numel(names)                          % what describes cl, read from each declaration
     d = study.describe(names{k});
     if ~isfield(d, 'of') || ~strcmp(d.of, 'cl'), continue; end
-    if isfield(d, 'with_respect_to'), derivative = names{k};
+    if isfield(d, 'with_respect_to'), derivatives(d.with_respect_to) = names{k};
+    elseif ~isfield(d, 'statistic'), continue
     elseif strcmp(d.statistic, 'std'), spreadName = names{k};
-    else, quantiles(str2double(d.q)) = names{k};
+    elseif strcmp(d.statistic, 'quantile'), quantiles(str2double(d.q)) = names{k};
     end
 end
 fprintf('the std of cl: %s\n', spreadName);
 fprintf('its 0.05 and 0.95 quantiles: %s %s\n', quantiles(0.05), quantiles(0.95));
-fprintf('its derivative with respect to alpha: %s\n', derivative);
+fprintf('its derivative with respect to alpha: %s\n', derivatives('alpha'));
 low = study.getScalar(quantiles(0.05));
 high = study.getScalar(quantiles(0.95));
 fprintf('90 %% band at 8 degrees: %.3f to %.3f\n', low(end), high(end));
