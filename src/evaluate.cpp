@@ -337,13 +337,12 @@ void Evaluation::ready() {
         throw Error("", "the nearest model " + id + " gives values only, not the " + a.request.kind + " of " +
                             a.request.output, id);
       }
-      std::vector<double> v = nearest_values(nm, a.request.output, index);
-      if (static_cast<std::int64_t>(v.size()) != rows_ * a.per_row) {
+      const std::int64_t per_row = nearest_output_size(nm, a.request.output);
+      if (per_row != a.per_row) {
         throw Error("E17", "the nearest model " + id + " gives " + a.request.output + " with " +
-                               std::to_string(nearest_output_size(nm, a.request.output)) +
-                               " values per row, not " + std::to_string(a.per_row), id);
+                               std::to_string(per_row) + " values per row, not " + std::to_string(a.per_row), id);
       }
-      a.answer = std::move(v);
+      a.answer = nearest_values(nm, a.request.output, index);
       a.answered = true;
     }
   }

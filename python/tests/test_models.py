@@ -85,6 +85,15 @@ def test_nearest_model_file_and_evaluation(tmp_path):
     assert gamut.validate(out_path).findings == ()
     with gamut.evaluate(mp, {"mach": [], "alpha": []}) as none:
         assert none.row_count == 0 and none.get_scalar("cl").shape == (0,)
+    # An output of the wrong width is refused with no rows as with some.
+    wide = str(tmp_path / "wide.gamut")
+    with gamut.create_model(wide, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
+                             scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as mf:
+        mf.add_model("fit", gamut.Nearest(["x"], [0.0], [1.0], [[0.0], [1.0]], {"y": [[10, 11], [20, 21]]}),
+                     ["x"])
+    for x in ([0.5], []):
+        with pytest.raises(gamut.GamutError, match="2 values per row, not 1"):
+            gamut.evaluate(wide, {"x": x})
     # In memory: a temporary file that disappears on close.
     p = gamut.evaluate(mp, inputs)
     path = p.path
