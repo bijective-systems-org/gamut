@@ -102,8 +102,8 @@ with gamut.evaluate("lift.gamut", {"alpha": [1.0, 5.0]}) as answer:   # an ordin
 - [Reading parts](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/08-reading-parts.md): runs by condition, nodes by zone, values in other units
 - [Combining files](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/09-combining-files.md): append, extract, rewrite
 - [VTK](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/10-vtk.md): a folder of VTK files as one study, and back
-- [Command line](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/11-command-line.md): inspect, validate, build from CSV and extract without code
-- [MATLAB](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/12-matlab.md), [Julia](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/13-julia.md), [C++ and C](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/14-c-and-cpp.md): the same calls in each language
+- [Command line](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/command-line.md): inspect, validate, build from CSV and extract without code
+- [MATLAB](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/matlab.md), [Julia](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/julia.md), [C++ and C](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/c-and-cpp.md): the same calls in each language
 - [Selecting rows](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/reference/selecting.md): the grammar of `select`
 - [Installing](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/install.md): every language, and xarray
 

@@ -1,12 +1,142 @@
-/* Bijective blue, as in the marks; tabs and links take it, and code stays neutral. */
+/* The site in the Bijective house style: a plain page and header, one
+   accent (the blue of the marks), Inter for text and JetBrains Mono for
+   code, set firmly. */
+
 :root, [data-md-color-scheme="default"] {
-  --md-primary-fg-color: #0070dc;
-  --md-primary-fg-color--light: #74bff8;
-  --md-primary-fg-color--dark: #0059b0;
-  --md-accent-fg-color: #0070dc;
+  --gamut-blue: #0070dc;
+  --gamut-ink: #16191d;
+  --gamut-rule: #e3e7ec;
+  --md-primary-fg-color: #ffffff;          /* the header: the page's own white */
+  --md-primary-fg-color--light: #ffffff;
+  --md-primary-fg-color--dark: #ffffff;
+  --md-primary-bg-color: var(--gamut-ink);  /* text on the header */
+  --md-primary-bg-color--light: #5b6370;
+  --md-accent-fg-color: var(--gamut-blue);
+  --md-typeset-a-color: var(--gamut-blue);
+  --md-default-fg-color: var(--gamut-ink);
+  --md-code-bg-color: #f5f7f9;
 }
+/* Dark pages take the ground the dark logo is drawn on (#0d1117). */
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color: #0a2a4a;
-  --md-accent-fg-color: #74bff8;
-  --md-typeset-a-color: #74bff8;
+  --gamut-blue: #74bff8;
+  --gamut-ink: #e6edf3;
+  --gamut-rule: #30363d;
+  --md-hue: 215;
+  --md-default-bg-color: #0d1117;
+  --md-primary-fg-color: #0d1117;
+  --md-primary-fg-color--light: #0d1117;
+  --md-primary-fg-color--dark: #0d1117;
+  --md-primary-bg-color: var(--gamut-ink);
+  --md-primary-bg-color--light: #9aa3b0;
+  --md-accent-fg-color: var(--gamut-blue);
+  --md-typeset-a-color: var(--gamut-blue);
+  --md-default-fg-color: var(--gamut-ink);
+  --md-code-bg-color: #161b22;
 }
+
+/* The header and the section tabs under it: no colour band, a hairline below. */
+.md-header, .md-tabs {
+  box-shadow: none;
+}
+.md-header {
+  border-bottom: 1px solid var(--gamut-rule);
+}
+.md-tabs {
+  border-bottom: 1px solid var(--gamut-rule);
+}
+.md-tabs__link {
+  font-size: .7rem;
+  font-weight: 500;
+  opacity: 1;
+  color: var(--md-primary-bg-color--light);
+}
+.md-tabs__item--active .md-tabs__link,
+.md-tabs__link:hover {
+  color: var(--gamut-ink);
+}
+.md-tabs__item--active .md-tabs__link {
+  box-shadow: inset 0 -2px 0 var(--gamut-blue);
+  padding-bottom: .55rem;
+}
+
+/* The logo carries the name, so the header shows the name only once a page
+   is scrolled, as its title. */
+.md-header__button.md-logo {
+  padding: .3rem .2rem;
+}
+.md-header__button.md-logo img.gamut-logo {
+  height: 1.9rem;
+  width: auto;
+}
+.md-logo img.gamut-logo--dark { display: none; }
+[data-md-color-scheme="slate"] .md-logo img.gamut-logo--light { display: none; }
+[data-md-color-scheme="slate"] .md-logo img.gamut-logo--dark { display: block; }
+.md-header__topic:first-child .md-ellipsis { visibility: hidden; }
+
+/* The search box: a quiet field, not a coloured bar. */
+.md-search__form {
+  background-color: var(--md-code-bg-color);
+  border: 1px solid var(--gamut-rule);
+  border-radius: .2rem;
+}
+.md-search__form:hover {
+  background-color: var(--md-code-bg-color);
+}
+
+/* Headings set firmly in the text colour. */
+.md-typeset h1 {
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: var(--gamut-ink);
+}
+.md-typeset h2 {
+  font-weight: 650;
+  letter-spacing: -.01em;
+}
+.md-typeset h3 {
+  font-weight: 600;
+}
+
+/* Language tabs: the chosen one underlined in the accent, code beneath on
+   the same ground. */
+.md-typeset .tabbed-labels > label {
+  font-weight: 500;
+  font-size: .72rem;
+}
+.md-typeset .tabbed-set > input:checked + label,
+.md-typeset .tabbed-labels > label:hover {
+  color: var(--gamut-ink);
+}
+
+/* Tables: rules, not stripes. */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--gamut-rule);
+  box-shadow: none;
+}
+.md-typeset table:not([class]) th {
+  background: var(--md-code-bg-color);
+  font-weight: 600;
+}
+
+/* The footer: one line of copyright on the page's ground. */
+.md-footer-meta {
+  background: var(--md-default-bg-color);
+  border-top: 1px solid var(--gamut-rule);
+}
+.md-footer-meta, .md-copyright {
+  color: var(--md-primary-bg-color--light);
+}
+
+/* On a narrow screen the header keeps the logo beside the menu button. */
+@media screen and (max-width: 76.2344em) {
+  .md-header__button.md-logo {
+    display: block;
+    margin-left: 0;
+  }
+  .md-header__button.md-logo img.gamut-logo {
+    height: 1.6rem;
+  }
+}
+
+/* The repository link names the repository, without its counts. */
+.md-source__facts { display: none; }

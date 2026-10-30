@@ -1,7 +1,7 @@
-"""The command-line page of the guide runs as written: every `$ gamut`
-line gives the output shown under it (`...` stands for text that varies,
-such as a file's size), and every document it shows is the one in
-examples/cli."""
+"""The command-line page and the How it works pages run as written: every
+`$ gamut` line gives the output shown under it (`...` stands for text that
+varies, such as a file's size), and every document the command-line page
+shows is the one in examples/cli."""
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ import sys
 
 import pytest
 
-from _pages import EXAMPLES, GUIDE, ROOT, blocks, matches, sessions
+from _pages import DOCS, EXAMPLES, ROOT, blocks, matches, sessions
 from gamut import cli
 
-PAGE = GUIDE / "11-command-line.md"
+PAGE = DOCS / "reference" / "command-line.md"
 DOCUMENTS = EXAMPLES / "cli"
 
 
@@ -31,6 +31,13 @@ def test_the_command_line_page_runs(tmp_path, capsys, monkeypatch):
     for script in ("01_run_table.py", "02_one_mesh.py"):
         subprocess.run([sys.executable, str(ROOT / "examples" / script)], cwd=tmp_path, env=env,
                        check=True, capture_output=True)
+    # The models page's model, for How it works; the example's other files
+    # would collide with the command-line page's.
+    models = tmp_path / "models"
+    models.mkdir()
+    subprocess.run([sys.executable, str(ROOT / "examples" / "07_models.py")], cwd=models, env=env,
+                   check=True, capture_output=True)
+    shutil.copy(models / "lift_model.gamut", tmp_path)
     for document in DOCUMENTS.iterdir():
         shutil.copy(document, tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -43,6 +50,8 @@ def test_the_command_line_page_runs(tmp_path, capsys, monkeypatch):
 
     steps = sessions(text)
     assert steps, "the page has sessions"
+    for concept in sorted((DOCS / "concepts").glob("*.md")):
+        steps += sessions(concept.read_text(encoding="utf-8"))
     for command, expected in steps:
         argv = shlex.split(command)
         assert argv[0] == "gamut", command

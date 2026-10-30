@@ -17,6 +17,8 @@ validation:
 
 theme:
   name: material
+  custom_dir: overrides       # the header logo, light and dark
+  favicon: assets/mark.svg
   font:
     text: Inter
     code: JetBrains Mono
@@ -30,11 +32,18 @@ theme:
       primary: custom
       toggle: {icon: material/weather-sunny, name: Light}
   features:
+    - navigation.tabs          # the sections as tabs under the header
+    - navigation.indexes       # a section's first page is its index
     - content.tabs.link        # one choice of language switches every tab set
     - content.code.copy
     - navigation.sections
     - navigation.top
     - search.highlight
+
+copyright: © 2026 Bijective Systems
+
+extra:
+  generator: false
 
 extra_css:
   - assets/site.css
@@ -51,9 +60,18 @@ markdown_extensions:
       alternate_style: true
 
 nav:
-  - Home: README.md
-  - Installing: install.md
-  - Guide:
+  - Getting started:
+      - README.md
+      - install.md
+  - How it works:
+      - concepts/README.md
+      - concepts/meshes.md
+      - concepts/models.md
+      - concepts/the-file.md
+      - concepts/languages.md
+      - concepts/validation.md
+      - Files from outside: security.md
+  - Examples:
       - guide/README.md
       - guide/01-run-tables.md
       - guide/02-one-mesh.md
@@ -65,12 +83,13 @@ nav:
       - guide/08-reading-parts.md
       - guide/09-combining-files.md
       - guide/10-vtk.md
-      - guide/11-command-line.md
-      - guide/12-matlab.md
-      - guide/13-julia.md
-      - guide/14-c-and-cpp.md
   - Reference:
+      - reference/command-line.md
+      - reference/matlab.md
+      - reference/julia.md
+      - reference/c-and-cpp.md
       - reference/selecting.md
-      - security.md
+      - Specification: https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md
       - comparison.md
       - benchmarks.md
+      - Changelog: https://github.com/bijective-systems-org/gamut/blob/main/CHANGELOG.md

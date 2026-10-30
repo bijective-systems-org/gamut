@@ -1,4 +1,4 @@
-# 14. C++ and C
+# C++ and C
 
 The library every language uses is a C++ core behind a C interface,
 [`gamut/gamut.h`](https://github.com/bijective-systems-org/gamut/blob/main/include/gamut/gamut.h). C++ programs use
@@ -9,127 +9,14 @@ use `gamut.h` directly. Both are installed with the library
 ([installing](../install.md#c-and-c)); with CMake, `find_package(gamut)`
 and `gamut::gamut` are all a project needs.
 
-There are three examples: [`sweep.cpp`](https://github.com/bijective-systems-org/gamut/blob/main/examples/cpp/sweep.cpp), the
-[README](https://github.com/bijective-systems-org/gamut/blob/main/README.md#example)'s run table;
-[`one_mesh.cpp`](https://github.com/bijective-systems-org/gamut/blob/main/examples/cpp/one_mesh.cpp), eight runs of flow
-past a cylinder on one mesh, with a ninth added, then the run count, the
-lowest `cp` on the wall and `cp` at the top read back (a shorter C
-version prints the last line); and [`nearest.cpp`](https://github.com/bijective-systems-org/gamut/blob/main/examples/cpp/nearest.cpp),
-a model fitted in Python and evaluated in C++. Without CMake, one builds
-as `c++ -std=c++17 one_mesh.cpp -I<prefix>/include -L<prefix>/lib -lgamut
--o one_mesh`, `<prefix>` being where the library is installed.
+An example written in C++ has a C++ tab, quoted from a program in
+`examples/cpp`; the [examples](../guide/README.md) say which are.
+[`nearest.cpp`](https://github.com/bijective-systems-org/gamut/blob/main/examples/cpp/nearest.cpp)
+evaluates a model fitted in Python. Without CMake, one builds as
+`c++ -std=c++17 run_table.cpp -I<prefix>/include -L<prefix>/lib -lgamut
+-o run_table`, `<prefix>` being where the library is installed.
 
 ## C++
-
-### A run table
-
-```cpp
-auto study = gamut::create("sweep.gamut", "example sweep");
-study.declare_parameter("alpha", "condition", "degree");
-study.declare_label("status", "status", {"converged", "failed"});
-study.declare_scalar("cl", "1");
-for (double alpha = 0.0; alpha <= 10.0; alpha += 2.0)
-  study.add_run({{"alpha", alpha}, {"status", "converged"}, {"cl", solve(alpha)}});
-study.close();
-
-study = gamut::open("sweep.gamut", "a");
-study.add_run({{"alpha", 12.0}, {"status", "failed"}});
-study.close();
-
-study = gamut::open("sweep.gamut");
-const std::vector<double> cl = study.get_scalar("cl", study.select("status == converged"));
-```
-
-```text
-lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
-```
-
-`solve` stands for the solver. A run left without a result, such as the
-failed one here, stores it as missing (NaN), and `select` returns positions
-counted from 0, which every `get_` call takes as rows.
-
-### Writing on one mesh
-
-```cpp
-auto study = gamut::create("cylinder.gamut", "example sweep", "shared", "fixed");
-study.declare_coordinates("m", 2);
-study.declare_parameter("gamma", "design", "m2 s-1");
-study.declare_mesh_label("surface", "node", {"field", "wall"});
-study.declare_field("cp", "node", "1");
-study.set_mesh(points, cells, {{"surface", surface}});
-for (double gamma = 0.0; gamma < 3.75; gamma += 0.5)
-  study.add_run({{"gamma", gamma}}, {{"cp", solve(gamma)}});
-study.close();
-```
-
-`create` takes the path, the writer, the mesh (`""` for a table of runs,
-`"shared"` or `"changing"`) and how often the geometry changes (`"fixed"`,
-`"run"` or `"group:<label>"`). Declarations come next, then the mesh, then
-runs. `points` are nodes × axes in C order and `cells` a `gamut::Cells` in
-VTK's convention, node numbers from 0; `surface` is a code per node, 1 on
-the wall, for the mesh label. Each run gives its parameters and scalars
-as numbers (a parameter is a double unless declared with
-`declare_parameter<int64_t>`) and its labels by name,
-then its fields; `add_run` writes it all or nothing and returns its id,
-and takes a `gamut::Geometry` when the run brings its own points.
-`add_runs` writes many runs at once from a column per name. `solve`
-stands for the solver and returns `cp` at every node.
-
-A call that is refused throws `gamut::Error`, whose `rule()` names the rule
-of the specification (`"E7"`) when one applies and `path()` what it
-concerns. A study closes when it goes out of scope. Call `close()` to
-finish a file you write: it throws if the file cannot be finished (a
-shared mesh never set), whereas leaving the scope then discards the file
-silently. `abandon()` gives up on a file on purpose.
-
-### Adding runs
-
-```cpp
-study = gamut::open("cylinder.gamut", "a");
-study.add_run({{"gamma", 4.0}}, {{"cp", solve(4.0)}});
-study.close();
-```
-
-### Reading
-
-```cpp
-study = gamut::open("cylinder.gamut");
-std::printf("%s mesh, %lld runs, %lld nodes\n", study.type().c_str(), (long long)study.row_count(),
-            (long long)study.get_points().shape[0]);
-const auto names = study.categories("surface");
-// The code that means "wall" is its place in the table.
-const int64_t wall = std::find(names.begin(), names.end(), "wall") - names.begin();
-std::vector<int64_t> on_wall;
-const auto label = study.get_mesh_label("surface");
-for (int64_t k = 0; k < int64_t(label.size()); ++k)
-  if (label[size_t(k)] == wall) on_wall.push_back(k);
-const auto block = study.get_field("cp", gamut::all, on_wall);  // runs x wall nodes
-std::printf("lowest cp on the wall, by run:");
-for (int64_t run = 0; run < block.shape[0]; ++run) {
-  double lowest = block(run, 0);
-  for (int64_t k = 1; k < block.shape[1]; ++k) lowest = std::min(lowest, block(run, k));
-  std::printf(" %.2f", lowest);
-}
-std::printf("\n");
-const auto top = study.get_field("cp", gamut::all, {12});       // node 12, the top, in every run
-std::printf("cp at the top of the cylinder, run by run:");
-for (double v : top) std::printf(" %.2f", v);
-std::printf("\n");
-```
-
-```text
-shared mesh, 9 runs, 576 nodes
-lowest cp on the wall, by run: -3.00 -3.32 -3.66 -4.01 -4.37 -4.75 -5.14 -5.54 -5.95
-cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -1.32 -1.08 -0.86
-```
-
-`categories` gives a mesh label's names, code c being entry c, and
-`get_mesh_label` its code per node. `get_field` takes the rows and the
-nodes (or cells) to read: `gamut::all`, positions such as `{12}`, or
-`gamut::Selection::range(start, stop)`. It returns a
-`gamut::Array<double>`: the values in C order and their shape, here 9 runs
-× 48 wall nodes, with `block(run, k)` for one value.
-`gamut::open(path, "r", 4)` decompresses large reads in four threads.
 
 ### The same calls
 
@@ -147,9 +34,36 @@ nodes (or cells) to read: `gamut::all`, positions such as `{12}`, or
 Model files, notes and private records are written and read through
 `gamut.h`; `study.handle()` gives the open file to pass to it.
 
+### Conventions
+
+`create` takes the path, the writer, the mesh (`""` for a table of runs,
+`"shared"` or `"changing"`) and how often the geometry changes (`"fixed"`,
+`"run"` or `"group:<label>"`). Declarations come next, then the mesh, then
+runs. `points` are nodes × axes in C order and `cells` a `gamut::Cells` in
+VTK's convention, node numbers from 0. Each run gives its parameters and
+scalars as numbers (a parameter is a double unless declared with
+`declare_parameter<int64_t>`) and its labels by name, then its fields;
+`add_run` writes it all or nothing and returns its id, and takes a
+`gamut::Geometry` when the run brings its own points. `add_runs` writes
+many runs at once from a column per name.
+
+`select` returns positions counted from 0, which every `get_` call takes
+as rows: `gamut::all`, positions such as `{12}`, or
+`gamut::Selection::range(start, stop)`. A field comes back as a
+`gamut::Array<double>`: the values in C order and their shape, with
+`block(run, k)` for one value. `gamut::open(path, "r", 4)` decompresses
+large reads in four threads.
+
+A call that is refused throws `gamut::Error`, whose `rule()` names the rule
+of the specification (`"E7"`) when one applies and `path()` what it
+concerns. A study closes when it goes out of scope. Call `close()` to
+finish a file you write: it throws if the file cannot be finished (a
+shared mesh never set), whereas leaving the scope then discards the file
+silently. `abandon()` gives up on a file on purpose.
+
 ### A model file
 
-The built-in nearest model of [models](07-models.md#the-built-in-model),
+The built-in nearest model of [models](../guide/07-models.md#the-built-in-model),
 fitted in Python, is evaluated here by the core, from the model's stored
 numbers:
 

@@ -14,8 +14,8 @@ package. [Installing](install.md) covers each language and platform.
 
 A sweep of a wing's angle of attack: six runs written, a seventh added by
 reopening the file, then the lift of the runs that converged read back. The
-same program in each language; on the [documentation site](https://bijective-systems-org.github.io/gamut/),
-choosing one shows that language in every example.
+same program in each language; choosing one here shows it in every
+example.
 
 /// tab | Python
 
@@ -103,40 +103,24 @@ const std::vector<double> cl = study.get_scalar("cl", study.select("status == co
 
 ///
 
-Each prints
+Each prints:
 
 ```text
 lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
 ```
 
-## Start with a study
+## Where next
 
-- [Overview and examples](https://github.com/bijective-systems-org/gamut/blob/main/README.md): write, append and read a study in four languages.
-- [Guide](guide/README.md): one concept per page, quoting runnable programs in [examples](https://github.com/bijective-systems-org/gamut/tree/main/examples).
-- [Run tables](guide/01-run-tables.md): inputs, status and results with units.
-- [Shared meshes](guide/02-one-mesh.md): fields as runs by nodes or cells.
-- [Fitted models](guide/07-models.md): store a model's numbers and evaluate new inputs.
-- [Command line](guide/11-command-line.md): inspect, validate, build and extract files.
+[Installing](install.md) covers each language and platform.
+[How it works](concepts/README.md) explains what a file holds and why it
+is shaped as it is. The [examples](guide/README.md) build a study up one
+idea at a time, from a table of runs to meshes, models and VTK, each a
+program that runs as shown. The [reference](reference/command-line.md)
+has the command line, each language's spelling of the calls, and the
+[specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md),
+which defines the format.
 
-## Reference and interoperability
-
-- [File format specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md): the authoritative layout, meaning, validation rules and format versions.
-- [Selecting rows](reference/selecting.md): the query grammar.
-- [C API](https://github.com/bijective-systems-org/gamut/blob/main/include/gamut/gamut.h) and [C++ API](https://github.com/bijective-systems-org/gamut/blob/main/include/gamut/gamut.hpp): public headers.
-- [Python API](https://github.com/bijective-systems-org/gamut/blob/main/python/gamut/__init__.py): public functions and docstrings, also available through `help(gamut)`.
-- [Conformance corpus](https://github.com/bijective-systems-org/gamut/tree/main/corpus): valid, invalid and hostile files with expected outcomes.
-- [Files from outside](security.md): validation and process boundaries for untrusted files.
-- [Comparison](comparison.md) and [benchmarks](benchmarks.md): scope, trade-offs and measured workloads.
-
-The package version and file format version are separate: a file declares
-`gamut/1`. [The specification's version rules](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md#17-versions-and-additions)
-define compatibility. [Release history](https://github.com/bijective-systems-org/gamut/blob/main/CHANGELOG.md) describes package changes.
-
-## Plain-text entry points
-
+For coding agents,
 [llms.txt](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/llms.txt)
-collects API patterns and raw documentation links for coding agents.
-The [raw specification](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/SPEC.md)
-defines the format; the [citation metadata](https://github.com/bijective-systems-org/gamut/blob/main/CITATION.cff) identifies the software.
-The canonical source and documentation live in the
-[Gamut repository](https://github.com/bijective-systems-org/gamut).
+collects the API's patterns and plain-text links to these pages. To cite
+Gamut, use its [citation metadata](https://github.com/bijective-systems-org/gamut/blob/main/CITATION.cff).

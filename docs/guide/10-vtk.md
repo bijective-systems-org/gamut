@@ -74,4 +74,4 @@ written back: ['run_000.vtu', 'run_001.vtu', 'run_002.vtu']
 - `to_pyvista(study, row)` and `from_pyvista(mesh)` in `gamut.vtk` are
   the bridge, and a worked example for a converter from another format.
 
-Run it: `python examples/10_vtk.py`. Next: [the command line](11-command-line.md).
+Run it: `python examples/10_vtk.py`. Next: [the command line](../reference/command-line.md).

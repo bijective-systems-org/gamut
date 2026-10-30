@@ -237,7 +237,7 @@ close(answer)
 Julia evaluates the built-in type only, and gives any model's numbers
 with `Gamut.model_numbers`. C and C++ read a model's numbers and run the
 built-in model through `gamut.h`
-([C++ and C](14-c-and-cpp.md#a-model-file)).
+([C++ and C](../reference/c-and-cpp.md#a-model-file)).
 
 ## Notes
 
