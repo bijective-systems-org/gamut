@@ -273,7 +273,14 @@ void Evaluation::ready() {
   order_.clear();
   auto ask = [&](const std::string& model, const Request& r, std::int64_t per_row) {
     for (const auto& a : asked_) {
-      if (a.model == model && a.request == r) return;
+      if (a.model != model || !(a.request == r)) continue;
+      // One answer cannot be read at two widths (a scalar and a field, say).
+      if (a.per_row != per_row) {
+        throw Error("E17", "the model " + model + "'s output " + r.output + " is read with " +
+                               std::to_string(a.per_row) + " and with " + std::to_string(per_row) +
+                               " values per row", model);
+      }
+      return;
     }
     if (requests_.count(model) == 0) order_.push_back(model);
     requests_[model].push_back(r);

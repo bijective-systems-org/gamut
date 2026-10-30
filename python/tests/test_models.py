@@ -485,3 +485,24 @@ def test_given_coordinates_are_the_answers_per_run(tmp_path):
         assert out.describe()["per"] == "fixed" and out.get_scalar("x0").tolist() == [1.0]
     with gamut.evaluate(mp, {"x": []}) as out:
         assert out.row_count == 0
+
+
+def test_one_output_read_at_two_widths_is_refused(tmp_path):
+    # A scalar and a node field, or a scalar and the coordinates, cannot
+    # both be one model output: refused whatever the number of rows.
+    cases = {"field": dict(per="fixed", coordinates={"units": "m", "axes": 1},
+                           fields={"f": {"units": "1", "at": "node", "model": "fit", "output": "same"}}),
+             "coordinates": dict(per="run", coordinates={"units": "m", "axes": 1, "model": "fit", "output": "same"})}
+    for case, kw in cases.items():
+        path = str(tmp_path / f"{case}.gamut")
+        with gamut.create_model(path, writer="t", mesh="shared",
+                                 parameters={"x": {"units": "1", "lower": 0.0, "upper": 1.0}},
+                                 scalars={"s": {"units": "1", "model": "fit", "output": "same"}}, **kw) as m:
+            if case == "field":
+                m.set_mesh(np.array([[0.0], [1.0]]))
+            else:
+                m.set_mesh(n_nodes=2)
+            m.add_model("fit", gamut.Nearest(["x"], [0.0], [1.0], [[0.0], [1.0]], {"same": [10.0, 20.0]}), ["x"])
+        for x in ([0.5], []):
+            with pytest.raises(gamut.GamutError, match="is read with 1 and with 2 values per row"):
+                gamut.evaluate(path, {"x": x})
