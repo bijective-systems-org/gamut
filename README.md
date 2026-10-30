@@ -12,7 +12,7 @@ By [Bijective Systems](https://github.com/bijective-systems-org), with
 libraries for Python, MATLAB, Julia, C++ and C.
 
 [PyPI: gamut-format](https://pypi.org/project/gamut-format/) ·
-[Documentation](https://github.com/bijective-systems-org/gamut/blob/main/docs/README.md) ·
+[Documentation](https://bijective-systems-org.github.io/gamut/) ·
 [Specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md) ·
 [Releases](https://github.com/bijective-systems-org/gamut/releases)
 
@@ -262,8 +262,10 @@ built with CMake.
 
 ## Documentation
 
-The [documentation index](https://github.com/bijective-systems-org/gamut/blob/main/docs/README.md)
-links installation, examples and reference material. For coding agents,
+The [documentation site](https://bijective-systems-org.github.io/gamut/) links installation, examples
+and reference material, and shows an example written in several languages
+as tabs; its pages are the Markdown files of
+[docs/](https://github.com/bijective-systems-org/gamut/blob/main/docs/README.md). For coding agents,
 [llms.txt](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/llms.txt)
 provides a plain-text overview with runnable Python patterns and source links.
 

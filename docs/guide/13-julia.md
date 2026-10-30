@@ -6,7 +6,7 @@ declarations as `Dict`s or named tuples, `do` blocks that close the file,
 and positions counted from 1. The package needs the core library
 ([installing](../install.md#julia)).
 
-There are two examples: `sweep.jl`, the [README](../../README.md#example)'s
+There are two examples: `sweep.jl`, the [README](https://github.com/bijective-systems-org/gamut/blob/main/README.md#example)'s
 run table, and `one_mesh.jl`, eight runs of flow past a cylinder on one
 mesh, with a ninth added, then the run count, the lowest `cp` on the wall
 and `cp` at the top read back. Run either from a working folder:
@@ -101,7 +101,7 @@ language, so the wall's code is its place in `categories` minus one.
 answer, a study open to read. An input outside the range the model was
 fitted on is evaluated with a warning (W4), and the answer keeps the
 model's bounds, so it can say which rows lie outside and how far.
-[`nearest.jl`](../../examples/julia/nearest.jl) asks the models page's
+[`nearest.jl`](https://github.com/bijective-systems-org/gamut/blob/main/examples/julia/nearest.jl) asks the models page's
 nearest-run model about 5 and 12 degrees:
 
 ```julia

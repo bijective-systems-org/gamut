@@ -33,7 +33,7 @@ several of these on real studies.
 | Capability | Gamut | PhysicsNeMo-Mesh |
 |---|---|---|
 | Preserve the capsule's quadrilateral cells | Yes, directly | No; convert the quads to triangles |
-| Cell model | VTK cell types, including quads and hexahedra ([specification](../SPEC.md)) | Simplices: points, segments, triangles, tetrahedra and higher-dimensional equivalents ([NVIDIA's data model](https://docs.nvidia.com/physicsnemo/latest/user-guide/mesh/using_mesh.html)) |
+| Cell model | VTK cell types, including quads and hexahedra ([specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md)) | Simplices: points, segments, triangles, tetrahedra and higher-dimensional equivalents ([NVIDIA's data model](https://docs.nvidia.com/physicsnemo/latest/user-guide/mesh/using_mesh.html)) |
 | Run relationships in these benchmarks | Defined in the study file | Supplied by the benchmark's CSV/schema companions |
 
 The quad limitation matters when preserving a solver mesh. Triangulating
@@ -85,7 +85,7 @@ server access, and a very large study is read a part at a time.
 
 Version 1 leaves out polyhedral cells (export them decomposed), declared
 tensors (store their components) and fields as model inputs. The
-[specification](../SPEC.md#18-additions-planned-within-version-1) lists
+[specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md#18-additions-planned-within-version-1) lists
 what is planned within version 1. Unit conversion on reads is Python's
 alone, through pint; MATLAB, Julia and C return values in the units they
 were stored in.

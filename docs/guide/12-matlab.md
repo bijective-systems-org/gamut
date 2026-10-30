@@ -6,7 +6,7 @@ pairs, declarations as structs, and positions counted from 1. The toolbox, `Gamu
 no compiler ([installing](../install.md#matlab)).
 
 There are two examples, from a working folder with `examples/matlab` on
-the path: `sweep`, the [README](../../README.md#example)'s run table, and
+the path: `sweep`, the [README](https://github.com/bijective-systems-org/gamut/blob/main/README.md#example)'s run table, and
 `one_mesh`, eight runs of flow past a cylinder on one mesh, with a ninth
 added, then the run count, the lowest `cp` on the wall and `cp` at the
 top read back.
@@ -114,7 +114,7 @@ shared mesh is `/mesh/node_fields/<name>` (or `cell_fields`), which
 `ncread` gives as nodes × runs, the axes reversed as for every netCDF
 array MATLAB reads. `ncinfo(f)` lists everything in a file. Writing,
 selecting by condition, models and validation need the package
-([`examples/matlab/read_with_ncread.m`](../../examples/matlab/read_with_ncread.m)
+([`examples/matlab/read_with_ncread.m`](https://github.com/bijective-systems-org/gamut/blob/main/examples/matlab/read_with_ncread.m)
 is the whole program).
 
 ## Inputs outside a model's range
@@ -123,7 +123,7 @@ is the whole program).
 answer, a study open to read. An input outside the range the model was
 fitted on is evaluated with a warning (`gamut:W4`), and the answer keeps
 the model's bounds, so it can say which rows lie outside and how far.
-[`evaluate_model.m`](../../examples/matlab/evaluate_model.m) asks the
+[`evaluate_model.m`](https://github.com/bijective-systems-org/gamut/blob/main/examples/matlab/evaluate_model.m) asks the
 models page's quadratic about 5 and 12 degrees:
 
 ```matlab
@@ -164,7 +164,7 @@ what it can do.
   library underneath is one and the same.
 - MATLAB loads its own HDF5. The toolbox's library carries its own HDF5
   linked in, so the two never meet; a gateway built from a checkout needs
-  such a core too ([installing](../install.md#from-a-checkout-1)).
+  such a core too ([installing](../install.md#compiling-the-gateway)).
 - Values arrive in the units they were stored in, which
   `study.describe(name).units` names. Converting them is left to the
   caller; only Python's reads convert, through pint.

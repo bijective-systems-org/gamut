@@ -7,7 +7,7 @@ once, each with what it concerns.
 
 The sessions below run in a folder holding the files of the first two
 examples (`polar.gamut`, `cylinder.gamut`) and the documents in
-[`examples/cli/`](../../examples/cli).
+[`examples/cli/`](https://github.com/bijective-systems-org/gamut/tree/main/examples/cli).
 
 ## Looking inside
 
@@ -26,7 +26,7 @@ no errors, 3 warnings
   W3 cl: 1 value is missing or not finite, the first at row 17
 ```
 
-`validate` checks the rules of the [specification](../../SPEC.md) and
+`validate` checks the rules of the [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md) and
 names each one it finds broken, within the [limits](../security.md#the-limits)
 of what it reads. Errors make a file invalid; warnings say
 what a reader should know, such as runs that failed. A row in a finding

@@ -40,7 +40,7 @@ gamut-vtk = "gamut.cli:vtk_main"
 
 [project.urls]
 Homepage = "https://github.com/bijective-systems-org/gamut"
-Documentation = "https://github.com/bijective-systems-org/gamut/blob/main/docs/README.md"
+Documentation = "https://bijective-systems-org.github.io/gamut/"
 Source = "https://github.com/bijective-systems-org/gamut"
 Releases = "https://github.com/bijective-systems-org/gamut/releases"
 Specification = "https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md"

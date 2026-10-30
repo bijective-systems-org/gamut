@@ -13,7 +13,7 @@ Every study file is made and read the same way, in every language:
 
 Most studies need only the first two pages. The others each add one idea,
 for when a study has it. Each page runs one script from
-[`examples/`](../../examples), from a checkout with the Python package
+[`examples/`](https://github.com/bijective-systems-org/gamut/tree/main/examples), from a checkout with the Python package
 installed ([installing](../install.md)), and shows what it prints.
 `gamut info FILE` lists what a file holds, from any shell.
 
@@ -52,4 +52,4 @@ The same files from other places:
 | field | a result with one number per node, or per cell, in every run |
 | mesh label | an integer per node or cell that describes the mesh: a zone, a boundary patch |
 
-The [specification](../../SPEC.md) defines each of these exactly.
+The [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md) defines each of these exactly.
