@@ -560,7 +560,9 @@ def test_an_answer_or_input_that_is_not_real_is_refused(tmp_path):
                   {"x": np.array([0.5, np.datetime64("2026-01-01")], dtype=object)},
                   {"x": np.array([0.5, np.void(b"1")], dtype=object)},
                   {"x": np.array([0.5, np.timedelta64(1, "ns")], dtype=object)},
-                  {"x": np.array(["1"], dtype=np.dtypes.StringDType())}):
+                  # NumPy 2's variable-width strings
+                  *([{"x": np.array(["1"], dtype=np.dtypes.StringDType())}]
+                    if hasattr(np.dtypes, "StringDType") else [])):
         with pytest.raises(gamut.GamutError) as e:
             gamut.evaluate(mp, given)
         assert e.value.rule == "E4"
