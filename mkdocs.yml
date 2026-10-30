@@ -1,8 +1,10 @@
 # The documentation site: the Markdown pages of docs/, as they read on GitHub,
 # with one addition: a code example shown in several languages is a set of
 # tabs, and choosing a language once shows it in every set on every page.
-# Build it with `mkdocs build` (pip install "mkdocs-material==9.6.*").
+# Build it with `mkdocs build --strict` (pip install "mkdocs-material==9.6.*");
+# .github/workflows/docs.yml publishes it from main.
 site_name: Gamut
+site_url: https://bijective-systems-org.github.io/gamut/
 site_description: An open file format for parametric simulation studies and the models fitted to them.
 repo_url: https://github.com/bijective-systems-org/gamut
 docs_dir: docs
@@ -28,6 +30,9 @@ theme:
     - navigation.sections
     - navigation.top
     - search.highlight
+
+hooks:
+  - tools/docs_links.py       # links that leave docs/ point at GitHub
 
 extra_css:
   - assets/site.css

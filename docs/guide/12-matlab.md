@@ -164,7 +164,7 @@ what it can do.
   library underneath is one and the same.
 - MATLAB loads its own HDF5. The toolbox's library carries its own HDF5
   linked in, so the two never meet; a gateway built from a checkout needs
-  such a core too ([installing](../install.md#from-a-checkout-1)).
+  such a core too ([installing](../install.md#compiling-the-gateway)).
 - Values arrive in the units they were stored in, which
   `study.describe(name).units` names. Converting them is left to the
   caller; only Python's reads convert, through pint.

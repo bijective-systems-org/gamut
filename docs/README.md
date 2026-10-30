@@ -14,8 +14,8 @@ package. [Installing](install.md) covers each language and platform.
 
 A sweep of a wing's angle of attack: six runs written, a seventh added by
 reopening the file, then the lift of the runs that converged read back. The
-same program in each language; choose one and every example on this site
-follows.
+same program in each language; on the [documentation site](https://bijective-systems-org.github.io/gamut/),
+choosing one shows that language in every example.
 
 /// tab | Python
 

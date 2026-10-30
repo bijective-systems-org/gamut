@@ -1,0 +1,54 @@
+name: docs
+
+# The documentation site (mkdocs.yml): built from main and published to
+# GitHub Pages, and built without publishing for a pull request that
+# changes it, so a broken link fails there first. The build is strict:
+# any warning, a link to a page or anchor that is not there among them,
+# stops it.
+#
+# Every action is pinned to a full commit SHA with its tag beside it. The
+# build job only reads this repository; the deploy job may write Pages
+# and, to prove to Pages which workflow it is, request an OIDC token.
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', mkdocs.yml, tools/docs_links.py, .github/workflows/docs.yml]
+  pull_request:
+    paths: ['docs/**', mkdocs.yml, tools/docs_links.py, .github/workflows/docs.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -q "mkdocs-material==9.6.*"
+      - run: mkdocs build --strict
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

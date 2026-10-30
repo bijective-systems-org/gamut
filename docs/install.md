@@ -79,7 +79,7 @@ MATLAB's. `matlab.addons.uninstall('Gamut')` removes it.
 To read a file only, MATLAB needs nothing installed: its own `ncread`
 reads every array ([reading without the package](guide/12-matlab.md#reading-without-the-package)).
 
-### From a checkout
+### Compiling the gateway
 
 For an earlier MATLAB or an Intel Mac, compile the gateway yourself. The
 package is the `matlab` folder of a checkout, and its gateway is compiled
