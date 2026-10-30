@@ -133,7 +133,7 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "gamut_evaluation_input_info": (_I, [_P, _S, ctypes.POINTER(_I), ctypes.POINTER(_I), ctypes.POINTER(_L), _I,
                                          _E]),
     "gamut_evaluation_input": (_I, [_P, _S, _P, _L, _E]),
-    "gamut_evaluation_answer": (_I, [_P, _S, _S, _S, _S, ctypes.POINTER(_D), _L, _E]),
+    "gamut_evaluation_answer": (_I, [_P, _S, _S, _S, _S, _I, _P, _L, _E]),
     "gamut_evaluation_finish": (_I, [_P, _E]),
     "gamut_evaluation_free": (None, [_P]),
     "gamut_set_constant": (_I, [_P, _S, _S, _I, _D, _L, _E]),
@@ -303,14 +303,15 @@ def float64_exactly(values: Any, what: str) -> np.ndarray:
     with a float in it) are floats already. Booleans, complex numbers and
     text are refused, as the writer refuses them, rather than cast."""
     arr = np.asarray(values)
-    if arr.dtype.kind in "bcUSVMm":
+    if arr.dtype.kind in "bcUSTVMm":
         raise GamutError("E4", f"{what}: values of dtype {arr.dtype} are not real numbers")
     if arr.dtype.kind in "iuO":
         flat = arr.reshape(-1)
         if arr.dtype.kind != "O":
             flat = flat[(flat > 2**53) | (flat < -2**53)]
         for v in flat.tolist():
-            if v is not None and (isinstance(v, (bool, np.bool_)) or not isinstance(v, (numbers.Real, Decimal))):
+            if v is not None and (isinstance(v, (bool, np.bool_, np.timedelta64))
+                                  or not isinstance(v, (numbers.Real, Decimal))):
                 raise GamutError("E4", f"{what}: {v!r} is not a real number")
             if isinstance(v, (int, np.integer)) and abs(int(v)) > 2**53:
                 v = int(v)

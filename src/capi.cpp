@@ -1487,13 +1487,11 @@ int gamut_evaluation_input(const gamut_evaluation* ev, const char* name, void* o
 }
 
 int gamut_evaluation_answer(gamut_evaluation* ev, const char* model_id, const char* output, const char* kind,
-                            const char* key, const double* values, int64_t count, gamut_error* err) {
+                            const char* key, int dtype_code, const void* values, int64_t count, gamut_error* err) {
   try {
     const Lock lock(hdf5_mutex());
     clear(err);
-    need(count >= 0, "a negative count");
-    need(count == 0 || values != nullptr, "the values pointer is NULL");
-    evaluation_of(ev).answer(str(model_id), request(output, kind, key), values, count);
+    evaluation_of(ev).answer(str(model_id), request(output, kind, key), column(dtype_code, values, count));
     return 0;
   } catch (...) {
     return fail(err);

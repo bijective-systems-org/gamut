@@ -481,10 +481,10 @@ void test_evaluation_through_the_c_interface() {
     CHECK(ok(gamut_evaluation_input(ev, "alpha", read, sizeof read, &e)));
     double lift[3];
     for (int i = 0; i < 3; ++i) lift[i] = slope * read[i];
-    CHECK(gamut_evaluation_answer(ev, "fit", "cl", "values", "", lift, 2, &e) != 0 &&
+    CHECK(gamut_evaluation_answer(ev, "fit", "cl", "values", "", GAMUT_FLOAT64, lift, 2, &e) != 0 &&
           std::string(e.rule) == "E5");
     CHECK(gamut_evaluation_finish(ev, &e) != 0);            // cl is not answered yet
-    CHECK(ok(gamut_evaluation_answer(ev, "fit", "cl", "values", "", lift, 3, &e)));
+    CHECK(ok(gamut_evaluation_answer(ev, "fit", "cl", "values", "", GAMUT_FLOAT64, lift, 3, &e)));
     CHECK(ok(gamut_evaluation_finish(ev, &e)));
     gamut_evaluation_free(ev);
     const auto answer = gamut::open("answer.gamut");

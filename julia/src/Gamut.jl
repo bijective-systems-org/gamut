@@ -1161,8 +1161,8 @@ function run_model(m::Study, ev::Ptr{Cvoid}, id)
             kind == "quantile" ? get(get(record, "quantiles", Dict()), ask[3], nothing) :
             get(get(record, "derivatives", Dict()), key, nothing)
         v === nothing && throw(GamutError("", "the model $id gave no $kind for $out"))
-        flat = c_order(float64_exactly(v, "$id: $out"))
-        @mes gamut_evaluation_answer (Ptr{Cvoid}, Cstring, Cstring, Cstring, Cstring, Ptr{Float64}, Int64) ev cs(id) cs(out) cs(kind) cs(key) flat length(flat)
+        flat = numbers(c_order(v))      # as given: the core converts it as written values
+        GC.@preserve flat @mes gamut_evaluation_answer (Ptr{Cvoid}, Cstring, Cstring, Cstring, Cstring, Cint, Ptr{Cvoid}, Int64) ev cs(id) cs(out) cs(kind) cs(key) DTYPE[eltype(flat)] pointer(flat) length(flat)
     end
 end
 

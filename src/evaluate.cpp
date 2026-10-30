@@ -349,7 +349,8 @@ void Evaluation::ready() {
         throw Error("E17", "the nearest model " + id + " gives " + a.request.output + " with " +
                                std::to_string(per_row) + " values per row, not " + std::to_string(a.per_row), id);
       }
-      a.answer = nearest_values(nm, a.request.output, index);
+      const std::vector<double> v = nearest_values(nm, a.request.output, index);
+      a.answer = Column::of(DType::Float64, v.data(), static_cast<std::int64_t>(v.size()));
       a.answered = true;
     }
   }
@@ -405,17 +406,17 @@ const std::vector<unsigned char>& Evaluation::input(const std::string& name) con
   throw Error("E2", name + " is not an input given to this evaluation", name);
 }
 
-void Evaluation::answer(const std::string& model_id, const Request& r, const double* values,
-                        std::int64_t count) {
+void Evaluation::answer(const std::string& model_id, const Request& r, const Column& given) {
   if (!ready_) throw Error("", "the evaluation is not ready: give the inputs and call ready");
   Asked& a = asked(model_id, r);
+  const std::int64_t count = given.count;
   if (count != rows_ * a.per_row) {
     throw Error("E5", "the model " + model_id + " gave " + std::to_string(count) + " values for the " +
                           r.kind + " of " + r.output + ", not " + std::to_string(rows_ * a.per_row) +
                           " (rows x " + std::to_string(a.per_row) + ")",
                 model_id);
   }
-  a.answer.assign(values, values + count);
+  a.answer = given;   // converted as the writer converts written values, on finish
   a.answered = true;
 }
 
@@ -433,23 +434,27 @@ void Evaluation::finish() {
   for (const auto& r : s.results) {
     const Asked* a = asked_for(r);
     if (a == nullptr) throw Error("E17", r.name + " is computed by no model the file holds", r.name);
-    b.values[r.name] = Column::of(DType::Float64, a->answer.data(), static_cast<std::int64_t>(a->answer.size()));
+    b.values[r.name] = a->answer;
   }
   if (s.mesh.kind == "shared" && (s.mesh.per == "run" || coordinates_given_)) {
-    const std::vector<double>* source = nullptr;
+    Column source;
     if (!s.mesh.coordinate_model.empty()) {
-      source = &asked(s.mesh.coordinate_model, Request{s.mesh.coordinate_output, "values", ""}).answer;
+      source = asked(s.mesh.coordinate_model, Request{s.mesh.coordinate_output, "values", ""}).answer;
     } else if (coordinates_given_) {
-      source = &coordinates_;
+      source = Column::of(DType::Float64, coordinates_.data(), static_cast<std::int64_t>(coordinates_.size()));
     } else {
       throw Error("E2", "this model file's geometry changes per run; give coordinates", "coordinates");
     }
     const std::int64_t each = s.mesh.n_nodes * s.mesh.axes;
+    const std::size_t width = dtype_size(source.dtype) * static_cast<std::size_t>(each);
     for (std::int64_t i = 0; i < rows_; ++i) {
       Geometry g;
       g.n_nodes = s.mesh.n_nodes;
       g.axes = s.mesh.axes;
-      g.points = Column::of(DType::Float64, source->data() + i * each, each);
+      g.points.dtype = source.dtype;
+      g.points.count = each;
+      const auto first = source.bytes.begin() + static_cast<std::ptrdiff_t>(static_cast<std::size_t>(i) * width);
+      g.points.bytes.assign(first, first + static_cast<std::ptrdiff_t>(width));
       b.run_geometry.push_back(std::move(g));
     }
   }

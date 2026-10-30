@@ -70,9 +70,10 @@ class Evaluation {
   std::vector<std::int64_t> input_shape(const std::string& name) const;
   const std::vector<unsigned char>& input(const std::string& name) const;
   // A model's answer to one of its requests: rows values for a scalar,
-  // rows x sites for a field, rows x nodes x axes for coordinates.
-  void answer(const std::string& model_id, const Request& r, const double* values,
-              std::int64_t count);
+  // rows x sites for a field, rows x nodes x axes for coordinates.  It is
+  // kept as given and written at the result's declared precision, by the
+  // writer's rule for written values.
+  void answer(const std::string& model_id, const Request& r, const Column& given);
   // Writes the rows and closes the data file.  A request left unanswered
   // is refused and can still be answered; a failure writing the rows
   // removes the file.
@@ -83,7 +84,7 @@ class Evaluation {
     std::string model;
     Request request;
     std::int64_t per_row = 0;            // values per row of the answer
-    std::vector<double> answer;
+    Column answer;
     bool answered = false;
   };
   Asked& asked(const std::string& model_id, const Request& r);

@@ -105,7 +105,7 @@ for j = 1:numel(outputs)
     if isempty(values)
         error('gamut:error', 'the model %s gave no %s for %s', id, kinds{j}, o);
     end
-    gamut_mex('evaluation_answer', ev, id, o, kinds{j}, keys{j}, exactDouble(values, o));
+    gamut_mex('evaluation_answer', ev, id, o, kinds{j}, keys{j}, values);   % converted by the core
 end
 end
 

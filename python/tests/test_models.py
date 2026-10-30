@@ -535,7 +535,45 @@ def test_an_answer_or_input_that_is_not_real_is_refused(tmp_path):
     for given in ({"x": [0.5]}, {"x": [0.5 + 1j]}, {"x": [True]}, {"x": np.array([0.5, 1j], dtype=object)},
                   {"x": np.array([0.5, True], dtype=object)},
                   {"x": np.array([0.5, np.datetime64("2026-01-01")], dtype=object)},
-                  {"x": np.array([0.5, np.void(b"1")], dtype=object)}):
-        with pytest.raises(gamut.GamutError, match="not (a )?real number") as e:
+                  {"x": np.array([0.5, np.void(b"1")], dtype=object)},
+                  {"x": np.array([0.5, np.timedelta64(1, "ns")], dtype=object)},
+                  {"x": np.array(["1"], dtype=np.dtypes.StringDType())}):
+        with pytest.raises(gamut.GamutError) as e:
             gamut.evaluate(mp, given)
         assert e.value.rule == "E4"
+
+
+@gamut.register_model_type
+class Wide:
+    """Gives back x as int64, past what a float64 holds exactly."""
+
+    type = "tests.wide"
+
+    @classmethod
+    def load(cls, numbers):
+        return cls()
+
+    def save(self):
+        return {"k": 1}
+
+    def call(self, inputs, wanted):
+        return {"y": {"values": np.full(len(inputs["x"]), 2**53 + 1, dtype=np.int64)}}
+
+
+def test_an_answer_is_written_as_written_values_are(tmp_path):
+    # The core converts an answer to the result's declared precision as the
+    # writer converts written values: an int64 past 2^53 to a float32 result
+    # is rounded there, as a float64 result refuses it.
+    for precision, expect in (("float32", [float(2**53)]), ("float64", None)):
+        mp = str(tmp_path / f"{precision}.gamut")
+        with gamut.create_model(mp, writer="t", parameters={"x": {"units": "1", "lower": 0.0, "upper": 1.0}},
+                                 scalars={"y": {"units": "1", "precision": precision, "model": "w",
+                                                "output": "y"}}) as m:
+            m.add_model("w", Wide(), ["x"])
+        if expect is None:
+            with pytest.raises(gamut.GamutError) as e:
+                gamut.evaluate(mp, {"x": [0.5]})
+            assert e.value.rule == "E4"
+        else:
+            with gamut.evaluate(mp, {"x": [0.5]}) as out:
+                assert out.get_scalar("y").tolist() == expect

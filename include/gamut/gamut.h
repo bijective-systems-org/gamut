@@ -339,10 +339,12 @@ GAMUT_API int gamut_evaluation_input_info(const gamut_evaluation* ev, const char
                                       int* rank, int64_t* shape, int capacity, gamut_error* err);
 GAMUT_API int gamut_evaluation_input(const gamut_evaluation* ev, const char* name, void* out,
                                  int64_t out_bytes, gamut_error* err);
-/* A model's answer to one request: rows values for a scalar, rows x sites
- * for a field, rows x nodes x axes for coordinates. */
+/* A model's answer to one request, in dtype: rows values for a scalar,
+ * rows x sites for a field, rows x nodes x axes for coordinates.  It is
+ * written at the result's declared precision, converted as written values
+ * are (E4 for a value that is not exact there). */
 GAMUT_API int gamut_evaluation_answer(gamut_evaluation* ev, const char* model_id, const char* output,
-                                  const char* kind, const char* key, const double* values,
+                                  const char* kind, const char* key, int dtype, const void* values,
                                   int64_t count, gamut_error* err);
 /* Writes the rows and closes the data file.  A request left unanswered is
  * refused and can still be answered; a failure writing the rows removes

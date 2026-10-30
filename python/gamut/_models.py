@@ -438,9 +438,9 @@ def _run(m: Study, ev: ctypes.c_void_p, model_id: str) -> None:
             values = record.get("derivatives", {}).get(y)
         if values is None:
             raise GamutError("", f"the model {model_id} gave no {k} for {o}")
-        flat = np.ascontiguousarray(_lib.float64_exactly(values, f"{model_id}: {o}")).ravel()
-        call("gamut_evaluation_answer", ev, b(model_id), b(o), b(k), b(y),
-             flat.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), flat.size)
+        flat = _lib.as_array(values).ravel()      # as given: the core converts it as written values
+        call("gamut_evaluation_answer", ev, b(model_id), b(o), b(k), b(y), _lib.dtype_code(flat),
+             flat.ctypes.data_as(ctypes.c_void_p), flat.size)
 
 
 def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None,

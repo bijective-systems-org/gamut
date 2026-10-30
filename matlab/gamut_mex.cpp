@@ -972,13 +972,15 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     plhs[0] = from_c_order(bytes.data(), dims, code);
   } else if (cmd == "evaluation_answer") {
     // values: a column per row, rows x sites for a field, rows x nodes x axes for coordinates
+    // as given: the core converts it as written values
     const mxArray* v = arg(6);
-    if (!mxIsDouble(v) || mxIsComplex(v)) usage("an answer is real double values");
+    const int code = dtype_code(mxGetClassID(v));
+    if (code < 0 || mxIsLogical(v) || mxIsComplex(v) || mxIsSparse(v)) usage("an answer is real full numeric");
     std::vector<int64_t> dims;
     const auto bytes = to_c_order(v, mxGetNumberOfDimensions(v), &dims);
     check(gamut_evaluation_answer(evaluation(arg(1)), text(arg(2), "model").c_str(),
                                   text(arg(3), "output").c_str(), text(arg(4), "kind").c_str(),
-                                  text(arg(5), "key").c_str(), reinterpret_cast<const double*>(bytes.data()),
+                                  text(arg(5), "key").c_str(), code, bytes.data(),
                                   static_cast<int64_t>(mxGetNumberOfElements(v)), &e),
           e);
   } else if (cmd == "evaluation_finish") {
