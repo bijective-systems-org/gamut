@@ -120,11 +120,12 @@ jobs:
         run: |
           julia --project=julia -e 'using Pkg; Pkg.instantiate()'
           julia --project=julia -e 'include("julia/test/runtests.jl")'
-          mkdir -p "$RUNNER_TEMP/jexample/table" "$RUNNER_TEMP/jexample/mesh" "$RUNNER_TEMP/jexample/sweep" \
-                   "$RUNNER_TEMP/jexample/models" "$RUNNER_TEMP/jprinted"
+          mkdir -p "$RUNNER_TEMP/jexample/sweep" "$RUNNER_TEMP/jexample/models" "$RUNNER_TEMP/jprinted"
           # What each example prints is kept, and held to the pages that show it.
-          (cd "$RUNNER_TEMP/jexample/table" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/run_table.jl") | tee "$RUNNER_TEMP/jprinted/run_table.txt"
-          (cd "$RUNNER_TEMP/jexample/mesh" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/one_mesh.jl") | tee "$RUNNER_TEMP/jprinted/one_mesh.txt"
+          for example in run_table one_mesh family refinement transient; do
+            mkdir -p "$RUNNER_TEMP/jexample/$example"
+            (cd "$RUNNER_TEMP/jexample/$example" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/$example.jl") | tee "$RUNNER_TEMP/jprinted/$example.txt"
+          done
           # The README's sweep prints the README's line.
           (cd "$RUNNER_TEMP/jexample/sweep" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/sweep.jl") | tee "$RUNNER_TEMP/jsweep.txt"
           grep -qxF "$(grep -m1 '^lift of the runs that converged:' README.md)" "$RUNNER_TEMP/jsweep.txt"

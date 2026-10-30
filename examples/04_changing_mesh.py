@@ -3,7 +3,8 @@
 The same flow on three meshes of increasing resolution, with the pressure
 stored per cell as a finite-volume solver reports it. Each run keeps its
 own mesh; reads take one run at a time. The lowest cell value approaches
-the exact -3 as the cells next to the wall shrink.
+the exact -3 as the cells next to the wall shrink. The MATLAB, Julia and
+C++ examples refinement are the same program and print the same lines.
 """
 import numpy as np
 
@@ -23,8 +24,9 @@ with gamut.create("refinement.gamut", writer="example refinement", mesh="changin
                       points=points, cells=cells)
 
 with gamut.open("refinement.gamut") as study:
+    rounds = study.get_parameter("cells_round")
     for row in range(study.row_count):
         types, offsets, connectivity = study.get_cells(row=row)
         cp = study.get_field("cp", rows=row)
-        print(f"row {row}: {len(study.get_points(row=row))} nodes, {len(types)} cells, "
+        print(f"{rounds[row]:g} cells round: {len(study.get_points(row=row))} nodes, {len(types)} cells, "
               f"lowest cell cp {cp.min():.3f}")

@@ -295,18 +295,24 @@ for bound = {struct('units', '1', 'lower', 0), struct('units', '1', 'upper', 1)}
     end
 end
 
-% The examples in examples/matlab run: run_table and one_mesh write valid
-% files, and the README's sweep, and the same file read with ncread, print
-% its line. With EXAMPLE_OUTPUT naming a folder, what each prints is kept
-% there for `python python/tests/_pages.py matlab FOLDER`, which holds it
-% to the pages that show it.
+% The examples in examples/matlab run, and those of the guide write valid
+% files; the README's sweep, and the same file read with ncread, print its
+% line. With EXAMPLE_OUTPUT naming a folder, what each prints is kept there
+% for `python python/tests/_pages.py matlab FOLDER`, which holds it to the
+% pages that show it. The examples call cylinderRing and cylinderPressure,
+% beside them.
 examples = fullfile(fileparts(fileparts(here)), 'examples', 'matlab');
 if isfile(fullfile(examples, 'one_mesh.m'))
     exampleDir = fullfile(tmp, 'examples'); mkdir(exampleDir);
-    run_example(fullfile(examples, 'run_table.m'), exampleDir);
-    found = gamut.validate(fullfile(exampleDir, 'polar.gamut'));
-    ok(~any(startsWith({found.rule}, 'E')), ...
-        'the MATLAB run table writes a valid file (its failed run is a warning)');
+    addpath(examples);
+    unpath = onCleanup(@() rmpath(examples));
+    for example = {'run_table', 'polar'; 'family', 'family'; 'refinement', 'refinement'; ...
+                   'transient', 'transient'}'
+        run_example(fullfile(examples, [example{1} '.m']), exampleDir);
+        found = gamut.validate(fullfile(exampleDir, [example{2} '.gamut']));
+        ok(isempty(found) || ~any(startsWith({found.rule}, 'E')), ...
+            sprintf('the MATLAB example %s writes a valid file', example{1}));
+    end
     run_example(fullfile(examples, 'one_mesh.m'), exampleDir);
     ok(isempty(gamut.validate(fullfile(exampleDir, 'cylinder.gamut'))), ...
         'the MATLAB example writes a valid file');
