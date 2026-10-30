@@ -533,7 +533,9 @@ def test_an_answer_or_input_that_is_not_real_is_refused(tmp_path):
                              scalars={"y": {"units": "1", "model": "c", "output": "y"}}) as m:
         m.add_model("c", Complex(), ["x"])
     for given in ({"x": [0.5]}, {"x": [0.5 + 1j]}, {"x": [True]}, {"x": np.array([0.5, 1j], dtype=object)},
-                  {"x": np.array([0.5, True], dtype=object)}):
+                  {"x": np.array([0.5, True], dtype=object)},
+                  {"x": np.array([0.5, np.datetime64("2026-01-01")], dtype=object)},
+                  {"x": np.array([0.5, np.void(b"1")], dtype=object)}):
         with pytest.raises(gamut.GamutError, match="not (a )?real number") as e:
             gamut.evaluate(mp, given)
         assert e.value.rule == "E4"

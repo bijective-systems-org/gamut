@@ -4,8 +4,10 @@ conversions every call needs.  Nothing here is public."""
 from __future__ import annotations
 
 import ctypes
+import numbers
 import os
 import sys
+from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -308,7 +310,7 @@ def float64_exactly(values: Any, what: str) -> np.ndarray:
         if arr.dtype.kind != "O":
             flat = flat[(flat > 2**53) | (flat < -2**53)]
         for v in flat.tolist():
-            if isinstance(v, (bool, np.bool_, complex, np.complexfloating, str, bytes)):
+            if v is not None and (isinstance(v, (bool, np.bool_)) or not isinstance(v, (numbers.Real, Decimal))):
                 raise GamutError("E4", f"{what}: {v!r} is not a real number")
             if isinstance(v, (int, np.integer)) and abs(int(v)) > 2**53:
                 v = int(v)
