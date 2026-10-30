@@ -59,8 +59,11 @@ defaults:
 env:
   # The MATLAB that builds the gateways and packages them, and so the oldest
   # release the toolbox claims (package_toolbox.m reads it from the MATLAB it
-  # runs in): the first to run natively on Apple silicon. It runs on macOS 14
-  # and Ubuntu 22.04 at the newest, hence those runners for it.
+  # runs in): the first to run natively on Apple silicon. MathWorks lists
+  # Ubuntu 22.04 and macOS 14 as its newest systems; GitHub retires the
+  # macOS 14 runners on 2 November 2026, so its macOS jobs run on macOS 15,
+  # where the gateway builds and the toolbox test installs it and runs the
+  # example.
   MATLAB_RELEASE: R2023b
   MANYLINUX: quay.io/pypa/manylinux_2_28_x86_64:2026.10.16-1@sha256:1e7b8460ad8fb3fb0fbe1cd818845159ac896b4fd17452d56e892c291f3b97a8
 
@@ -150,7 +153,7 @@ jobs:
           # The Linux gateway is built on the oldest runner: built on glibc
           # 2.38 or later it would ask for symbols older systems lack.
           - {platform: linux-x86_64, os: ubuntu-22.04, library: lib/libgamut.so, mex: mexa64}
-          - {platform: macos-arm64, os: macos-14, library: lib/libgamut.dylib, mex: mexmaca64}
+          - {platform: macos-arm64, os: macos-15, library: lib/libgamut.dylib, mex: mexmaca64}
           - {platform: macos-x86_64, os: macos-15-intel}
           - {platform: windows-x86_64, os: windows-2022, library: bin/gamut.dll, mex: mexw64}
     runs-on: ${{ matrix.os }}
@@ -257,7 +260,7 @@ jobs:
         include:
           - {name: Linux, os: ubuntu-22.04}
           - {name: 'Linux, latest MATLAB', os: ubuntu-24.04, release: latest}
-          - {name: macOS, os: macos-14}
+          - {name: macOS, os: macos-15}
           - {name: 'macOS, latest MATLAB', os: macos-15, release: latest}
           - {name: Windows, os: windows-2022}
     runs-on: ${{ matrix.os }}
