@@ -104,7 +104,7 @@ that matches the core it calls, and point it at a core library:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v2.0.0")
+Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v2.1.0")
 ENV["GAMUT_LIBRARY"] = "/path/to/libgamut.dylib"   # .so on Linux, gamut.dll on Windows
 using Gamut
 Gamut.version()
@@ -156,7 +156,7 @@ that matches the core it links, and point the build at a core library:
 
 ```toml
 [dependencies]
-bijective-gamut = { git = "https://github.com/bijective-systems-org/gamut", tag = "v2.0.0" }
+bijective-gamut = { git = "https://github.com/bijective-systems-org/gamut", tag = "v2.1.0" }
 ```
 
 ```bash
