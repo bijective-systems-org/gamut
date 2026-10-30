@@ -857,6 +857,54 @@ int gamut_describe(const gamut_file* f, const char* name, gamut_strings** keys, 
   }
 }
 
+int gamut_related(const gamut_file* f, const char* name, gamut_strings** kinds, gamut_strings** keys,
+                  gamut_strings** names, gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    need(kinds != nullptr && keys != nullptr && names != nullptr, "an output is NULL");
+    const Reader& r = reader_of(f);
+    const Schema& s = r.schema();
+    const std::string path = path_of(s, str(name));
+    r.describe(path);                       // refuses a name that is nothing in the file
+    std::vector<std::string> t, k, n;
+    auto add = [&](const char* kind, std::string key, const std::string& other) {
+      t.emplace_back(kind);
+      k.push_back(std::move(key));
+      n.push_back(other);
+    };
+    if (const auto* mine = s.result(path)) {
+      for (const char* where : {"scalar", "node", "cell"}) {
+        for (const auto& other : s.results) {
+          if (other.where != where) continue;
+          const auto& rel = other.relation;
+          if (rel.of == mine->name) {
+            if (rel.statistic == "std") {
+              add("std", "", other.name);
+            } else if (rel.statistic == "quantile" && rel.q) {
+              add("quantile", gamut_core::internal::format_f64(*rel.q), other.name);
+            } else if (!rel.with_respect_to.empty()) {
+              add("derivative", rel.with_respect_to == "coordinates" ? "coordinates:" + rel.axis
+                                                                     : rel.with_respect_to,
+                  other.name);
+            }
+          }
+          // The vector's parts, not the statistics or derivatives of them.
+          if (!mine->vector.empty() && other.vector == mine->vector && rel.of.empty()) {
+            add("vector", "", other.name);
+          }
+        }
+      }
+    }
+    *kinds = strings(std::move(t));
+    *keys = strings(std::move(k));
+    *names = strings(std::move(n));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
 int gamut_shape(const gamut_file* f, const char* name, const gamut_sel* rows, const gamut_sel* sites,
               int* rank, int64_t* shape, int capacity, gamut_error* err) {
   try {

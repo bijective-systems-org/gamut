@@ -19,6 +19,7 @@ folder with `julia --project=<checkout>/julia <checkout>/examples/julia/run_tabl
 | `study.select("mach > 0.7")` | `Gamut.select(study, "mach > 0.7")`, positions from 1 |
 | `study.outside("alpha", rows=r)` | `Gamut.outside(study, "alpha"; rows=r)` |
 | `study.row_count`, `study.type` | `study.row_count`, `study.type` |
+| `study.related("cl")` | `Gamut.related(study, "cl")` |
 | `study.model_numbers("fit")` | `Gamut.model_numbers(study, "fit")` |
 | `gamut.append`, `extract`, `write_copy`, `validate` | `Gamut.append!`, `extract`, `write_copy`, `validate` |
 

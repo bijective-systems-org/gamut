@@ -175,6 +175,9 @@ ok(isequal(out.getScalar('y'), [1; 2]) && isequal(out.getScalar('y_std'), [0.25;
     'plug-in values and std');
 ok(max(abs(out.getScalar('y_p90') - [1.2; 2.2])) < 1e-12, 'plug-in quantile, from a containers.Map');
 ok(isequal(out.getScalar('dy_dx'), [2; 2]), 'plug-in derivative');
+rel = out.related('y');
+ok(strcmp(rel.std, 'y_std') && isequal(rel.quantiles.keys(), {0.9}) && strcmp(rel.quantiles(0.9), 'y_p90') ...
+    && strcmp(rel.derivatives('x'), 'dy_dx') && isempty(rel.vector), 'related reads what describes y');
 out.close();
 ok(isfile(ep) && isempty(gamut.validate(ep)), 'evaluated file kept and valid');
 

@@ -155,6 +155,7 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "gamut_info": (_I, [_P, _S, _PP, _E]),
     "gamut_names": (_I, [_P, _S, _PP, _E]),
     "gamut_describe": (_I, [_P, _S, _PP, _PP, _E]),
+    "gamut_related": (_I, [_P, _S, _PP, _PP, _PP, _E]),
     "gamut_shape": (_I, [_P, _S, _SEL, _SEL, ctypes.POINTER(_I), ctypes.POINTER(_L), _I, _E]),
     "gamut_read": (_I, [_P, _S, _SEL, _SEL, _I, _P, _L, _E]),
     "gamut_label_names": (_I, [_P, _S, _SEL, _PP, _E]),
@@ -211,18 +212,21 @@ def strings_out(name: str, *args: Any) -> list[str]:
         _lib.gamut_strings_free(handle)
 
 
-def two_strings_out(name: str, *args: Any) -> tuple[list[str], list[str]]:
-    keys, values = ctypes.c_void_p(), ctypes.c_void_p()
-    call(name, *args, ctypes.byref(keys), ctypes.byref(values))
+def lists_out(name: str, count: int, *args: Any) -> list[list[str]]:
+    """Calls a function whose last `count` outputs are gamut_strings lists."""
+    handles = [ctypes.c_void_p() for _ in range(count)]
+    call(name, *args, *(ctypes.byref(h) for h in handles))
     try:
-        out = []
-        for h in (keys, values):
-            n = _lib.gamut_strings_count(h)
-            out.append([_lib.gamut_strings_get(h, i).decode("utf-8", "replace") for i in range(n)])
-        return out[0], out[1]
+        return [[_lib.gamut_strings_get(h, i).decode("utf-8", "replace")
+                 for i in range(_lib.gamut_strings_count(h))] for h in handles]
     finally:
-        _lib.gamut_strings_free(keys)
-        _lib.gamut_strings_free(values)
+        for h in handles:
+            _lib.gamut_strings_free(h)
+
+
+def two_strings_out(name: str, *args: Any) -> tuple[list[str], list[str]]:
+    keys, values = lists_out(name, 2, *args)
+    return keys, values
 
 
 def string_array(items: Sequence[str]) -> Any:

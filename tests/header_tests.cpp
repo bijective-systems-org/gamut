@@ -97,6 +97,13 @@ void test_table() {
   CHECK(s.describe("cl_std")["statistic"] == "std");
   CHECK(s.describe("dcl_dalpha")["with_respect_to"] == "alpha");
   CHECK(std::fabs(std::stod(s.describe("cl_p95")["q"]) - 0.95) < 1e-12);
+  const gamut::Related rel = s.related("cl");                     // what describes cl
+  CHECK(rel.std_dev == "cl_std");
+  CHECK(rel.quantiles == (std::map<double, std::string>{{0.95, "cl_p95"}}));
+  CHECK(rel.derivatives == (std::map<std::string, std::string>{{"alpha", "dcl_dalpha"}}));
+  CHECK(rel.vector.empty());
+  CHECK(s.related("alpha").std_dev.empty() && s.related("alpha").derivatives.empty());
+  CHECK(refused([&] { s.related("nothing"); }) != "");
   CHECK(s.names("parameters").size() == 2);
   CHECK(s.categories("status") == (std::vector<std::string>{"converged", "failed"}));
   CHECK(s.get_label("status", {5}) == std::vector<std::string>{"failed"});

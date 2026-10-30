@@ -28,6 +28,7 @@ evaluates a model fitted in Python. Without CMake, one builds as
 | `study.get_field("p", rows=r, nodes=n)` | `study.get_field("p", r, n)` |
 | `study.get_parameter("alpha")`, `study.get_constant("area")` | `study.get_parameter<double>("alpha")`, `study.get_constant<double>("area")`: the type the value is stored as, `int64_t` for one declared int64 |
 | `study.outside("alpha", rows=r)` | `study.outside("alpha", r)` |
+| `study.related("cl")` | `study.related("cl")`: a `gamut::Related`, its std as `std_dev` |
 | `study.select("mach > 0.7")`, `study.get_label(...)`, `study.describe(...)` | the same names |
 | `gamut.append`, `extract`, `write_copy`, `validate` | `gamut::append`, `extract`, `write_copy`, `validate` |
 

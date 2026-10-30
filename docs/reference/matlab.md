@@ -20,6 +20,7 @@ An example written in MATLAB has a MATLAB tab, quoted from a program in
 | `study.row_count` | `study.rowCount()` |
 | `study.table()` | `study.table()`: a MATLAB `table`, labels as `categorical` |
 | `gamut.register_model_type(cls)` | `gamut.registerModelType(className)` |
+| `study.related("cl")` | `study.related('cl')`: a struct, its quantiles and derivatives as `containers.Map` |
 | `study.model_numbers("fit")` | `study.modelNumbers('fit')`: a struct |
 | `gamut.append`, `extract`, `write_copy`, `validate` | `gamut.append`, `extract`, `writeCopy`, `validate` |
 

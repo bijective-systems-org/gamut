@@ -1,8 +1,8 @@
 %UNCERTAIN Uncertainty and gradients beside the values they describe.
 %   Each run stores a lift coefficient with its standard deviation and two
 %   quantiles, and its derivative with respect to angle of attack. Each
-%   names the result it describes, so a reader finds them by their
-%   declarations. examples/06_uncertainty_gradients.py and the Julia and
+%   names the result it describes, so a reader finds them without naming
+%   conventions. examples/06_uncertainty_gradients.py and the Julia and
 %   C++ examples are the same program and print the same lines.
 
 alpha = linspace(0, 8, 9)';
@@ -20,22 +20,11 @@ study.addRuns(struct('alpha', alpha, 'cl', cl, 'cl_std', spread, ...
 study.close();
 
 study = gamut.open('uncertain.gamut');
-quantiles = containers.Map('KeyType', 'double', 'ValueType', 'char');
-derivatives = containers.Map();
-names = study.names('scalars');
-for k = 1:numel(names)                          % what describes cl, read from each declaration
-    d = study.describe(names{k});
-    if ~isfield(d, 'of') || ~strcmp(d.of, 'cl'), continue; end
-    if isfield(d, 'with_respect_to'), derivatives(d.with_respect_to) = names{k};
-    elseif ~isfield(d, 'statistic'), continue
-    elseif strcmp(d.statistic, 'std'), spreadName = names{k};
-    elseif strcmp(d.statistic, 'quantile'), quantiles(str2double(d.q)) = names{k};
-    end
-end
-fprintf('the std of cl: %s\n', spreadName);
-fprintf('its 0.05 and 0.95 quantiles: %s %s\n', quantiles(0.05), quantiles(0.95));
-fprintf('its derivative with respect to alpha: %s\n', derivatives('alpha'));
-low = study.getScalar(quantiles(0.05));
-high = study.getScalar(quantiles(0.95));
+related = study.related('cl');
+fprintf('the std of cl: %s\n', related.std);
+fprintf('its 0.05 and 0.95 quantiles: %s %s\n', related.quantiles(0.05), related.quantiles(0.95));
+fprintf('its derivative with respect to alpha: %s\n', related.derivatives('alpha'));
+low = study.getScalar(related.quantiles(0.05));
+high = study.getScalar(related.quantiles(0.95));
 fprintf('90 %% band at 8 degrees: %.3f to %.3f\n', low(end), high(end));
 study.close();

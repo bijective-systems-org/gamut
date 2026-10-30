@@ -1148,3 +1148,25 @@ def test_related_lists_a_vector_s_parts_not_their_statistics(tmp_path):
     with gamut.open(p) as f:
         r = f.related("u_x")
     assert r["std"] == "s_x" and sorted(r["vector"]) == ["u_x", "u_y"]
+
+
+def test_related_keys_derivatives_by_what_they_are_taken_with_respect_to(tmp_path):
+    # Two derivatives of one result are two entries, and a statistic this
+    # version does not know describes nothing (spec section 17), in the core
+    # every language asks.
+    p = str(tmp_path / "d.gamut")
+    with gamut.create(p, writer="t", parameters={"alpha": "degree", "beta": "degree"},
+                      scalars={"cl": "1", "cl_k": {"units": "1", "of": "cl", "statistic": "std"},
+                               "dcl_dalpha": {"units": "degree-1", "of": "cl", "with_respect_to": "alpha"},
+                               "dcl_dbeta": {"units": "degree-1", "of": "cl", "with_respect_to": "beta"}}) as s:
+        s.add_runs({"alpha": [0.0], "beta": [1.0], "cl": [0.1], "cl_k": [0.01], "dcl_dalpha": [0.11],
+                    "dcl_dbeta": [0.02]})
+    with h5py.File(p, "a") as h:
+        h["cl_k"].attrs["statistic"] = "kurtosis"
+    with gamut.open(p) as f:
+        assert f.related("cl") == {"std": None, "quantiles": {},
+                                   "derivatives": {"alpha": "dcl_dalpha", "beta": "dcl_dbeta"}, "vector": []}
+        assert f.related("alpha") == {"std": None, "quantiles": {}, "derivatives": {}, "vector": []}
+        with pytest.raises(gamut.GamutError):
+            f.related("nothing")
+
