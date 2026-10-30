@@ -28,7 +28,7 @@ the same lines; choosing a language shows it in every example.
 | 6 | [Uncertainty and gradients](06-uncertainty-and-gradients.md) | a spread, quantiles or a derivative beside a result | Python, MATLAB, Julia, C++ |
 | 7 | [Models](07-models.md) | a fitted model to share and evaluate on new inputs | Python, MATLAB; the built-in model in Julia and C++ too |
 | 8 | [Reading parts](08-reading-parts.md) | more data than memory, regions, other units | Python, MATLAB, Julia, C++ |
-| 9 | [Combining files](09-combining-files.md) | runs from several files, or a subset of one | Python |
+| 9 | [Combining files](09-combining-files.md) | runs from several files, or a subset of one | Python, MATLAB, Julia, C++ |
 | 10 | [VTK](10-vtk.md) | a folder of VTK files to bring in, or to write back out | Python, command line |
 
 The [reference](../reference/command-line.md) has the command line and

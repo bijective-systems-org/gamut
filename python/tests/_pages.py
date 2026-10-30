@@ -77,6 +77,8 @@ PROGRAMS = {
                            "cpp": ["cpp/nearest.cpp"]},
     "guide/08-reading-parts.md": {"matlab": ["matlab/parts.m"], "julia": ["julia/parts.jl"],
                                   "cpp": ["cpp/parts.cpp"]},
+    "guide/09-combining-files.md": {"matlab": ["matlab/combining.m"], "julia": ["julia/combining.jl"],
+                                    "cpp": ["cpp/combining.cpp"]},
     "reference/matlab.md": {"matlab": ["matlab/read_with_ncread.m", "matlab/evaluate_model.m"]},
     "reference/julia.md": {"julia": ["julia/nearest.jl"]},
     "reference/c-and-cpp.md": {"cpp": ["cpp/nearest.cpp"], "c": ["c/one_mesh.c"]},
