@@ -328,7 +328,9 @@ void Evaluation::ready() {
       columns[c] = as_float64(it->second, c);
       pointers[c] = columns[c].data();
     }
-    const std::vector<std::int64_t> index = nearest_indices(nm, pointers, rows_);
+    // No rows: no queries (an empty column has no data to point at).
+    const std::vector<std::int64_t> index =
+        rows_ == 0 ? std::vector<std::int64_t>() : nearest_indices(nm, pointers, rows_);
     for (auto& a : asked_) {
       if (a.model != id) continue;
       if (a.request.kind != "values") {

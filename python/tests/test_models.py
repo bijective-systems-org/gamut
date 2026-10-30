@@ -83,6 +83,8 @@ def test_nearest_model_file_and_evaluation(tmp_path):
         assert pred.describe()["evaluated_from"] == file_id
         np.testing.assert_array_equal(pred.get_points(), pts)
     assert gamut.validate(out_path).findings == ()
+    with gamut.evaluate(mp, {"mach": [], "alpha": []}) as none:
+        assert none.row_count == 0 and none.get_scalar("cl").shape == (0,)
     # In memory: a temporary file that disappears on close.
     p = gamut.evaluate(mp, inputs)
     path = p.path
