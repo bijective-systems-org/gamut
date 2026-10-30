@@ -67,6 +67,20 @@ def test_julia_install_names_this_release():
 
 
 @pytest.mark.skipif(not PAGES, reason="the documentation is not beside this test (an installed package)")
+def test_the_old_name_installs_this_release():
+    # gamut-format, the name through 2.0.0, installs bijective-gamut at the
+    # same version with the same extras.
+    import tomllib
+    package = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+    old = tomllib.loads((ROOT / "packaging" / "gamut-format" / "pyproject.toml").read_text())["project"]
+    version = package["version"]
+    assert (package["name"], old["name"], old["version"]) == ("bijective-gamut", "gamut-format", version)
+    assert old["dependencies"] == [f"bijective-gamut=={version}"]
+    assert old["optional-dependencies"] == {extra: [f"bijective-gamut[{extra}]=={version}"]
+                                            for extra in package["optional-dependencies"]}
+
+
+@pytest.mark.skipif(not PAGES, reason="the documentation is not beside this test (an installed package)")
 def test_rust_install_names_this_release():
     # The crates carry the package's version and are added from its tag.
     package = re.search(r'^version = "(.+)"', (ROOT / "pyproject.toml").read_text(), re.M)[1]

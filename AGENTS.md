@@ -22,10 +22,11 @@ layers over that interface; a validator; a command line; VTK conversion.
 | `tests/` | the core's C++ tests; `two_hdf5_linux.sh`, two HDF5 copies in one process |
 | `python/gamut/` | the Python layer (ctypes), the command line (`cli.py`), VTK conversion (`vtk.py`) |
 | `matlab/`, `julia/` | the MATLAB and Julia layers and their tests; `matlab/package_toolbox.m` packages the MATLAB toolbox |
-| `rust/` | the Rust crates: `gamut-sys`, the declarations of `gamut.h` that `generate.py` writes, and `gamut` over it, with its tests and the corpus check |
+| `rust/` | the Rust crates: `bijective-gamut-sys` (`gamut-sys/`), the declarations of `gamut.h` that `generate.py` writes, and `bijective-gamut` (`gamut/`, `gamut` in code) over it, with its tests and the corpus check |
 | `examples/` | runnable examples; each guide page quotes one, and the README quotes `00_readme.py`, `07_models.py` and the MATLAB, Julia, C++ and Rust examples; the MATLAB, Julia, C++ and Rust model examples evaluate the files `07_models.py` writes |
 | `docs/` | install, the guide, reference, security, comparison, benchmarks |
 | `bench/` | benchmark scripts and results; `bench/figures.py` writes the page's tables and figures |
+| `packaging/gamut-format/` | the package's name on PyPI through 2.0.0, published with each release; it only installs `bijective-gamut` |
 | `tools/` | `build_deps.sh` (static zlib and HDF5), `build_core.sh` (the core as a release carries it), `damaged_files.py` |
 | `licenses/` | the licences of HDF5 and zlib, which packages link in and carry |
 

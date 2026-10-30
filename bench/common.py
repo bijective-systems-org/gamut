@@ -46,11 +46,11 @@ def machine() -> dict[str, Any]:
             out = subprocess.run(["sysctl", "-n", key], capture_output=True, text=True).stdout
             info[name] = out.strip()
     packages = {}
-    # Recorded under the import name; gamut's distribution is gamut-format.
+    # Recorded under the import name; gamut's distribution is bijective-gamut.
     for name in ("gamut", "numpy", "h5py", "netCDF4", "xarray", "zarr", "pyarrow", "pandas",
                  "pyvista", "vtk"):
         try:
-            packages[name] = metadata.version("gamut-format" if name == "gamut" else name)
+            packages[name] = metadata.version("bijective-gamut" if name == "gamut" else name)
         except metadata.PackageNotFoundError:
             if name == "gamut":                # run from a checkout, not installed
                 try:

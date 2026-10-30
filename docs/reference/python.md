@@ -1,6 +1,6 @@
 # Python
 
-The package is `gamut-format` on PyPI, imported as `gamut`
+The package is `bijective-gamut` on PyPI, imported as `gamut`
 ([installing](../install.md)). This page is generated from its
 docstrings, which `help()` shows in Python, and every
 [example](../guide/README.md) has a Python tab. Positions count from 0,

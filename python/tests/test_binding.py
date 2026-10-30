@@ -325,7 +325,7 @@ def test_portion_marking_is_free_text_under_64_kib(tmp_path):
 def test_package_and_core_versions_agree():
     from importlib import metadata
     try:
-        installed = metadata.version("gamut-format")
+        installed = metadata.version("bijective-gamut")
     except metadata.PackageNotFoundError:
         pytest.skip("run from a source tree, not an installed package")
     assert installed == gamut.__version__ == gamut._lib.version()

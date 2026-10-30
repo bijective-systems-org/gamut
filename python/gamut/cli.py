@@ -913,7 +913,7 @@ def vtk_main(argv: list[str] | None = None) -> int:
         if e.name not in ("pandas", "pyvista", "vtk"):
             raise
         print(f'gamut-vtk needs the vtk extra, without which {e.name} is missing: '
-              f'pip install "gamut-format[vtk]"', file=sys.stderr)
+              f'pip install "bijective-gamut[vtk]"', file=sys.stderr)
         return 2
     return vtk(argv)
 

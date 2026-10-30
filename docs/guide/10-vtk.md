@@ -3,7 +3,7 @@
 Many studies today are a folder of VTK files, one per run. `gamut-vtk`
 turns such a folder into one study file, and a study file back into a
 folder of `.vtu` files. It needs the `vtk` extra:
-`pip install "gamut-format[vtk]"`.
+`pip install "bijective-gamut[vtk]"`.
 
 ## From the command line
 

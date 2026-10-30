@@ -6,7 +6,7 @@ process, checks that every format read the same numbers, and saves a JSON
 result with the machine and the versions.
 
 ```bash
-pip install "gamut-format[vtk]" h5py netCDF4 xarray zarr pyarrow
+pip install "bijective-gamut[vtk]" h5py netCDF4 xarray zarr pyarrow
 
 # A study on one mesh (any gamut file with a shared mesh):
 python bench/shared_mesh.py run STUDY.gamut WORK_DIR bench/results/NAME.json

@@ -3,7 +3,7 @@ requires = ["scikit-build-core>=0.10"]
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "gamut-format"
+name = "bijective-gamut"
 version = "2.0.0"
 description = "Gamut by Bijective Systems: an open file format for parametric simulation studies and fitted models"
 readme = "README.md"

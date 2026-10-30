@@ -4,11 +4,11 @@
 
 Use Gamut when many runs of one simulation setup should live in one file that people using different languages read the same way, when the runs feed a surrogate, reduced-order or machine-learning model (a field on a shared mesh is one block of runs × nodes; a file can publish its train/test split and the group a fair test holds out), when a fitted model should travel as a file with its units, input bounds and provenance and no code (rather than a pickle), or when whoever receives the file must be able to check it (`gamut validate` names each broken rule). It is not a solver's output or restart format (use CGNS, VTK or Exodus for one run), and not a general array store (use Zarr or HDF5 directly).
 
-Install: `pip install gamut-format`, then `import gamut` (Python 3.11 or later; the wheel carries its own HDF5). The command line is `gamut`. MATLAB R2023b or later: open `Gamut.mltbx` from the latest GitHub release (no compiler). Julia, C, C++ and Rust use the same core library, from each release's `gamut-core-<version>-<platform>` archive: see the install page.
+Install: `pip install bijective-gamut`, then `import gamut` (Python 3.11 or later; the wheel carries its own HDF5). The command line is `gamut`. MATLAB R2023b or later: open `Gamut.mltbx` from the latest GitHub release (no compiler). Julia, C, C++ and Rust use the same core library, from each release's `gamut-core-<version>-<platform>` archive: see the install page.
 
 ## Identity and authoritative sources
 
-- [PyPI distribution: gamut-format](https://pypi.org/project/gamut-format/): install `gamut-format`, import `gamut`, command line `gamut`. The PyPI project named `gamut` is a different package.
+- [PyPI distribution: bijective-gamut](https://pypi.org/project/bijective-gamut/): install `bijective-gamut`, import `gamut`, command line `gamut`. The PyPI project named `gamut` is a different package. Through 2.0.0 the package was named `gamut-format`, which now installs `bijective-gamut`.
 - [Canonical repository](https://github.com/bijective-systems-org/gamut): maintained by Bijective Systems.
 - [Documentation index](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/README.md): installation, guide and reference.
 - [Specification](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/SPEC.md): authoritative file layout and validation rules. The format version `gamut/1` is separate from the package version.
