@@ -80,9 +80,10 @@ def outputs(text: str, language: str) -> list[str]:
     """The output blocks of a page that `language`'s program prints. An
     output block is printed by the code just before it: inside a language
     tab, that language's; after a set of tabs, every language in the set;
-    elsewhere, the language of the last code block."""
+    elsewhere, the last code block's (a shell's output is no language's).
+    One before any code is every language's. Tabs are one level deep."""
     shown: list[str] = []
-    owners: set[str] = set()    # who prints the next output block outside tabs
+    owners: set[str] = set(CODE)  # who prints the next output block outside tabs
     tab = None                  # the open tab's language
     tabs: set[str] | None = None  # the languages of the set of tabs being read
     fence, block = None, []
@@ -91,7 +92,7 @@ def outputs(text: str, language: str) -> list[str]:
             if line == "```":
                 if fence == "text" and language in ({tab} if tab else owners):
                     shown.append("\n".join(block) + "\n")
-                elif fence in CODE and tab is None:
+                elif tab is None:
                     owners = {fence}
                 fence = None
             else:
@@ -100,6 +101,8 @@ def outputs(text: str, language: str) -> list[str]:
             fence, block = line[3:].strip(), []
             if tabs is not None and tab is None:    # the set of tabs has ended
                 owners, tabs = tabs, None
+        elif line.startswith("////"):
+            raise ValueError("a page's language tabs are one level deep, not nested")
         elif line.startswith("/// tab | "):
             tab = TABS[line[len("/// tab | "):].strip()]
             tabs = (tabs or set()) | {tab}
