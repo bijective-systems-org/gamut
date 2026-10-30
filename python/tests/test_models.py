@@ -404,3 +404,73 @@ def test_an_answer_marks_the_inputs_outside_the_fitted_range(tmp_path):
         np.testing.assert_array_equal(answer.outside("mach"), [-0.125, 0.0, 0.0])
         np.testing.assert_array_equal(answer.outside("alpha"), [0.0, 1.5, -1.0])
     assert gamut.validate(out).warning_ids == ["W4"]
+
+
+@gamut.register_model_type
+class Echo:
+    """Gives back x as y, and the first node's x coordinate as x0."""
+
+    type = "tests.echo"
+
+    @classmethod
+    def load(cls, numbers):
+        return cls()
+
+    def save(self):
+        return {"k": 1}
+
+    def call(self, inputs, wanted):
+        out = {}
+        for output, *_ in wanted:
+            if output == "x0":
+                out[output] = {"values": np.asarray(inputs["coordinates"])[:, 0, 0]}
+            else:
+                out[output] = {"values": np.asarray(inputs["x"], dtype=float)}
+        return out
+
+
+def test_an_int64_input_past_2_53_is_evaluated_as_an_integer(tmp_path):
+    # Bounds are compared exactly, and the nearest model takes int64 as
+    # float64 (spec section 7.5), so a large integer is neither refused nor
+    # misjudged against its bounds.
+    big = 2**53 + 1
+    mp = str(tmp_path / "big.gamut")
+    with gamut.create_model(mp, writer="tests",
+                             parameters={"x": {"units": "1", "dtype": "int64", "lower": 0.0, "upper": float(2**53)}},
+                             scalars={"y": {"units": "1", "model": "echo", "output": "y"},
+                                      "z": {"units": "1", "model": "n", "output": "z"}}) as m:
+        m.add_model("echo", Echo(), ["x"])
+        m.add_model("n", gamut.Nearest(["x"], [0.0], [float(2**53)], [[0.0], [float(2**53)]], {"z": [1.0, 2.0]}),
+                    ["x"])
+    with pytest.warns(UserWarning, match="x is outside the model's domain .* in 1 of 2 rows"):
+        out = gamut.evaluate(mp, {"x": [big, 2**53]})
+    with out:
+        assert out.get_parameter("x").tolist() == [big, 2**53]
+        assert out.get_scalar("z").tolist() == [2.0, 2.0]
+        assert out.outside("x").tolist() == [1.0, 0.0]
+
+
+def _echo_model(path, per="fixed"):
+    with gamut.create_model(path, writer="tests", mesh="shared", per=per,
+                             coordinates={"units": "m", "axes": 2},
+                             parameters={"x": {"units": "1", "lower": 0.0, "upper": 2.0}},
+                             scalars={"x0": {"units": "m", "model": "echo", "output": "x0"}}) as m:
+        m.set_mesh(np.array([[1.0, 0.0], [0.0, 1.0]]), cells=([3], [0, 2], [0, 1]))
+        m.add_model("echo", Echo(), ["x", "coordinates"])
+
+
+def test_given_coordinates_are_the_answers_per_run(tmp_path):
+    # Spec section 7.4: coordinates the caller gives are the data file's,
+    # per run, though the model file's are fixed.
+    mp = str(tmp_path / "echo.gamut")
+    _echo_model(mp)
+    given = np.array([[[10.0, 0.0], [0.0, 1.0]], [[50.0, 0.0], [0.0, 1.0]]])
+    with gamut.evaluate(mp, {"x": [1.0, 2.0]}, coordinates=given) as out:
+        assert out.describe()["per"] == "run"
+        assert out.get_scalar("x0").tolist() == [10.0, 50.0]
+        np.testing.assert_array_equal(out.get_points(1), given[1])
+    # Without them, the stored ones, fixed; and for no rows, no rows.
+    with gamut.evaluate(mp, {"x": [1.0]}) as out:
+        assert out.describe()["per"] == "fixed" and out.get_scalar("x0").tolist() == [1.0]
+    with gamut.evaluate(mp, {"x": []}) as out:
+        assert out.row_count == 0

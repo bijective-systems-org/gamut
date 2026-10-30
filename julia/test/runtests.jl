@@ -320,6 +320,8 @@ mktempdir() do tmp
         @test Gamut.open(f -> Gamut.describe(f)["portion_marking"], mp) == "Example marking"
         e = try Gamut.evaluate(mp, Dict("alpha" => [2^53 + 1])); nothing catch x; x end
         @test e isa GamutError && e.rule == "E4"       # Float64 would round it
+        e = try Gamut.evaluate(mp, Dict("alpha" => [1.0], "typo" => ["steel"])); nothing catch x; x end
+        @test e isa GamutError && e.rule == "E2"       # the name is refused before its values
         out = Gamut.evaluate(mp, Dict("alpha" => [1.0, 4.0, 9.0]))
         @test Gamut.get_scalar(out, "cl") == [0.1, 0.5, 1.0]
         @test Gamut.describe(out)["portion_marking"] == "Example marking"   # copied into the answer

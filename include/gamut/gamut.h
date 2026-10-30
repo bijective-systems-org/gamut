@@ -321,7 +321,7 @@ GAMUT_API int gamut_evaluation_values(gamut_evaluation* ev, const char* name, in
 GAMUT_API int gamut_evaluation_names(gamut_evaluation* ev, const char* name, const char* const* names,
                                  int64_t count, gamut_error* err);
 /* rows x nodes x axes, for a model that reads geometry the file does not
- * store for every row. */
+ * store for every row.  They are the data file's coordinates, per run. */
 GAMUT_API int gamut_evaluation_coordinates(gamut_evaluation* ev, int dtype, const void* values,
                                        int64_t count, gamut_error* err);
 GAMUT_API int gamut_evaluation_ready(gamut_evaluation* ev, gamut_strings** warnings,
@@ -344,9 +344,9 @@ GAMUT_API int gamut_evaluation_input(const gamut_evaluation* ev, const char* nam
 GAMUT_API int gamut_evaluation_answer(gamut_evaluation* ev, const char* model_id, const char* output,
                                   const char* kind, const char* key, const double* values,
                                   int64_t count, gamut_error* err);
-/* Writes the rows and closes the data file; refuses a request left
- * unanswered, and leaves no file when it fails.  Freeing an evaluation that
- * was not finished removes its file. */
+/* Writes the rows and closes the data file.  A request left unanswered is
+ * refused and can still be answered; a failure writing the rows removes
+ * the file.  Freeing an evaluation that was not finished removes its file. */
 GAMUT_API int gamut_evaluation_finish(gamut_evaluation* ev, gamut_error* err);
 GAMUT_API void gamut_evaluation_free(gamut_evaluation* ev);
 

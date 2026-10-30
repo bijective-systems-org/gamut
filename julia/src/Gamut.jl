@@ -1096,8 +1096,10 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
                 if name in labels
                     strs, ptrs = cstrings(String[string(x) for x in v])
                     GC.@preserve strs @mes gamut_evaluation_names (Ptr{Cvoid}, Cstring, Ptr{Ptr{UInt8}}, Int64) ev[] cs(name) ptrs length(ptrs)
+                elseif !(name in params)    # the core refuses the name (E2) before its values
+                    @mes gamut_evaluation_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64) ev[] cs(name) 6 C_NULL 0
                 else
-                    int64 = name in params && get(describe(m, name), "dtype", "") == "int64"
+                    int64 = get(describe(m, name), "dtype", "") == "int64"
                     col = int64 ? Vector{Int64}(vec(v)) : Vector{Float64}(float64_exactly(vec(v), name))
                     @mes gamut_evaluation_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64) ev[] cs(name) (int64 ? 4 : 6) col length(col)
                 end

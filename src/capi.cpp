@@ -1454,14 +1454,14 @@ int gamut_evaluation_input_info(const gamut_evaluation* ev, const char* name, in
   try {
     const Lock lock(hdf5_mutex());
     clear(err);
-    need(dtype_out != nullptr && rank != nullptr, "an output is NULL");
+    need(dtype_out != nullptr && rank != nullptr && shape != nullptr, "an output is NULL");
     const auto& e = evaluation_of(ev);
     const std::vector<std::int64_t> s = e.input_shape(str(name));
-    *dtype_out = static_cast<int>(e.input_dtype(str(name)));
-    *rank = static_cast<int>(s.size());
+    const int dtype = static_cast<int>(e.input_dtype(str(name)));
     need(static_cast<int>(s.size()) <= capacity, "the input has " + std::to_string(s.size()) +
                                                       " axes and room was given for " + std::to_string(capacity));
-    need(shape != nullptr, "shape is NULL");
+    *dtype_out = dtype;
+    *rank = static_cast<int>(s.size());
     for (std::size_t i = 0; i < s.size(); ++i) shape[i] = s[i];
     return 0;
   } catch (...) {

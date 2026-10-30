@@ -473,6 +473,10 @@ void test_evaluation_through_the_c_interface() {
     int64_t shape[3] = {0, 0, 0};
     CHECK(ok(gamut_evaluation_input_info(ev, "alpha", &dtype, &rank, shape, 3, &e)));
     CHECK(dtype == GAMUT_FLOAT64 && rank == 1 && shape[0] == 3);
+    int dtype_kept = 77, rank_kept = 88;
+    int64_t shape_kept[3] = {99, 99, 99};
+    CHECK(gamut_evaluation_input_info(ev, "alpha", &dtype_kept, &rank_kept, shape_kept, 0, &e) != 0);
+    CHECK(dtype_kept == 77 && rank_kept == 88 && shape_kept[0] == 99);   // a refusal changes no output
     double read[3] = {0, 0, 0};
     CHECK(ok(gamut_evaluation_input(ev, "alpha", read, sizeof read, &e)));
     double lift[3];

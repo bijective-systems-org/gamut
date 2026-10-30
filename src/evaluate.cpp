@@ -12,11 +12,12 @@ namespace gamut_core {
 namespace internal {
 
 // A setup that fails part way removes the file it created.
-std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string& out_path) {
+std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string& out_path,
+                                         bool per_run) {
   const Schema& s = model.schema();
   if (s.kind != "model") throw Error("E16", "only a model file is evaluated");
-  auto w = Writer::create(out_path, "gamut evaluate", s.mesh.kind,
-                          s.mesh.kind.empty() ? "fixed" : s.mesh.per);
+  const std::string per = s.mesh.kind.empty() ? "fixed" : per_run ? "run" : s.mesh.per;
+  auto w = Writer::create(out_path, "gamut evaluate", s.mesh.kind, per);
   try {
     for (const auto& kv : {std::make_pair("title", s.title), std::make_pair("license", s.license),
                            std::make_pair("references", s.references),
@@ -50,7 +51,7 @@ std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string&
       g.n_nodes = s.mesh.n_nodes;
       g.axes = s.mesh.axes;
       const auto all = Selection::all();
-      if (s.mesh.per == "fixed") {
+      if (per == "fixed") {
         std::vector<double> pts(checked_count("coordinates", 8, {s.mesh.n_nodes, s.mesh.axes}));
         model.read("coordinates", all, all, DType::Float64, pts.data(), pts.size() * 8);
         g.points = Column::of(DType::Float64, pts.data(), static_cast<std::int64_t>(pts.size()));
@@ -103,10 +104,24 @@ std::vector<double> doubles(const Column& c, const std::string& what) {
   return out;
 }
 
+std::vector<std::int64_t> integers(const Column& c) {
+  std::vector<std::int64_t> out(static_cast<std::size_t>(c.count));
+  if (!out.empty()) std::memcpy(out.data(), c.bytes.data(), out.size() * 8);
+  return out;
+}
+
+// A parameter as the nearest model reads it: int64 taken as float64
+// (spec section 7.5), rounded where it must be.
+std::vector<double> as_float64(const Column& c, const std::string& what) {
+  if (c.dtype != DType::Int64) return doubles(c, what);
+  const std::vector<std::int64_t> v = integers(c);
+  return std::vector<double>(v.begin(), v.end());
+}
+
 }  // namespace
 
 Evaluation::Evaluation(const Reader& model, std::int64_t rows, const std::string& out_path)
-    : model_(model), rows_(rows) {
+    : model_(model), rows_(rows), out_path_(out_path) {
   if (model.schema().kind != "model") throw Error("E16", "only a model file is evaluated");
   if (rows < 0) throw Error("E5", "the number of rows is negative");
   writer_ = begin_evaluation(model, out_path);
@@ -176,13 +191,23 @@ void Evaluation::coordinates(const Column& given) {
                           std::to_string(m.axes) + ")",
                 "coordinates");
   }
-  coordinates_ = doubles(given, "coordinates");
+  std::vector<double> v = doubles(given, "coordinates");
+  // Given coordinates are the data file's, per run (spec section 7.4): a
+  // fixed mesh's file, declared with its stored ones, is declared again.
+  if (!coordinates_given_ && m.kind == "shared" && m.per == "fixed") {
+    if (writer_ == nullptr) throw Error("", "the evaluation is finished");
+    writer_->abandon(true);
+    writer_.reset();
+    writer_ = begin_evaluation(model_, out_path_, true);
+  }
+  coordinates_ = std::move(v);
   coordinates_given_ = true;
+  coordinates_stored_ = false;
   ready_ = false;
 }
 
 bool Evaluation::coordinates_available() const {
-  return coordinates_given_ || !coordinates_.empty();
+  return coordinates_given_ || coordinates_stored_;
 }
 
 Evaluation::Asked& Evaluation::asked(const std::string& model_id, const Request& r) {
@@ -219,8 +244,13 @@ void Evaluation::ready() {
   warnings_.clear();
   for (const auto& p : s.parameters) {
     if (!p.lower || !p.upper) continue;
-    const std::vector<double> v = doubles(parameters_.at(p.name), p.name);
-    const auto out = std::count_if(v.begin(), v.end(), [&](double x) { return x < *p.lower || x > *p.upper; });
+    const Column& c = parameters_.at(p.name);
+    std::int64_t out = 0;
+    if (c.dtype == DType::Int64) {
+      for (const std::int64_t x : integers(c)) out += compare_int64(x, *p.lower) < 0 || compare_int64(x, *p.upper) > 0;
+    } else {
+      for (const double x : doubles(c, p.name)) out += x < *p.lower || x > *p.upper;
+    }
     if (out > 0) {
       warnings_.push_back("W4: " + p.name + " is outside the model's domain [" + number(*p.lower) + ", " +
                           number(*p.upper) + "] in " + std::to_string(out) + " of " +
@@ -234,6 +264,7 @@ void Evaluation::ready() {
     model_.read("coordinates", all, all, DType::Float64, pts.data(), pts.size() * 8);
     coordinates_.clear();
     for (std::int64_t i = 0; i < rows_; ++i) coordinates_.insert(coordinates_.end(), pts.begin(), pts.end());
+    coordinates_stored_ = true;
   }
   // What each model is asked for: its results' values, spreads, quantiles
   // and derivatives, and computed coordinates.
@@ -294,7 +325,7 @@ void Evaluation::ready() {
     for (const auto& c : nm.columns) {
       const auto it = parameters_.find(c);
       if (it == parameters_.end()) throw Error("E17", "the nearest model " + id + " reads " + c + ", which is not a parameter", id);
-      columns[c] = doubles(it->second, c);
+      columns[c] = as_float64(it->second, c);
       pointers[c] = columns[c].data();
     }
     const std::vector<std::int64_t> index = nearest_indices(nm, pointers, rows_);
@@ -396,7 +427,7 @@ void Evaluation::finish() {
     if (a == nullptr) throw Error("E17", r.name + " is computed by no model the file holds", r.name);
     b.values[r.name] = Column::of(DType::Float64, a->answer.data(), static_cast<std::int64_t>(a->answer.size()));
   }
-  if (s.mesh.kind == "shared" && s.mesh.per == "run") {
+  if (s.mesh.kind == "shared" && (s.mesh.per == "run" || coordinates_given_)) {
     const std::vector<double>* source = nullptr;
     if (!s.mesh.coordinate_model.empty()) {
       source = &asked(s.mesh.coordinate_model, Request{s.mesh.coordinate_output, "values", ""}).answer;

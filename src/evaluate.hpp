@@ -23,8 +23,10 @@ namespace internal {
 // datasets), constants, and the mesh (its stored coordinates when fixed;
 // cells only when a model or the caller gives coordinates per run).  The
 // file records the model file's id in `evaluated_from` and carries its
-// `portion_marking` when it has one.
-std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string& out_path);
+// `portion_marking` when it has one.  per_run declares a fixed mesh's
+// coordinates per run, for coordinates the caller gives (spec section 7.4).
+std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string& out_path,
+                                         bool per_run = false);
 
 // What a model is asked for: an output's values, its std, a quantile (key:
 // q) or a derivative (key: what it is taken with respect to).
@@ -52,7 +54,7 @@ class Evaluation {
   // A label's names, each in the model file's table (E9).
   void names(const std::string& name, const std::vector<std::string>& given);
   // rows x nodes x axes, for a model that reads geometry the file does not
-  // store for every row.
+  // store for every row.  They are the data file's coordinates, per run.
   void coordinates(const Column& given);
   // Checks that every input is given and every model can read what it
   // reads, runs the built-in models, and lists the W4 findings.
@@ -71,8 +73,9 @@ class Evaluation {
   // rows x sites for a field, rows x nodes x axes for coordinates.
   void answer(const std::string& model_id, const Request& r, const double* values,
               std::int64_t count);
-  // Writes the rows and closes the data file; refuses a request left
-  // unanswered, and removes the file when it fails.
+  // Writes the rows and closes the data file.  A request left unanswered
+  // is refused and can still be answered; a failure writing the rows
+  // removes the file.
   void finish();
 
  private:
@@ -89,6 +92,7 @@ class Evaluation {
 
   const Reader& model_;
   std::int64_t rows_;
+  std::string out_path_;
   std::unique_ptr<Writer> writer_;                        // the data file, until finished
   bool ready_ = false;
   std::map<std::string, Column> parameters_;              // converted
@@ -96,6 +100,7 @@ class Evaluation {
   std::map<std::string, std::vector<std::int64_t>> label_codes_;
   std::vector<double> coordinates_;                       // given, or the stored ones per row
   bool coordinates_given_ = false;
+  bool coordinates_stored_ = false;                       // a fixed mesh's, broadcast
   std::vector<Asked> asked_;
   std::map<std::string, std::vector<Request>> requests_;  // by model, in order
   std::vector<std::string> order_;                        // models, in order asked

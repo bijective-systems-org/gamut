@@ -35,7 +35,9 @@ for k = 1:numel(given)
     name = given{k};
     if any(strcmp(labels, name))
         gamut_mex('evaluation_names', ev, name, cellstr(inputs.(name)));
-    elseif any(strcmp(params, name)) && strcmp(gamut.internal.field(m.describe(name), 'dtype', ''), 'int64')
+    elseif ~any(strcmp(params, name))   % the core refuses the name (E2) before its values
+        gamut_mex('evaluation_values', ev, name, []);
+    elseif strcmp(gamut.internal.field(m.describe(name), 'dtype', ''), 'int64')
         gamut_mex('evaluation_values', ev, name, int64Exactly(inputs.(name)(:), name));
     else
         gamut_mex('evaluation_values', ev, name, exactDouble(inputs.(name)(:), name));
