@@ -308,8 +308,9 @@ def float64_exactly(values: Any, what: str) -> np.ndarray:
         if arr.dtype.kind != "O":
             flat = flat[(flat > 2**53) | (flat < -2**53)]
         for v in flat.tolist():
-            if isinstance(v, (int, np.integer)) and not isinstance(v, (bool, np.bool_)) \
-                    and abs(int(v)) > 2**53:
+            if isinstance(v, (bool, np.bool_, complex, np.complexfloating, str, bytes)):
+                raise GamutError("E4", f"{what}: {v!r} is not a real number")
+            if isinstance(v, (int, np.integer)) and abs(int(v)) > 2**53:
                 v = int(v)
                 try:
                     exact = int(float(v)) == v
