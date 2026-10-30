@@ -35,6 +35,14 @@ def test_relative_links_resolve(page):
             path = (ROOT / own.group(1).split("#")[0]).resolve()
             assert path.exists(), f"{page.relative_to(ROOT)} links to {target}, which does not exist"
             continue
+        # A link to the documentation site names a page built from docs/.
+        site = re.match(r"https://bijective-systems-org\.github\.io/gamut/([^#]*)", target)
+        if site:
+            name = site.group(1) or "index.html"
+            name = name[:-len("index.html")] + "README" if name.endswith("index.html") else name[:-len(".html")]
+            path = ROOT / "docs" / (name + ".md")
+            assert path.exists(), f"{page.relative_to(ROOT)} links to {target}, which no page of docs/ makes"
+            continue
         if re.match(r"[a-z]+:", target) or target.startswith("#"):
             continue
         path = (page.parent / target.split("#")[0]).resolve()

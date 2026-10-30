@@ -6,7 +6,7 @@ The library every language uses is a C++ core behind a C interface,
 interface with the names of the Python package, exceptions for errors and
 standard containers for data; C programs, and other languages that call C,
 use `gamut.h` directly. Both are installed with the library
-([installing](../install.md#c-and-c)); with CMake, `find_package(gamut)`
+([installing](../install.md)); with CMake, `find_package(gamut)`
 and `gamut::gamut` are all a project needs.
 
 An example written in C++ has a C++ tab, quoted from a program in

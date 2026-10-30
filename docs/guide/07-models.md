@@ -21,7 +21,7 @@ calls as any other file and checked by `gamut validate`.
 ## The pattern
 
 The model here is a quadratic fitted to the runs of the
-[README's sweep](https://github.com/bijective-systems-org/gamut/blob/main/README.md#example) that converged. `Polynomial` is
+[README's sweep](../README.md#a-study-in-four-languages) that converged. `Polynomial` is
 its type, a class of a few lines [defined below](#a-model-type-of-your-own).
 
 /// tab | Python

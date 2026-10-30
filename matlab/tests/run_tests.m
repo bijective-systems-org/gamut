@@ -336,10 +336,11 @@ if isfile(fullfile(examples, 'one_mesh.m'))
     else
         copyfile(fullfile(models, 'lift_model.gamut'), exampleDir);
         copyfile(fullfile(examples, 'Polynomial.m'), exampleDir);
-        line = regexp(readme, 'the model''s lift at[^\r\n]*', 'match', 'once');
+        models = fileread(fullfile(fileparts(fileparts(here)), 'docs', 'guide', '07-models.md'));
+        line = regexp(models, '^the model''s lift at 2.2[^\r\n]*', 'match', 'once', 'lineanchors');
         printed = splitlines(string(run_example(fullfile(examples, 'evaluate_model.m'), exampleDir)));
         ok(~isempty(line) && any(strcmp(printed, line)), ...
-            'MATLAB evaluates the model fitted in Python and prints the README''s line');
+            'MATLAB evaluates the model fitted in Python and prints the models page''s line');
         page = fileread(fullfile(fileparts(fileparts(here)), 'docs', 'reference', 'matlab.md'));
         marks = regexp(page, 'degrees outside the fitted range:[^\r\n]*', 'match', 'once');
         ok(~isempty(marks) && any(strcmp(printed, marks)), ...

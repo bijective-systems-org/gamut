@@ -83,7 +83,7 @@ kill.
 ## Reporting a problem
 
 A file that crashes or hangs a reader outside HDF5, or that a reader
-accepts against the [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md), is a bug. Please report it
+accepts against the [specification](reference/specification.md), is a bug. Please report it
 privately through GitHub's
 [vulnerability reporting](https://github.com/bijective-systems-org/gamut/security/advisories/new)
 for this repository, with the file if you can share it.

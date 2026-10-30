@@ -5,7 +5,7 @@ its inputs, or one model fitted to such a study. It says what every
 number in it is: its name, its units, its role and where it lives, so a
 reader needs nothing but the file. These pages explain what a file holds
 and how it is stored; the
-[specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md)
+[specification](../reference/specification.md)
 defines it exactly, rule by rule.
 
 ## The run table

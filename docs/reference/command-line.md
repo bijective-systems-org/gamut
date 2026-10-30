@@ -26,7 +26,7 @@ no errors, 3 warnings
   W3 cl: 1 value is missing or not finite, the first at row 17
 ```
 
-`validate` checks the rules of the [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md) and
+`validate` checks the rules of the [specification](specification.md) and
 names each one it finds broken, within the [limits](../security.md#the-limits)
 of what it reads. Errors make a file invalid; warnings say
 what a reader should know, such as runs that failed. A row in a finding

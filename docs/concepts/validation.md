@@ -1,7 +1,7 @@
 # Rules and validation
 
 Every rule of the format is numbered in the
-[specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md#16-validation).
+[specification](../reference/specification.md#16-validation).
 An **error** (`E`) makes a file invalid: units that do not parse, a name
 used twice, a label code outside its table, cells that point at a node
 the mesh does not have. A **warning** (`W`) says what a reader should

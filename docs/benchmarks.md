@@ -202,7 +202,7 @@ preparation receipt are also in `capsule_tri_native.json`. The scripts and resul
 
 ## Reading the study, in the same vocabulary
 
-The [README's examples](https://github.com/bijective-systems-org/gamut/blob/main/README.md#example) write, append and read the
+The [README's examples](README.md#a-study-in-four-languages) write, append and read the
 same study in four languages, with matching numeric output. The runnable
 [reading-parts example](guide/08-reading-parts.md) selects converged runs,
 reads a named surface region and converts pressure to kilopascals. Those

@@ -34,6 +34,7 @@ theme:
       toggle: {icon: material/weather-sunny, name: Light}
   features:
     - navigation.tabs          # the sections as tabs under the header
+    - navigation.tabs.sticky   # and kept in view while a page scrolls
     - navigation.indexes       # a section's first page is its index
     - content.tabs.link        # one choice of language switches every tab set
     - content.code.copy
@@ -75,14 +76,16 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.highlight
+  - pymdownx.snippets:         # the specification and changelog pages include the files themselves
+      base_path: ["."]
+      check_paths: true
   - pymdownx.superfences
   - pymdownx.blocks.tab:       # /// tab | Python ... ///, which reads as plain text on GitHub
       alternate_style: true
 
 nav:
-  - Getting started:
-      - README.md
-      - install.md
+  - Home: README.md
+  - Installing: install.md
   - How it works:
       - concepts/README.md
       - concepts/meshes.md
@@ -110,7 +113,7 @@ nav:
       - reference/julia.md
       - reference/c-and-cpp.md
       - reference/selecting.md
-      - Specification: https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md
+      - Specification: reference/specification.md
       - comparison.md
       - benchmarks.md
-      - Changelog: https://github.com/bijective-systems-org/gamut/blob/main/CHANGELOG.md
+      - Changelog: reference/changelog.md

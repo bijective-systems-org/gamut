@@ -382,7 +382,7 @@ Version 1 of the format, `gamut/1`, and a new implementation. Before
 version 1 the format and its libraries were called mestra (the 0.1 series
 on PyPI).
 
-The format ([SPEC.md](SPEC.md)) is redesigned around the study: a run
+The format ([SPEC.md](https://bijective-systems-org.github.io/gamut/reference/specification.html)) is redesigned around the study: a run
 table with roles, statuses and splits; a shared mesh whose geometry is
 fixed, per run or per member of a family, or a mesh per run; fields as one
 block of runs × nodes; uncertainty and derivatives as relations; and model
@@ -402,6 +402,6 @@ turns a folder of VTK runs into a study and back. MATLAB, Julia and C++
 spelling, and C programs use the C interface, `gamut/gamut.h`.
 
 Readers check sizes before using memory, never follow links and load no
-HDF5 plugins ([security](docs/security.md)). The guide has fourteen pages,
+HDF5 plugins ([security](https://bijective-systems-org.github.io/gamut/security.html)). The guide has fourteen pages,
 each held to a runnable example by the tests, and the
-[benchmarks](docs/benchmarks.md) cover two studies.
+[benchmarks](https://bijective-systems-org.github.io/gamut/benchmarks.html) cover two studies.

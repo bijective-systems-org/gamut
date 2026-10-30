@@ -1,7 +1,7 @@
 # Python
 
 The package is `gamut-format` on PyPI, imported as `gamut`
-([installing](../install.md#python)). This page is generated from its
+([installing](../install.md)). This page is generated from its
 docstrings, which `help()` shows in Python, and every
 [example](../guide/README.md) has a Python tab. Positions count from 0,
 and a refusal raises `GamutError` naming the rule. `gamut.FORMAT` is the
