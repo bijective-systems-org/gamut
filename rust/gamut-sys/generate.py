@@ -16,13 +16,14 @@ HERE = pathlib.Path(__file__).resolve().parent
 HEADER = HERE.parents[1] / "include" / "gamut" / "gamut.h"
 BASE = {"char": "c_char", "int": "c_int", "int64_t": "i64", "uint8_t": "u8", "double": "f64",
         "size_t": "usize", "void": "c_void"}
-# The preprocessor lines gamut.h has: its guard, its includes, GAMUT_API and
-# extern "C".  Any other directive could change what the C means.
-DIRECTIVES = {"#ifndef GAMUT_H", "#define GAMUT_H", "#include <stddef.h>", "#include <stdint.h>",
-              "#if defined(_WIN32)", "#if defined(GAMUT_BUILDING)",
-              "#define GAMUT_API __declspec(dllexport)", "#else",
-              "#define GAMUT_API __declspec(dllimport)", "#endif",
-              '#define GAMUT_API __attribute__((visibility("default")))', "#ifdef __cplusplus"}
+# The preprocessor lines gamut.h has, in order: its guard, its includes,
+# GAMUT_API and extern "C".  Any other directive, or a declaration inside
+# one of its conditional blocks, could change what the C means.
+DIRECTIVES = ["#ifndef GAMUT_H", "#define GAMUT_H", "#include <stddef.h>", "#include <stdint.h>",
+              "#if defined(_WIN32)", "#if defined(GAMUT_BUILDING)", "#define GAMUT_API __declspec(dllexport)",
+              "#else", "#define GAMUT_API __declspec(dllimport)", "#endif", "#else",
+              '#define GAMUT_API __attribute__((visibility("default")))', "#endif",
+              "#ifdef __cplusplus", "#endif", "#ifdef __cplusplus", "#endif", "#endif"]
 # C parameter names that are Rust keywords.
 KEYWORDS = {"type", "where", "in", "fn", "ref", "mod", "use", "match", "move", "self", "loop", "impl"}
 NAME = r"[A-Za-z_]\w*"
@@ -68,14 +69,24 @@ def main() -> None:
     text = re.sub(r"/\*.*?\*/", " ", HEADER.read_text(), flags=re.S)
     if "//" in text:
         refuse("a // comment")
-    body = []
+    body, directives, open_blocks = [], [], []
     for line in text.split("\n"):
         if line.lstrip().startswith("#"):
             directive = "#" + " ".join(line.strip()[1:].split())
-            if directive not in DIRECTIVES:
-                refuse(f"the directive {line.strip()!r}")
-        else:
-            body.append(line)
+            directives.append(directive)
+            if directive.startswith("#if"):
+                open_blocks.append(directive)
+            elif directive == "#endif" and open_blocks:
+                open_blocks.pop()
+            continue
+        # Inside the guard only: within its other blocks, only extern "C"'s lines.
+        if line.strip() and len(open_blocks) > 1 and not (
+                open_blocks[-1] == "#ifdef __cplusplus" and line.strip() in ('extern "C" {', "}")):
+            refuse(f"{line.strip()!r} inside {open_blocks[-1]}")
+        body.append(line)
+    if directives != DIRECTIVES:
+        refuse("preprocessor lines other than gamut.h's own: " +
+               next((d for d, e in zip(directives + [""], DIRECTIVES + [""]) if d != e), "?"))
     text = "\n".join(body)
     if text.count('extern "C" {') != 1:
         refuse('extern "C" other than once')
@@ -128,6 +139,8 @@ def main() -> None:
                 for p in params.split(","):
                     spec, rest = split_type(p, m.group(2))
                     pname, t = declarator(spec, rest, m.group(2))
+                    if t.startswith("["):                       # C passes a pointer
+                        refuse(f"the array parameter {pname} of {m.group(2)}")
                     args.append(f"{pname + '_' if pname in KEYWORDS else pname}: {t}")
             if ret == "void":
                 r = ""
