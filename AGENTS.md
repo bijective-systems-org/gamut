@@ -26,7 +26,6 @@ layers over that interface; a validator; a command line; VTK conversion.
 | `examples/` | runnable examples; each guide page quotes one, and the README quotes `00_readme.py`, `07_models.py` and the MATLAB, Julia, C++ and Rust examples; the MATLAB, Julia, C++ and Rust model examples evaluate the files `07_models.py` writes |
 | `docs/` | install, the guide, reference, security, comparison, benchmarks |
 | `bench/` | benchmark scripts and results; `bench/figures.py` writes the page's tables and figures |
-| `packaging/gamut-format/` | the package's name on PyPI through 2.0.0, published with each release; it only installs `bijective-gamut` |
 | `tools/` | `build_deps.sh` (static zlib and HDF5), `build_core.sh` (the core as a release carries it), `damaged_files.py` |
 | `licenses/` | the licences of HDF5 and zlib, which packages link in and carry |
 

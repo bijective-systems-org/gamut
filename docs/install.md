@@ -3,8 +3,20 @@
 Gamut is published by Bijective Systems as
 [`bijective-gamut` on PyPI](https://pypi.org/project/bijective-gamut/):
 install `bijective-gamut`, then `import gamut`; the command line is `gamut`.
-The PyPI project named `gamut` is a different package. Through 2.0.0 the
-package was named `gamut-format`; that name now installs `bijective-gamut`.
+The PyPI project named `gamut` is a different package.
+
+Through 2.0.0 the package was named `gamut-format`. Both names install the
+same `gamut` module, so an environment that has `gamut-format` moves by
+removing it first:
+
+```bash
+pip uninstall gamut-format
+pip install bijective-gamut
+```
+
+Installed beside `gamut-format`, or by upgrading it, `bijective-gamut`
+loses its files when `gamut-format` is removed;
+`pip install --force-reinstall --no-deps bijective-gamut` puts them back.
 
 Every language uses the same core library, written in C++. The Python
 wheels and the MATLAB toolbox carry it with HDF5 linked inside, so it

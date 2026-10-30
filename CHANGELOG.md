@@ -1,16 +1,27 @@
 # Changelog
 
+## Unreleased
+
+- `gamut-format` stays at 2.0.0. Its 2.1.0, which only installed
+  `bijective-gamut`, is yanked: both names install the same `gamut`
+  module, so upgrading `gamut-format` to it removed that module. To move
+  an environment, `pip uninstall gamut-format`, then
+  `pip install bijective-gamut`; one broken by the upgrade is repaired by
+  `pip install --force-reinstall --no-deps bijective-gamut`.
+
 ## 2.1.0 (2026-10-30)
 
 **Upgrading from 2.0.** The file format (`gamut/1`) is unchanged, and the
 C interface only adds calls, so programs written for 2.0 build and run
-against 2.1; what `evaluate` now does differently is listed below. Install
-`bijective-gamut` where you installed `gamut-format`.
+against 2.1; what `evaluate` now does differently is listed below. To
+move from `gamut-format`, uninstall it, then install `bijective-gamut`
+(see Unreleased).
 
 - The Python package is now `bijective-gamut` on PyPI, and the Rust crates
   are `bijective-gamut` and `bijective-gamut-sys`; the code still says
   `import gamut` and `gamut::`. `gamut-format`, the name through 2.0.0,
-  installs `bijective-gamut` at the same version, extras included.
+  was published at 2.1.0 to install `bijective-gamut`; that release is
+  yanked (see Unreleased).
 - Rust: the `bijective-gamut` crate (`gamut` in code), over
   `bijective-gamut-sys`, the declarations of `gamut.h` that
   `rust/gamut-sys/generate.py` writes from it. It writes and reads
