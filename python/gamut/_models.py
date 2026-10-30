@@ -491,6 +491,10 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
                 _run(m, ev, model_id)
             call("gamut_evaluation_finish", ev)
         except BaseException:
+            # Freed first: an unfinished evaluation removes its file, and
+            # Windows removes no folder while a file in it is open.
+            _lib._lib.gamut_evaluation_free(ev)
+            ev = ctypes.c_void_p()
             if directory is not None:
                 directory.cleanup()
             raise
