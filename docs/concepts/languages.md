@@ -3,8 +3,12 @@
 Every language reads and writes through the same library: a core written
 in C++ that implements the format, writing, reading, selecting rows,
 validating and the built-in model, behind a C interface,
-[`gamut.h`](https://github.com/bijective-systems-org/gamut/blob/main/include/gamut/gamut.h).
-Each language is a thin layer over that interface:
+[`gamut.h`](https://github.com/bijective-systems-org/gamut/blob/main/include/gamut/gamut.h),
+which is all the library exports. Each language is a thin layer over that
+interface, C++ included:
+
+![Python (with the command line), MATLAB, Julia, C++ and C each read and write a .gamut file through the C interface of the one C++ core; Rust and Fortran are planned.](../assets/languages.svg#only-light)
+![Python (with the command line), MATLAB, Julia, C++ and C each read and write a .gamut file through the C interface of the one C++ core; Rust and Fortran are planned.](../assets/languages-dark.svg#only-dark)
 
 | Language | Reaches the core through | Installed as |
 |---|---|---|
@@ -13,6 +17,7 @@ Each language is a thin layer over that interface:
 | Julia | `ccall` | the package, pointed at a release's core or the wheel's |
 | C++ | [`gamut.hpp`](https://github.com/bijective-systems-org/gamut/blob/main/include/gamut/gamut.hpp), a header over `gamut.h` | the core built with CMake |
 | C | `gamut.h` | the core built with CMake |
+| Command line | the Python package | `gamut` and `gamut-vtk`, installed with the wheel |
 
 ## What that means
 

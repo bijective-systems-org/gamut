@@ -11,13 +11,12 @@
 By [Bijective Systems](https://github.com/bijective-systems-org), with
 libraries for Python, MATLAB, Julia, C++ and C.
 
-[PyPI: gamut-format](https://pypi.org/project/gamut-format/) ·
 [Documentation](https://bijective-systems-org.github.io/gamut/) ·
+[Installing](https://bijective-systems-org.github.io/gamut/install.html) ·
+[Examples](https://bijective-systems-org.github.io/gamut/guide/index.html) ·
 [Specification](https://bijective-systems-org.github.io/gamut/reference/specification.html) ·
+[PyPI: gamut-format](https://pypi.org/project/gamut-format/) ·
 [Releases](https://github.com/bijective-systems-org/gamut/releases)
-
-For Python, install `gamut-format`, then `import gamut`; the command line
-is `gamut`. The PyPI project named `gamut` is a different package.
 
 <p align="center">
   <a href="https://github.com/bijective-systems-org/gamut/actions/workflows/ci.yml"><img src="https://github.com/bijective-systems-org/gamut/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
@@ -29,27 +28,23 @@ Gamut is a file format for parametric simulation studies: the hundreds or
 thousands of CFD or FEA runs behind a design sweep, an aerodynamic
 database or a surrogate model. One file holds the run table, each run's
 inputs, results and status, and, when the runs have a mesh, the mesh and
-every field on it, all with units. Python, MATLAB, Julia and C++ read and
-write it with the same calls. A model fitted to the runs is saved the same
-way, as plain numbers with no code, and evaluated on new inputs. Files are
-HDF5 laid out as netCDF-4, so h5py, xarray and the netCDF tools open them
-too, and a published specification says what every array in them means.
+every field on it, all with units. A model fitted to the runs is saved the
+same way, as plain numbers with no code. Every language reads and writes
+the file through one core, so each reads what another wrote, value for
+value.
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/hero-dark.svg">
-    <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/hero.svg" alt="A study file laid open: an XFOIL sweep of a NACA 4412 section, 363 runs on one shared mesh of 160 nodes. Each table row is one run: its inputs, status, train or test split, lift with its spread over transition criteria, drag and moment, continued by its pressure coefficient at every node. A failed run keeps its inputs with no results. A select call shades the 40 runs it picks." width="760">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/languages-dark.svg">
+    <img src="https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/assets/languages.svg" alt="Python (with the command line), MATLAB, Julia, C++ and C each read and write a .gamut file through the C interface of the one C++ core; Rust and Fortran are planned." width="760">
   </picture>
 </p>
 
 ## Example
 
 A sweep of a wing's angle of attack: six runs written at once, a seventh
-added later, and the lift of the runs that converged read back, as a model
-fitted to the study would read it. `cl` stands for your solver's results;
-the complete programs are in [`examples/`](https://github.com/bijective-systems-org/gamut/blob/main/examples).
-
-Python
+added later, and the lift of the runs that converged read back. `cl`
+stands for your solver's results.
 
 ```python
 alpha = np.arange(0.0, 11.0, 2.0)  # six angles of attack, in degrees
@@ -70,7 +65,8 @@ with gamut.open("sweep.gamut") as study:
     lift = study.get_scalar("cl", rows=study.select("status == converged"))
 ```
 
-MATLAB
+<details>
+<summary>MATLAB</summary>
 
 ```matlab
 alpha = (0:2:10)';   % six angles of attack, in degrees
@@ -95,7 +91,10 @@ lift = study.getScalar('cl', 'rows', study.select('status == converged'));
 study.close();
 ```
 
-Julia
+</details>
+
+<details>
+<summary>Julia</summary>
 
 ```julia
 alpha = collect(0.0:2.0:10.0)  # six angles of attack, in degrees
@@ -119,7 +118,10 @@ lift = Gamut.open("sweep.gamut") do study
 end
 ```
 
-C++
+</details>
+
+<details>
+<summary>C++</summary>
 
 ```cpp
 const std::vector<double> alpha = {0, 2, 4, 6, 8, 10};  // angles of attack, degrees
@@ -143,22 +145,18 @@ const std::vector<double> lift =
     study.get_scalar("cl", study.select("status == converged"));
 ```
 
+</details>
+
 All four print the same line:
 
 ```text
 lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
 ```
 
-Every name is declared once, with its units and role, and the runs then
-give their values, here as a column per name; the failed run has no lift,
-so it is stored as missing.
-`select` returns the positions of the rows it picks, counted from 0 in
-Python and C++ and from 1 in MATLAB and Julia.
-
 The [examples](https://bijective-systems-org.github.io/gamut/guide/index.html) go on from here, a step at a time
 and in each language: a mesh shared by every run, families of shapes,
 meshes that change, time series, uncertainty, and models fitted to the
-runs and saved in the same format.
+runs.
 
 ## Performance
 
@@ -184,18 +182,10 @@ another approach is faster.
 | Julia 1.10 or later | `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v2.0.0")` |
 | C++ and C | CMake build and install, then `find_package(gamut)`; include `gamut/gamut.hpp` (C++17) or `gamut/gamut.h` (C) |
 
-[Installing](https://bijective-systems-org.github.io/gamut/install.html) has the details for each language.
-
-## Documentation
-
-The [documentation site](https://bijective-systems-org.github.io/gamut/) has
-[how it works](https://bijective-systems-org.github.io/gamut/concepts/index.html), the
-[examples](https://bijective-systems-org.github.io/gamut/guide/index.html) in Python, MATLAB, Julia and C++, and
-the [reference](https://bijective-systems-org.github.io/gamut/reference/python.html): each language's calls, the
-command line and the [specification](https://bijective-systems-org.github.io/gamut/reference/specification.html),
-which defines the format. For coding agents,
-[llms.txt](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/llms.txt)
-gives a plain-text overview with runnable Python patterns.
+In Python, install `gamut-format`, then `import gamut`; the PyPI project
+named `gamut` is a different package. [Installing](https://bijective-systems-org.github.io/gamut/install.html) has
+the details for each language, and [llms.txt](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/llms.txt) gives coding
+agents a plain-text overview.
 
 ## License
 
