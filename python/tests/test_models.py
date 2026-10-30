@@ -506,3 +506,33 @@ def test_one_output_read_at_two_widths_is_refused(tmp_path):
         for x in ([0.5], []):
             with pytest.raises(gamut.GamutError, match="is read with 1 and with 2 values per row"):
                 gamut.evaluate(path, {"x": x})
+
+
+@gamut.register_model_type
+class Complex:
+    """A model that answers with complex numbers."""
+
+    type = "tests.complex"
+
+    @classmethod
+    def load(cls, numbers):
+        return cls()
+
+    def save(self):
+        return {"k": 1}
+
+    def call(self, inputs, wanted):
+        return {"y": {"values": np.array([1 + 2j] * len(inputs["x"]))}}
+
+
+def test_an_answer_or_input_that_is_not_real_is_refused(tmp_path):
+    # A complex, boolean or text value is refused, not cast (which would
+    # drop an imaginary part with only a NumPy warning).
+    mp = str(tmp_path / "complex.gamut")
+    with gamut.create_model(mp, writer="t", parameters={"x": {"units": "1", "lower": 0.0, "upper": 1.0}},
+                             scalars={"y": {"units": "1", "model": "c", "output": "y"}}) as m:
+        m.add_model("c", Complex(), ["x"])
+    for given in ({"x": [0.5]}, {"x": [0.5 + 1j]}, {"x": [True]}):
+        with pytest.raises(gamut.GamutError, match="not real numbers") as e:
+            gamut.evaluate(mp, given)
+        assert e.value.rule == "E4"

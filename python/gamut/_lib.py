@@ -298,8 +298,11 @@ def float64_exactly(values: Any, what: str) -> np.ndarray:
     """Values as float64, refusing an integer a float64 would round (past
     2**53), as the core does: for values computed with here before the core
     sees them. Values NumPy itself reads as floats (a float array, a list
-    with a float in it) are floats already."""
+    with a float in it) are floats already. Booleans, complex numbers and
+    text are refused, as the writer refuses them, rather than cast."""
     arr = np.asarray(values)
+    if arr.dtype.kind in "bcUSVMm":
+        raise GamutError("E4", f"{what}: values of dtype {arr.dtype} are not real numbers")
     if arr.dtype.kind in "iuO":
         flat = arr.reshape(-1)
         if arr.dtype.kind != "O":

@@ -932,7 +932,7 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
   } else if (cmd == "evaluation_values" || cmd == "evaluation_coordinates") {
     const mxArray* v = arg(cmd == "evaluation_values" ? 3 : 2);
     const int code = dtype_code(mxGetClassID(v));
-    if (code < 0 || mxIsLogical(v)) usage("values are numeric");
+    if (code < 0 || mxIsLogical(v) || mxIsComplex(v) || mxIsSparse(v)) usage("values are real full numeric");
     std::vector<int64_t> dims;
     const auto bytes = to_c_order(v, mxGetNumberOfDimensions(v), &dims);
     const auto count = static_cast<int64_t>(mxGetNumberOfElements(v));
