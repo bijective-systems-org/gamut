@@ -185,6 +185,7 @@ class Nearest:
 
     @classmethod
     def load(cls, numbers: Mapping[str, Any]) -> "Nearest":
+        """The model from its stored numbers (spec section 7.5)."""
         # Numbers from a file are checked before any is looked up: a damaged
         # or foreign file may lack one (E17).
         _nearest_check(numbers)
@@ -192,10 +193,12 @@ class Nearest:
                    numbers["outputs"])
 
     def save(self) -> dict[str, Any]:
+        """Its numbers, to store."""
         return {"columns": list(self.columns), "lower": self.lower, "upper": self.upper,
                 "x": self.x, "outputs": dict(self.outputs)}
 
     def call(self, inputs: Mapping[str, Any], wanted: Sequence[tuple]) -> dict[str, dict]:
+        """For each input row, the values of the closest stored point."""
         missing = [c for c in self.columns if c not in inputs]
         if missing:
             raise GamutError("", f"nearest needs the inputs {', '.join(missing)}")
@@ -266,19 +269,19 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
     per, coordinates, title, license, references, source,
     portion_marking), except:
 
-    parameters   each needs "lower" and "upper", the range the model was
-                 fitted on: {"alpha": {"units": "degree", "lower": 0.0,
-                 "upper": 10.0}}. `evaluate` warns (W4) of an input
-                 outside it, and evaluates it.
-    scalars, fields  each names the model and the output that computes
-                 it: {"cl": {"units": "1", "model": "fit", "output":
-                 "cl"}}. A spread or a derivative is declared as in
-                 `create` ("of", "statistic", "with_respect_to"), and
-                 the model's `call` is asked for it.
-    trained_on   the file_id (`study.describe()["file_id"]`) of each
-                 study the model was fitted on.
-    portion_marking  a marking the model's author set, as free text;
-                 `evaluate` copies it into every answer file.
+    - `parameters`: each needs "lower" and "upper", the range the model
+      was fitted on, as
+      `{"alpha": {"units": "degree", "lower": 0.0, "upper": 10.0}}`.
+      `evaluate` warns (W4) of an input outside it, and evaluates it.
+    - `scalars`, `fields`: each names the model and the output that
+      computes it, as `{"cl": {"units": "1", "model": "fit", "output": "cl"}}`.
+      A spread or a derivative is declared as in `create` ("of",
+      "statistic", "with_respect_to"), and the model's `call` is asked for
+      it.
+    - `trained_on`: the file_id (`study.describe()["file_id"]`) of each
+      study the model was fitted on.
+    - `portion_marking`: a marking the model's author set, as free text;
+      `evaluate` copies it into every answer file.
 
     Then `add_model(id, model, inputs)` stores each model: an object of a
     type registered with `register_model_type`, or the built-in `Nearest`.

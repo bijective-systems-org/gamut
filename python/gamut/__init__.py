@@ -20,8 +20,8 @@ on a mesh), all with units. The whole pattern:
     print(gamut.validate("polar.gamut").ok)
 
 Meshes and fields, families of shapes, time series, uncertainty and fitted
-models build on the same calls; the guide has a page for each, with a
-runnable example: https://github.com/bijective-systems-org/gamut/tree/main/docs/guide
+models build on the same calls; the documentation has an example of each,
+in Python, MATLAB, Julia and C++: https://bijective-systems-org.github.io/gamut/
 
 Every call goes to the shared core (a C library); this package is its
 Python face, with NumPy as its one dependency.

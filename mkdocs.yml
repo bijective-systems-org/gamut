@@ -1,8 +1,9 @@
 # The documentation site: the Markdown pages of docs/, as they read on GitHub,
 # with one addition: a code example shown in several languages is a set of
 # tabs, and choosing a language once shows it in every set on every page.
-# Build it with `mkdocs build --strict` (pip install "mkdocs-material==9.6.*");
-# .github/workflows/docs.yml publishes it from main.
+# Build it with `mkdocs build --strict` (pip install "mkdocs-material==9.6.*"
+# "mkdocstrings-python==2.0.*" "ruff==0.17.*"); .github/workflows/docs.yml
+# publishes it from main.
 site_name: Gamut
 site_url: https://bijective-systems-org.github.io/gamut/
 site_description: An open file format for parametric simulation studies and the models fitted to them.
@@ -45,6 +46,25 @@ copyright: © 2026 Bijective Systems
 extra:
   generator: false
 
+plugins:
+  - search
+  - mkdocstrings:             # the Python reference, from the package's docstrings
+      handlers:
+        python:
+          paths: [python]
+          options:
+            docstring_style: null
+            heading_level: 3
+            show_root_heading: true
+            show_root_full_path: false
+            show_source: false
+            show_bases: false
+            separate_signature: true
+            show_signature_annotations: true
+            line_length: 80
+            members_order: source
+            filters: ["!^_"]
+
 extra_css:
   - assets/site.css
 
@@ -84,6 +104,7 @@ nav:
       - guide/09-combining-files.md
       - guide/10-vtk.md
   - Reference:
+      - reference/python.md
       - reference/command-line.md
       - reference/matlab.md
       - reference/julia.md
