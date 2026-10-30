@@ -61,9 +61,9 @@ def main() -> None:
     consts, structs, opaque, functions = [], [], [], []
     for enum in re.findall(r"enum\s*\{(.*?)\}\s*;", text, flags=re.S):
         for item in filter(None, (i.strip() for i in enum.split(","))):
-            m = re.fullmatch(r"(\w+)\s*=\s*(-?\d+)", item)
+            m = re.fullmatch(r"(\w+)\s*=\s*(-?(?:0|[1-9]\d*))", item)   # decimal: 010 is octal in C
             if not m:
-                sys.exit(f"generate.py: an enumerator needs a literal value: {item!r}")
+                sys.exit(f"generate.py: an enumerator needs a decimal value: {item!r}")
             consts.append(f"pub const {m.group(1)}: c_int = {m.group(2)};")
     text = re.sub(r"enum\s*\{.*?\}\s*;", "", text, flags=re.S)
     for body, name in re.findall(r"typedef\s+struct\s*\{(.*?)\}\s*(\w+)\s*;", text, flags=re.S):
@@ -72,11 +72,13 @@ def main() -> None:
             decl = decl.strip()
             if not decl:
                 continue
-            m = re.fullmatch(r"(.*?)(\w+)\s*\[(\d+)\]", decl)
+            m = re.fullmatch(r"(.*?)(\w+)\s*\[(0|[1-9]\d*)\]", decl)   # decimal: 010 is octal in C
             if m:
                 fields.append(f"    pub {m.group(2)}: [{rust_type(m.group(1))}; {m.group(3)}],")
                 continue
-            m = re.fullmatch(r"((?:const\s+)?\w+\s*\**)\s*(.*)", decl)
+            m = re.fullmatch(r"((?:const\s+)?\w+\s*\**)\s*((?:\**\s*\w+\s*,\s*)*\**\s*\w+)", decl)
+            if not m:
+                sys.exit(f"generate.py: cannot read the field {decl!r} of {name}")
             for field in m.group(2).split(","):
                 stars, field = re.fullmatch(r"\s*(\**)\s*(\w+)\s*", field).groups()
                 fields.append(f"    pub {field}: {rust_type(m.group(1) + stars)},")
