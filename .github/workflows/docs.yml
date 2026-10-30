@@ -21,9 +21,11 @@ on:
 permissions:
   contents: read
 
-# One run at a time on each branch, so that on main the site a deploy
-# leaves is the newest one started; a newer run on a pull request
-# replaces an older one.
+# One run at a time on each branch, and each run builds the branch as it
+# stands when the run starts, not the commit that started it: GitHub may
+# start an older run after a newer one, and the site a deploy leaves is
+# still the newest main. A newer run on a pull request replaces an older
+# one.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -33,6 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
