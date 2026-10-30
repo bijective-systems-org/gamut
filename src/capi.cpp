@@ -52,6 +52,10 @@ struct gamut_report {
   gamut_core::internal::Report report;
 };
 
+struct gamut_evaluation {
+  std::unique_ptr<gamut_core::internal::Evaluation> e;
+};
+
 struct gamut_tree {
   gamut_core::internal::Dict root;
 };
@@ -192,6 +196,15 @@ gamut_strings* strings(std::vector<std::string> items) {
   auto* s = new gamut_strings;
   s->items = std::move(items);
   return s;
+}
+
+gamut_core::internal::Evaluation& evaluation_of(const gamut_evaluation* ev) {
+  need(ev != nullptr && ev->e != nullptr, "the evaluation is NULL");
+  return *ev->e;
+}
+
+gamut_core::internal::Request request(const char* output, const char* kind, const char* key) {
+  return gamut_core::internal::Request{str(output), str(kind), str(key)};
 }
 
 gamut_core::internal::Dict& tree_of(gamut_tree* t) {
@@ -1335,6 +1348,172 @@ int gamut_evaluate_begin(const gamut_file* model, const char* out_path, gamut_fi
   } catch (...) {
     return fail(err);
   }
+}
+
+int gamut_evaluation_begin(const gamut_file* model, int64_t rows, const char* out_path,
+                           gamut_evaluation** out, gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    need(out != nullptr, "out is NULL");
+    auto ev = std::make_unique<gamut_evaluation>();
+    need(out_path != nullptr, "out_path is NULL");
+    ev->e = std::make_unique<gamut_core::internal::Evaluation>(reader_of(model), rows, str(out_path));
+    *out = ev.release();
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int gamut_evaluation_values(gamut_evaluation* ev, const char* name, int dtype_code, const void* values,
+                            int64_t count, gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    evaluation_of(ev).values(str(name), column(dtype_code, values, count));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int gamut_evaluation_names(gamut_evaluation* ev, const char* name, const char* const* names, int64_t count,
+                           gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    need(count >= 0, "a negative count");
+    need(count == 0 || names != nullptr, "names is NULL");
+    std::vector<std::string> given;
+    for (int64_t i = 0; i < count; ++i) {
+      need(names[i] != nullptr, "name " + std::to_string(i) + " is NULL");
+      given.emplace_back(names[i]);
+    }
+    evaluation_of(ev).names(str(name), given);
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int gamut_evaluation_coordinates(gamut_evaluation* ev, int dtype_code, const void* values, int64_t count,
+                                 gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    evaluation_of(ev).coordinates(column(dtype_code, values, count));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int gamut_evaluation_ready(gamut_evaluation* ev, gamut_strings** warnings, gamut_strings** models,
+                           gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    need(warnings != nullptr && models != nullptr, "an output is NULL");
+    auto& e = evaluation_of(ev);
+    e.ready();
+    std::unique_ptr<gamut_strings> w(strings(e.warnings())), m(strings(e.models()));
+    *warnings = w.release();
+    *models = m.release();
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int gamut_evaluation_requests(const gamut_evaluation* ev, const char* model_id, gamut_strings** outputs,
+                              gamut_strings** kinds, gamut_strings** keys, gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    need(outputs != nullptr && kinds != nullptr && keys != nullptr, "an output is NULL");
+    std::vector<std::string> o, k, y;
+    for (const auto& r : evaluation_of(ev).requests(str(model_id))) {
+      o.push_back(r.output);
+      k.push_back(r.kind);
+      y.push_back(r.key);
+    }
+    std::unique_ptr<gamut_strings> lo(strings(std::move(o))), lk(strings(std::move(k))),
+        ly(strings(std::move(y)));
+    *outputs = lo.release();
+    *kinds = lk.release();
+    *keys = ly.release();
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int gamut_evaluation_input_info(const gamut_evaluation* ev, const char* name, int* dtype_out, int* rank,
+                                int64_t* shape, int capacity, gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    need(dtype_out != nullptr && rank != nullptr, "an output is NULL");
+    const auto& e = evaluation_of(ev);
+    const std::vector<std::int64_t> s = e.input_shape(str(name));
+    *dtype_out = static_cast<int>(e.input_dtype(str(name)));
+    *rank = static_cast<int>(s.size());
+    need(static_cast<int>(s.size()) <= capacity, "the input has " + std::to_string(s.size()) +
+                                                      " axes and room was given for " + std::to_string(capacity));
+    need(shape != nullptr, "shape is NULL");
+    for (std::size_t i = 0; i < s.size(); ++i) shape[i] = s[i];
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int gamut_evaluation_input(const gamut_evaluation* ev, const char* name, void* out, int64_t out_bytes,
+                           gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    const std::vector<unsigned char>& b = evaluation_of(ev).input(str(name));
+    need(out_bytes >= 0 && static_cast<uint64_t>(out_bytes) >= b.size(),
+         str(name) + " needs " + std::to_string(b.size()) + " bytes and room was given for " +
+             std::to_string(out_bytes));
+    need(b.empty() || out != nullptr, "out is NULL");
+    if (!b.empty()) std::memcpy(out, b.data(), b.size());
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int gamut_evaluation_answer(gamut_evaluation* ev, const char* model_id, const char* output, const char* kind,
+                            const char* key, const double* values, int64_t count, gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    need(count >= 0, "a negative count");
+    need(count == 0 || values != nullptr, "the values pointer is NULL");
+    evaluation_of(ev).answer(str(model_id), request(output, kind, key), values, count);
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int gamut_evaluation_finish(gamut_evaluation* ev, gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    evaluation_of(ev).finish();
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+void gamut_evaluation_free(gamut_evaluation* ev) {
+  const Lock lock(hdf5_mutex());
+  delete ev;
 }
 
 int gamut_validate(const char* path, gamut_report** out, gamut_error* err) {

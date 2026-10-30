@@ -93,7 +93,13 @@ tree read with the `gamut_tree_*` calls, for a program that computes the
 model itself. `gamut_nearest_call` evaluates the built-in model on a
 column of values for each named input, a value per row. It returns values
 only: it neither checks the inputs against the parameters' bounds nor
-writes a data file, as `evaluate` does in Python, MATLAB and Julia.
+writes a data file.
+
+`evaluate` in Python, MATLAB and Julia is the core's `gamut_evaluation_*`
+calls, which a C program can make itself. The core checks the inputs,
+runs the built-in models, asks the caller for the answers of each model
+of another type, and writes the data file; `gamut.h` describes the order
+of the calls.
 
 ## C
 

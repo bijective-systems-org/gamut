@@ -295,11 +295,60 @@ GAMUT_API int gamut_nearest_call(const gamut_tree* numbers, const char* const* i
                              int n_inputs, int64_t n_rows, const char* output, double* out,
                              int64_t out_count, gamut_error* err);
 
-/* Evaluation, driven by the binding: a data file declaring what the open
- * model file declares; the caller adds the rows (inputs and the models'
- * outputs) with gamut_batch_* and closes it. */
+/* Superseded by gamut_evaluation_* below, and kept for 2.0 callers: a data
+ * file declaring what the open model file declares; the caller adds the
+ * rows (inputs and the models' outputs) with gamut_batch_* and closes it. */
 GAMUT_API int gamut_evaluate_begin(const gamut_file* model, const char* out_path, gamut_file** out,
                                gamut_error* err);
+
+/* Evaluation by the core (spec section 7.4), into a new data file at
+ * out_path, which must not exist and is declared at once (a model file it
+ * cannot declare is refused before any model runs).  Give the model file's
+ * inputs for `rows` rows, then gamut_evaluation_ready checks them (every parameter and
+ * label given, none unknown, each the same length, label names in the model
+ * file's tables, numbers exact in their dtype), runs the built-in models,
+ * and lists the W4 findings (inputs outside a parameter's bounds, which are
+ * evaluated) and the models the caller runs.  For each of those, the caller
+ * reads the inputs the model reads, calls it, and gives back each request's
+ * answer; gamut_evaluation_finish then writes the data file.  The model file
+ * stays open until gamut_evaluation_free. */
+typedef struct gamut_evaluation gamut_evaluation;
+GAMUT_API int gamut_evaluation_begin(const gamut_file* model, int64_t rows, const char* out_path,
+                                 gamut_evaluation** out, gamut_error* err);
+/* A parameter's values (rows of them, in dtype) or a label's names. */
+GAMUT_API int gamut_evaluation_values(gamut_evaluation* ev, const char* name, int dtype,
+                                  const void* values, int64_t count, gamut_error* err);
+GAMUT_API int gamut_evaluation_names(gamut_evaluation* ev, const char* name, const char* const* names,
+                                 int64_t count, gamut_error* err);
+/* rows x nodes x axes, for a model that reads geometry the file does not
+ * store for every row. */
+GAMUT_API int gamut_evaluation_coordinates(gamut_evaluation* ev, int dtype, const void* values,
+                                       int64_t count, gamut_error* err);
+GAMUT_API int gamut_evaluation_ready(gamut_evaluation* ev, gamut_strings** warnings,
+                                 gamut_strings** models, gamut_error* err);
+/* What a model is asked for, as three parallel lists: outputs, kinds
+ * ("values", "std", "quantile", "derivative") and keys (a quantile's q as
+ * %.17g; what a derivative is with respect to; empty otherwise). */
+GAMUT_API int gamut_evaluation_requests(const gamut_evaluation* ev, const char* model_id,
+                                    gamut_strings** outputs, gamut_strings** kinds,
+                                    gamut_strings** keys, gamut_error* err);
+/* An input as a model reads it: a parameter in its dtype, a label's codes
+ * (int64), coordinates (float64, rows x nodes x axes).  shape has room for
+ * `capacity` extents (3 is always enough); out_bytes is out's capacity. */
+GAMUT_API int gamut_evaluation_input_info(const gamut_evaluation* ev, const char* name, int* dtype,
+                                      int* rank, int64_t* shape, int capacity, gamut_error* err);
+GAMUT_API int gamut_evaluation_input(const gamut_evaluation* ev, const char* name, void* out,
+                                 int64_t out_bytes, gamut_error* err);
+/* A model's answer to one request: rows values for a scalar, rows x sites
+ * for a field, rows x nodes x axes for coordinates. */
+GAMUT_API int gamut_evaluation_answer(gamut_evaluation* ev, const char* model_id, const char* output,
+                                  const char* kind, const char* key, const double* values,
+                                  int64_t count, gamut_error* err);
+/* Writes the rows and closes the data file; refuses a request left
+ * unanswered, and leaves no file when it fails.  Freeing an evaluation that
+ * was not finished removes its file. */
+GAMUT_API int gamut_evaluation_finish(gamut_evaluation* ev, gamut_error* err);
+GAMUT_API void gamut_evaluation_free(gamut_evaluation* ev);
 
 /* --- Checking ------------------------------------------------------------- */
 /* Copies between files.  Each validates its source

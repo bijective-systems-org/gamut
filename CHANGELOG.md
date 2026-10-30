@@ -8,6 +8,12 @@
   (`study.related(name)`) and C++ (`study.related(name)`, a
   `gamut::Related`) gain it, and Python's and Julia's now read it from the
   core, so the four agree.
+- `evaluate` is one implementation, in the core: the `gamut_evaluation_*`
+  calls check the inputs (E2, E5, E9, and the W4 finding, with one
+  message in every language), run the built-in models and write the data
+  file. Python, MATLAB and Julia only call the registered model types, and
+  a C program can evaluate a model file itself. `gamut_evaluate_begin`
+  stays for 2.0 callers.
 
 ## 2.0.0 (2026-10-29)
 

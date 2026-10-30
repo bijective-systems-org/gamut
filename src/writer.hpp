@@ -35,6 +35,11 @@ struct Column {
   }
 };
 
+// `c` as `target`, by the writer's rule: floats among floats, integers among
+// integers (range-checked), integers to floats only when exact (E4); never
+// floats to integers.
+std::vector<unsigned char> converted(const Column& c, DType target, const std::string& what);
+
 // One geometry: node positions, and for a changing mesh its cells and
 // mesh labels.
 struct Geometry {
