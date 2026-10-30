@@ -333,6 +333,8 @@ class Study:
 
     @property
     def addons(self) -> list[str]:
+        """What the file holds beyond its type: "time", "uncertainty",
+        "gradients"."""
         self._need_reader()
         return _lib.strings_out("gamut_info", self._handle(), b("addons"))
 
@@ -557,10 +559,12 @@ class Study:
         call("gamut_set_private", self._handle(), b(name), buf, len(buf))
 
     def private_names(self) -> list[str]:
+        """The names of the producer's own records (`set_private`)."""
         self._need_reader()
         return _lib.strings_out("gamut_private_names", self._handle())
 
     def get_private(self, name: str) -> bytes:
+        """A producer's own record, the bytes `set_private` stored."""
         self._need_reader()
         n = ctypes.c_int64()
         call("gamut_get_private", self._handle(), b(name), None, 0, ctypes.byref(n))
@@ -648,37 +652,35 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
     here by name. The destination must not exist; a refused declaration
     removes only the new file, leaving any existing destination unchanged.
 
-    parameters   inputs that place a run: {"alpha": {"units": "degree",
-                 "role": "condition"}}. Role "design" (the default),
-                 "condition" or "time"; optional "lower", "upper".
-                 float64 whatever the values given, or "dtype":
-                 "int64" for whole numbers such as a count or a seed.
-    labels       names rather than numbers: {"status": {"role": "status",
-                 "categories": ["converged", "failed"]}}. Role
-                 "categorical" (the default), "group", "status" or
-                 "split". Only the status "converged" marks a run as
-                 usable. A name not yet in "categories" is added to them.
-                 `bool` declares a false/true label.
-    scalars      one number per run: {"cl": "1"} (its units), or a mapping
-                 with "units" and a relation ("of" with "statistic" and
-                 "q", or "with_respect_to").
-    fields       one number per node or cell: {"p": {"units": "Pa",
-                 "at": "node"}}; needs a mesh.
-    constants    one number for the whole study: {"area": (12.5, "m2")}.
-    mesh, per    no mesh (a run table); "shared" (one mesh for every run)
-                 with per "fixed", "run" or "group:<label>"; or
-                 "changing" (a mesh per run) with per "run" or
-                 "group:<label>". With a mesh, `coordinates={"units": "m",
-                 "axes": 2}`.
-    mesh_labels  zones or patches: {"surface": {"at": "node",
-                 "categories": ["field", "wall"]}}.
-    generalisation_group  the group label a fair test holds out whole.
-    title, license, references, source  describe the file.
-    portion_marking  a marking the author set, as free text; `evaluate`
-                 copies it into every answer, `extract` and `write_copy`
-                 keep it.
-    precision, round_bits, compression  storage; the defaults suit most
-                 studies.
+    - `parameters`: inputs that place a run, as
+      `{"alpha": {"units": "degree", "role": "condition"}}`. Role "design"
+      (the default), "condition" or "time"; optional "lower", "upper".
+      float64 whatever the values given, or `"dtype": "int64"` for whole
+      numbers such as a count or a seed.
+    - `labels`: names rather than numbers, as
+      `{"status": {"role": "status", "categories": ["converged", "failed"]}}`.
+      Role "categorical" (the default), "group", "status" or "split". Only
+      the status "converged" marks a run as usable. A name not yet in
+      "categories" is added to them. `bool` declares a false/true label.
+    - `scalars`: one number per run, as `{"cl": "1"}` (its units), or a
+      mapping with "units" and a relation ("of" with "statistic" and "q",
+      or "with_respect_to").
+    - `fields`: one number per node or cell, as
+      `{"p": {"units": "Pa", "at": "node"}}`; needs a mesh.
+    - `constants`: one number for the whole study, as
+      `{"area": (12.5, "m2")}`.
+    - `mesh`, `per`: no mesh (a run table); "shared" (one mesh for every
+      run) with per "fixed", "run" or "group:<label>"; or "changing" (a
+      mesh per run) with per "run" or "group:<label>". With a mesh,
+      `coordinates={"units": "m", "axes": 2}`.
+    - `mesh_labels`: zones or patches, as
+      `{"surface": {"at": "node", "categories": ["field", "wall"]}}`.
+    - `generalisation_group`: the group label a fair test holds out whole.
+    - `title`, `license`, `references`, `source`: describe the file.
+    - `portion_marking`: a marking the author set, as free text; `evaluate`
+      copies it into every answer, `extract` and `write_copy` keep it.
+    - `precision`, `round_bits`, `compression`: storage; the defaults suit
+      most studies.
 
     Units use the UDUNITS grammar: "1", "degree", "m s-1", "W m-2"."""
     axes = _axes(coordinates)        # before the file exists: a refusal leaves none

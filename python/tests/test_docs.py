@@ -94,3 +94,14 @@ def test_llms_txt_shows_the_model_pattern():
     shown = re.findall(r"```python\n(.*?)```", (ROOT / "llms.txt").read_text(encoding="utf-8"), re.S)
     assert any(block.strip() == _model_pattern() for block in shown), \
         "llms.txt shows the model pattern of help(gamut.create_model)"
+
+
+@pytest.mark.skipif(not PAGES, reason="the documentation is not beside this test (an installed package)")
+def test_the_python_reference_covers_the_package():
+    # The reference is generated from the docstrings of what it names; a
+    # name the package exports and the page leaves out would go undocumented.
+    page = (ROOT / "docs" / "reference" / "python.md").read_text(encoding="utf-8")
+    shown = set(re.findall(r"^::: gamut\.(\w+)$", page, re.M))
+    exported = set(gamut.__all__) - {"FORMAT"}          # a constant, named in the page's text
+    assert shown == exported, f"missing {sorted(exported - shown)}, not exported {sorted(shown - exported)}"
+

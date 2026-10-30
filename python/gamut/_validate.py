@@ -29,22 +29,27 @@ class Report:
 
     @property
     def errors(self) -> list[Finding]:
+        """The findings that make the file invalid."""
         return [f for f in self.findings if f.severity == "error"]
 
     @property
     def warnings(self) -> list[Finding]:
+        """The findings a reader of a valid file should know."""
         return [f for f in self.findings if f.severity == "warning"]
 
     @property
     def ok(self) -> bool:
+        """Whether the file has no errors."""
         return not self.errors
 
     @property
     def error_ids(self) -> list[str]:
+        """The rules the errors break, each once: ["E7", ...]."""
         return sorted({f.rule for f in self.errors})
 
     @property
     def warning_ids(self) -> list[str]:
+        """The rules the warnings name, each once."""
         return sorted({f.rule for f in self.warnings})
 
 
