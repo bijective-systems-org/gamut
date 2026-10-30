@@ -613,6 +613,12 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     check(gamut_describe(file(arg(1)), text(arg(2), "name").c_str(), &k, &v, &e), e);
     plhs[0] = cell_out(k);
     plhs[1] = cell_out(v);
+  } else if (cmd == "related") {
+    gamut_strings *t = nullptr, *k = nullptr, *n = nullptr;
+    check(gamut_related(file(arg(1)), text(arg(2), "name").c_str(), &t, &k, &n, &e), e);
+    plhs[0] = cell_out(t);
+    plhs[1] = cell_out(k);
+    plhs[2] = cell_out(n);
   } else if (cmd == "read") {
     gamut_file* f = file(arg(1));
     const std::string name = text(arg(2), "name");

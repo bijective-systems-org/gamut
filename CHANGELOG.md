@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- `related` in every language, read in the core: what describes a result
+  (its standard deviation, quantiles and derivatives, and the parts of its
+  vector) comes from `gamut_related` in the C interface. MATLAB
+  (`study.related(name)`) and C++ (`study.related(name)`, a
+  `gamut::Related`) gain it, and Python's and Julia's now read it from the
+  core, so the four agree.
+
 ## 2.0.0 (2026-10-29)
 
 **Upgrading from 1.3.** The file format is unchanged (`gamut/1`), so

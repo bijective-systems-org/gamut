@@ -590,27 +590,21 @@ class Study:
         return out[: n.value].copy()
 
     def related(self, name: str) -> dict[str, Any]:
-        """What describes `name`: its std, quantiles, derivatives, and the
-        other parts of its vector."""
+        """What describes `name` (spec section 6): its std, its quantiles by
+        q, its derivatives by what they are taken with respect to
+        ("coordinates:x" for node position along x), and the parts of its
+        vector, itself among them."""
         self._need_reader()
         out: dict[str, Any] = {"std": None, "quantiles": {}, "derivatives": {}, "vector": []}
-        mine = self.describe(name)
-        for group in ("scalars", "node_fields", "cell_fields"):
-            for other in self.names(group):
-                d = _declared(self, other)
-                if d.get("of") == name:
-                    if d.get("statistic") == "std":
-                        out["std"] = other
-                    elif d.get("statistic") == "quantile":
-                        out["quantiles"][float(d["q"])] = other
-                    elif d.get("with_respect_to"):
-                        wrt = d["with_respect_to"]
-                        if wrt == "coordinates":
-                            wrt = f"coordinates:{d.get('axis', '')}"
-                        out["derivatives"][wrt] = other
-                # The vector's parts, not the statistics or derivatives of them.
-                if mine.get("vector") and d.get("vector") == mine.get("vector") and not d.get("of"):
-                    out["vector"].append(other)
+        for kind, key, other in zip(*_lib.lists_out("gamut_related", 3, self._handle(), b(name))):
+            if kind == "std":
+                out["std"] = other
+            elif kind == "quantile":
+                out["quantiles"][float(key)] = other
+            elif kind == "derivative":
+                out["derivatives"][key] = other
+            elif kind == "vector":
+                out["vector"].append(other)
         return out
 
     def _result_dtype(self, name: str) -> Any:

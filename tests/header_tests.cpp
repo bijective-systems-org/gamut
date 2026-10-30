@@ -97,6 +97,22 @@ void test_table() {
   CHECK(s.describe("cl_std")["statistic"] == "std");
   CHECK(s.describe("dcl_dalpha")["with_respect_to"] == "alpha");
   CHECK(std::fabs(std::stod(s.describe("cl_p95")["q"]) - 0.95) < 1e-12);
+  const gamut::Related rel = s.related("cl");                     // what describes cl
+  CHECK(rel.std_dev == "cl_std");
+  CHECK(rel.quantiles == (std::map<double, std::string>{{0.95, "cl_p95"}}));
+  CHECK(rel.derivatives == (std::map<std::string, std::string>{{"alpha", "dcl_dalpha"}}));
+  CHECK(rel.vector.empty());
+  CHECK(s.related("alpha").std_dev.empty() && s.related("alpha").derivatives.empty());
+  CHECK(refused([&] { s.related("nothing"); }) != "");
+  {                                                               // a subnormal q reads back exactly
+    auto t = gamut::create("subnormal.gamut", "header tests");
+    t.declare_parameter("x", "condition", "1");
+    t.declare_scalar("y", "1");
+    t.declare_scalar("y_q", "1", gamut::quantile_of("y", 1e-310));
+    t.add_run({{"x", 1.0}, {"y", 2.0}, {"y_q", 1.5}});
+    t.close();
+    CHECK(gamut::open("subnormal.gamut").related("y").quantiles == (std::map<double, std::string>{{1e-310, "y_q"}}));
+  }
   CHECK(s.names("parameters").size() == 2);
   CHECK(s.categories("status") == (std::vector<std::string>{"converged", "failed"}));
   CHECK(s.get_label("status", {5}) == std::vector<std::string>{"failed"});

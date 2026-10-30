@@ -154,6 +154,28 @@ classdef Study < handle
             end
         end
 
+        function r = related(s, name)
+            %RELATED What describes the result NAME (spec section 6): r.std,
+            %   its standard deviation's name or ''; r.quantiles, a
+            %   containers.Map from q to name; r.derivatives, a containers.Map
+            %   from what each is taken with respect to ('coordinates:x' for
+            %   node position along x) to name; r.vector, the parts of its
+            %   vector, itself among them.
+            [kinds, keys, names] = gamut_mex('related', s.Handle, name);
+            r = struct('std', '', ...
+                'quantiles', containers.Map('KeyType', 'double', 'ValueType', 'char'), ...
+                'derivatives', containers.Map('KeyType', 'char', 'ValueType', 'char'), ...
+                'vector', {{}});
+            for i = 1:numel(kinds)
+                switch kinds{i}
+                    case 'std', r.std = names{i};
+                    case 'quantile', r.quantiles(str2double(keys{i})) = names{i};
+                    case 'derivative', r.derivatives(keys{i}) = names{i};
+                    case 'vector', r.vector{end + 1} = names{i};
+                end
+            end
+        end
+
         function v = modelNumbers(s, id)
             %MODELNUMBERS A model's stored numbers (spec section 12) as a
             %   struct, as its save gave them; its type need not be registered.

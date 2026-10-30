@@ -817,24 +817,19 @@ function select(s::Study, where)
     return out[1:n[]] .+ 1
 end
 
-"""    related(study, name)    its std, quantiles, derivatives and vector parts."""
+"""    related(study, name)    its std, quantiles, derivatives and vector parts (spec section 6)."""
 function related(s::Study, name)
+    need_reader(s)
+    t, k, n = Ref{Ptr{Cvoid}}(C_NULL), Ref{Ptr{Cvoid}}(C_NULL), Ref{Ptr{Cvoid}}(C_NULL)
+    @mes gamut_related (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}, Ref{Ptr{Cvoid}}, Ref{Ptr{Cvoid}}) handle(s) cs(name) t k n
+    kinds, keys, names = take_strings(t[]), take_strings(k[]), take_strings(n[])
     out = Dict{String,Any}("std" => nothing, "quantiles" => Dict{Float64,String}(),
                            "derivatives" => Dict{String,String}(), "vector" => String[])
-    mine = describe(s, name)
-    for group in ("scalars", "node_fields", "cell_fields"), other in Gamut.names(s, group)
-        d = declared(s, other)
-        if get(d, "of", "") == name
-            st = get(d, "statistic", "")
-            st == "std" && (out["std"] = other)
-            st == "quantile" && (out["quantiles"][parse(Float64, d["q"])] = other)
-            wrt = get(d, "with_respect_to", "")
-            # Along each axis its own entry, as in Python.
-            isempty(wrt) || (out["derivatives"][wrt == "coordinates" ? "coordinates:" * get(d, "axis", "") : wrt] = other)
-        end
-        if haskey(mine, "vector") && get(d, "vector", "") == mine["vector"] && !haskey(d, "of")
-            push!(out["vector"], other)
-        end
+    for (kind, key, other) in zip(kinds, keys, names)
+        kind == "std" && (out["std"] = other)
+        kind == "quantile" && (out["quantiles"][parse(Float64, key)] = other)
+        kind == "derivative" && (out["derivatives"][key] = other)
+        kind == "vector" && push!(out["vector"], other)
     end
     return out
 end

@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <initializer_list>
 #include <map>
 #include <optional>
@@ -138,6 +139,15 @@ struct Geometry {
   std::vector<double> points;
   std::optional<Cells> cells;
   MeshLabels labels;
+};
+
+// What describes a result (spec section 6), from Study::related.
+struct Related {
+  std::string std_dev;                              // its standard deviation, or ""
+  std::map<double, std::string> quantiles;          // by q
+  std::map<std::string, std::string> derivatives;   // by what each is taken with respect to;
+                                                    // "coordinates:x" for node position along x
+  std::vector<std::string> vector;                  // the parts of its vector, itself among them
 };
 
 // A result's relation to another (spec section 6), made by std_of,
@@ -377,6 +387,21 @@ class Study {
     const std::vector<std::string> keys = k.take(), values = v.take();
     std::map<std::string, std::string> out;
     for (size_t i = 0; i < keys.size(); ++i) out[keys[i]] = values[i];
+    return out;
+  }
+  // What describes a result: its std, quantiles, derivatives and vector.
+  Related related(const std::string& name) const {
+    gamut_error e{};
+    detail::Strings t, k, n;
+    detail::check(gamut_related(need_reader(), name.c_str(), &t.s, &k.s, &n.s, &e), e);
+    const std::vector<std::string> kinds = t.take(), keys = k.take(), names = n.take();
+    Related out;
+    for (size_t i = 0; i < kinds.size(); ++i) {
+      if (kinds[i] == "std") out.std_dev = names[i];
+      else if (kinds[i] == "quantile") out.quantiles[std::strtod(keys[i].c_str(), nullptr)] = names[i];
+      else if (kinds[i] == "derivative") out.derivatives[keys[i]] = names[i];
+      else if (kinds[i] == "vector") out.vector.push_back(names[i]);
+    }
     return out;
   }
   // The category table of a label or mesh label: code c names entry c.

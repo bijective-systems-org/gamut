@@ -75,7 +75,7 @@ study.declare_scalar("cl_std", "1", gamut::std_of("cl"));
 study.declare_scalar("cl_p05", "1", gamut::quantile_of("cl", 0.05));
 study.declare_scalar("cl_p95", "1", gamut::quantile_of("cl", 0.95));
 study.declare_scalar("dcl_dalpha", "degree-1", gamut::derivative_of("cl", "alpha"));
-study.add_runs({{"alpha", alpha}, {"cl", cl}, {"cl_std", spread}, {"cl_p05", low}, {"cl_p95", high},
+study.add_runs({{"alpha", alpha}, {"cl", cl}, {"cl_std", spread}, {"cl_p05", p05}, {"cl_p95", p95},
                 {"dcl_dalpha", std::vector<double>(9, 0.11)}});
 study.close();
 ```
@@ -115,23 +115,12 @@ with gamut.open("uncertain.gamut") as study:
 
 ```matlab
 study = gamut.open('uncertain.gamut');
-quantiles = containers.Map('KeyType', 'double', 'ValueType', 'char');
-derivatives = containers.Map();
-names = study.names('scalars');
-for k = 1:numel(names)                          % what describes cl, read from each declaration
-    d = study.describe(names{k});
-    if ~isfield(d, 'of') || ~strcmp(d.of, 'cl'), continue; end
-    if isfield(d, 'with_respect_to'), derivatives(d.with_respect_to) = names{k};
-    elseif ~isfield(d, 'statistic'), continue
-    elseif strcmp(d.statistic, 'std'), spreadName = names{k};
-    elseif strcmp(d.statistic, 'quantile'), quantiles(str2double(d.q)) = names{k};
-    end
-end
-fprintf('the std of cl: %s\n', spreadName);
-fprintf('its 0.05 and 0.95 quantiles: %s %s\n', quantiles(0.05), quantiles(0.95));
-fprintf('its derivative with respect to alpha: %s\n', derivatives('alpha'));
-low = study.getScalar(quantiles(0.05));
-high = study.getScalar(quantiles(0.95));
+related = study.related('cl');
+fprintf('the std of cl: %s\n', related.std);
+fprintf('its 0.05 and 0.95 quantiles: %s %s\n', related.quantiles(0.05), related.quantiles(0.95));
+fprintf('its derivative with respect to alpha: %s\n', related.derivatives('alpha'));
+low = study.getScalar(related.quantiles(0.05));
+high = study.getScalar(related.quantiles(0.95));
 fprintf('90 %% band at 8 degrees: %.3f to %.3f\n', low(end), high(end));
 study.close();
 ```
@@ -158,21 +147,14 @@ end
 
 ```cpp
 study = gamut::open("uncertain.gamut");
-std::string spread_name;
-std::map<double, std::string> quantiles;
-std::map<std::string, std::string> derivatives;
-for (const std::string& name : study.names("scalars")) {  // what describes cl, read from each declaration
-  auto d = study.describe(name);
-  if (d["of"] != "cl") continue;
-  if (!d["with_respect_to"].empty()) derivatives[d["with_respect_to"]] = name;
-  else if (d["statistic"] == "std") spread_name = name;
-  else if (d["statistic"] == "quantile") quantiles[std::stod(d["q"])] = name;
-}
-std::printf("the std of cl: %s\n", spread_name.c_str());
-std::printf("its 0.05 and 0.95 quantiles: %s %s\n", quantiles[0.05].c_str(), quantiles[0.95].c_str());
-std::printf("its derivative with respect to alpha: %s\n", derivatives["alpha"].c_str());
-const std::vector<double> p05 = study.get_scalar(quantiles[0.05]), p95 = study.get_scalar(quantiles[0.95]);
-std::printf("90 %% band at 8 degrees: %.3f to %.3f\n", p05.back(), p95.back());
+const gamut::Related related = study.related("cl");
+std::printf("the std of cl: %s\n", related.std_dev.c_str());
+std::printf("its 0.05 and 0.95 quantiles: %s %s\n", related.quantiles.at(0.05).c_str(),
+            related.quantiles.at(0.95).c_str());
+std::printf("its derivative with respect to alpha: %s\n", related.derivatives.at("alpha").c_str());
+const std::vector<double> low = study.get_scalar(related.quantiles.at(0.05));
+const std::vector<double> high = study.get_scalar(related.quantiles.at(0.95));
+std::printf("90 %% band at 8 degrees: %.3f to %.3f\n", low.back(), high.back());
 ```
 
 ///
@@ -186,11 +168,10 @@ its derivative with respect to alpha: dcl_dalpha
 90 % band at 8 degrees: 0.837 to 0.923
 ```
 
-In Python and Julia, `related` finds everything that describes a result;
-in MATLAB and C++ the same comes from each result's declaration, which
-`describe` returns. Either way a plotting script draws error bars, and a
-training script collects gradients, without knowing the names the
-producer chose.
+`related` finds everything that describes a result, in every language:
+the core reads it from each result's declaration. A plotting script draws
+error bars, and a training script collects gradients, without knowing the
+names the producer chose.
 
 ## Notes
 

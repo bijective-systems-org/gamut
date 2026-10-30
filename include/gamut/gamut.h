@@ -198,6 +198,16 @@ GAMUT_API int gamut_names(const gamut_file* f, const char* group, gamut_strings*
 /* A concept's attributes as two parallel lists. */
 GAMUT_API int gamut_describe(const gamut_file* f, const char* name, gamut_strings** keys,
                          gamut_strings** values, gamut_error* err);
+/* What describes a result (spec section 6), as three parallel lists, in the
+ * order of the file's scalars, node fields and cell fields: kinds ("std",
+ * "quantile", "derivative", "vector"), keys (a quantile's q, as describe
+ * gives it; what a derivative is with respect to, "coordinates:<axis>" for
+ * node position; empty for "std" and "vector") and the results' names.  The
+ * parts of a vector are its results without an "of", the result itself
+ * among them.  Another concept has nothing describing it; a name that is
+ * nothing in the file is refused, as by gamut_describe. */
+GAMUT_API int gamut_related(const gamut_file* f, const char* name, gamut_strings** kinds,
+                        gamut_strings** keys, gamut_strings** names, gamut_error* err);
 /* name: a parameter, label, scalar, constant, field or mesh label, or
  * "row", "coordinates", "cells/types", "cells/offsets",
  * "cells/connectivity".  rows and sites may be NULL (everything).  shape has
