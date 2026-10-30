@@ -35,18 +35,19 @@ int main() {
   study.close();
 
   study = gamut::open("uncertain.gamut");
-  std::string spread_name, derivative;
+  std::string spread_name;
   std::map<double, std::string> quantiles;
+  std::map<std::string, std::string> derivatives;
   for (const std::string& name : study.names("scalars")) {  // what describes cl, read from each declaration
     auto d = study.describe(name);
     if (d["of"] != "cl") continue;
-    if (!d["with_respect_to"].empty()) derivative = name;
+    if (!d["with_respect_to"].empty()) derivatives[d["with_respect_to"]] = name;
     else if (d["statistic"] == "std") spread_name = name;
-    else quantiles[std::stod(d["q"])] = name;
+    else if (d["statistic"] == "quantile") quantiles[std::stod(d["q"])] = name;
   }
   std::printf("the std of cl: %s\n", spread_name.c_str());
   std::printf("its 0.05 and 0.95 quantiles: %s %s\n", quantiles[0.05].c_str(), quantiles[0.95].c_str());
-  std::printf("its derivative with respect to alpha: %s\n", derivative.c_str());
+  std::printf("its derivative with respect to alpha: %s\n", derivatives["alpha"].c_str());
   const std::vector<double> p05 = study.get_scalar(quantiles[0.05]), p95 = study.get_scalar(quantiles[0.95]);
   std::printf("90 %% band at 8 degrees: %.3f to %.3f\n", p05.back(), p95.back());
 }
