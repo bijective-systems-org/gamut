@@ -3,7 +3,7 @@
 MATLAB reads and writes the same files with the same calls, in MATLAB's
 spelling: methods on a study object in camelCase, options as name–value
 pairs, declarations as structs, and positions counted from 1. The toolbox,
-`Gamut.mltbx`, installs it with no compiler ([installing](../install.md#matlab)).
+`Gamut.mltbx`, installs it with no compiler ([installing](../install.md)).
 An example written in MATLAB has a MATLAB tab, quoted from a program in
 `examples/matlab`; the [examples](../guide/README.md) say which are.
 
@@ -91,7 +91,7 @@ bounds or on one, negative below them, positive above.
   library underneath is one and the same.
 - MATLAB loads its own HDF5. The toolbox's library carries its own HDF5
   linked in, so the two never meet; a gateway built from a checkout needs
-  such a core too ([installing](../install.md#compiling-the-gateway)).
+  such a core too ([installing](../install.md)).
 - Values arrive in the units they were stored in, which
   `study.describe(name).units` names. Converting them is left to the
   caller; only Python's reads convert, through pint.

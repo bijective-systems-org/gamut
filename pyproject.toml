@@ -43,8 +43,8 @@ Homepage = "https://github.com/bijective-systems-org/gamut"
 Documentation = "https://bijective-systems-org.github.io/gamut/"
 Source = "https://github.com/bijective-systems-org/gamut"
 Releases = "https://github.com/bijective-systems-org/gamut/releases"
-Specification = "https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md"
-Changelog = "https://github.com/bijective-systems-org/gamut/blob/main/CHANGELOG.md"
+Specification = "https://bijective-systems-org.github.io/gamut/reference/specification.html"
+Changelog = "https://bijective-systems-org.github.io/gamut/reference/changelog.html"
 Issues = "https://github.com/bijective-systems-org/gamut/issues"
 
 [tool.scikit-build]
