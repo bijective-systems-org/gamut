@@ -2,8 +2,13 @@
 
 ## Unreleased
 
-- Rust: the `gamut` crate, over `gamut-sys`, the declarations of `gamut.h`
-  that `rust/gamut-sys/generate.py` writes from it. It writes and reads
+- The Python package is now `bijective-gamut` on PyPI, and the Rust crates
+  are `bijective-gamut` and `bijective-gamut-sys`; the code still says
+  `import gamut` and `gamut::`. `gamut-format`, the name through 2.0.0,
+  installs `bijective-gamut` at the same version, extras included.
+- Rust: the `bijective-gamut` crate (`gamut` in code), over
+  `bijective-gamut-sys`, the declarations of `gamut.h` that
+  `rust/gamut-sys/generate.py` writes from it. It writes and reads
   data files with the calls of the other languages, evaluates model files
   whose models are the built-in nearest neighbour, and is held to the
   corpus. Every example has a Rust tab, and the reference a Rust page.

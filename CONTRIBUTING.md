@@ -61,7 +61,7 @@ GAMUT_LIBRARY=build/libgamut.so python corpus/check.py /tmp/corpus
 julia --project=<an environment with JSON and Gamut> julia/test/check_corpus.jl /tmp/corpus
 ```
 
-Rust's tests, the corpus from Rust, and the check that `gamut-sys`
+Rust's tests, the corpus from Rust, and the check that `bijective-gamut-sys`
 declares what `gamut.h` does, from `rust/` with the core built in
 `build/` (`_pages.py rust FOLDER` checks the examples' output against
 their pages, as for MATLAB and Julia):

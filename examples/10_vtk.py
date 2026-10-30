@@ -1,4 +1,4 @@
-"""VTK files in and out (needs the `vtk` extra: pip install "gamut-format[vtk]").
+"""VTK files in and out (needs the `vtk` extra: pip install "bijective-gamut[vtk]").
 
 A folder of VTK runs becomes one study with `gamut-vtk import`; a study
 becomes one VTK file per run with `gamut-vtk export`. The same calls are

@@ -1,5 +1,5 @@
 [package]
-name = "gamut-sys"
+name = "bijective-gamut-sys"
 description = "The C interface of the Gamut core (gamut.h), declared for Rust"
 version.workspace = true
 edition.workspace = true
@@ -9,7 +9,8 @@ repository.workspace = true
 links = "gamut"
 build = "build.rs"
 
-# Declarations only: the gamut crate tests them.
+# Declarations only: the bijective-gamut crate tests them. `gamut_sys` in code.
 [lib]
+name = "gamut_sys"
 test = false
 doctest = false

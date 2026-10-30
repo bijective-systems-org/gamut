@@ -131,7 +131,7 @@ codes count from 0 in every language, so a name's code is its place in
 Values are stored in the units they were written in, which
 `describe(name)` names. In Python, every read takes `units` and converts
 from the stored units; this needs the `units` extra
-(`pip install "gamut-format[units]"`, which brings pint), and without it
+(`pip install "bijective-gamut[units]"`, which brings pint), and without it
 a read that asks for other units is refused. MATLAB, Julia, C++ and Rust
 return the stored units, and the programs above convert them.
 

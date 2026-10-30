@@ -2,7 +2,7 @@
 
 Runs are chosen with a small expression language; nodes by a mesh label;
 values arrive in the units asked for (unit conversion needs the `units`
-extra: pip install "gamut-format[units]"). The MATLAB, Julia and C++
+extra: pip install "bijective-gamut[units]"). The MATLAB, Julia and C++
 examples parts are the same program, converting units themselves, and print
 the same lines.
 """

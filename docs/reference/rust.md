@@ -3,8 +3,9 @@
 Rust reads and writes the same files with the same calls, in Rust's
 spelling: a `Study` that owns the open file and closes it when dropped,
 methods that return a `Result` whose error names the rule, slices for
-values, and positions counted from 0. The `gamut` crate is a thin layer
-over `gamut-sys`, the declarations of `gamut.h`, and links the core
+values, and positions counted from 0. The `bijective-gamut` crate, `gamut`
+in code, is a thin layer over `bijective-gamut-sys`, the declarations of
+`gamut.h`, and links the core
 library ([installing](../install.md)). An example written in Rust has a
 Rust tab, quoted from a program in `examples/rust`; the
 [examples](../guide/README.md) say which are. Run one from `rust/` in a
@@ -76,6 +77,6 @@ bounds or on one, negative below them, positive above.
   neighbour; models of other types are registered in Python or MATLAB.
   The crate writes data files, not model files.
 - `study.handle()` gives the open file to the calls of `gamut.h` the
-  crate does not cover, through `gamut-sys`.
+  crate does not cover, through `bijective-gamut-sys` (`gamut_sys`).
 - The crates carry the version of the core they are made for, and are
   added from the same release tag.

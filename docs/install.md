@@ -1,9 +1,10 @@
 # Installing
 
 Gamut is published by Bijective Systems as
-[`gamut-format` on PyPI](https://pypi.org/project/gamut-format/):
-install `gamut-format`, then `import gamut`; the command line is `gamut`.
-The PyPI project named `gamut` is a different package.
+[`bijective-gamut` on PyPI](https://pypi.org/project/bijective-gamut/):
+install `bijective-gamut`, then `import gamut`; the command line is `gamut`.
+The PyPI project named `gamut` is a different package. Through 2.0.0 the
+package was named `gamut-format`; that name now installs `bijective-gamut`.
 
 Every language uses the same core library, written in C++. The Python
 wheels and the MATLAB toolbox carry it with HDF5 linked inside, so it
@@ -15,9 +16,9 @@ rises within 2.x.
 /// tab | Python
 
 ```bash
-pip install gamut-format                 # Python 3.11 or later
-pip install "gamut-format[units]"        # with unit conversion on reads and writes (pint)
-pip install "gamut-format[vtk]"          # with VTK import and export (pyvista, pandas)
+pip install bijective-gamut                 # Python 3.11 or later
+pip install "bijective-gamut[units]"        # with unit conversion on reads and writes (pint)
+pip install "bijective-gamut[vtk]"          # with VTK import and export (pyvista, pandas)
 ```
 
 Wheels are built for macOS (arm64 and x86_64, macOS 11 and later), Linux
@@ -155,15 +156,16 @@ that matches the core it links, and point the build at a core library:
 
 ```toml
 [dependencies]
-gamut = { git = "https://github.com/bijective-systems-org/gamut", tag = "v2.0.0" }
+bijective-gamut = { git = "https://github.com/bijective-systems-org/gamut", tag = "v2.0.0" }
 ```
 
 ```bash
 GAMUT_LIB_DIR=/path/to/gamut-core/lib cargo build
 ```
 
-The core is in each release's `gamut-core-<version>-<platform>` archive;
-`GAMUT_LIB_DIR` is its `lib/` folder. A program finds the library when it
+The package is `bijective-gamut`; in code it is `gamut`. The core is in
+each release's `gamut-core-<version>-<platform>` archive; `GAMUT_LIB_DIR`
+is its `lib/` folder. A program finds the library when it
 runs through the library path (`LD_LIBRARY_PATH` on Linux,
 `DYLD_LIBRARY_PATH` on macOS, `PATH` with the archive's `bin/` on Windows)
 or an rpath. From a checkout, `cargo test` and

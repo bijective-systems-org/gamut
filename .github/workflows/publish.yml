@@ -16,7 +16,8 @@ name: publish
 # pyproject.toml. Only `publish` holds a credential: an OpenID Connect
 # token minted for the `pypi` environment, which PyPI trusts for this
 # repository and this workflow file alone, so there is no API token
-# anywhere. Every action is pinned to a commit, as in ci.yml.
+# anywhere. It uploads bijective-gamut and gamut-format, the name through
+# 2.0.0, which only installs bijective-gamut; both PyPI projects trust it. Every action is pinned to a commit, as in ci.yml.
 #
 # `cores` builds the core with tools/build_core.sh on each platform, the
 # Linux one in the manylinux image the Linux wheel is built in, and the
@@ -129,15 +130,18 @@ jobs:
               sys.exit("the tag and pyproject.toml disagree")
           PY
 
-      - name: Build the sdist
+      - name: Build the sdist, and gamut-format, the old name that installs it
         run: |
           python -m pip install -q build
           python -m build --sdist --outdir dist .
+          python -m build --outdir dist packaging/gamut-format
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sdist
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/gamut_format-*.whl
           if-no-files-found: error
 
   cores:
@@ -295,13 +299,13 @@ jobs:
     timeout-minutes: 10
     environment:
       name: pypi
-      url: https://pypi.org/project/gamut-format/
+      url: https://pypi.org/project/bijective-gamut/
     permissions:
       # The OpenID Connect token is the credential; nothing else is granted.
       id-token: write
     steps:
-      # Only the wheels and the sdist: the cores and the toolbox are built
-      # in the same run and are not Python packages.
+      # Only the wheels and the sdists, gamut-format's among them: the cores
+      # and the toolbox are built in the same run and are not Python packages.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: wheel-*

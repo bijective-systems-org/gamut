@@ -46,7 +46,7 @@ def _registry() -> Any:
         import pint
     except ImportError:
         raise GamutError("", "unit conversion needs pint: pip install pint "
-                              "(or gamut-format[units])") from None
+                              "(or bijective-gamut[units])") from None
     return pint.UnitRegistry()
 
 

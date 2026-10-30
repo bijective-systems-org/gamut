@@ -1,0 +1,30 @@
+# gamut-format, the package's name on PyPI through 2.0.0: it installs
+# bijective-gamut at the same version, extras included, so instructions and
+# requirements that name it keep working. The publish workflow builds it
+# with every release; test_docs holds its version and extras to the
+# package's own.
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gamut-format"
+version = "2.0.0"
+description = "Now bijective-gamut: installs it (import gamut)"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [{ name = "Bijective Systems" }]
+requires-python = ">=3.11"
+dependencies = ["bijective-gamut==2.0.0"]
+
+[project.optional-dependencies]
+units = ["bijective-gamut[units]==2.0.0"]
+vtk = ["bijective-gamut[vtk]==2.0.0"]
+test = ["bijective-gamut[test]==2.0.0"]
+
+[project.urls]
+Homepage = "https://github.com/bijective-systems-org/gamut"
+Documentation = "https://bijective-systems-org.github.io/gamut/"
+
+[tool.setuptools]
+packages = []

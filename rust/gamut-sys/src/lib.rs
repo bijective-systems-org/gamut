@@ -1,7 +1,7 @@
 // Generated from include/gamut/gamut.h by generate.py; do not edit.
 //
 // The C interface of the Gamut core, one declaration per function of
-// gamut.h, which documents each.  The gamut crate is the safe interface.
+// gamut.h, which documents each.  bijective-gamut is the safe interface.
 
 #![allow(non_camel_case_types)]
 

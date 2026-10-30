@@ -89,7 +89,7 @@ def test_vtk_command_without_its_extra_says_what_to_install():
             "raise SystemExit(vtk_main(['--help']))")
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert result.returncode == 2, result.stderr
-    assert 'pip install "gamut-format[vtk]"' in result.stderr
+    assert 'pip install "bijective-gamut[vtk]"' in result.stderr
     assert "Traceback" not in result.stderr
 
 

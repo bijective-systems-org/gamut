@@ -1,5 +1,5 @@
 """VTK in and out of Gamut files, on PyVista and pandas (the `vtk` extra:
-`pip install "gamut-format[vtk]"`).
+`pip install "bijective-gamut[vtk]"`).
 
     gamut-vtk import RUNS_DIR [-o study.gamut] [--parameters CSV]
                       [--fields CSV] [--skip a,b] [--round-bits N] [--json]

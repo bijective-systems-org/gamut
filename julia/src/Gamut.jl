@@ -39,7 +39,7 @@ function sym(name::Symbol)
                 p = library_path()
                 isfile(p) || error("the Gamut core library ($p) was not found; set " *
                                    "GAMUT_LIBRARY to its path: the Python wheel's (pip install " *
-                                   "gamut-format, then python -c \"import gamut; " *
+                                   "bijective-gamut, then python -c \"import gamut; " *
                                    "print(gamut.library_path())\"), or one built from a " *
                                    "checkout with cmake -S . -B build && cmake --build build")
                 HANDLE[] = Libdl.dlopen(p)
