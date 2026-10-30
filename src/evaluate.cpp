@@ -445,6 +445,11 @@ void Evaluation::finish() {
     } else {
       throw Error("E2", "this model file's geometry changes per run; give coordinates", "coordinates");
     }
+    // Geometry is stored as floats: integer coordinates become float64 where exact.
+    if (source.dtype != DType::Float32 && source.dtype != DType::Float64) {
+      source.bytes = converted(source, DType::Float64, "coordinates");
+      source.dtype = DType::Float64;
+    }
     const std::int64_t each = s.mesh.n_nodes * s.mesh.axes;
     const std::size_t width = dtype_size(source.dtype) * static_cast<std::size_t>(each);
     for (std::int64_t i = 0; i < rows_; ++i) {

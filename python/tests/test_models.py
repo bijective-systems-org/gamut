@@ -241,6 +241,19 @@ class Stretch:
         return {"coordinates": {"values": pts}}
 
 
+@gamut.register_model_type
+class IntStretch(Stretch):
+    """Stretch, in whole numbers: int64 coordinates."""
+
+    type = "tests.int_stretch"
+
+    def call(self, inputs, wanted):
+        s = np.asarray(inputs["s"]).astype(np.int64)
+        pts = np.repeat(self.base.astype(np.int64)[None], len(s), axis=0)
+        pts[:, :, 0] *= s[:, None]
+        return {"coordinates": {"values": pts}}
+
+
 def test_a_model_computes_the_coordinates(tmp_path):
     mp = str(tmp_path / "shape.gamut")
     base = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
@@ -278,6 +291,16 @@ def test_a_model_computes_the_coordinates(tmp_path):
     with gamut.evaluate(mp, {"s": [1.0, 2.5]}) as pred:
         np.testing.assert_array_equal(pred.get_points(0), base)
         np.testing.assert_array_equal(pred.get_points(1)[:, 0], [0.0, 2.5, 0.0])
+    # Integer coordinates are stored as floats, where exact.
+    ip = str(tmp_path / "int_shape.gamut")
+    with gamut.create_model(ip, writer="tests", mesh="shared", per="run",
+                             coordinates={"units": "m", "axes": 3, "model": "shape",
+                                          "output": "coordinates"},
+                             parameters={"s": {"units": "1", "lower": 1.0, "upper": 3.0}}) as f:
+        f.set_mesh(cells=([5], [0, 3], [0, 1, 2]), n_nodes=3)
+        f.add_model("shape", IntStretch(base.astype(np.int64)), inputs=["s"])
+    with gamut.evaluate(ip, {"s": [2.0, 3.0]}) as pred:
+        np.testing.assert_array_equal(pred.get_points(1)[:, 0], [0.0, 3.0, 0.0])
 
 
 def test_model_numbers_read_back_without_the_type_registered(tmp_path):
