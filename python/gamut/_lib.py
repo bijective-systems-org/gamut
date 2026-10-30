@@ -4,8 +4,10 @@ conversions every call needs.  Nothing here is public."""
 from __future__ import annotations
 
 import ctypes
+import numbers
 import os
 import sys
+from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -122,7 +124,18 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "gamut_nearest_output_size": (_I, [_P, _S, ctypes.POINTER(_L), _E]),
     "gamut_nearest_call": (_I, [_P, _SS, ctypes.POINTER(ctypes.POINTER(_D)), ctypes.POINTER(_L), _I, _L, _S,
                                ctypes.POINTER(_D), _L, _E]),
-    "gamut_evaluate_begin": (_I, [_P, _S, _PP, _E]),
+    "gamut_evaluation_begin": (_I, [_P, _L, _S, _PP, _E]),
+    "gamut_evaluation_values": (_I, [_P, _S, _I, _P, _L, _E]),
+    "gamut_evaluation_names": (_I, [_P, _S, _SS, _L, _E]),
+    "gamut_evaluation_coordinates": (_I, [_P, _I, _P, _L, _E]),
+    "gamut_evaluation_ready": (_I, [_P, _PP, _PP, _E]),
+    "gamut_evaluation_requests": (_I, [_P, _S, _PP, _PP, _PP, _E]),
+    "gamut_evaluation_input_info": (_I, [_P, _S, ctypes.POINTER(_I), ctypes.POINTER(_I), ctypes.POINTER(_L), _I,
+                                         _E]),
+    "gamut_evaluation_input": (_I, [_P, _S, _P, _L, _E]),
+    "gamut_evaluation_answer": (_I, [_P, _S, _S, _S, _S, _I, _P, _L, _E]),
+    "gamut_evaluation_finish": (_I, [_P, _E]),
+    "gamut_evaluation_free": (None, [_P]),
     "gamut_set_constant": (_I, [_P, _S, _S, _I, _D, _L, _E]),
     "gamut_set_generalisation_group": (_I, [_P, _S, _E]),
     "gamut_set_compression": (_I, [_P, _I, _I, _E]),
@@ -287,15 +300,20 @@ def float64_exactly(values: Any, what: str) -> np.ndarray:
     """Values as float64, refusing an integer a float64 would round (past
     2**53), as the core does: for values computed with here before the core
     sees them. Values NumPy itself reads as floats (a float array, a list
-    with a float in it) are floats already."""
+    with a float in it) are floats already. Booleans, complex numbers and
+    text are refused, as the writer refuses them, rather than cast."""
     arr = np.asarray(values)
+    if arr.dtype.kind in "bcUSTVMm":
+        raise GamutError("E4", f"{what}: values of dtype {arr.dtype} are not real numbers")
     if arr.dtype.kind in "iuO":
         flat = arr.reshape(-1)
         if arr.dtype.kind != "O":
             flat = flat[(flat > 2**53) | (flat < -2**53)]
         for v in flat.tolist():
-            if isinstance(v, (int, np.integer)) and not isinstance(v, (bool, np.bool_)) \
-                    and abs(int(v)) > 2**53:
+            if v is not None and (isinstance(v, (bool, np.bool_, np.timedelta64))
+                                  or not isinstance(v, (numbers.Real, Decimal))):
+                raise GamutError("E4", f"{what}: {v!r} is not a real number")
+            if isinstance(v, (int, np.integer)) and abs(int(v)) > 2**53:
                 v = int(v)
                 try:
                     exact = int(float(v)) == v

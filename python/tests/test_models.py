@@ -83,6 +83,17 @@ def test_nearest_model_file_and_evaluation(tmp_path):
         assert pred.describe()["evaluated_from"] == file_id
         np.testing.assert_array_equal(pred.get_points(), pts)
     assert gamut.validate(out_path).findings == ()
+    with gamut.evaluate(mp, {"mach": [], "alpha": []}) as none:
+        assert none.row_count == 0 and none.get_scalar("cl").shape == (0,)
+    # An output of the wrong width is refused with no rows as with some.
+    wide = str(tmp_path / "wide.gamut")
+    with gamut.create_model(wide, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},
+                             scalars={"y": {"units": "1", "model": "fit", "output": "y"}}) as mf:
+        mf.add_model("fit", gamut.Nearest(["x"], [0.0], [1.0], [[0.0], [1.0]], {"y": [[10, 11], [20, 21]]}),
+                     ["x"])
+    for x in ([0.5], []):
+        with pytest.raises(gamut.GamutError, match="2 values per row, not 1"):
+            gamut.evaluate(wide, {"x": x})
     # In memory: a temporary file that disappears on close.
     p = gamut.evaluate(mp, inputs)
     path = p.path
@@ -230,6 +241,19 @@ class Stretch:
         return {"coordinates": {"values": pts}}
 
 
+@gamut.register_model_type
+class IntStretch(Stretch):
+    """Stretch, in whole numbers: int64 coordinates."""
+
+    type = "tests.int_stretch"
+
+    def call(self, inputs, wanted):
+        s = np.asarray(inputs["s"]).astype(np.int64)
+        pts = np.repeat(self.base.astype(np.int64)[None], len(s), axis=0)
+        pts[:, :, 0] *= s[:, None]
+        return {"coordinates": {"values": pts}}
+
+
 def test_a_model_computes_the_coordinates(tmp_path):
     mp = str(tmp_path / "shape.gamut")
     base = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
@@ -267,6 +291,16 @@ def test_a_model_computes_the_coordinates(tmp_path):
     with gamut.evaluate(mp, {"s": [1.0, 2.5]}) as pred:
         np.testing.assert_array_equal(pred.get_points(0), base)
         np.testing.assert_array_equal(pred.get_points(1)[:, 0], [0.0, 2.5, 0.0])
+    # Integer coordinates are stored as floats, where exact.
+    ip = str(tmp_path / "int_shape.gamut")
+    with gamut.create_model(ip, writer="tests", mesh="shared", per="run",
+                             coordinates={"units": "m", "axes": 3, "model": "shape",
+                                          "output": "coordinates"},
+                             parameters={"s": {"units": "1", "lower": 1.0, "upper": 3.0}}) as f:
+        f.set_mesh(cells=([5], [0, 3], [0, 1, 2]), n_nodes=3)
+        f.add_model("shape", IntStretch(base.astype(np.int64)), inputs=["s"])
+    with gamut.evaluate(ip, {"s": [2.0, 3.0]}) as pred:
+        np.testing.assert_array_equal(pred.get_points(1)[:, 0], [0.0, 3.0, 0.0])
 
 
 def test_model_numbers_read_back_without_the_type_registered(tmp_path):
@@ -404,3 +438,167 @@ def test_an_answer_marks_the_inputs_outside_the_fitted_range(tmp_path):
         np.testing.assert_array_equal(answer.outside("mach"), [-0.125, 0.0, 0.0])
         np.testing.assert_array_equal(answer.outside("alpha"), [0.0, 1.5, -1.0])
     assert gamut.validate(out).warning_ids == ["W4"]
+
+
+@gamut.register_model_type
+class Echo:
+    """Gives back x as y, and the first node's x coordinate as x0."""
+
+    type = "tests.echo"
+
+    @classmethod
+    def load(cls, numbers):
+        return cls()
+
+    def save(self):
+        return {"k": 1}
+
+    def call(self, inputs, wanted):
+        out = {}
+        for output, *_ in wanted:
+            if output == "x0":
+                out[output] = {"values": np.asarray(inputs["coordinates"])[:, 0, 0]}
+            else:
+                out[output] = {"values": np.asarray(inputs["x"], dtype=float)}
+        return out
+
+
+def test_an_int64_input_past_2_53_is_evaluated_as_an_integer(tmp_path):
+    # Bounds are compared exactly, and the nearest model takes int64 as
+    # float64 (spec section 7.5), so a large integer is neither refused nor
+    # misjudged against its bounds.
+    big = 2**53 + 1
+    mp = str(tmp_path / "big.gamut")
+    with gamut.create_model(mp, writer="tests",
+                             parameters={"x": {"units": "1", "dtype": "int64", "lower": 0.0, "upper": float(2**53)}},
+                             scalars={"y": {"units": "1", "model": "echo", "output": "y"},
+                                      "z": {"units": "1", "model": "n", "output": "z"}}) as m:
+        m.add_model("echo", Echo(), ["x"])
+        m.add_model("n", gamut.Nearest(["x"], [0.0], [float(2**53)], [[0.0], [float(2**53)]], {"z": [1.0, 2.0]}),
+                    ["x"])
+    with pytest.warns(UserWarning, match="x is outside the model's domain .* in 1 of 2 rows"):
+        out = gamut.evaluate(mp, {"x": [big, 2**53]})
+    with out:
+        assert out.get_parameter("x").tolist() == [big, 2**53]
+        assert out.get_scalar("z").tolist() == [2.0, 2.0]
+        assert out.outside("x").tolist() == [1.0, 0.0]
+
+
+def _echo_model(path, per="fixed"):
+    with gamut.create_model(path, writer="tests", mesh="shared", per=per,
+                             coordinates={"units": "m", "axes": 2},
+                             parameters={"x": {"units": "1", "lower": 0.0, "upper": 2.0}},
+                             scalars={"x0": {"units": "m", "model": "echo", "output": "x0"}}) as m:
+        m.set_mesh(np.array([[1.0, 0.0], [0.0, 1.0]]), cells=([3], [0, 2], [0, 1]))
+        m.add_model("echo", Echo(), ["x", "coordinates"])
+
+
+def test_given_coordinates_are_the_answers_per_run(tmp_path):
+    # Spec section 7.4: coordinates the caller gives are the data file's,
+    # per run, though the model file's are fixed.
+    mp = str(tmp_path / "echo.gamut")
+    _echo_model(mp)
+    given = np.array([[[10.0, 0.0], [0.0, 1.0]], [[50.0, 0.0], [0.0, 1.0]]])
+    with gamut.evaluate(mp, {"x": [1.0, 2.0]}, coordinates=given) as out:
+        assert out.describe()["per"] == "run"
+        assert out.get_scalar("x0").tolist() == [10.0, 50.0]
+        np.testing.assert_array_equal(out.get_points(1), given[1])
+    # Without them, the stored ones, fixed; and for no rows, no rows.
+    with gamut.evaluate(mp, {"x": [1.0]}) as out:
+        assert out.describe()["per"] == "fixed" and out.get_scalar("x0").tolist() == [1.0]
+    with gamut.evaluate(mp, {"x": []}) as out:
+        assert out.row_count == 0
+
+
+def test_one_output_read_at_two_widths_is_refused(tmp_path):
+    # A scalar and a node field, or a scalar and the coordinates, cannot
+    # both be one model output: refused whatever the number of rows.
+    cases = {"field": dict(per="fixed", coordinates={"units": "m", "axes": 1},
+                           fields={"f": {"units": "1", "at": "node", "model": "fit", "output": "same"}}),
+             "coordinates": dict(per="run", coordinates={"units": "m", "axes": 1, "model": "fit", "output": "same"})}
+    for case, kw in cases.items():
+        path = str(tmp_path / f"{case}.gamut")
+        with gamut.create_model(path, writer="t", mesh="shared",
+                                 parameters={"x": {"units": "1", "lower": 0.0, "upper": 1.0}},
+                                 scalars={"s": {"units": "1", "model": "fit", "output": "same"}}, **kw) as m:
+            if case == "field":
+                m.set_mesh(np.array([[0.0], [1.0]]))
+            else:
+                m.set_mesh(n_nodes=2)
+            m.add_model("fit", gamut.Nearest(["x"], [0.0], [1.0], [[0.0], [1.0]], {"same": [10.0, 20.0]}), ["x"])
+        for x in ([0.5], []):
+            with pytest.raises(gamut.GamutError, match="is read with 1 and with 2 values per row"):
+                gamut.evaluate(path, {"x": x})
+
+
+@gamut.register_model_type
+class Complex:
+    """A model that answers with complex numbers."""
+
+    type = "tests.complex"
+
+    @classmethod
+    def load(cls, numbers):
+        return cls()
+
+    def save(self):
+        return {"k": 1}
+
+    def call(self, inputs, wanted):
+        return {"y": {"values": np.array([1 + 2j] * len(inputs["x"]))}}
+
+
+def test_an_answer_or_input_that_is_not_real_is_refused(tmp_path):
+    # A complex, boolean or text value is refused, not cast (which would
+    # drop an imaginary part with only a NumPy warning).
+    mp = str(tmp_path / "complex.gamut")
+    with gamut.create_model(mp, writer="t", parameters={"x": {"units": "1", "lower": 0.0, "upper": 1.0}},
+                             scalars={"y": {"units": "1", "model": "c", "output": "y"}}) as m:
+        m.add_model("c", Complex(), ["x"])
+    for given in ({"x": [0.5]}, {"x": [0.5 + 1j]}, {"x": [True]}, {"x": np.array([0.5, 1j], dtype=object)},
+                  {"x": np.array([0.5, True], dtype=object)},
+                  {"x": np.array([0.5, np.datetime64("2026-01-01")], dtype=object)},
+                  {"x": np.array([0.5, np.void(b"1")], dtype=object)},
+                  {"x": np.array([0.5, np.timedelta64(1, "ns")], dtype=object)},
+                  # NumPy 2's variable-width strings
+                  *([{"x": np.array(["1"], dtype=np.dtypes.StringDType())}]
+                    if hasattr(np.dtypes, "StringDType") else [])):
+        with pytest.raises(gamut.GamutError) as e:
+            gamut.evaluate(mp, given)
+        assert e.value.rule == "E4"
+
+
+@gamut.register_model_type
+class Wide:
+    """Gives back x as int64, past what a float64 holds exactly."""
+
+    type = "tests.wide"
+
+    @classmethod
+    def load(cls, numbers):
+        return cls()
+
+    def save(self):
+        return {"k": 1}
+
+    def call(self, inputs, wanted):
+        return {"y": {"values": np.full(len(inputs["x"]), 2**53 + 1, dtype=np.int64)}}
+
+
+def test_an_answer_is_written_as_written_values_are(tmp_path):
+    # The core converts an answer to the result's declared precision as the
+    # writer converts written values: an int64 past 2^53 to a float32 result
+    # is rounded there, as a float64 result refuses it.
+    for precision, expect in (("float32", [float(2**53)]), ("float64", None)):
+        mp = str(tmp_path / f"{precision}.gamut")
+        with gamut.create_model(mp, writer="t", parameters={"x": {"units": "1", "lower": 0.0, "upper": 1.0}},
+                                 scalars={"y": {"units": "1", "precision": precision, "model": "w",
+                                                "output": "y"}}) as m:
+            m.add_model("w", Wide(), ["x"])
+        if expect is None:
+            with pytest.raises(gamut.GamutError) as e:
+                gamut.evaluate(mp, {"x": [0.5]})
+            assert e.value.rule == "E4"
+        else:
+            with gamut.evaluate(mp, {"x": [0.5]}) as out:
+                assert out.get_scalar("y").tolist() == expect

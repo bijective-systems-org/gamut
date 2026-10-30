@@ -427,6 +427,98 @@ void test_calls_from_several_threads() {
   std::remove("threads_shared.gamut");
 }
 
+// The core's evaluation, driven through the C interface as a binding drives
+// it: a model of a registered type (here, this program) asked for its
+// answers, the W4 finding, and the refusals of an evaluation used wrongly.
+void test_evaluation_through_the_c_interface() {
+  gamut_error e;
+  auto ok = [&](int status) {
+    if (status != 0) std::fprintf(stderr, "%s: %s\n", e.rule, e.message);
+    return status == 0;
+  };
+  const double slope = 0.11;
+  {
+    gamut_file* f = nullptr;
+    CHECK(ok(gamut_create_model("lift_model.gamut", "header tests", nullptr, nullptr, &f, &e)));
+    CHECK(ok(gamut_declare_parameter(f, "alpha", "design", "degree", GAMUT_FLOAT64, 1, 0.0, 6.0, "", &e)));
+    CHECK(ok(gamut_declare_result(f, "cl", "scalar", "1", GAMUT_FLOAT64, "", "", 0, 0.0, "", "", "", "",
+                                  -1, "fit", "cl", &e)));
+    gamut_tree* numbers = nullptr;
+    CHECK(ok(gamut_tree_new(&numbers, &e)));
+    CHECK(ok(gamut_tree_set_float(numbers, "slope", slope, &e)));
+    const char* reads[] = {"alpha"};
+    CHECK(ok(gamut_add_model(f, "fit", "linear", reads, 1, numbers, "", &e)));
+    gamut_tree_free(numbers);
+    CHECK(ok(gamut_close(f, &e)));
+  }
+  const gamut::Study model = gamut::open("lift_model.gamut");
+  const double alpha[] = {1.0, 5.0, 8.0};
+
+  // Every request answered: the data file holds the inputs and the answers.
+  {
+    gamut_evaluation* ev = nullptr;
+    CHECK(ok(gamut_evaluation_begin(model.handle(), 3, "answer.gamut", &ev, &e)));
+    CHECK(ok(gamut_evaluation_values(ev, "alpha", GAMUT_FLOAT64, alpha, 3, &e)));
+    gamut::detail::Strings warnings, models;
+    CHECK(ok(gamut_evaluation_ready(ev, &warnings.s, &models.s, &e)));
+    const auto found = warnings.take();
+    CHECK(found.size() == 1 && found[0].find("alpha is outside") != std::string::npos &&
+          found[0].find("1 of 3 rows") != std::string::npos);
+    CHECK(models.take() == std::vector<std::string>{"fit"});
+    gamut::detail::Strings outputs, kinds, keys;
+    CHECK(ok(gamut_evaluation_requests(ev, "fit", &outputs.s, &kinds.s, &keys.s, &e)));
+    CHECK(outputs.take() == std::vector<std::string>{"cl"});
+    CHECK(kinds.take() == std::vector<std::string>{"values"});
+    int dtype = 0, rank = 0;
+    int64_t shape[3] = {0, 0, 0};
+    CHECK(ok(gamut_evaluation_input_info(ev, "alpha", &dtype, &rank, shape, 3, &e)));
+    CHECK(dtype == GAMUT_FLOAT64 && rank == 1 && shape[0] == 3);
+    int dtype_kept = 77, rank_kept = 88;
+    int64_t shape_kept[3] = {99, 99, 99};
+    CHECK(gamut_evaluation_input_info(ev, "alpha", &dtype_kept, &rank_kept, shape_kept, 0, &e) != 0);
+    CHECK(dtype_kept == 77 && rank_kept == 88 && shape_kept[0] == 99);   // a refusal changes no output
+    double read[3] = {0, 0, 0};
+    CHECK(ok(gamut_evaluation_input(ev, "alpha", read, sizeof read, &e)));
+    double lift[3];
+    for (int i = 0; i < 3; ++i) lift[i] = slope * read[i];
+    CHECK(gamut_evaluation_answer(ev, "fit", "cl", "values", "", GAMUT_FLOAT64, lift, 2, &e) != 0 &&
+          std::string(e.rule) == "E5");
+    CHECK(gamut_evaluation_finish(ev, &e) != 0);            // cl is not answered yet
+    CHECK(ok(gamut_evaluation_answer(ev, "fit", "cl", "values", "", GAMUT_FLOAT64, lift, 3, &e)));
+    CHECK(ok(gamut_evaluation_finish(ev, &e)));
+    gamut_evaluation_free(ev);
+    const auto answer = gamut::open("answer.gamut");
+    CHECK(answer.get_scalar("cl") == (std::vector<double>{0.11, 0.11 * 5.0, 0.11 * 8.0}));
+  }
+
+  // The inputs are checked before any model runs.
+  auto ready = [&](const std::string& name, int64_t rows, int64_t count) {
+    gamut_evaluation* ev = nullptr;
+    std::string rule;
+    if (gamut_evaluation_begin(model.handle(), rows, "refused.gamut", &ev, &e) != 0) return std::string(e.rule);
+    gamut_strings* warnings = nullptr;
+    gamut_strings* models = nullptr;
+    if (gamut_evaluation_values(ev, name.c_str(), GAMUT_FLOAT64, alpha, count, &e) != 0 ||
+        gamut_evaluation_ready(ev, &warnings, &models, &e) != 0)
+      rule = e.rule;
+    gamut_strings_free(warnings);
+    gamut_strings_free(models);
+    gamut_evaluation_free(ev);                               // not finished: no file is left
+    return rule;
+  };
+  CHECK(ready("alpha", 3, 2) == "E5");
+  CHECK(ready("beta", 3, 3) == "E2");
+  CHECK(ready("alpha", -1, 0) == "E5");
+  CHECK(!std::filesystem::exists("refused.gamut"));
+  {
+    gamut_evaluation* ev = nullptr;
+    CHECK(gamut_evaluation_begin(model.handle(), 3, "answer.gamut", &ev, &e) != 0);   // it exists
+    CHECK(ev == nullptr);
+  }
+  std::remove("answer.gamut");
+  std::remove("lift_model.gamut");
+}
+
 int main() {
   namespace fs = std::filesystem;
   const auto original = fs::current_path();
@@ -443,6 +535,7 @@ int main() {
   test_geometry_per_run_and_members();
   test_refusals_before_the_library();
   test_calls_from_several_threads();
+  test_evaluation_through_the_c_interface();
   std::printf("%d checks, %d failures\n", g_checks, g_failures);
   fs::current_path(original);
   fs::remove_all(directory);

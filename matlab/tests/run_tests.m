@@ -137,6 +137,12 @@ ok(strcmp(out.describe().portion_marking, 'Example marking'), 'portion marking c
 tmpPath = out.Path;
 out.close();
 ok(~isfile(tmpPath), 'temporary evaluated file removed on close');
+try
+    gamut.evaluate(mp, struct('alpha', 1, 'typo', int64(9007199254740992) + int64(1)));
+    ok(false, 'an unknown input is refused');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E2'), ['an unknown input is refused by name: ' err.identifier]);
+end
 lastwarn('');
 out = gamut.evaluate(mp, struct('alpha', [-2; 5; 12]));
 [~, id] = lastwarn();

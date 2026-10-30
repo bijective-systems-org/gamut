@@ -316,6 +316,10 @@ void write_table(File& f, const std::string& name,
 
 }  // namespace
 
+std::vector<unsigned char> converted(const Column& c, DType target, const std::string& what) {
+  return convert(c, target, what);
+}
+
 std::string new_uuid() {
   std::random_device rd;
   std::mt19937_64 gen((static_cast<std::uint64_t>(rd()) << 32) ^ rd() ^

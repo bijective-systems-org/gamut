@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 #include <exception>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -18,6 +19,20 @@
 namespace {
 
 std::set<std::uintptr_t> g_files;
+// Each live evaluation, with the model file it reads: freed before that file
+// closes, whatever order MATLAB clears them in.
+std::map<std::uintptr_t, std::uintptr_t> g_evaluations;
+
+void free_evaluations_of(std::uintptr_t model) {
+  for (auto it = g_evaluations.begin(); it != g_evaluations.end();) {
+    if (it->second == model) {
+      gamut_evaluation_free(reinterpret_cast<gamut_evaluation*>(it->first));
+      it = g_evaluations.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
 
 // An error for MATLAB, thrown so the stack unwinds and every guard below
 // frees what it holds; mexFunction reports it once nothing is left to free
@@ -42,6 +57,8 @@ void forget(gamut_file* f) {
 }
 
 void finish_open_files() {
+  for (const auto& kv : g_evaluations) gamut_evaluation_free(reinterpret_cast<gamut_evaluation*>(kv.first));
+  g_evaluations.clear();
   for (const std::uintptr_t p : g_files) {
     gamut_file* f = reinterpret_cast<gamut_file*>(p);
     gamut_error e{};
@@ -166,6 +183,17 @@ gamut_file* file(const mxArray* a) {
   const std::uintptr_t p = static_cast<std::uintptr_t>(*static_cast<std::uint64_t*>(mxGetData(a)));
   if (g_files.count(p) == 0) usage("the file is closed or the handle is not one Gamut made");
   return reinterpret_cast<gamut_file*>(p);
+}
+
+std::uintptr_t evaluation_handle(const mxArray* a) {
+  if (a == nullptr || !mxIsUint64(a) || mxGetNumberOfElements(a) != 1) usage("not a Gamut evaluation");
+  return static_cast<std::uintptr_t>(*static_cast<std::uint64_t*>(mxGetData(a)));
+}
+
+gamut_evaluation* evaluation(const mxArray* a) {
+  const std::uintptr_t p = evaluation_handle(a);
+  if (g_evaluations.count(p) == 0) usage("the evaluation is over or the handle is not one Gamut made");
+  return reinterpret_cast<gamut_evaluation*>(p);
 }
 
 // A handle's output is made before the file is acquired, so a MATLAB allocation
@@ -593,12 +621,14 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     plhs[0] = handle_out(out, f);
   } else if (cmd == "close") {
     gamut_file* f = file(arg(1));
+    free_evaluations_of(reinterpret_cast<std::uintptr_t>(f));
     const int status = gamut_close(f, &e);
     // A refused close keeps the handle open (fix and close again, or abandon).
     if (status == 0) forget(f);
     check(status, e);
   } else if (cmd == "abandon") {
     gamut_file* f = file(arg(1));
+    free_evaluations_of(reinterpret_cast<std::uintptr_t>(f));
     forget(f);
     gamut_abandon(f, nrhs > 2 && mxIsLogicalScalarTrue(prhs[2]) ? 1 : 0);
   } else if (cmd == "info" || cmd == "names" || cmd == "table") {
@@ -881,12 +911,80 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     check(gamut_extract(text(arg(1), "src").c_str(), text(arg(2), "dst").c_str(), rows.ptr(), &e), e);
   } else if (cmd == "write_copy") {
     check(gamut_write_copy(text(arg(1), "src").c_str(), text(arg(2), "dst").c_str(), &e), e);
-  } else if (cmd == "evaluate_begin") {
-    gamut_file* w = nullptr;
-    const std::string path = text(arg(2), "path");
+  } else if (cmd == "evaluation_begin") {
+    gamut_file* m = file(arg(1));
+    const std::string path = text(arg(3), "path");
     mxArray* out = new_handle();
-    check(gamut_evaluate_begin(file(arg(1)), path.c_str(), &w, &e), e);
-    plhs[0] = handle_out(out, w);
+    gamut_evaluation* ev = nullptr;
+    check(gamut_evaluation_begin(m, one_integer(arg(2)), path.c_str(), &ev, &e), e);
+    const std::uintptr_t p = reinterpret_cast<std::uintptr_t>(ev);
+    try {
+      g_evaluations[p] = reinterpret_cast<std::uintptr_t>(m);
+    } catch (...) {
+      gamut_evaluation_free(ev);
+      throw;
+    }
+    *static_cast<std::uint64_t*>(mxGetData(out)) = p;
+    plhs[0] = out;
+  } else if (cmd == "evaluation_free") {
+    const std::uintptr_t p = evaluation_handle(arg(1));
+    if (g_evaluations.erase(p) != 0) gamut_evaluation_free(reinterpret_cast<gamut_evaluation*>(p));
+  } else if (cmd == "evaluation_values" || cmd == "evaluation_coordinates") {
+    const mxArray* v = arg(cmd == "evaluation_values" ? 3 : 2);
+    const int code = dtype_code(mxGetClassID(v));
+    if (code < 0 || mxIsLogical(v) || mxIsComplex(v) || mxIsSparse(v)) usage("values are real full numeric");
+    std::vector<int64_t> dims;
+    const auto bytes = to_c_order(v, mxGetNumberOfDimensions(v), &dims);
+    const auto count = static_cast<int64_t>(mxGetNumberOfElements(v));
+    gamut_evaluation* ev = evaluation(arg(1));
+    check(cmd == "evaluation_values"
+              ? gamut_evaluation_values(ev, text(arg(2), "name").c_str(), code, bytes.data(), count, &e)
+              : gamut_evaluation_coordinates(ev, code, bytes.data(), count, &e),
+          e);
+  } else if (cmd == "evaluation_names") {
+    const auto names = cellstr(arg(3), "names");
+    const auto p = pointers(names);
+    check(gamut_evaluation_names(evaluation(arg(1)), text(arg(2), "name").c_str(), p.data(),
+                                 static_cast<int64_t>(p.size()), &e),
+          e);
+  } else if (cmd == "evaluation_ready") {
+    gamut_strings *w = nullptr, *m = nullptr;
+    check(gamut_evaluation_ready(evaluation(arg(1)), &w, &m, &e), e);
+    plhs[0] = cell_out(w);
+    plhs[1] = cell_out(m);
+  } else if (cmd == "evaluation_requests") {
+    gamut_strings *o = nullptr, *k = nullptr, *y = nullptr;
+    check(gamut_evaluation_requests(evaluation(arg(1)), text(arg(2), "model").c_str(), &o, &k, &y, &e), e);
+    plhs[0] = cell_out(o);
+    plhs[1] = cell_out(k);
+    plhs[2] = cell_out(y);
+  } else if (cmd == "evaluation_input") {
+    gamut_evaluation* ev = evaluation(arg(1));
+    const std::string name = text(arg(2), "name");
+    int code = 0, rank = 0;
+    int64_t shape[3];
+    check(gamut_evaluation_input_info(ev, name.c_str(), &code, &rank, shape, 3, &e), e);
+    std::vector<int64_t> dims(shape, shape + rank);
+    std::size_t total = 1;
+    for (const auto d : dims) total *= static_cast<std::size_t>(d);
+    std::vector<unsigned char> bytes(total * size_of(code));
+    check(gamut_evaluation_input(ev, name.c_str(), bytes.data(), static_cast<int64_t>(bytes.size()), &e), e);
+    plhs[0] = from_c_order(bytes.data(), dims, code);
+  } else if (cmd == "evaluation_answer") {
+    // values: a column per row, rows x sites for a field, rows x nodes x axes for coordinates
+    // as given: the core converts it as written values
+    const mxArray* v = arg(6);
+    const int code = dtype_code(mxGetClassID(v));
+    if (code < 0 || mxIsLogical(v) || mxIsComplex(v) || mxIsSparse(v)) usage("an answer is real full numeric");
+    std::vector<int64_t> dims;
+    const auto bytes = to_c_order(v, mxGetNumberOfDimensions(v), &dims);
+    check(gamut_evaluation_answer(evaluation(arg(1)), text(arg(2), "model").c_str(),
+                                  text(arg(3), "output").c_str(), text(arg(4), "kind").c_str(),
+                                  text(arg(5), "key").c_str(), code, bytes.data(),
+                                  static_cast<int64_t>(mxGetNumberOfElements(v)), &e),
+          e);
+  } else if (cmd == "evaluation_finish") {
+    check(gamut_evaluation_finish(evaluation(arg(1)), &e), e);
   } else {
     usage("unknown command \"" + cmd + "\"");
   }

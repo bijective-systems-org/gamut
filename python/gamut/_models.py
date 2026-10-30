@@ -400,6 +400,49 @@ class _Temporary(Study):
         self._directory.cleanup()
 
 
+def _input(ev: ctypes.c_void_p, name: str) -> np.ndarray:
+    """An input as a model reads it, from the evaluation."""
+    code, rank = ctypes.c_int(), ctypes.c_int()
+    shape = (ctypes.c_int64 * 3)()
+    call("gamut_evaluation_input_info", ev, b(name), ctypes.byref(code), ctypes.byref(rank), shape, 3)
+    out = np.empty(tuple(shape[: rank.value]), dtype=np.int64 if code.value == _lib.GAMUT_INT64 else np.float64)
+    call("gamut_evaluation_input", ev, b(name), out.ctypes.data_as(ctypes.c_void_p), out.nbytes)
+    return out
+
+
+def _run(m: Study, ev: ctypes.c_void_p, model_id: str) -> None:
+    """Calls one model of a registered type with what it reads, and gives the
+    evaluation each answer it is asked for."""
+    d = _declared(m, f"models/{model_id}")
+    cls = _REGISTRY.get(d["type"])
+    if cls is None:
+        raise GamutError("", f"the model {model_id} is of type {d['type']!r}, whose software is not "
+                              "registered here (register_model_type)")
+    model = cls.load(m.model_numbers(model_id))
+    given = {k: _input(ev, k) for k in d["inputs"].split()}
+    outputs, kinds, keys = _lib.lists_out("gamut_evaluation_requests", 3, ev, b(model_id))
+    wanted = [(o, "quantile", float(y)) if k == "quantile" else (o, k, y) if k == "derivative" else (o, k)
+              for o, k, y in zip(outputs, kinds, keys)]
+    result = model.call(given, wanted)
+    for (o, k, y), ask in zip(zip(outputs, kinds, keys), wanted):
+        record = result.get(o)
+        if record is None:
+            raise GamutError("", f"the model {model_id} gave no output {o}")
+        if k == "values":
+            values = record.get("values")
+        elif k == "std":
+            values = record.get("std")
+        elif k == "quantile":
+            values = record.get("quantiles", {}).get(ask[2])
+        else:
+            values = record.get("derivatives", {}).get(y)
+        if values is None:
+            raise GamutError("", f"the model {model_id} gave no {k} for {o}")
+        flat = _lib.as_array(values).ravel()      # as given: the core converts it as written values
+        call("gamut_evaluation_answer", ev, b(model_id), b(o), b(k), b(y), _lib.dtype_code(flat),
+             flat.ctypes.data_as(ctypes.c_void_p), flat.size)
+
+
 def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None,
              coordinates: Any = None) -> Study:
     """Evaluates a model file on a table of inputs (spec section 7.4) and
@@ -414,136 +457,46 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
     Without `path` the data file is temporary and removed when closed:
     read it in a `with` block, or give `path` to keep it."""
     with _open(model_path) as m:
-        if m.kind != "model":
-            raise GamutError("E16", f"{model_path} is not a model file")
-        params = m.names("parameters")
-        labels = m.names("labels")
-        lengths = {len(np.atleast_1d(np.asarray(v))) for v in inputs.values()}
-        if len(lengths) != 1:
-            raise GamutError("E5", "every input needs the same number of rows")
-        n = lengths.pop()
-        table: dict[str, np.ndarray] = {}
-        for name in params:
-            if name not in inputs:
-                raise GamutError("E2", f"the input {name} is missing")
-            d = _declared(m, name)
-            col = np.atleast_1d(_lib.int64_exactly(inputs[name], name) if d.get("dtype") == "int64"
-                                else _lib.float64_exactly(inputs[name], name))
-            lo, hi = float(d["lower"]), float(d["upper"])
-            outside = np.flatnonzero((col < lo) | (col > hi))
-            if outside.size:
-                warnings.warn(f"W4: {name} is outside the model's domain [{lo}, {hi}] at row "
-                              f"{int(outside[0])}", stacklevel=2)
-            table[name] = col
-        label_names: dict[str, list[str]] = {}
-        for name in labels:
-            if name not in inputs:
-                raise GamutError("E2", f"the input {name} is missing")
-            entries = _lib.strings_out("gamut_table", m._handle(), b(_declared(m, name)["category"]))
-            given = [str(x) for x in np.atleast_1d(np.asarray(inputs[name]))]
-            unknown = [g for g in given if g not in entries]
-            if unknown:
-                raise GamutError("E9", f"{name}: {unknown[0]!r} is not in the model's table")
-            table[name] = np.array([entries.index(g) for g in given], dtype=np.int64)
-            label_names[name] = given
-        unknown_inputs = set(inputs) - set(params) - set(labels)
-        if unknown_inputs:
-            raise GamutError("E2", f"{sorted(unknown_inputs)[0]} is not an input of this model")
-        if coordinates is not None:
-            table["coordinates"] = _lib.float64_exactly(coordinates, "coordinates")
-        elif m._mesh_kind and m._per == "fixed":
-            pts = m.get_points()
-            table["coordinates"] = np.broadcast_to(pts, (n,) + pts.shape)
-        # What each model is asked for.
-        results = [(r, "scalar") for r in m.names("scalars")] + \
-                  [(r, "field") for r in m.names("node_fields") + m.names("cell_fields")]
-        wanted: dict[str, list[tuple]] = {}
-        requests: list[tuple[str, str, str, tuple]] = []
-        for name, _ in results:
-            d = _declared(m, name)
-            request: tuple
-            if d.get("statistic") == "std":
-                request = (d["output"], "std")
-            elif d.get("statistic") == "quantile":
-                request = (d["output"], "quantile", float(d["q"]))
-            elif d.get("with_respect_to"):
-                request = (d["output"], "derivative", d["with_respect_to"])
-            else:
-                request = (d["output"], "values")
-            wanted.setdefault(d["model"], []).append(request)
-            requests.append((name, d["model"], d["output"], request))
-        coordinate = _declared(m, "coordinates") if m._mesh_kind else {}
-        if coordinate.get("model"):
-            wanted.setdefault(coordinate["model"], []).append((coordinate["output"], "values"))
-        outputs: dict[str, dict] = {}
-        for model_id, asks in wanted.items():
-            d = _declared(m, f"models/{model_id}")
-            cls = _REGISTRY.get(d["type"])
-            if cls is None:
-                raise GamutError("", f"the model {model_id} is of type {d['type']!r}, whose "
-                                      "software is not registered here (register_model_type)")
-            model = cls.load(m.model_numbers(model_id))
-            reads = d["inputs"].split()
-            given = {k: table[k] for k in reads if k in table}
-            missing = [k for k in reads if k not in given]
-            if missing:
-                raise GamutError("E2", f"the model {model_id} reads {missing[0]}, which was not "
-                                        "given")
-            outputs[model_id] = model.call(given, asks)
-        # The data file.
-        out_path = path
-        temporary = path is None
-        directory = tempfile.TemporaryDirectory(prefix="gamut-evaluate-") if temporary else None
-        if directory is not None:
+        labels, params = set(m.names("labels")), set(m.names("parameters"))
+        n = len(np.atleast_1d(np.asarray(next(iter(inputs.values()))))) if inputs else 0
+        # The core checks the inputs, runs the built-in models and writes the
+        # answer; this layer converts values and calls the registered types.
+        out_path, temporary, directory = path, path is None, None
+        if temporary:
+            directory = tempfile.TemporaryDirectory(prefix="gamut-evaluate-")
             out_path = os.path.join(directory.name, "result.gamut")
-        writer = ctypes.c_void_p()
+        ev = ctypes.c_void_p()
         try:
-            call("gamut_evaluate_begin", m._handle(), b(out_path), ctypes.byref(writer))
+            try:
+                call("gamut_evaluation_begin", m._handle(), n, b(out_path), ctypes.byref(ev))
+                for name, given in inputs.items():
+                    if name in labels:
+                        names = [str(x) for x in np.atleast_1d(np.asarray(given))]
+                        call("gamut_evaluation_names", ev, b(name), _lib.string_array(names), len(names))
+                    elif name not in params:          # the core says what it is not
+                        call("gamut_evaluation_values", ev, b(name), _lib.GAMUT_FLOAT64, None, 0)
+                    else:
+                        int64 = m.describe(name).get("dtype") == "int64"
+                        col = np.ascontiguousarray(np.atleast_1d(
+                            _lib.int64_exactly(given, name) if int64 else _lib.float64_exactly(given, name)))
+                        call("gamut_evaluation_values", ev, b(name), _lib.dtype_code(col),
+                             col.ctypes.data_as(ctypes.c_void_p), col.size)
+                if coordinates is not None:
+                    pts = np.ascontiguousarray(_lib.float64_exactly(coordinates, "coordinates"))
+                    call("gamut_evaluation_coordinates", ev, _lib.GAMUT_FLOAT64,
+                         pts.ctypes.data_as(ctypes.c_void_p), pts.size)
+                found, models = _lib.lists_out("gamut_evaluation_ready", 2, ev)
+                for finding in found:
+                    warnings.warn(finding, stacklevel=2)
+                for model_id in models:
+                    _run(m, ev, model_id)
+                call("gamut_evaluation_finish", ev)
+            finally:
+                # Freed once, before the folder goes: an unfinished evaluation
+                # removes its file, and Windows removes no folder holding an
+                # open file.
+                _lib._lib.gamut_evaluation_free(ev)
         except BaseException:
-            if directory is not None:
-                directory.cleanup()
-            raise
-        w = Study(writer, out_path, writing=True)
-        w._mesh_kind, w._per = m._mesh_kind, m._per
-        try:
-            columns: dict[str, Any] = {k: table[k] for k in params}
-            columns.update({k: label_names[k] for k in labels})
-            fields: dict[str, Any] = {}
-            for name, model_id, output, request in requests:
-                record = outputs[model_id].get(output)
-                if record is None:
-                    raise GamutError("", f"the model {model_id} gave no output {output}")
-                kind = request[1]
-                if kind == "values":
-                    values = record.get("values")
-                elif kind == "std":
-                    values = record.get("std")
-                elif kind == "quantile":
-                    values = record.get("quantiles", {}).get(request[2])
-                else:
-                    values = record.get("derivatives", {}).get(request[2])
-                if values is None:
-                    raise GamutError("", f"the model {model_id} gave no {kind} for {output}")
-                values = np.asarray(values)
-                if values.ndim == 1:
-                    columns[name] = values
-                else:
-                    fields[name] = values.reshape(n, -1)
-            points = None
-            if m._mesh_kind and m._per == "run":
-                if coordinate.get("model"):
-                    pts = outputs[coordinate["model"]][coordinate["output"]]["values"]
-                elif coordinates is not None:
-                    pts = _lib.float64_exactly(coordinates, "coordinates")
-                else:
-                    raise GamutError("E2", "this model file's geometry changes per run; give "
-                                            "coordinates")
-                points = [np.asarray(pts[i]) for i in range(n)]
-            w.add_runs(columns, fields=fields, points=points)
-            w.close()
-        except BaseException:
-            # A failed evaluation leaves no file behind.
-            w._abandon(remove=True)
             if directory is not None:
                 directory.cleanup()
             raise

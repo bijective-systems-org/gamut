@@ -772,17 +772,6 @@ void two_sum(double a, double b, double* s, double* e) {
   *e = (a - (*s - v)) + (b - v);
 }
 
-// -1, 0 or 1 as the int64 v is below, at or above the finite b, exactly.
-int compare(std::int64_t v, double b) {
-  if (b >= 9223372036854775808.0) return -1;
-  if (b < -9223372036854775808.0) return 1;
-  const double whole = std::trunc(b);
-  const auto i = static_cast<std::int64_t>(whole);   // exact: |whole| <= 2^63, -2^63 included
-  if (v != i) return v < i ? -1 : 1;
-  const double fraction = b - whole;                  // exact
-  return fraction > 0 ? -1 : fraction < 0 ? 1 : 0;
-}
-
 // v - b for an int64 v and a finite b, rounded once to the nearest double
 // (a double holds every int64 only to 2^53). v is split into its bits above
 // the lowest ten and those ten, each exact as a double, and the sum is
@@ -804,6 +793,16 @@ double minus(std::int64_t v, double b) {
 }
 
 }  // namespace
+
+int compare_int64(std::int64_t v, double b) {
+  if (b >= 9223372036854775808.0) return -1;
+  if (b < -9223372036854775808.0) return 1;
+  const double whole = std::trunc(b);
+  const auto i = static_cast<std::int64_t>(whole);   // exact: |whole| <= 2^63, -2^63 included
+  if (v != i) return v < i ? -1 : 1;
+  const double fraction = b - whole;                  // exact
+  return fraction > 0 ? -1 : fraction < 0 ? 1 : 0;
+}
 
 void Reader::outside(const std::string& name, const Selection& runs, double* out,
                      std::size_t out_bytes) const {
@@ -827,8 +826,8 @@ void Reader::outside(const std::string& name, const Selection& runs, double* out
     // Inside or outside is decided exactly; then how far.
     for (std::size_t i = 0; i < values.size(); ++i) {
       const std::int64_t v = values[i];
-      out[i] = compare(v, *p->lower) < 0   ? minus(v, *p->lower)
-               : compare(v, *p->upper) > 0 ? minus(v, *p->upper)
+      out[i] = compare_int64(v, *p->lower) < 0   ? minus(v, *p->lower)
+               : compare_int64(v, *p->upper) > 0 ? minus(v, *p->upper)
                                            : 0.0;
     }
     return;

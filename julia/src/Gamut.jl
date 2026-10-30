@@ -1083,118 +1083,86 @@ length. Without `path` the file is temporary, removed on close.
 """
 function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=nothing)
     open(model_path) do m
-        m.kind == "model" || throw(GamutError("E16", "$model_path is not a model file"))
         params, labels = names(m, "parameters"), names(m, "labels")
         given = Dict{String,Any}(pairs_of(inputs))
-        lengths = unique(length(v) for v in values(given))
-        length(lengths) == 1 || throw(GamutError("E5", "every input needs the same number of rows"))
-        n = lengths[1]
-        unknown = setdiff(keys(given), vcat(params, labels))
-        isempty(unknown) || throw(GamutError("E2", "$(first(sort(collect(unknown)))) is not an input of this model"))
-        tbl = Dict{String,Any}()
-        label_names = Dict{String,Vector{String}}()
-        for name in params
-            haskey(given, name) || throw(GamutError("E2", "the input $name is missing"))
-            d = declared(m, name)
-            col = get(d, "dtype", "") == "int64" ? Vector{Int64}(given[name]) : float64_exactly(given[name], name)
-            lo, hi = parse(Float64, d["lower"]), parse(Float64, d["upper"])
-            i = findfirst(x -> x < lo || x > hi, col)
-            i === nothing || @warn "W4: $name is outside the model's domain [$lo, $hi] at row $i"
-            tbl[name] = col
-        end
-        for name in labels
-            haskey(given, name) || throw(GamutError("E2", "the input $name is missing"))
-            out = Ref{Ptr{Cvoid}}(C_NULL)
-            @mes gamut_table (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(m) cs(declared(m, name)["category"]) out
-            entries = take_strings(out[])
-            names_given = String[string(x) for x in given[name]]
-            codes = Int64[]
-            for g in names_given
-                i = findfirst(==(g), entries)
-                i === nothing && throw(GamutError("E9", "$name: $(repr(g)) is not in the model's table"))
-                push!(codes, i - 1)
-            end
-            tbl[name] = codes
-            label_names[name] = names_given
-        end
-        if coordinates !== nothing
-            tbl["coordinates"] = float64_exactly(coordinates, "coordinates")
-        elseif !isempty(m.mesh_kind) && m.per == "fixed"
-            pts = get_points(m)
-            tbl["coordinates"] = permutedims(repeat(reshape(pts, size(pts)..., 1), 1, 1, n), (3, 1, 2))
-        end
-        results = vcat(names(m, "scalars"), names(m, "node_fields"), names(m, "cell_fields"))
-        wanted = Dict{String,Vector{Any}}()
-        requests = Any[]
-        for name in results
-            d = declared(m, name)
-            st, wrt = get(d, "statistic", ""), get(d, "with_respect_to", "")
-            req = st == "std" ? (d["output"], "std") :
-                  st == "quantile" ? (d["output"], "quantile", parse(Float64, d["q"])) :
-                  !isempty(wrt) ? (d["output"], "derivative", wrt) : (d["output"], "values")
-            push!(get!(wanted, d["model"], Any[]), req)
-            push!(requests, (name, d["model"], d["output"], req))
-        end
-        coordinate = isempty(m.mesh_kind) ? Dict{String,String}() : declared(m, "coordinates")
-        if !isempty(get(coordinate, "model", ""))
-            push!(get!(wanted, coordinate["model"], Any[]), (coordinate["output"], "values"))
-        end
-        outputs = Dict{String,Any}()
-        for (id, asks) in wanted
-            d = declared(m, "models/$id")
-            loader = get(LOADERS, d["type"], nothing)
-            loader === nothing && throw(GamutError("", "the model $id is of type $(repr(d["type"])), " *
-                                                        "whose software is not registered here"))
-            model = loader(model_numbers(m, id))
-            reads = split(d["inputs"])
-            missing_ = [k for k in reads if !haskey(tbl, k)]
-            isempty(missing_) || throw(GamutError("E2", "the model $id reads $(missing_[1]), which was not given"))
-            outputs[id] = call(model, Dict(String(k) => tbl[k] for k in reads), asks)
-        end
+        n = isempty(given) ? 0 : length(first(values(given)))
         out_path = path === nothing ? tempname() * ".gamut" : String(path)
-        w = Ref{Ptr{Cvoid}}(C_NULL)
-        @mes gamut_evaluate_begin (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}) handle(m) cs(out_path) w
-        ws = Study(w[], out_path, true, m.mesh_kind, m.per)
+        # The core checks the inputs, runs the built-in models and writes the
+        # answer; this layer converts values and calls the registered types.
+        ev = Ref{Ptr{Cvoid}}(C_NULL)
+        @mes gamut_evaluation_begin (Ptr{Cvoid}, Int64, Cstring, Ref{Ptr{Cvoid}}) handle(m) n cs(out_path) ev
         try
-            columns = Dict{String,Any}(k => tbl[k] for k in params)
-            for k in labels
-                columns[k] = label_names[k]
-            end
-            fields = Dict{String,Any}()
-            scalars = names(m, "scalars")
-            for (name, id, output, req) in requests
-                record = get(outputs[id], output, nothing)
-                record === nothing && throw(GamutError("", "the model $id gave no output $output"))
-                kind = req[2]
-                v = kind == "values" ? get(record, "values", nothing) :
-                    kind == "std" ? get(record, "std", nothing) :
-                    kind == "quantile" ? get(get(record, "quantiles", Dict()), req[3], nothing) :
-                    get(get(record, "derivatives", Dict()), req[3], nothing)
-                v === nothing && throw(GamutError("", "the model $id gave no $kind for $output"))
-                if name in scalars
-                    columns[name] = vec(v)
+            for (name, v) in given
+                if name in labels
+                    strs, ptrs = cstrings(String[string(x) for x in v])
+                    GC.@preserve strs @mes gamut_evaluation_names (Ptr{Cvoid}, Cstring, Ptr{Ptr{UInt8}}, Int64) ev[] cs(name) ptrs length(ptrs)
+                elseif !(name in params)    # the core refuses the name (E2) before its values
+                    @mes gamut_evaluation_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64) ev[] cs(name) 6 C_NULL 0
                 else
-                    fields[name] = reshape(v, n, :)
+                    int64 = get(describe(m, name), "dtype", "") == "int64"
+                    col = int64 ? Vector{Int64}(vec(v)) : Vector{Float64}(float64_exactly(vec(v), name))
+                    @mes gamut_evaluation_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64) ev[] cs(name) (int64 ? 4 : 6) col length(col)
                 end
             end
-            points = nothing
-            if !isempty(m.mesh_kind) && m.per == "run"
-                pts = !isempty(get(coordinate, "model", "")) ?
-                      outputs[coordinate["model"]][coordinate["output"]]["values"] :
-                      coordinates !== nothing ? float64_exactly(coordinates, "coordinates") :
-                      throw(GamutError("E2", "this model file's geometry changes per run; give coordinates"))
-                points = [pts[i, :, :] for i in 1:n]
+            if coordinates !== nothing
+                pts = c_order(float64_exactly(coordinates, "coordinates"))
+                @mes gamut_evaluation_coordinates (Ptr{Cvoid}, Cint, Ptr{Cvoid}, Int64) ev[] 6 pts length(pts)
             end
-            add_runs!(ws, columns; fields, points)
-        catch
-            # A failed evaluation leaves no file behind.
-            abandon(ws, true)
-            rethrow()
+            w, ids = Ref{Ptr{Cvoid}}(C_NULL), Ref{Ptr{Cvoid}}(C_NULL)
+            @mes gamut_evaluation_ready (Ptr{Cvoid}, Ref{Ptr{Cvoid}}, Ref{Ptr{Cvoid}}) ev[] w ids
+            found, models = take_strings(w[]), take_strings(ids[])
+            for finding in found
+                @warn finding
+            end
+            for id in models
+                run_model(m, ev[], id)
+            end
+            @mes gamut_evaluation_finish (Ptr{Cvoid},) ev[]
+        finally
+            ccall(sym(:gamut_evaluation_free), Cvoid, (Ptr{Cvoid},), ev[])
         end
-        close(ws)
         r = open(out_path)
         r.remove_on_close = path === nothing
         return r
+    end
+end
+
+# An input as a model reads it, from the evaluation.
+function evaluation_input(ev::Ptr{Cvoid}, name)
+    code, rank, shape = Ref{Cint}(0), Ref{Cint}(0), zeros(Int64, 3)
+    @mes gamut_evaluation_input_info (Ptr{Cvoid}, Cstring, Ref{Cint}, Ref{Cint}, Ptr{Int64}, Cint) ev cs(name) code rank shape 3
+    dims = shape[1:rank[]]
+    buf = Vector{code[] == 4 ? Int64 : Float64}(undef, prod(dims))
+    @mes gamut_evaluation_input (Ptr{Cvoid}, Cstring, Ptr{Cvoid}, Int64) ev cs(name) buf sizeof(buf)
+    return from_c_order(buf, dims)
+end
+
+# Calls one model of a registered type with what it reads, and gives the
+# evaluation each answer it is asked for.
+function run_model(m::Study, ev::Ptr{Cvoid}, id)
+    d = declared(m, "models/$id")
+    loader = get(LOADERS, d["type"], nothing)
+    loader === nothing && throw(GamutError("", "the model $id is of type $(repr(d["type"])), " *
+                                                "whose software is not registered here"))
+    model = loader(model_numbers(m, id))
+    reads = split(d["inputs"])
+    o, k, y = Ref{Ptr{Cvoid}}(C_NULL), Ref{Ptr{Cvoid}}(C_NULL), Ref{Ptr{Cvoid}}(C_NULL)
+    @mes gamut_evaluation_requests (Ptr{Cvoid}, Cstring, Ref{Ptr{Cvoid}}, Ref{Ptr{Cvoid}}, Ref{Ptr{Cvoid}}) ev cs(id) o k y
+    outputs, kinds, keys_ = take_strings(o[]), take_strings(k[]), take_strings(y[])
+    wanted = Any[kind == "quantile" ? (out, kind, parse(Float64, key)) :
+                 kind == "derivative" ? (out, kind, key) : (out, kind)
+                 for (out, kind, key) in zip(outputs, kinds, keys_)]
+    got = call(model, Dict(String(r) => evaluation_input(ev, r) for r in reads), wanted)
+    for ((out, kind, key), ask) in zip(zip(outputs, kinds, keys_), wanted)
+        record = get(got, out, nothing)
+        record === nothing && throw(GamutError("", "the model $id gave no output $out"))
+        v = kind == "values" ? get(record, "values", nothing) :
+            kind == "std" ? get(record, "std", nothing) :
+            kind == "quantile" ? get(get(record, "quantiles", Dict()), ask[3], nothing) :
+            get(get(record, "derivatives", Dict()), key, nothing)
+        v === nothing && throw(GamutError("", "the model $id gave no $kind for $out"))
+        flat = numbers(c_order(v))      # as given: the core converts it as written values
+        GC.@preserve flat @mes gamut_evaluation_answer (Ptr{Cvoid}, Cstring, Cstring, Cstring, Cstring, Cint, Ptr{Cvoid}, Int64) ev cs(id) cs(out) cs(kind) cs(key) DTYPE[eltype(flat)] pointer(flat) length(flat)
     end
 end
 
