@@ -116,18 +116,20 @@ with gamut.open("uncertain.gamut") as study:
 ```matlab
 study = gamut.open('uncertain.gamut');
 quantiles = containers.Map('KeyType', 'double', 'ValueType', 'char');
+derivatives = containers.Map();
 names = study.names('scalars');
 for k = 1:numel(names)                          % what describes cl, read from each declaration
     d = study.describe(names{k});
     if ~isfield(d, 'of') || ~strcmp(d.of, 'cl'), continue; end
-    if isfield(d, 'with_respect_to'), derivative = names{k};
+    if isfield(d, 'with_respect_to'), derivatives(d.with_respect_to) = names{k};
+    elseif ~isfield(d, 'statistic'), continue
     elseif strcmp(d.statistic, 'std'), spreadName = names{k};
-    else, quantiles(str2double(d.q)) = names{k};
+    elseif strcmp(d.statistic, 'quantile'), quantiles(str2double(d.q)) = names{k};
     end
 end
 fprintf('the std of cl: %s\n', spreadName);
 fprintf('its 0.05 and 0.95 quantiles: %s %s\n', quantiles(0.05), quantiles(0.95));
-fprintf('its derivative with respect to alpha: %s\n', derivative);
+fprintf('its derivative with respect to alpha: %s\n', derivatives('alpha'));
 low = study.getScalar(quantiles(0.05));
 high = study.getScalar(quantiles(0.95));
 fprintf('90 %% band at 8 degrees: %.3f to %.3f\n', low(end), high(end));
@@ -156,18 +158,19 @@ end
 
 ```cpp
 study = gamut::open("uncertain.gamut");
-std::string spread_name, derivative;
+std::string spread_name;
 std::map<double, std::string> quantiles;
+std::map<std::string, std::string> derivatives;
 for (const std::string& name : study.names("scalars")) {  // what describes cl, read from each declaration
   auto d = study.describe(name);
   if (d["of"] != "cl") continue;
-  if (!d["with_respect_to"].empty()) derivative = name;
+  if (!d["with_respect_to"].empty()) derivatives[d["with_respect_to"]] = name;
   else if (d["statistic"] == "std") spread_name = name;
-  else quantiles[std::stod(d["q"])] = name;
+  else if (d["statistic"] == "quantile") quantiles[std::stod(d["q"])] = name;
 }
 std::printf("the std of cl: %s\n", spread_name.c_str());
 std::printf("its 0.05 and 0.95 quantiles: %s %s\n", quantiles[0.05].c_str(), quantiles[0.95].c_str());
-std::printf("its derivative with respect to alpha: %s\n", derivative.c_str());
+std::printf("its derivative with respect to alpha: %s\n", derivatives["alpha"].c_str());
 const std::vector<double> p05 = study.get_scalar(quantiles[0.05]), p95 = study.get_scalar(quantiles[0.95]);
 std::printf("90 %% band at 8 degrees: %.3f to %.3f\n", p05.back(), p95.back());
 ```
