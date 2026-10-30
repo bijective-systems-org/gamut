@@ -896,9 +896,12 @@ int gamut_related(const gamut_file* f, const char* name, gamut_strings** kinds, 
         }
       }
     }
-    *kinds = strings(std::move(t));
-    *keys = strings(std::move(k));
-    *names = strings(std::move(n));
+    // Every list made before any is handed over, so a failure hands over none.
+    std::unique_ptr<gamut_strings> kt(strings(std::move(t))), kk(strings(std::move(k))),
+        kn(strings(std::move(n)));
+    *kinds = kt.release();
+    *keys = kk.release();
+    *names = kn.release();
     return 0;
   } catch (...) {
     return fail(err);

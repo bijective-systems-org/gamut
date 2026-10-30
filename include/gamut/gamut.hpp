@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <initializer_list>
 #include <map>
 #include <optional>
@@ -397,7 +398,7 @@ class Study {
     Related out;
     for (size_t i = 0; i < kinds.size(); ++i) {
       if (kinds[i] == "std") out.std_dev = names[i];
-      else if (kinds[i] == "quantile") out.quantiles[std::stod(keys[i])] = names[i];
+      else if (kinds[i] == "quantile") out.quantiles[std::strtod(keys[i].c_str(), nullptr)] = names[i];
       else if (kinds[i] == "derivative") out.derivatives[keys[i]] = names[i];
       else if (kinds[i] == "vector") out.vector.push_back(names[i]);
     }
