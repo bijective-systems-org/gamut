@@ -4,7 +4,8 @@ MATLAB reads and writes the same files with the same calls, in MATLAB's
 spelling: methods on a study object in camelCase, options as name–value
 pairs, declarations as structs, and positions counted from 1. The toolbox,
 `Gamut.mltbx`, installs it with no compiler ([installing](../install.md#matlab)).
-Every example in the [examples](../guide/README.md) has a MATLAB tab.
+An example written in MATLAB has a MATLAB tab, quoted from a program in
+`examples/matlab`; the [examples](../guide/README.md) say which are.
 
 ## The same calls
 

@@ -9,8 +9,8 @@ use `gamut.h` directly. Both are installed with the library
 ([installing](../install.md#c-and-c)); with CMake, `find_package(gamut)`
 and `gamut::gamut` are all a project needs.
 
-Every example in the [examples](../guide/README.md) has a C++ tab, quoted
-from a program in `examples/cpp`, and
+An example written in C++ has a C++ tab, quoted from a program in
+`examples/cpp`; the [examples](../guide/README.md) say which are.
 [`nearest.cpp`](https://github.com/bijective-systems-org/gamut/blob/main/examples/cpp/nearest.cpp)
 evaluates a model fitted in Python. Without CMake, one builds as
 `c++ -std=c++17 run_table.cpp -I<prefix>/include -L<prefix>/lib -lgamut

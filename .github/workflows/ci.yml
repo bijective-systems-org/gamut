@@ -128,11 +128,11 @@ jobs:
           # The README's sweep prints the README's line.
           (cd "$RUNNER_TEMP/jexample/sweep" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/sweep.jl") | tee "$RUNNER_TEMP/jsweep.txt"
           grep -qxF "$(grep -m1 '^lift of the runs that converged:' README.md)" "$RUNNER_TEMP/jsweep.txt"
-          # The nearest model fitted in Python evaluates in Julia to the guide's lines.
+          # The nearest model fitted in Python evaluates in Julia to the lift the
+          # models page shows, and to what the Julia page shows.
           (cd "$RUNNER_TEMP/jexample/models" && "$RUNNER_TEMP/venv-3.12/bin/python" "$GITHUB_WORKSPACE/examples/07_models.py" > /dev/null)
-          (cd "$RUNNER_TEMP/jexample/models" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/nearest.jl") | tee "$RUNNER_TEMP/jnearest.txt"
-          grep -qxF "$(grep -m1 "^the nearest run's lift" docs/guide/07-models.md)" "$RUNNER_TEMP/jnearest.txt"
-          grep -qxF "$(grep -m1 "^degrees outside the fitted range" docs/reference/julia.md)" "$RUNNER_TEMP/jnearest.txt"
+          (cd "$RUNNER_TEMP/jexample/models" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/nearest.jl") | tee "$RUNNER_TEMP/jprinted/nearest.txt"
+          grep -qxF "$(grep -m1 "^the nearest run's lift" docs/guide/07-models.md)" "$RUNNER_TEMP/jprinted/nearest.txt"
           "$RUNNER_TEMP/venv-3.12/bin/python" python/tests/_pages.py julia "$RUNNER_TEMP/jprinted"
           julia --project="$RUNNER_TEMP/jcorpus" -e 'using Pkg; Pkg.add(name="JSON", version="1.10"); Pkg.develop(path="julia")'
           julia --project="$RUNNER_TEMP/jcorpus" julia/test/check_corpus.jl "$RUNNER_TEMP/corpus" | tee "$RUNNER_TEMP/jcorpus.txt"

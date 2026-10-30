@@ -43,7 +43,8 @@ That node k is the same point in every run is the producer's claim: a
 solver run on one mesh, a fixed-topology mesher, or a morphing tool such
 as TopoLink establishes it. The file records it structurally, by storing
 the node count and connectivity once, and identifies the mesh by a digest
-of them, its `support_id`, so a model and the study it predicts, or two
+of them (and of the coordinates, for a point cloud whose coordinates are
+fixed), its `support_id`, so a model and the study it predicts, or two
 studies combined, can be checked to share a mesh.
 
 ## Mesh labels

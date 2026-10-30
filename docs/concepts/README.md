@@ -78,4 +78,4 @@ model runs in every language.
 
 **Checked when written.** Every rule is numbered. A writer refuses input
 that would break one, naming the rule, and `gamut validate` reports every
-rule a file breaks ([rules and validation](validation.md)).
+finding at once ([rules and validation](validation.md)).

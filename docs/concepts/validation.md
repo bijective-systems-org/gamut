@@ -2,11 +2,12 @@
 
 Every rule of the format is numbered in the
 [specification](https://github.com/bijective-systems-org/gamut/blob/main/SPEC.md#16-validation).
-An **error** (`E1` to `E26`) makes a file invalid: units that do not
-parse, a name used twice, a label code outside its table, cells that
-point at a node the mesh does not have. A **warning** (`W1` to `W11`)
-says what a reader should know about a valid file: runs that failed,
-results that are missing, a parameter outside its bounds.
+An **error** (`E`) makes a file invalid: units that do not parse, a name
+used twice, a label code outside its table, cells that point at a node
+the mesh does not have. A **warning** (`W`) says what a reader should
+know about a valid file: runs that failed, results that are missing, a
+parameter outside its bounds. One numbered rule is neither: E25 is the
+refusal to append to a valid file whose dimensions cannot grow.
 
 ## Checked when written
 
@@ -18,7 +19,7 @@ where they are made, not when someone else opens the file.
 ## Checked when received
 
 `gamut validate` checks a file from anywhere, written by any tool, and
-reports every rule it breaks, not only the first:
+reports every finding at once, not only the first:
 
 ```console
 $ gamut validate polar.gamut
@@ -32,7 +33,9 @@ no errors, no warnings
 
 The run that failed in [the first example](../guide/01-run-tables.md) is
 reported, so whoever receives the file sees it without being told. A row
-in a finding is a position in the file, counted from 0. `validate` is
+in a finding is a position in the file, counted from 0. An array of more
+than 67,108,864 values is reported (W11) rather than checked value by
+value. `validate` is
 also a call in every language, and `gamut validate --json` gives the
 findings to a script. Readers make the checks a read needs on what they
 read, within the limits in [files from outside](../security.md).

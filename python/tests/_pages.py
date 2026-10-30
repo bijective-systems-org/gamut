@@ -57,10 +57,9 @@ def contiguous(part: str, whole: str) -> bool:
 
 
 # The programs a page is made from in each language but Python, whose
-# example the page's number names. Its code blocks quote them; on a page
-# with language tabs, an output block outside the tabs is what every
-# language's program prints, and one inside a tab is what that language's
-# prints.
+# example the page's number names. Its code blocks quote them, and its
+# output blocks are what they print (see `outputs`). Every program a lane
+# checks must have run, except the files a page quotes that print nothing.
 PROGRAMS = {
     "guide/01-run-tables.md": {"matlab": ["matlab/run_table.m"], "julia": ["julia/run_table.jl"],
                                "cpp": ["cpp/run_table.cpp"]},
@@ -72,44 +71,57 @@ PROGRAMS = {
     "reference/julia.md": {"julia": ["julia/nearest.jl"]},
     "reference/c-and-cpp.md": {"cpp": ["cpp/nearest.cpp"], "c": ["c/one_mesh.c"]},
 }
+QUOTED_ONLY = {"matlab/Polynomial.m"}       # a class the model example uses
 TABS = {"Python": "python", "MATLAB": "matlab", "Julia": "julia", "C++": "cpp", "C": "c"}
+CODE = set(TABS.values())
 
 
 def outputs(text: str, language: str) -> list[str]:
-    """The output blocks of a page with language tabs that `language`'s
-    program prints: those outside the tabs, and those in its own tab."""
-    shown, tab, block = [], None, None
+    """The output blocks of a page that `language`'s program prints. An
+    output block is printed by the code just before it: inside a language
+    tab, that language's; after a set of tabs, every language in the set;
+    elsewhere, the language of the last code block."""
+    shown: list[str] = []
+    owners: set[str] = set()    # who prints the next output block outside tabs
+    tab = None                  # the open tab's language
+    tabs: set[str] | None = None  # the languages of the set of tabs being read
+    fence, block = None, []
     for line in text.split("\n"):
-        if block is not None:
+        if fence is not None:
             if line == "```":
-                if tab in (None, language):
+                if fence == "text" and language in ({tab} if tab else owners):
                     shown.append("\n".join(block) + "\n")
-                block = None
+                elif fence in CODE and tab is None:
+                    owners = {fence}
+                fence = None
             else:
                 block.append(line)
+        elif line.startswith("```"):
+            fence, block = line[3:].strip(), []
+            if tabs is not None and tab is None:    # the set of tabs has ended
+                owners, tabs = tabs, None
         elif line.startswith("/// tab | "):
             tab = TABS[line[len("/// tab | "):].strip()]
+            tabs = (tabs or set()) | {tab}
         elif line == "///":
             tab = None
-        elif line == "```text":
-            block = []
+        elif line.strip() and tabs is not None and tab is None:
+            owners, tabs = tabs, None
     return shown
-
-
-def tabbed(text: str) -> bool:
-    return "\n/// tab | " in text
 
 
 def check(language: str, folder: pathlib.Path) -> list[str]:
     """What is wrong with the output of `language`'s programs, kept in
-    `folder` as <name>.txt, against the tabbed pages they make."""
+    `folder` as <name>.txt, against the pages that show them."""
     problems = []
     for page, programs in PROGRAMS.items():
-        text = (DOCS / page).read_text(encoding="utf-8")
-        if language not in programs or not tabbed(text):
+        if language not in programs:
             continue
+        text = (DOCS / page).read_text(encoding="utf-8")
         printed = ""
         for program in programs[language]:
+            if program in QUOTED_ONLY:
+                continue
             kept = folder / (pathlib.Path(program).stem + ".txt")
             if not kept.is_file():
                 problems.append(f"{page}: {program} was not run (no {kept})")

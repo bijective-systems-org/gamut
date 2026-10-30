@@ -126,13 +126,14 @@ study.close();
 /// tab | Julia
 
 ```julia
-for mach in (0.6, 0.7, 0.8), alpha in -2.0:2.0:8.0
-    cl = 0.11 * alpha / sqrt(1 - mach^2)          # stand-in for a solver
-    cd = 0.008 + 0.04 * cl^2
-    failed = mach == 0.8 && alpha == 8
-    Gamut.add_run!(study, Dict("mach" => mach, "alpha" => alpha,
-                               "status" => failed ? "failed" : "converged",
-                               "cl" => failed ? NaN : cl, "cd" => failed ? NaN : cd))
+    for mach in (0.6, 0.7, 0.8), alpha in -2.0:2.0:8.0
+        cl = 0.11 * alpha / sqrt(1 - mach^2)          # stand-in for a solver
+        cd = 0.008 + 0.04 * cl^2
+        failed = mach == 0.8 && alpha == 8
+        Gamut.add_run!(study, Dict("mach" => mach, "alpha" => alpha,
+                                   "status" => failed ? "failed" : "converged",
+                                   "cl" => failed ? NaN : cl, "cd" => failed ? NaN : cd))
+    end
 end
 ```
 

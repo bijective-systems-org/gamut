@@ -4,8 +4,9 @@ Julia reads and writes the same files with the same calls, in Julia's
 spelling: functions in the `Gamut` module taking the study first,
 declarations as `Dict`s or named tuples, `do` blocks that close the file,
 and positions counted from 1. The package needs the core library
-([installing](../install.md#julia)). Every example in the
-[examples](../guide/README.md) has a Julia tab; run one from a working
+([installing](../install.md#julia)). An example written in Julia has a
+Julia tab, quoted from a program in `examples/julia`; the
+[examples](../guide/README.md) say which are. Run one from a working
 folder with `julia --project=<checkout>/julia <checkout>/examples/julia/run_table.jl`.
 
 ## The same calls

@@ -13,7 +13,7 @@ import sys
 
 import pytest
 
-from _pages import EXAMPLES, GUIDE, blocks, contiguous, matches, outputs, sessions, tabbed
+from _pages import EXAMPLES, GUIDE, blocks, contiguous, matches, outputs, sessions
 from gamut import cli
 
 SCRIPTS = sorted(p for p in EXAMPLES.glob("[0-9][0-9]_*.py")) if EXAMPLES.is_dir() else []
@@ -41,7 +41,7 @@ def test_example_runs(script, tmp_path, capsys, monkeypatch):
         assert f"examples/{script.name}" in text, f"{page.name} names its script"
         for block in blocks(text, "python"):
             assert contiguous(block, source), f"{page.name} quotes code not in {script.name}:\n{block}"
-        for block in outputs(text, "python") if tabbed(text) else blocks(text, "text"):
+        for block in outputs(text, "python"):
             assert contiguous(block, result.stdout), \
                 f"{page.name} shows output {script.name} does not print:\n{block}"
         monkeypatch.chdir(tmp_path)

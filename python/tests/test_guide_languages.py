@@ -67,7 +67,6 @@ def test_examples_print_what_their_page_shows(tmp_path):
                                 timeout=120)
         assert result.returncode == 0, f"{source.name}: {result.stderr}"
         printed[source] = result.stdout
-    # The pages with language tabs, one language at a time.
     for language, suffix in (("cpp", ".cpp"), ("c", ".c")):
         kept = tmp_path / f"printed_{language}"
         kept.mkdir()
@@ -76,8 +75,3 @@ def test_examples_print_what_their_page_shows(tmp_path):
                 (kept / f"{source.stem}.txt").write_text(out, encoding="utf-8")
         problems = check(language, kept)
         assert not problems, "\n".join(problems)
-    # The C++ and C page, which shows both.
-    text = (DOCS / "reference" / "c-and-cpp.md").read_text(encoding="utf-8")
-    for block in blocks(text, "text"):
-        assert any(contiguous(block, out) for out in printed.values()), \
-            f"the page shows output no example prints:\n{block}"

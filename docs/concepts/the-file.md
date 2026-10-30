@@ -11,10 +11,10 @@ convention.
 
 ## The layout
 
-The run table is at the root: one dataset per parameter, label, scalar
-and constant, each over the `row` dimension, with its units and role as
-attributes. A label stores its codes there and its names under
-`categories`. A mesh is the group `mesh`, holding the coordinates, the
+The run table is at the root: one dataset per parameter, label and
+scalar, each over the `row` dimension, with its role and, but for a
+label, its units as attributes. A label stores its codes there and its
+names under `categories`; a constant is a dataset of one value. A mesh is the group `mesh`, holding the coordinates, the
 cells in VTK's arrays (types, offsets, connectivity), the mesh labels,
 and the fields. The main arrays of the cylinder of
 [example 2](../guide/02-one-mesh.md), as h5py lists them:
@@ -37,16 +37,17 @@ per model holding its numbers.
 
 ## Storage
 
-Every array is chunked along the dimension that grows, so runs can be
-appended in place, a batch at a time, without rewriting what is there.
-Arrays are compressed with gzip and shuffle, level 1 by default, filters
-every HDF5 build has, MATLAB's and Julia's included. A file keeps track of
+Every array that grows with the runs is chunked along that dimension, so
+runs can be appended in place, a batch at a time, without rewriting what
+is there. Chunked arrays are compressed with gzip and shuffle, level 1 by
+default, filters every HDF5 build has, MATLAB's and Julia's included. A file keeps track of
 the space a rewritten chunk leaves free, so a file appended one run at a
 time stays the size of its data: 3,000 single-row appends of 20 columns,
 the file reopened for each, give 0.49 MB, against 32 MB without.
 
-Values are stored at the precision they were given, float32 or float64,
-and converted only when asked. A writer may round a result's mantissa to
+Results and coordinates are stored at the precision they were given,
+float32 or float64, and converted only when asked; parameters are float64,
+or int64 for counts. A writer may round a result's mantissa to
 fewer bits, recording how many it kept as netCDF-C does for the same
 algorithm; it is off by default.
 
