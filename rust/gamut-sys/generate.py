@@ -60,8 +60,11 @@ def main() -> None:
            ""]
     consts, structs, opaque, functions = [], [], [], []
     for enum in re.findall(r"enum\s*\{(.*?)\}\s*;", text, flags=re.S):
-        for name, value in re.findall(r"(\w+)\s*=\s*(-?\d+)", enum):
-            consts.append(f"pub const {name}: c_int = {value};")
+        for item in filter(None, (i.strip() for i in enum.split(","))):
+            m = re.fullmatch(r"(\w+)\s*=\s*(-?\d+)", item)
+            if not m:
+                sys.exit(f"generate.py: an enumerator needs a literal value: {item!r}")
+            consts.append(f"pub const {m.group(1)}: c_int = {m.group(2)};")
     text = re.sub(r"enum\s*\{.*?\}\s*;", "", text, flags=re.S)
     for body, name in re.findall(r"typedef\s+struct\s*\{(.*?)\}\s*(\w+)\s*;", text, flags=re.S):
         fields = []

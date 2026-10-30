@@ -88,79 +88,83 @@ fn evaluate(path: &str, given: &[(String, Column)], tmp: &Path) -> Result<Study,
     Ok(gamut::evaluate(path, &named, out.to_str().unwrap())?.0)
 }
 
-fn described(f: &Study, p: &Json) -> Option<String> {
+// Each probe holds (Ok) or says what differed or what was refused (Err):
+// a refusal is a failure, as in the other checkers.
+type Held = Result<(), String>;
+
+fn refused(what: &str) -> impl Fn(gamut::Error) -> String + '_ {
+    move |e| format!("{what} refused: {e}")
+}
+
+fn holds(ok: bool, why: impl FnOnce() -> String) -> Held {
+    if ok {
+        Ok(())
+    } else {
+        Err(why())
+    }
+}
+
+fn described(f: &Study, p: &Json) -> Held {
     let key = p["describe"].as_str().unwrap();
-    let got = f.describe("").ok()?.remove(key);
+    let got = f.describe("").map_err(refused("describe"))?.remove(key);
     let want = p["value"].as_str().map(String::from);
-    (got != want).then(|| format!("describe {key}: {got:?} != {want:?}"))
+    holds(got == want, || format!("describe {key}: {got:?} != {want:?}"))
 }
 
 fn same<T: Element + PartialEq>(f: &Study, p: &Json, want: &[Json], shape: &[usize], bits: impl Fn(T) -> u64,
-                                from: impl Fn(&Json) -> T) -> Option<String> {
+                                from: impl Fn(&Json) -> T) -> Held {
     let name = p["read"].as_str().unwrap();
-    let got = match f.read::<T>(name, selection(p.get("rows")), selection(p.get("sites"))) {
-        Ok(got) => got,
-        Err(e) => return Some(format!("read {name}: {e}")),
-    };
+    let got = f.read::<T>(name, selection(p.get("rows")), selection(p.get("sites"))).map_err(refused(name))?;
     if got.shape != shape {
-        return Some(format!("read {name}: shape {:?} != {shape:?}", got.shape));
+        return Err(format!("read {name}: shape {:?} != {shape:?}", got.shape));
     }
     let want: Vec<u64> = want.iter().map(|v| bits(from(v))).collect();
     let got: Vec<u64> = got.values.into_iter().map(bits).collect();
-    (got != want).then(|| format!("read {name}: {got:?} != {want:?} (as bits)"))
+    holds(got == want, || format!("read {name}: {got:?} != {want:?} (as bits)"))
 }
 
-fn probe(path: &str, p: &Json, tmp: &Path) -> Option<String> {
+fn probe(path: &str, p: &Json, tmp: &Path) -> Held {
     if let Some(given) = p.get("evaluate") {
-        let out = match evaluate(path, &inputs(given), tmp) {
-            Ok(out) => out,
-            Err(e) => return Some(format!("evaluate: {e}")),
-        };
+        let out = evaluate(path, &inputs(given), tmp).map_err(refused("evaluate"))?;
         if p.get("describe").is_some() {
             return described(&out, p);
         }
         let name = p["scalar"].as_str().unwrap();
-        let got = out.get_scalar(name, ..).ok()?;
+        let got = out.get_scalar(name, ..).map_err(refused(name))?;
         let want: Vec<f64> = p["values"].as_array().unwrap().iter().map(number).collect();
-        return (got != want).then(|| format!("evaluate {name}: {got:?} != {want:?}"));
+        return holds(got == want, || format!("evaluate {name}: {got:?} != {want:?}"));
     }
     if let Some(how) = p.get("copy") {
         let dst = tmp.join("copy.gamut");
         let _ = std::fs::remove_file(&dst);
         let dst = dst.to_str().unwrap();
-        let done = if how == "extract" {
-            gamut::extract(path, dst, selection(p.get("rows")))
+        if how == "extract" {
+            gamut::extract(path, dst, selection(p.get("rows"))).map_err(refused("extract"))?;
         } else {
-            gamut::write_copy(path, dst)
-        };
-        if let Err(e) = done {
-            return Some(format!("copy: {e}"));
+            gamut::write_copy(path, dst).map_err(refused("write_copy"))?;
         }
-        return described(&gamut::open(dst).ok()?, p);
+        return described(&gamut::open(dst).map_err(refused("open the copy"))?, p);
     }
-    let f = match gamut::open(path) {
-        Ok(f) => f,
-        Err(e) => return Some(format!("open: {e}")),
-    };
+    let f = gamut::open(path).map_err(refused("open"))?;
     if p.get("describe").is_some() {
         return described(&f, p);
     }
     if let Some(info) = p.get("info").and_then(Json::as_str) {
         let got = match info {
-            "type" => Json::from(f.type_().ok()?),
-            "kind" => Json::from(f.kind().ok()?),
-            "addons" => Json::from(f.addons().ok()?),
-            other => return Some(format!("no info {other} here")),
+            "type" => Json::from(f.type_().map_err(refused(info))?),
+            "kind" => Json::from(f.kind().map_err(refused(info))?),
+            "addons" => Json::from(f.addons().map_err(refused(info))?),
+            other => return Err(format!("no info {other} here")),
         };
-        return (got != p["value"]).then(|| format!("{info}: {got} != {}", p["value"]));
+        return holds(got == p["value"], || format!("{info}: {got} != {}", p["value"]));
     }
     if let Some(label) = p.get("label").and_then(Json::as_str) {
-        let got = f.get_label(label, selection(p.get("rows"))).ok()?;
-        return (Json::from(got.clone()) != p["names"]).then(|| format!("label {label}: {got:?} != {}", p["names"]));
+        let got = f.get_label(label, selection(p.get("rows"))).map_err(refused(label))?;
+        return holds(Json::from(got.clone()) == p["names"], || format!("label {label}: {got:?} != {}", p["names"]));
     }
     if let Some(condition) = p.get("select").and_then(Json::as_str) {
-        let got = f.select(condition).ok()?;
-        return (Json::from(got.clone()) != p["positions"]).then(|| format!("select: {got:?} != {}", p["positions"]));
+        let got = f.select(condition).map_err(refused("select"))?;
+        return holds(Json::from(got.clone()) == p["positions"], || format!("select: {got:?} != {}", p["positions"]));
     }
     let (mut shape, mut want) = (Vec::new(), Vec::new());
     flatten(&p["values"], &mut shape, 0, &mut want);
@@ -171,7 +175,7 @@ fn probe(path: &str, p: &Json, tmp: &Path) -> Option<String> {
         "int32" => same::<i32>(&f, p, &want, &shape, |v| v as u32 as u64, |v| v.as_i64().unwrap() as i32),
         "uint8" => same::<u8>(&f, p, &want, &shape, u64::from, |v| v.as_u64().unwrap() as u8),
         "int8" => same::<i8>(&f, p, &want, &shape, |v| v as u8 as u64, |v| v.as_i64().unwrap() as i8),
-        other => Some(format!("no dtype {other} here")),
+        other => Err(format!("no dtype {other} here")),
     }
 }
 
@@ -234,7 +238,7 @@ fn corpus() {
                 failures.push(format!("{name}: a valid file drew {findings:?}"));
             }
             for p in e.get("probes").and_then(Json::as_array).into_iter().flatten() {
-                if let Some(why) = probe(path, p, &tmp) {
+                if let Err(why) = probe(path, p, &tmp) {
                     failures.push(format!("{name}: {why}"));
                 }
             }
