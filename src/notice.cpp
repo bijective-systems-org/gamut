@@ -110,7 +110,11 @@ std::string marking_notice(const Schema& s, const std::string& path) {
 
 void marking_opened(const Schema& s, const std::string& path) {
   if (s.portion_marking.empty()) return;
-  const std::string key = (s.file_id.empty() ? path : s.file_id) + '\0' + s.portion_marking;
+  // A file evaluated from a model carries the model file's marking (spec
+  // section 7.4), and is known by that file's id: every answer of a loop
+  // of evaluations is a new file, and its marking was shown with the model.
+  const std::string& id = !s.evaluated_from.empty() ? s.evaluated_from : s.file_id;
+  const std::string key = (id.empty() ? path : id) + '\0' + s.portion_marking;
   {
     Sink& k = sink();
     const std::lock_guard<std::mutex> lock(k.mutex);

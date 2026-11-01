@@ -186,7 +186,10 @@ GAMUT_API int gamut_open(const char* path, gamut_file** out, gamut_error* err);
  * a file whose portion_marking is not empty (gamut_open, gamut_open_append,
  * both files of gamut_append, the source of gamut_extract and
  * gamut_write_copy), the notice goes to the sink once per file per process:
- * a file is its file_id with its marking (its path when it has no file_id).
+ * a file is its file_id with its marking (its path when it has no file_id),
+ * and a file evaluated from a model is known by its evaluated_from, the
+ * model file's file_id, so the model file and the answers of many
+ * evaluations show their marking once.
  * text is the same block in every language, the marking whole, with CR and
  * CRLF as LF and U+FFFD in place of invalid UTF-8, control characters but
  * LF and TAB, C1 controls and bidirectional overrides and isolates; path is

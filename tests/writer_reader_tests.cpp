@@ -571,12 +571,28 @@ void test_marking_notice() {
   gamut_set_marking_notice(capture, &got);           // forgotten
   open_close(a);
   CHECK(got.notices.size() == 2);
+  // A file evaluated from a model is known by the model file's id: the
+  // answers of a loop of evaluations show what the model file showed once.
+  const std::string answer = "wr_notice_answer.gamut", other = "wr_notice_other.gamut";
+  for (const auto& p : {answer, other}) {
+    std::remove(p.c_str());
+    auto w = Writer::create(p, "tests", "", "fixed");
+    w->set_attribute("portion_marking", p == answer ? marking : std::string("PLACEHOLDER-B"));
+    w->set_attribute("evaluated_from", s.file_id);
+    w->declare_parameter(param("x", "design", "1"));
+    w->close();
+  }
+  open_close(answer);
+  CHECK(got.notices.size() == 2);
+  open_close(other);                                 // another marking from the same model
+  CHECK(got.notices.size() == 3 && got.notices[2].first == other);
+  got.notices.clear();
   // A refused append still opened both files: both are shown.
   marked_table(odd, "PLACEHOLDER-B");
   gamut_set_marking_notice(capture, &got);
   CHECK(gamut_append(u.c_str(), odd.c_str(), nullptr, &err) != 0 &&
         std::string(err.rule) == "E27");
-  CHECK(got.notices.size() == 3 && got.notices[2].first == odd);
+  CHECK(got.notices.size() == 1 && got.notices[0].first == odd);
   // Sanitised: ESC, CR, a C1 control, a bidi override and an invalid byte
   // become U+FFFD; CRLF and CR become LF; LF and TAB stay.
   const std::string fffd = "\xEF\xBF\xBD";
@@ -608,7 +624,7 @@ void test_marking_notice() {
   CHECK(probe.opened);
   gamut_set_marking_notice(nullptr, nullptr);
   if (!std::getenv("GAMUT_KEEP")) {
-    for (const auto& p : {a, u, copy, odd}) std::remove(p.c_str());
+    for (const auto& p : {a, u, copy, odd, answer, other}) std::remove(p.c_str());
   }
 }
 

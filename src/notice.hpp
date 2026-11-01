@@ -22,8 +22,9 @@ std::string shown_text(const std::string& s);
 std::string marking_notice(const Schema& s, const std::string& path);
 
 // Called when a file's schema is read: a non-empty marking not yet shown in
-// this process (since the sink was last set) is queued for the calling
-// thread.
+// this process (since the sink was last set) for this file is queued for
+// the calling thread.  A file is its file_id, or for a file evaluated from a
+// model the model file's, or its path when it has neither.
 void marking_opened(const Schema& s, const std::string& path);
 
 // Gives the notices queued during one call to the sink.  A C entry point
