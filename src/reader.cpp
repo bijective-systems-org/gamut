@@ -8,6 +8,7 @@
 
 #include "codec.hpp"
 #include "names.hpp"
+#include "notice.hpp"
 
 namespace gamut_core {
 namespace internal {
@@ -283,6 +284,9 @@ Schema load_schema(const File& f, const std::string& path) {
     model.repr = a.text("repr");
     s.models.push_back(model);
   }
+  // Every open of a file comes through here, both files of an append and
+  // the source of a copy among them (spec section 8).
+  marking_opened(s, path);
   return s;
 }
 

@@ -390,9 +390,15 @@ public attributes; nothing depends on them. `/private` holds a producer's
 own records in any form; readers copy it and never interpret it. Public
 information is never only in `/notes` or `/private`.
 
-The root may also carry `portion_marking`: a marking the model's author
-set, copied into every file evaluated from this one and kept by `extract`
-and `write_copy`. It is free text; the format does not interpret it.
+The root may also carry `portion_marking`, of either kind of file: a
+marking the file's author set. It is free text; the format does not
+interpret it, and an empty marking counts as none. `extract` and
+`write_copy` keep it; evaluation copies the model file's into the data file
+(§7.4); appending keeps the destination's and refuses rows marked otherwise
+(§11.5). The marking belongs to the file, not to its rows or results. A
+reader should show a non-empty marking when it opens a file and let its
+caller route or suppress that; the text is shown whole, never truncated or
+rewrapped.
 
 ---
 
@@ -703,7 +709,16 @@ written: such a failure, or a writer stopped partway (a crash, a killed
 process), can leave the file unreadable, rows written before included. A
 library says so; this version defines no recovery. A
 library appends without copying or re-reading the whole file, and checks
-the structure and the appended rows. A fixed-length string dataset whose
+the structure and the appended rows.
+
+Rows appended from a file whose `portion_marking` is not empty and not,
+byte for byte, the destination's are refused (E27). Rows from an unmarked
+file take the destination's marking. The caller may instead state the
+marking the result carries: it is not empty, the destination is marked with
+it, and the rows are appended whatever the two files carried. A stated
+marking is checked, and the markings compared, before the destination is
+opened to write. Rows from elsewhere that state a marking (a document) meet
+the same rule. A fixed-length string dataset whose
 new values need a wider width is recreated: its scale is detached, the
 dataset deleted, recreated and the scale reattached.
 
@@ -848,6 +863,7 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 | E24 | coordinates with other than one to three axes |
 | E25 | on appending, a growable dimension that is fixed: the file is valid and read-only (§11.5); a refusal, never a finding of validation |
 | E26 | a count past a cap §9.6 has a reader or writer state: nesting deeper than its cap, an eager read above its element limit, tables or a model's arrays above the budget they share, a chunk larger than it decodes, a chunk grid larger than it indexes, more chunks than one read may touch, more rows than a selection scans, or `where` nested past its cap |
+| E27 | on appending, a source whose `portion_marking` is not the destination's (§11.5); a refusal, never a finding of validation |
 
 **Warnings**
 
