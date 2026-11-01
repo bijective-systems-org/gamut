@@ -285,6 +285,34 @@ mktempdir() do tmp
         @test isempty(Gamut.validate(e)) && isempty(Gamut.validate(w))
     end
 
+    @testset "a marked append and the notice on opening" begin
+        a, u = joinpath(tmp, "ma.gamut"), joinpath(tmp, "mu.gamut")
+        for (p, m) in ((a, "PLACEHOLDER-A"), (u, nothing))
+            Gamut.create(p; writer="t", parameters=Dict("x" => "m"), portion_marking=m) do s
+                Gamut.add_run!(s, Dict("x" => 1.0))
+            end
+        end
+        got = Tuple{String,String}[]
+        Gamut.set_marking_notice((path, text) -> push!(got, (path, text)))
+        before = read(u)
+        err = try Gamut.append!(u, a); nothing catch e; e end
+        @test err isa GamutError && err.rule == "E27" && read(u) == before
+        @test length(got) == 1 && got[1][1] == a && occursin("\nPLACEHOLDER-A\n", got[1][2])
+        @test Gamut.append!(u, a; marking="PLACEHOLDER-B") == 1
+        @test Gamut.open(f -> Gamut.describe(f)["portion_marking"], u) == "PLACEHOLDER-B"
+        Gamut.open(identity, a)
+        @test length(got) == 2                     # u, now marked; a was shown
+        Gamut.set_marking_notice(true)
+        @test_logs (:info, r"carries a portion marking") Gamut.open(identity, a)
+        @test_logs Gamut.open(identity, a)         # once per file
+        Gamut.set_marking_notice((path, text) -> error("a broken sink"))
+        @test_logs (:error, "the marking notice failed") Gamut.open(identity, a)
+        Gamut.set_marking_notice(false)
+        @test_logs Gamut.open(identity, a)
+        @test_throws GamutError Gamut.set_marking_notice("stderr")
+        Gamut.set_marking_notice(true)
+    end
+
     @testset "how far each row lies outside its parameter's bounds" begin
         p = joinpath(tmp, "bounds.gamut")
         Gamut.create(p; writer="tests",
