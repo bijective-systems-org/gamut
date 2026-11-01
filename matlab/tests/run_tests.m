@@ -290,9 +290,19 @@ catch err
         'a notice made an error is raised as gamut:marking');
 end
 ok(mislocked('gamut_mex') == locked, 'the file the failed open opened is closed');
+% A call that changes a file is not undone or hidden by it: the append is
+% made and returns its rows, and the notice is printed.
+ma = fullfile(tmp, 'marked_again.gamut');
+s = gamut.create(ma, 'writer', 't', 'parameters', struct('x', 'm'), 'portionMarking', 'PLACEHOLDER 100% %s');
+s.addRuns(struct('x', 6));
+s.close();
+gamut_mex('marking_notice');
+n = 0;   % declared: run_tests has nested functions, so eval cannot add a variable
+printed = evalc('n = gamut.append(mp, ma);');
+ok(n == 1 && contains(printed, 'PLACEHOLDER 100% %s'), 'an append is made, its notice printed');
 warning(state);
 r = gamut.open(mp);
-ok(r.rowCount() == 1, 'the file opens once the notice is a warning again');
+ok(r.rowCount() == 2, 'the file opens once the notice is a warning again, the run appended');
 r.close();
 
 % Errors carry their rule.

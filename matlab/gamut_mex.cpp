@@ -66,8 +66,10 @@ void warn_marking(const char*, const char* text, void*) { g_notices.emplace_back
 
 // Issues the queued notices; the text is the format's argument, never the
 // format, so a % in a marking is text.  A warning made an error is trapped
-// and returned (the first, if several), for mexFunction to raise.
-mxArray* issue_notices() {
+// and returned (the first, if several), for mexFunction to raise from an
+// open; after a call that changed a file it is not raised, since the error
+// would hide what was done, and the notice is printed instead.
+mxArray* issue_notices(bool raise) {
   mxArray* raised = nullptr;
   std::vector<std::string> notices;
   notices.swap(g_notices);
@@ -76,9 +78,11 @@ mxArray* issue_notices() {
                         mxCreateString(text.c_str())};
     mxArray* e = mexCallMATLABWithTrap(0, nullptr, 3, args, "warning");
     for (mxArray* a : args) mxDestroyArray(a);
-    if (raised == nullptr) {
+    if (e == nullptr) continue;
+    if (raise && raised == nullptr) {
       raised = e;
-    } else if (e != nullptr) {
+    } else {
+      if (!raise) mexPrintf("%s\n", text.c_str());
       mxDestroyArray(e);
     }
   }
@@ -1040,9 +1044,14 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
   // The files open before the call, so that a call whose notice is raised
   // as an error closes what it opened rather than leaving it to exit.
   static std::set<std::uintptr_t> before;
-  bool failed = false;
+  bool failed = false, opens = false;
   {
     before = g_files;
+    if (nrhs > 0 && mxIsChar(prhs[0])) {
+      char* c = mxArrayToString(prhs[0]);
+      opens = c != nullptr && (std::strcmp(c, "open") == 0 || std::strcmp(c, "open_append") == 0);
+      mxFree(c);
+    }
     std::string i, m;
     try {
       dispatch(nlhs, plhs, nrhs, prhs);
@@ -1060,7 +1069,9 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
       std::snprintf(message, sizeof message, "%s", m.c_str());
     }
   }
-  mxArray* raised = issue_notices();   // on failure too: a refused append opened both files
+  // On failure too: a refused append opened both files.  Only an open,
+  // which changed nothing, fails for a notice made an error.
+  mxArray* raised = issue_notices(opens && !failed);
   if (failed) {
     if (raised != nullptr) mxDestroyArray(raised);
     mexErrMsgIdAndTxt(id, "%s", message);
