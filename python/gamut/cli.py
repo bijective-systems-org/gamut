@@ -3,7 +3,7 @@
     gamut info FILE [--json]
     gamut validate FILE [--json]
     gamut build DOC.json -o FILE [--json]       gamut build --example
-    gamut append FILE DOC.json [--json]
+    gamut append FILE DOC.json|SRC.gamut [--marking TEXT] [--json]
     gamut get FILE NAME... [--where EXPR] [--rows SEL] [--zone LABEL=NAME] -o OUT [--json]
 
 Readable text by default; `--json` prints one document of the shape given
@@ -12,7 +12,12 @@ agents, and every failure as {"problems": [{"rule", "path", "message"}]};
 `validate` always prints its findings, a file it cannot open among them.
 Big data goes to files; every problem is reported at once with where it is
 and what to do.  Exit status: 0 success, 1 the file or document has errors,
-2 a usage error, appending to a valid read-only file (E25) among them.
+2 a usage error, appending to a valid read-only file (E25) or rows marked
+otherwise (E27) among them.
+
+Opening a marked file prints its portion marking on stderr, once per file;
+`gamut --no-marking-notice COMMAND ...` turns that off. `gamut info` shows
+the marking in its own output instead.
 """
 
 from __future__ import annotations
@@ -32,6 +37,8 @@ from . import _lib
 from ._lib import GamutError
 from ._study import create, open as open_file
 from ._files import append as gamut_append, extract as gamut_extract
+from . import _notice
+from ._notice import set_marking_notice
 from ._validate import validate
 
 
@@ -255,8 +262,6 @@ def _human(doc: dict) -> str:
         lines.append(f"  model       {m['id']}: {m.get('type')} reading {m.get('inputs')}{about}")
     if doc["metadata"].get("trained_on"):
         lines.append(f"  trained on  {doc['metadata']['trained_on']}")
-    if doc["metadata"].get("portion_marking"):
-        lines.append(f"  marking     {doc['metadata']['portion_marking']}")
     size = doc["file_bytes"]
     unit = "KB" if size < 1e6 else ("MB" if size < 1e9 else "GB")
     scale = 1e3 if unit == "KB" else (1e6 if unit == "MB" else 1e9)
@@ -277,9 +282,14 @@ def cmd_info(args: argparse.Namespace) -> int:
     "scalars": [{name, ...describe}], "constants": [...], "mesh"?: {kind, per,
     coordinate_units, axes, precision, nodes?, cells?, support_id?, node_fields,
     cell_fields, mesh_labels}, "models": [{id, type, inputs, repr?}]}"""
+    # Read with the notice caught, so the marking is shown in the output, as
+    # the core composes it, and not again on stderr. --json carries it as data.
+    shown: list[str] = []
+    if not args.json:
+        set_marking_notice(lambda path, text: shown.append(text))
     try:
         doc = _summary(args.file)
-        text = "" if args.json else _human(doc)
+        text = "" if args.json else "\n".join([_human(doc)] + shown)
     except GamutError:
         raise
     except (KeyError, ValueError, TypeError, IndexError) as e:
@@ -494,6 +504,13 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 def cmd_append(args: argparse.Namespace) -> int:
     """--json: {"appended": FILE, "rows": n}"""
+    if args.marking is not None:
+        try:
+            args.marking.encode("utf-8")
+        except UnicodeEncodeError:
+            raise _Usage("E3", "--marking is not valid UTF-8") from None
+        if not args.marking:
+            raise _Usage("", "--marking states the marking the result carries; it is not empty")
     if args.document.lower().endswith(".gamut"):
         if os.path.exists(args.document) and os.path.exists(args.file) and \
                 os.path.samefile(args.document, args.file):
@@ -502,7 +519,7 @@ def cmd_append(args: argparse.Namespace) -> int:
             with open_file(path) as f:
                 _rows_kept(f, "appending")
         try:
-            n = gamut_append(args.file, args.document)  # every row of another study file
+            n = gamut_append(args.file, args.document, marking=args.marking)  # every row of another file
         except GamutError as e:
             # Two valid files that do not fit together (no rule): the command's mistake.
             if e.rule:
@@ -529,7 +546,13 @@ def cmd_append(args: argparse.Namespace) -> int:
                 raise
             raise _Usage("", e.message, e.path) from None
         with appending as study:
+            # The document's marking meets the rule a source file's does (E27).
+            if args.marking is None:
+                _lib.call("gamut_check_marking", study._handle(), _lib.b(doc.get("portion_marking")))
             n = _add_rows(study, doc, base, fields, labels)
+            if args.marking is not None:
+                _lib.call("gamut_set_attribute", study._handle(), b"portion_marking",
+                          _lib.b(args.marking))
     except Problems as e:
         return _report_problems(args, e.problems)
     except GamutError:
@@ -853,6 +876,8 @@ def main(argv: list[str] | None = None) -> int:
     from . import __version__, FORMAT
     parser.add_argument("--version", action="version",
                         version=f"gamut {__version__} (files {FORMAT})")
+    parser.add_argument("--no-marking-notice", action="store_true",
+                        help="do not print a marked file's portion marking on stderr when it opens")
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("info", help="describe a file")
     p.add_argument("file")
@@ -872,6 +897,7 @@ def main(argv: list[str] | None = None) -> int:
                                       "every row of another study file (.gamut)")
     p.add_argument("file")
     p.add_argument("document")
+    p.add_argument("--marking", help="the portion marking the result carries, whatever the two did")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_append)
     p = sub.add_parser("get", help="write selected data to a file")
@@ -885,16 +911,20 @@ def main(argv: list[str] | None = None) -> int:
                    help="replace an existing .csv, .npy or .npz output (a .gamut one is never replaced)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_get)
+    shown = _notice._show
     try:
         args = parser.parse_args(given)
+        if args.no_marking_notice:
+            set_marking_notice(False)
         return args.func(args)
     except GamutError as e:
         if _Parser.wants_json:
             print(_problems_json([(e.rule, e.path, e.message)]))
         else:
             print(f"error: {e}", file=sys.stderr)
-        # E25 is a valid file this command cannot grow: the command's, as a usage error is.
-        return 2 if isinstance(e, _Usage) or e.rule == "E25" else 1
+        # E25 is a valid file this command cannot grow, and E27 rows it may not
+        # add as they are: the command's, as a usage error is.
+        return 2 if isinstance(e, _Usage) or e.rule in ("E25", "E27") else 1
     except OSError as e:             # a file named that cannot be read or written: which, and why
         where = str(e.filename or "")
         message = f"{where}: {e.strerror}" if where else str(e)
@@ -903,6 +933,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"error: {message}", file=sys.stderr)
         return 2
+    finally:
+        if _notice._show is not shown:
+            set_marking_notice(shown)
 
 
 def vtk_main(argv: list[str] | None = None) -> int:

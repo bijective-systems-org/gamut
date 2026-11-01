@@ -32,6 +32,7 @@ from ._study import Study, create, open
 from ._validate import Finding, Report, validate
 from ._models import Nearest, create_model, evaluate, register_model_type
 from ._files import append, extract, write_copy
+from ._notice import set_marking_notice
 
 __version__ = _version()
 FORMAT = _format()
@@ -45,4 +46,4 @@ def library_path() -> str:
 
 __all__ = ["FORMAT", "Finding", "GamutError", "Nearest", "Report", "Study", "append", "create",
            "create_model", "evaluate", "extract", "library_path", "open", "register_model_type",
-           "validate", "write_copy"]
+           "set_marking_notice", "validate", "write_copy"]

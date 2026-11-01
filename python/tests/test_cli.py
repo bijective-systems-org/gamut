@@ -58,9 +58,10 @@ def test_build_info_validate_get(tmp_path, capsys):
     assert info["mesh"]["nodes"] == 6 and info["mesh"]["cells"] == 2
     assert [p["name"] for p in info["parameters"]] == ["alpha", "mach"]
     assert info["labels"][0]["counts"] == {"converged": 3, "failed": 1}
-    code, text, _ = run(capsys, "info", target)
+    code, text, err = run(capsys, "info", target)
     assert "shared mesh, 4 runs" in text and "p [Pa] at nodes" in text
-    assert "  marking     Example marking" in text
+    assert "---- portion marking ----\nExample marking\n---- end of portion marking ----" in text
+    assert err == ""                       # shown in the output, not again on stderr
 
     code, out, _ = run(capsys, "validate", target, "--json")
     v = json.loads(out)
@@ -431,3 +432,34 @@ def test_documents_paths_and_permissions_have_their_exit_status(tmp_path, capsys
             assert code == 2 and json.loads(out)["problems"], out
     finally:
         os.chmod(p, 0o644)
+
+
+def test_marked_files_and_documents_meet_the_append_rule(tmp_path, capsys):
+    """E27 is the command's (exit 2), as E25 is; --marking states the
+    result's marking for a file or a document; the notice is on stderr unless
+    --no-marking-notice."""
+    a, u = str(tmp_path / "a.gamut"), str(tmp_path / "u.gamut")
+    for path, marking in ((a, "PLACEHOLDER-A"), (u, None)):
+        with gamut.create(path, writer="t", parameters={"x": "1"}, portion_marking=marking) as s:
+            s.add_runs({"x": [1.0]})
+    gamut.set_marking_notice(True)
+    code, out, err = run(capsys, "append", u, a, "--json")
+    assert code == 2 and json.loads(out)["problems"][0]["rule"] == "E27", out
+    assert "carries a portion marking" in err and "\nPLACEHOLDER-A\n" in err
+    code, out, err = run(capsys, "--no-marking-notice", "info", a, "--json")
+    assert code == 0 and err == "" and json.loads(out)["metadata"]["portion_marking"] == "PLACEHOLDER-A"
+    code, out, err = run(capsys, "append", u, a, "--marking", "", "--json")
+    assert code == 2 and "not empty" in out
+    code, out, _ = run(capsys, "append", u, a, "--marking", "PLACEHOLDER-C", "--json")
+    assert code == 0 and json.loads(out)["rows"] == 1
+    (tmp_path / "runs.csv").write_text("x\n2\n")
+    doc = tmp_path / "add.json"
+    doc.write_text(json.dumps({"runs": "runs.csv", "portion_marking": "PLACEHOLDER-D"}))
+    code, out, _ = run(capsys, "append", u, str(doc), "--json")
+    assert code == 2 and json.loads(out)["problems"][0]["rule"] == "E27", out
+    code, out, _ = run(capsys, "append", u, str(doc), "--marking", "PLACEHOLDER-D", "--json")
+    assert code == 0 and json.loads(out)["rows"] == 1
+    code, out, _ = run(capsys, "append", u, str(doc), "--json")      # the same marking now
+    assert code == 0, out
+    with gamut.open(u) as f:
+        assert f.describe()["portion_marking"] == "PLACEHOLDER-D" and f.row_count == 4

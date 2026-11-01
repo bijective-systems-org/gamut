@@ -233,6 +233,34 @@ def test_extract_and_write_copy_keep_the_portion_marking(tmp_path):
         assert not gamut.validate(path).findings
 
 
+
+def marked(path, marking, x=1.0):
+    with gamut.create(path, writer="t", parameters={"x": "m"}, scalars={"y": "1"},
+                       portion_marking=marking) as s:
+        s.add_runs({"x": [x], "y": [2 * x]})
+
+
+def test_append_keeps_a_marking_or_states_one(tmp_path):
+    """Spec section 11.5: a marked source whose marking is not the
+    destination's is refused (E27) and the destination left as it was; an
+    unmarked source takes the destination's; `marking` states the result's."""
+    a, b, u, a2 = (str(tmp_path / n) for n in ("a.gamut", "b.gamut", "u.gamut", "a2.gamut"))
+    marked(a, "PLACEHOLDER-A")
+    marked(b, "PLACEHOLDER-B")
+    marked(u, None)
+    marked(a2, "PLACEHOLDER-A")
+    for dst, src, stated, rule in ((u, a, None, "E27"), (a, b, None, "E27"), (a, b, "", "")):
+        before = open(dst, "rb").read()
+        with pytest.raises(gamut.GamutError) as e:
+            gamut.append(dst, src, marking=stated)
+        assert e.value.rule == rule and open(dst, "rb").read() == before
+    assert "marking" in str(e.value)
+    assert gamut.append(a, a2) == 1 and gamut.append(a, u) == 1
+    assert gamut.append(a, b, marking="PLACEHOLDER-C") == 1
+    with gamut.open(a) as f:
+        assert f.describe()["portion_marking"] == "PLACEHOLDER-C" and f.row_count == 4
+    assert not gamut.validate(a).findings
+
 def test_write_copy_of_a_model_file_evaluates_the_same(tmp_path):
     m, c = str(tmp_path / "m.gamut"), str(tmp_path / "c.gamut")
     with gamut.create_model(m, writer="t", parameters={"x": {"units": "1", "lower": 0, "upper": 1}},

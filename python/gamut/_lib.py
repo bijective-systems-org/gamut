@@ -88,6 +88,8 @@ _E = ctypes.POINTER(_Error)
 _SEL = ctypes.POINTER(_Sel)
 _PP = ctypes.POINTER(ctypes.c_void_p)
 _SS = ctypes.POINTER(ctypes.c_char_p)
+# gamut_notice_fn: (path, text, context).
+NOTICE_FN = ctypes.CFUNCTYPE(None, _S, _S, _P)
 
 _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "gamut_version": (_S, []),
@@ -160,6 +162,9 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "gamut_get_private": (_I, [_P, _S, _P, _L, ctypes.POINTER(_L), _E]),
     "gamut_close": (_I, [_P, _E]),
     "gamut_append": (_I, [_S, _S, ctypes.POINTER(_L), _E]),
+    "gamut_append_marked": (_I, [_S, _S, _S, ctypes.POINTER(_L), _E]),
+    "gamut_check_marking": (_I, [_P, _S, _E]),
+    "gamut_set_marking_notice": (None, [NOTICE_FN, _P]),
     "gamut_extract": (_I, [_S, _S, _SEL, _E]),
     "gamut_write_copy": (_I, [_S, _S, _E]),
     "gamut_abandon": (None, [_P, _I]),
