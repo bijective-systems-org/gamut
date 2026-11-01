@@ -275,6 +275,25 @@ state = warning('off', 'gamut:marking');
 shown = evalc('r = gamut.open(mp); r.close();');   % lastwarn is set even for a warning off
 ok(isempty(shown), 'warning off turns the notice off');
 warning(state);
+% A notice made an error is raised at the top of the call, after the core
+% has returned: the open fails with gamut:marking and closes what it
+% opened, and the file opens again once the warning is a warning.
+gamut_mex('marking_notice');
+state = warning('error', 'gamut:marking');
+locked = mislocked('gamut_mex');
+try
+    r = gamut.open(mp);
+    r.close();
+    ok(false, 'a notice made an error is raised');
+catch err
+    ok(strcmp(err.identifier, 'gamut:marking') && contains(err.message, 'PLACEHOLDER 100% %s'), ...
+        'a notice made an error is raised as gamut:marking');
+end
+ok(mislocked('gamut_mex') == locked, 'the file the failed open opened is closed');
+warning(state);
+r = gamut.open(mp);
+ok(r.rowCount() == 1, 'the file opens once the notice is a warning again');
+r.close();
 
 % Errors carry their rule.
 try

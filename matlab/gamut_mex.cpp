@@ -57,10 +57,32 @@ void forget(gamut_file* f) {
 }
 
 // The notice on opening a marked file, as the warning gamut:marking, so
-// warning('off', 'gamut:marking') turns it off.  The text is the format's
-// argument, never the format: a % in a marking is text.
-void warn_marking(const char*, const char* text, void*) {
-  mexWarnMsgIdAndTxt("gamut:marking", "%s", text);
+// warning('off', 'gamut:marking') turns it off.  The core's sink only
+// queues it: the warning is issued once the core has returned, so a warning
+// made an error (warning('error', 'gamut:marking')) never crosses its frames.
+std::vector<std::string> g_notices;
+
+void warn_marking(const char*, const char* text, void*) { g_notices.emplace_back(text); }
+
+// Issues the queued notices; the text is the format's argument, never the
+// format, so a % in a marking is text.  A warning made an error is trapped
+// and returned (the first, if several), for mexFunction to raise.
+mxArray* issue_notices() {
+  mxArray* raised = nullptr;
+  std::vector<std::string> notices;
+  notices.swap(g_notices);
+  for (const std::string& text : notices) {
+    mxArray* args[3] = {mxCreateString("gamut:marking"), mxCreateString("%s"),
+                        mxCreateString(text.c_str())};
+    mxArray* e = mexCallMATLABWithTrap(0, nullptr, 3, args, "warning");
+    for (mxArray* a : args) mxDestroyArray(a);
+    if (raised == nullptr) {
+      raised = e;
+    } else if (e != nullptr) {
+      mxDestroyArray(e);
+    }
+  }
+  return raised;
 }
 
 void finish_open_files() {
@@ -1015,20 +1037,48 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
   // mexErrMsgIdAndTxt, which leaves without running destructors.
   static char id[64];
   static char message[4096];
+  // The files open before the call, so that a call whose notice is raised
+  // as an error closes what it opened rather than leaving it to exit.
+  static std::set<std::uintptr_t> before;
+  bool failed = false;
   {
+    before = g_files;
     std::string i, m;
     try {
       dispatch(nlhs, plhs, nrhs, prhs);
-      return;
     } catch (const Refusal& x) {
+      failed = true;
       i = x.id;
       m = x.message;
     } catch (const std::exception& x) {
+      failed = true;
       i = "gamut:error";
       m = x.what();
     }
-    std::snprintf(id, sizeof id, "%s", i.c_str());
-    std::snprintf(message, sizeof message, "%s", m.c_str());
+    if (failed) {
+      std::snprintf(id, sizeof id, "%s", i.c_str());
+      std::snprintf(message, sizeof message, "%s", m.c_str());
+    }
   }
-  mexErrMsgIdAndTxt(id, "%s", message);
+  mxArray* raised = issue_notices();   // on failure too: a refused append opened both files
+  if (failed) {
+    if (raised != nullptr) mxDestroyArray(raised);
+    mexErrMsgIdAndTxt(id, "%s", message);
+  }
+  if (raised != nullptr) {
+    for (auto it = g_files.begin(); it != g_files.end();) {
+      const std::uintptr_t p = *it++;
+      if (before.count(p)) continue;
+      free_evaluations_of(p);
+      gamut_file* f = reinterpret_cast<gamut_file*>(p);
+      gamut_error e{};
+      if (gamut_close(f, &e) != 0) gamut_abandon(f, 0);
+      forget(f);
+    }
+    for (int k = 0; k < nlhs; ++k) {
+      if (plhs[k] != nullptr) mxDestroyArray(plhs[k]);
+      plhs[k] = nullptr;
+    }
+    mexCallMATLAB(0, nullptr, 1, &raised, "throw");
+  }
 }
