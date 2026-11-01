@@ -20,7 +20,9 @@ namespace internal {
 // Builds the schema from attributes, shapes and the (small) category
 // tables, reading no field or model values, after refusing a file of
 // another format version (E1).  Objects it does not know are left out;
-// the validator reports them.
+// the validator reports them.  Every open comes through here (both files of
+// an append, the source of a copy), and it queues the notice for a marked
+// file (spec section 8) as soon as the root is read.
 Schema load_schema(const File& f, const std::string& path);
 
 class Reader {

@@ -424,7 +424,19 @@ CodeMaps check_same(const Reader& dst, const Reader& src) {
 
 }  // namespace
 
-void check_marking(const std::string& file_marking, const std::string& rows_marking) {
+void check_marking(const std::string& file_marking, const std::string& rows_marking,
+                   const std::optional<std::string>& stated) {
+  if (stated) {
+    need(!stated->empty(), "", "the marking the result carries is empty; a marking is stated to "
+                               "keep one, never to remove one");
+    need(valid_utf8(*stated), "E3", "the marking the result carries is not valid UTF-8");
+    const std::size_t most = max_root_text_bytes("portion_marking");
+    need(stated->size() <= most, "", "the marking the result carries is " +
+                                         std::to_string(stated->size()) +
+                                         " bytes, and portion_marking holds at most " +
+                                         std::to_string(most));
+    return;
+  }
   if (rows_marking.empty() || rows_marking == file_marking) return;
   throw Error("E27", std::string(file_marking.empty()
                                      ? "the rows carry a portion marking and the file none"
@@ -448,16 +460,7 @@ std::int64_t append_file(const std::string& dst, const std::string& src,
     maps = check_same(*d, *s);
     // The marking is checked here, before the writer opens the
     // destination, so a refusal leaves its bytes as they were.
-    if (marking) {
-      need(!marking->empty(), "", "the marking the result carries is empty; a marking is "
-                                  "stated to keep one, never to remove one");
-      need(valid_utf8(*marking), "E3", "the marking the result carries is not valid UTF-8");
-      need(marking->size() <= kMaxRootTextBytes, "",
-           "the marking the result carries is " + std::to_string(marking->size()) +
-               " bytes, and a root attribute holds at most " + std::to_string(kMaxRootTextBytes));
-    } else {
-      check_marking(d->schema().portion_marking, s->schema().portion_marking);
-    }
+    check_marking(d->schema().portion_marking, s->schema().portion_marking, marking);
     n = s->schema().rows;
   }
   const auto s = Reader::open(src);

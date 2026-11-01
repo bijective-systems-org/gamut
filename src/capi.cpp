@@ -733,11 +733,15 @@ int gamut_append_marked(const char* dst_path, const char* src_path, const char* 
   }
 }
 
-int gamut_check_marking(gamut_file* f, const char* rows_marking, gamut_error* err) {
+int gamut_check_marking(const gamut_file* f, const char* rows_marking, const char* marking,
+                      gamut_error* err) {
   try {
     const Lock lock(hdf5_mutex());
     clear(err);
-    gamut_core::internal::check_marking(writer_of(f).schema().portion_marking, str(rows_marking));
+    std::optional<std::string> stated;
+    if (marking != nullptr) stated = marking;
+    gamut_core::internal::check_marking(reader_of(f).schema().portion_marking, str(rows_marking),
+                                        stated);
     return 0;
   } catch (...) {
     return fail(err);

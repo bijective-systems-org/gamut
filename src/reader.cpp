@@ -112,6 +112,9 @@ Schema load_schema(const File& f, const std::string& path) {
   s.generalisation_group = root.text("generalisation_group");
   s.trained_on = root.text("trained_on");
   s.evaluated_from = root.text("evaluated_from");
+  // The notice is queued as soon as the root is read, so a file refused
+  // below for its structure (E22, say) still shows its marking.
+  marking_opened(s, path);
   const DsetInfo row = f.dataset_shape("/row");
   s.rows = row.is_dataset && row.shape.size() == 1
                ? static_cast<std::int64_t>(row.shape[0])
@@ -284,9 +287,6 @@ Schema load_schema(const File& f, const std::string& path) {
     model.repr = a.text("repr");
     s.models.push_back(model);
   }
-  // Every open of a file comes through here, both files of an append and
-  // the source of a copy among them (spec section 8).
-  marking_opened(s, path);
   return s;
 }
 

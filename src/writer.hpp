@@ -18,13 +18,20 @@
 namespace gamut_core {
 namespace internal {
 
-// The most bytes a root text attribute (a title, a portion marking) holds.
-// HDF5 keeps it in the root's object header at the writer's libver bounds,
-// where one attribute message has a 64 KiB limit: HDF5 1.14.6 refuses
-// portion_marking above 65,495 bytes, and between 65,489 and 65,495 writes
-// a header it cannot open again.  The limit falls as the name grows and
-// does not depend on the other attributes; this keeps a margin below it.
-const std::size_t kMaxRootTextBytes = 65000;
+// The most bytes a root text attribute named `name` (a title, a portion
+// marking) holds.  HDF5 keeps it in the root's object header at the
+// writer's libver bounds, as one message of at most 64 KiB whose name is
+// padded to 8 bytes.  Measured with HDF5 1.14.6 for every root text
+// attribute the writer sets, on a new file and over an existing value: up
+// to 65,504 bytes less the padded name it writes a header that opens again
+// (65,496 for title, license and source; 65,488 for references,
+// portion_marking, evaluated_from and trained_on); a few bytes more and it
+// writes one it cannot open, then refuses.  The other attributes make no
+// difference.  A larger value could only be written over an existing one,
+// and no copy of it opens.
+inline std::size_t max_root_text_bytes(const std::string& name) {
+  return 65504 - 8 * ((name.size() + 1 + 7) / 8);
+}
 
 // A typed column of values: `count` elements of `dtype`, packed.
 struct Column {

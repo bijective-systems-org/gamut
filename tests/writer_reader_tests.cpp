@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <iterator>
@@ -403,7 +404,7 @@ void test_refusals() {
 // The portion marking (spec section 8): a root attribute read as written,
 // absent when not set, kept by extract and write_copy, and accepted by the
 // validator.  HDF5 holds a root attribute in compact storage at the
-// writer's libver bounds, so one past kMaxRootTextBytes is refused and
+// writer's libver bounds, so one past max_root_text_bytes is refused and
 // nothing is written (HDF5 itself refuses or damages the header near 64 KiB).
 void test_portion_marking() {
   const std::string path = "wr_marked.gamut", plain = "wr_plain.gamut";
@@ -504,7 +505,8 @@ void test_append_marking() {
   CHECK(refused(e, a, std::nullopt) == "E27");   // an empty marking is none
   CHECK(refused(a, b, std::string()) == "error");             // a stated marking is never empty
   CHECK(refused(a, b, std::string("\xff")) == "E3");
-  CHECK(refused(a, b, std::string(kMaxRootTextBytes + 1, 'm')) == "error");   // too long to store
+  const std::size_t most = max_root_text_bytes("portion_marking");
+  CHECK(refused(a, b, std::string(most + 1, 'm')) == "error");   // too long to store
   CHECK(refused(u, a, std::string(65490, 'm')) == "error");   // HDF5 would damage the header
   CHECK(append_file(a, a2) == 2);                // equal markings
   CHECK(marking(a) == "PLACEHOLDER-A" && rows(a) == 4);
@@ -519,16 +521,72 @@ void test_append_marking() {
   CHECK(marking(u) == "PLACEHOLDER-C" && rows(u) == 6);
   CHECK(validate_file(a).findings.empty() && validate_file(u).findings.empty());
   // The longest marking stated is stored, and the file opens again.
-  CHECK(append_file(u, e, std::string(kMaxRootTextBytes, 'm')) == 2);
-  CHECK(marking(u).size() == kMaxRootTextBytes && validate_file(u).findings.empty());
+  CHECK(append_file(u, e, std::string(most, 'm')) == 2);
+  CHECK(marking(u).size() == most && validate_file(u).findings.empty());
   // Rows from elsewhere meet the same rule.
   CHECK(rule_of([] { check_marking("", "PLACEHOLDER-A"); }) == "E27");
   CHECK(rule_of([] { check_marking("PLACEHOLDER-B", "PLACEHOLDER-A"); }) == "E27");
   CHECK(rule_of([] { check_marking("PLACEHOLDER-A", ""); }).empty());
   CHECK(rule_of([] { check_marking("PLACEHOLDER-A", "PLACEHOLDER-A"); }).empty());
+  CHECK(rule_of([] { check_marking("", "PLACEHOLDER-A", std::string("PLACEHOLDER-C")); }).empty());
+  CHECK(rule_of([] { check_marking("", "", std::string()); }) == "error");
+  CHECK(rule_of([] { check_marking("", "", std::string("\xff")); }) == "E3");
+  CHECK(rule_of([&] { check_marking("", "", std::string(most + 1, 'm')); }) == "error");
   if (!std::getenv("GAMUT_KEEP")) {
     for (const auto& p : {a, b, u, e, a2}) std::remove(p.c_str());
   }
+}
+
+// The largest root text attribute HDF5 writes in a header that opens again
+// (max_root_text_bytes): for each name the writer sets, a value at the edge
+// is written, read back, validated and copied, and one past it is refused
+// with nothing written.  Data files take every name but trained_on, which a
+// model file takes.
+void test_root_text_edges() {
+  gamut_error e{};
+  gamut_set_marking_notice([](const char*, const char*, void*) {}, nullptr);   // 65 KB of m
+  for (const std::string name : {"title", "license", "references", "source", "portion_marking",
+                                 "evaluated_from", "trained_on"}) {
+    const std::size_t most = max_root_text_bytes(name);
+    const std::string path = "wr_edge.gamut", copy = "wr_edge_copy.gamut";
+    std::remove(path.c_str());
+    std::remove(copy.c_str());
+    const bool model = name == "trained_on";
+    gamut_file* f = nullptr;
+    CHECK((model ? gamut_create_model(path.c_str(), "tests", nullptr, nullptr, &f, &e)
+                 : gamut_create(path.c_str(), "tests", nullptr, nullptr, &f, &e)) == 0);
+    CHECK(gamut_set_attribute(f, name.c_str(), std::string(most + 1, 'm').c_str(), &e) != 0);
+    CHECK(gamut_set_attribute(f, name.c_str(), std::string(most, 'm').c_str(), &e) == 0);
+    CHECK(gamut_declare_parameter(f, "x", "design", "1", GAMUT_FLOAT64, 1, 0.0, 1.0, "", &e) == 0);
+    if (model) {
+      CHECK(gamut_declare_result(f, "y", "scalar", "1", GAMUT_FLOAT64, "", "", 0, 0.0, "", "", "", "",
+                                 -1, "fit", "y", &e) == 0);
+      gamut_tree* numbers = nullptr;
+      gamut_tree_new(&numbers, &e);
+      gamut_tree_set_float(numbers, "slope", 1.0, &e);
+      const char* reads[] = {"x"};
+      CHECK(gamut_add_model(f, "fit", "linear", reads, 1, numbers, "", &e) == 0);
+      gamut_tree_free(numbers);
+    }
+    CHECK(gamut_close(f, &e) == 0);
+    {
+      gamut_file* g = nullptr;
+      CHECK(gamut_open(path.c_str(), &g, &e) == 0);
+      gamut_strings* got = nullptr;
+      CHECK(gamut_info(g, name.c_str(), &got, &e) == 0 &&
+            std::strlen(gamut_strings_get(got, 0)) == most);
+      gamut_strings_free(got);
+      gamut_close(g, &e);
+    }
+    CHECK(validate_file(path).findings.empty());
+    CHECK(gamut_write_copy(path.c_str(), copy.c_str(), &e) == 0);   // a file at the edge copies
+    CHECK(validate_file(copy).findings.empty());
+    if (!std::getenv("GAMUT_KEEP")) {
+      std::remove(path.c_str());
+      std::remove(copy.c_str());
+    }
+  }
+  gamut_set_marking_notice(nullptr, nullptr);
 }
 
 // What a capturing sink receives.
@@ -594,6 +652,18 @@ void test_marking_notice() {
   open_close(other);                                 // another marking from the same model
   CHECK(got.notices.size() == 3 && got.notices[2].first == other);
   got.notices.clear();
+  // A file refused for its structure after its root is read (a soft link,
+  // E22) still shows its marking.
+  const std::string linked = "wr_notice_linked.gamut";
+  marked_table(linked, "PLACEHOLDER-D");
+  {
+    File h = File::open_write(linked);
+    CHECK(H5Lcreate_soft("/x", h.get(), "/elsewhere", H5P_DEFAULT, H5P_DEFAULT) >= 0);
+  }
+  got.notices.clear();
+  CHECK(gamut_open(linked.c_str(), &f, &err) != 0 && std::string(err.rule) == "E22");
+  CHECK(got.notices.size() == 1 && got.notices[0].first == linked);
+  got.notices.clear();
   // A refused append still opened both files: both are shown.
   marked_table(odd, "PLACEHOLDER-B");
   gamut_set_marking_notice(capture, &got);
@@ -631,7 +701,7 @@ void test_marking_notice() {
   CHECK(probe.opened);
   gamut_set_marking_notice(nullptr, nullptr);
   if (!std::getenv("GAMUT_KEEP")) {
-    for (const auto& p : {a, u, copy, odd, answer, other}) std::remove(p.c_str());
+    for (const auto& p : {a, u, copy, odd, answer, other, linked}) std::remove(p.c_str());
   }
 }
 
@@ -1349,6 +1419,7 @@ int main() {
       {"portion_marking", test_portion_marking},
       {"append_marking", test_append_marking},
       {"marking_notice", test_marking_notice},
+      {"root_text_edges", test_root_text_edges},
       {"bounds", test_outside_bounds},
       {"bounds_int", test_outside_large_integers},
       {"other_major", test_other_major_version},

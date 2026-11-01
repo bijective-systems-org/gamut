@@ -391,10 +391,14 @@ GAMUT_API int gamut_append(const char* dst_path, const char* src_path, int64_t* 
  * before the destination is opened to write. */
 GAMUT_API int gamut_append_marked(const char* dst_path, const char* src_path, const char* marking,
                               int64_t* rows_added, gamut_error* err);
-/* For rows from elsewhere (a document) added to a file open to add runs:
- * refuses (E27) when rows_marking (NULL or empty: none) is set and is not
- * the file's marking.  It writes nothing; the caller then adds the rows. */
-GAMUT_API int gamut_check_marking(gamut_file* f, const char* rows_marking, gamut_error* err);
+/* The marking checks of gamut_append_marked for rows from elsewhere (a
+ * document), on the destination open to read, before it is opened to add
+ * runs: with marking NULL, refuses (E27) rows_marking (NULL or empty: none)
+ * when it is set and is not the file's; with marking, refuses one that is
+ * empty, not UTF-8 or too long for portion_marking, and the caller then
+ * sets it with gamut_set_attribute after adding the rows. */
+GAMUT_API int gamut_check_marking(const gamut_file* f, const char* rows_marking, const char* marking,
+                              gamut_error* err);
 GAMUT_API int gamut_extract(const char* src_path, const char* dst_path, const gamut_sel* rows,
                         gamut_error* err);
 GAMUT_API int gamut_write_copy(const char* src_path, const char* dst_path, gamut_error* err);

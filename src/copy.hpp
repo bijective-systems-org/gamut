@@ -22,9 +22,13 @@ namespace internal {
 std::int64_t append_file(const std::string& dst, const std::string& src,
                          const std::optional<std::string>& marking = std::nullopt);
 
-// Refuses (E27) rows marked `rows_marking` (empty: none) for a file marked
-// `file_marking`: the rule of append, for rows from elsewhere.
-void check_marking(const std::string& file_marking, const std::string& rows_marking);
+// The marking checks of append (spec section 11.5), for rows from a file or
+// from elsewhere: with `stated`, that it is a marking the file can carry
+// (not empty, UTF-8, within portion_marking's size); without, a refusal
+// (E27) of rows marked `rows_marking` (empty: none) for a file marked
+// `file_marking`.
+void check_marking(const std::string& file_marking, const std::string& rows_marking,
+                   const std::optional<std::string>& stated = std::nullopt);
 
 // The selected rows of `src` as a new file `dst`: ids kept, every table
 // whole, a changing mesh's instances reduced to those the rows use.

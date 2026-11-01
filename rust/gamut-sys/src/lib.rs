@@ -155,7 +155,7 @@ extern "C" {
     pub fn gamut_evaluation_free(ev: *mut gamut_evaluation);
     pub fn gamut_append(dst_path: *const c_char, src_path: *const c_char, rows_added: *mut i64, err: *mut gamut_error) -> c_int;
     pub fn gamut_append_marked(dst_path: *const c_char, src_path: *const c_char, marking: *const c_char, rows_added: *mut i64, err: *mut gamut_error) -> c_int;
-    pub fn gamut_check_marking(f: *mut gamut_file, rows_marking: *const c_char, err: *mut gamut_error) -> c_int;
+    pub fn gamut_check_marking(f: *const gamut_file, rows_marking: *const c_char, marking: *const c_char, err: *mut gamut_error) -> c_int;
     pub fn gamut_extract(src_path: *const c_char, dst_path: *const c_char, rows: *const gamut_sel, err: *mut gamut_error) -> c_int;
     pub fn gamut_write_copy(src_path: *const c_char, dst_path: *const c_char, err: *mut gamut_error) -> c_int;
     pub fn gamut_validate(path: *const c_char, out: *mut *mut gamut_report, err: *mut gamut_error) -> c_int;
