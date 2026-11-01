@@ -25,6 +25,7 @@ checkout with `cargo run --example run_table`.
 | `study.related("cl")` | `study.related("cl")?`: a `gamut::Related` |
 | `gamut.evaluate(path, inputs, path=out)` | `gamut::evaluate(path, &inputs, out)?`: the answer and the W4 findings |
 | `gamut.append`, `extract`, `write_copy`, `validate` | `gamut::append`, `extract`, `write_copy`, `validate` |
+| `gamut.set_marking_notice(show)` | `gamut::set_marking_notice(Some(Box::new(...)))`, `None` for stderr |
 
 ## Conventions
 

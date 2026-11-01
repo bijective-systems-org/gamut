@@ -25,6 +25,18 @@ stored whole, or does not inflate to its full size, is refused (E23)
 before anything is copied from it; HDF5 trusts these sizes, and a crafted
 file could make it read or write past its own memory.
 
+A file's portion marking is shown when the file opens, as text the core
+composes the same way in every language: line ends become line feeds, and
+each byte that is not UTF-8, each control character but the line feed and
+the tab, each C1 control and each bidirectional override or isolate
+becomes U+FFFD, so a crafted marking cannot move or clear a terminal,
+reorder what is shown, or break a decoder; `gamut info` shows it the same
+way. The notice is a courtesy, not a control: a program can route it or
+turn it off, and any HDF5 tool reads the file without it, so a program
+that turns it off takes on any duty to show the marking. Appending keeps
+the destination's marking and refuses runs marked otherwise unless the
+call states the result's (E27).
+
 `gamut validate` reports the rules a file breaks, with where and why,
 within the limits below. A
 read that cannot be carried out safely is refused with the rule and the

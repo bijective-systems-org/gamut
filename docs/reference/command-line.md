@@ -87,7 +87,10 @@ appended 2 runs to sweep.gamut
 
 The declarations are those of `gamut.create` ([run tables](../guide/01-run-tables.md)).
 An appended document needs only its `runs`; `gamut append` also takes
-another study file and adds all of its runs. For fields, the document names
+another study file and adds all of its runs. Runs whose portion marking is
+not the file's, from a document's `portion_marking` or another study
+file, are refused (E27) unless `--marking TEXT` states the marking the
+result carries. For fields, the document names
 a mesh file (`.npz`), and each run's line names a `.npy` of its values;
 `gamut build --example` prints a complete document with the layout of
 both explained.
@@ -102,7 +105,11 @@ both explained.
   open among them.
 - The exit status is 0 on success, 1 when a file or document has errors,
   and 2 for a command used wrongly, such as appending to a valid file that
-  cannot grow (E25).
+  cannot grow (E25) or runs marked otherwise (E27).
+- Opening a file that carries a portion marking prints it on stderr, once
+  per file, so `--json` output is unchanged; `gamut --no-marking-notice
+  COMMAND ...` turns that off. `gamut info` shows the marking in its own
+  output instead.
 - `gamut --version` gives the package version and the format version it
   writes.
 

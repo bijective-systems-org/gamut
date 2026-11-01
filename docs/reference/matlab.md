@@ -23,6 +23,7 @@ An example written in MATLAB has a MATLAB tab, quoted from a program in
 | `study.related("cl")` | `study.related('cl')`: a struct, its quantiles and derivatives as `containers.Map` |
 | `study.model_numbers("fit")` | `study.modelNumbers('fit')`: a struct |
 | `gamut.append`, `extract`, `write_copy`, `validate` | `gamut.append`, `extract`, `writeCopy`, `validate` |
+| `gamut.set_marking_notice(False)` | `warning('off', 'gamut:marking')` |
 
 `help gamut.Study` describes the study object, and `methods(study)` lists
 what it can do.

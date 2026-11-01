@@ -31,6 +31,7 @@ evaluates a model fitted in Python. Without CMake, one builds as
 | `study.related("cl")` | `study.related("cl")`: a `gamut::Related`, its std as `std_dev` |
 | `study.select("mach > 0.7")`, `study.get_label(...)`, `study.describe(...)` | the same names |
 | `gamut.append`, `extract`, `write_copy`, `validate` | `gamut::append`, `extract`, `write_copy`, `validate` |
+| `gamut.set_marking_notice(show)` | `gamut::set_marking_notice(function)`, empty for stderr |
 
 Model files, notes and private records are written and read through
 `gamut.h`; `study.handle()` gives the open file to pass to it.
@@ -195,7 +196,11 @@ cp at the top of the cylinder, run by run: -3.00 -2.69 -2.39 -2.10 -1.83 -1.57 -
   the handle stays open to fix and close again; `gamut_abandon` gives up,
   and can delete a file the handle created.
 - `gamut_validate`, `gamut_append`, `gamut_extract` and `gamut_write_copy` work on
-  paths, as in every language.
+  paths, as in every language; `gamut_append_marked` states the marking
+  the result carries.
+- `gamut_set_marking_notice` gives the notice on opening a marked file to
+  a function of yours, called after the call's work, outside its lock; it
+  must not throw or unwind. NULL restores the default, stderr.
 - Only the `gamut_` functions leave the library. A build with
   `GAMUT_STATIC_HDF5` carries its own HDF5, so a program that also links
   HDF5 never meets a second copy.

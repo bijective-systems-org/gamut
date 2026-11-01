@@ -154,6 +154,18 @@ Category tables merge by name, so a status `failed` in one file is
 `failed` in the other whatever its code. A group member found in both
 files must have the same geometry in both.
 
+A file may carry a portion marking, its author's free text about who may
+see it (`portion_marking` when it is created). Appending keeps the
+destination's: runs from an unmarked file take it, and runs from a file
+marked otherwise are refused (E27), since they would lose their own. To
+append them, state the marking the result carries:
+`append(dst, src, marking=m)` in Python, `gamut.append(dst, src, 'Marking', m)`
+in MATLAB, `Gamut.append!(dst, src; marking=m)` in Julia,
+`gamut::append(dst, src, m)` in C++, `gamut::append_marked(dst, src, m)`
+in Rust, and `gamut append FILE SRC --marking TEXT` on the command line.
+The destination then carries it, whatever the two files did; an empty
+marking is none, and is never stated.
+
 ### Extract
 
 The chosen runs keep their ids, so a run can be traced back
@@ -177,6 +189,17 @@ identity: its `file_id` and creation time.
   unreadable, the runs written before included:
   keep a copy of a file you cannot regenerate before appending to it, or
   write each job's runs to a file of its own and `append` them at the end.
+- Opening a file that carries a portion marking shows it, once per file
+  in a process: a block naming the file, then the marking whole, the same
+  in every language. Python prints it on `sys.stderr` (so it shows in a
+  notebook), C, C++, Rust and the command line on stderr, Julia logs it
+  with `@info`, and MATLAB issues the warning `gamut:marking`.
+  `gamut.set_marking_notice` routes it: `False` turns it off and a
+  function of the path and the text receives it; Julia, C++ and Rust have
+  `set_marking_notice` too, MATLAB `warning('off', 'gamut:marking')`, and
+  the command line `gamut --no-marking-notice`. A program that turns it
+  off takes on any duty to show the marking: Gamut cannot make anything
+  display it, since any HDF5 tool reads the file.
 - `validate` checks a file against the rules of the specification. Each
   finding has its rule, the path of what it concerns and a message; Python
   C++ and Rust return a report with `ok`, `errors` and `warnings`, MATLAB and

@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+The file format (`gamut/1`) is unchanged; the C interface only adds calls.
+
+- Appending runs from a file whose portion marking is not the
+  destination's is refused (E27, a refusal and never a finding of
+  validation, as E25), so runs no longer lose their marking unseen. Runs
+  from an unmarked file take the destination's; an empty marking is none.
+  The caller may state the marking the result carries, which the
+  destination then carries whatever the two files did: `marking=` in
+  Python and Julia, `'Marking'` in MATLAB, a third argument in C++,
+  `gamut::append_marked` in Rust, `gamut_append_marked` in C, and
+  `--marking` on the command line, where a document's `portion_marking`
+  meets the same rule (`gamut_check_marking`) and E27 exits 2, as E25
+  does. Specification sections 8, 11.5 and 16 say so.
+- Opening a marked file shows its marking, once per file in a process
+  (and once for a model file and the answers evaluated from it): a block
+  the core composes the same way in every language, with the marking
+  whole and control characters, invalid UTF-8 and bidirectional overrides
+  shown as U+FFFD. Python prints it on `sys.stderr`, Julia logs it with
+  `@info`, MATLAB issues the warning `gamut:marking`, and C, C++, Rust and
+  the command line print it on stderr. `set_marking_notice` in Python,
+  Julia, C++, Rust and C (`gamut_set_marking_notice`) routes it or turns
+  it off, as do `warning('off', 'gamut:marking')` in MATLAB and
+  `gamut --no-marking-notice`. `gamut info` shows the marking as that
+  block in its output, where it printed the raw text before.
 - `gamut-format` stays at 2.0.0. Its 2.1.0, which only installed
   `bijective-gamut`, is yanked: both names install the same `gamut`
   module, so upgrading `gamut-format` to it removed that module. To move
