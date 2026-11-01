@@ -438,15 +438,21 @@ def _read_runs(doc: dict, base: str, study_fields: set[str], labels: set[str],
     return columns, fields, points, cells
 
 
-def _add_rows(study: Any, doc: dict, base: str, fields: set[str], labels: set[str]) -> int:
+def _rows(doc: dict, base: str, fields: set[str], labels: set[str], mesh_kind: str) -> tuple:
+    """A document's runs, read whole: (n, columns, fields, points, cells)."""
     problems: list[tuple[str, str]] = []
     columns, field_values, points, cells = _read_runs(doc, base, fields, labels, problems)
     if problems:
         raise Problems(problems)
     n = len(next(iter(columns.values()))) if columns else 0
-    arrays = {k: np.stack(v) if study._mesh_kind != "changing" else np.concatenate([a.ravel() for a in v])
+    arrays = {k: np.stack(v) if mesh_kind != "changing" else np.concatenate([a.ravel() for a in v])
               for k, v in field_values.items()}
-    study.add_runs(columns, fields=arrays, points=points or None, cells=cells or None)
+    return n, columns, arrays, points or None, cells or None
+
+
+def _add_rows(study: Any, doc: dict, base: str, fields: set[str], labels: set[str]) -> int:
+    n, columns, arrays, points, cells = _rows(doc, base, fields, labels, study._mesh_kind)
+    study.add_runs(columns, fields=arrays, points=points, cells=cells)
     return n
 
 
@@ -504,13 +510,6 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 def cmd_append(args: argparse.Namespace) -> int:
     """--json: {"appended": FILE, "rows": n}"""
-    if args.marking is not None:
-        try:
-            args.marking.encode("utf-8")
-        except UnicodeEncodeError:
-            raise _Usage("E3", "--marking is not valid UTF-8") from None
-        if not args.marking:
-            raise _Usage("", "--marking states the marking the result carries; it is not empty")
     if args.document.lower().endswith(".gamut"):
         if os.path.exists(args.document) and os.path.exists(args.file) and \
                 os.path.samefile(args.document, args.file):
@@ -533,11 +532,22 @@ def cmd_append(args: argparse.Namespace) -> int:
     problems = _checked(doc, base, appending=True)
     if problems:
         return _report_problems(args, problems)
+    # Everything is read and checked before the file is opened to add runs,
+    # which changes its bytes: the runs whole, then the marking's checks,
+    # made by the core on the file open to read (E27, or a stated marking's).
     try:
         with open_file(args.file) as f:
             _rows_kept(f, "appending")
             fields = set(f.names("node_fields") + f.names("cell_fields"))
             labels = set(f.names("labels"))
+            n, columns, arrays, points, cells = _rows(doc, base, fields, labels, f._mesh_kind)
+            try:
+                _lib.call("gamut_check_marking", f._handle(), _lib.b(doc.get("portion_marking")),
+                          _lib.b(args.marking))
+            except GamutError as e:     # a --marking the file cannot carry: the argument's
+                if e.rule == "E27":
+                    raise
+                raise _Usage(e.rule, e.message, e.path) from None
         try:
             appending = open_file(args.file, mode="a")
         except GamutError as e:
@@ -546,17 +556,10 @@ def cmd_append(args: argparse.Namespace) -> int:
                 raise
             raise _Usage("", e.message, e.path) from None
         with appending as study:
-            # The document's marking meets the rule a source file's does (E27);
-            # a stated one is set first, so a marking refused adds no rows.
-            if args.marking is None:
-                _lib.call("gamut_check_marking", study._handle(), _lib.b(doc.get("portion_marking")))
-            else:
-                try:
-                    _lib.call("gamut_set_attribute", study._handle(), b"portion_marking",
-                              _lib.b(args.marking))
-                except GamutError as e:     # a --marking the file cannot hold: the argument's
-                    raise _Usage(e.rule, e.message, e.path) from None
-            n = _add_rows(study, doc, base, fields, labels)
+            study.add_runs(columns, fields=arrays, points=points, cells=cells)
+            if args.marking is not None:            # re-marked last, once the runs are in
+                _lib.call("gamut_set_attribute", study._handle(), b"portion_marking",
+                          _lib.b(args.marking))
     except Problems as e:
         return _report_problems(args, e.problems)
     except GamutError:

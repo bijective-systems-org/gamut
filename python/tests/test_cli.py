@@ -449,18 +449,25 @@ def test_marked_files_and_documents_meet_the_append_rule(tmp_path, capsys):
     code, out, err = run(capsys, "--no-marking-notice", "info", a, "--json")
     assert code == 0 and err == "" and json.loads(out)["metadata"]["portion_marking"] == "PLACEHOLDER-A"
     code, out, err = run(capsys, "append", u, a, "--marking", "", "--json")
-    assert code == 2 and "not empty" in out
+    assert code == 2 and "is empty" in out
     code, out, _ = run(capsys, "append", u, a, "--marking", "PLACEHOLDER-C", "--json")
     assert code == 0 and json.loads(out)["rows"] == 1
     (tmp_path / "runs.csv").write_text("x\n2\n")
     doc = tmp_path / "add.json"
     doc.write_text(json.dumps({"runs": "runs.csv", "portion_marking": "PLACEHOLDER-D"}))
-    code, out, _ = run(capsys, "append", u, str(doc), "--json")
-    assert code == 2 and json.loads(out)["problems"][0]["rule"] == "E27", out
-    code, out, _ = run(capsys, "append", u, str(doc), "--marking", "m" * 65490, "--json")
-    assert code == 2 and "at most" in out, out             # too long to store: no rows added
-    with gamut.open(u) as f:
-        assert f.describe()["portion_marking"] == "PLACEHOLDER-C" and f.row_count == 2
+    # A refused document leaves the file's bytes as they were: E27, a stated
+    # marking too long to store, an empty one, and runs that do not read.
+    (tmp_path / "bad.csv").write_text("x\nnot a number\n")
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"runs": "bad.csv"}))
+    for argv, code_wanted, says in (([str(doc)], 2, "E27"),
+                                    ([str(doc), "--marking", "m" * 65489], 2, "at most"),
+                                    ([str(doc), "--marking", ""], 2, "is empty"),
+                                    ([str(bad), "--marking", "PLACEHOLDER-E"], 1, "not a number")):
+        before = open(u, "rb").read()
+        code, out, _ = run(capsys, "append", u, *argv, "--json")
+        assert code == code_wanted and says in out, out
+        assert open(u, "rb").read() == before
     code, out, _ = run(capsys, "append", u, str(doc), "--marking", "PLACEHOLDER-D", "--json")
     assert code == 0 and json.loads(out)["rows"] == 1
     code, out, _ = run(capsys, "append", u, str(doc), "--json")      # the same marking now
