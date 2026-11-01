@@ -24,13 +24,17 @@ The file format (`gamut/1`) is unchanged; the C interface only adds calls.
   the command line print it on stderr. `set_marking_notice` in Python,
   Julia, C++, Rust and C (`gamut_set_marking_notice`) routes it or turns
   it off, as do `warning('off', 'gamut:marking')` in MATLAB and
-  `gamut --no-marking-notice`. `gamut info` shows the marking as that
+  `gamut --no-marking-notice` and `gamut-vtk --no-marking-notice`.
+  `gamut info` shows the marking as that
   block in its output, where it printed the raw text before.
-- A root text attribute (a title, a portion marking) holds at most 65,000
-  bytes, refused before anything is written. HDF5 1.14.6 refused a
-  portion marking above 65,495 bytes, but between 65,489 and 65,495 wrote
-  a root it could not open again. A stated marking for `append` is
-  checked before the destination is opened, so its bytes stay as they were.
+- A root text attribute holds at most what HDF5 writes in a header that
+  opens again: 65,504 bytes less its name padded to 8 (65,496 for `title`,
+  `license` and `source`; 65,488 for `references`, `portion_marking`,
+  `evaluated_from` and `trained_on`), refused before anything is written.
+  HDF5 1.14.6 accepted a few bytes more and wrote a root it could not open
+  again. A stated marking for `append`, or for `gamut append` with a
+  document, is checked before the destination is opened, so a refusal
+  leaves its bytes as they were.
 - `gamut-format` stays at 2.0.0. Its 2.1.0, which only installed
   `bijective-gamut`, is yanked: both names install the same `gamut`
   module, so upgrading `gamut-format` to it removed that module. To move

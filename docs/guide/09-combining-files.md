@@ -197,7 +197,7 @@ identity: its `file_id` and creation time.
   `gamut.set_marking_notice` routes it: `False` turns it off and a
   function of the path and the text receives it; Julia, C++ and Rust have
   `set_marking_notice` too, MATLAB `warning('off', 'gamut:marking')`, and
-  the command line `gamut --no-marking-notice`. A program that turns it
+  the command line `gamut --no-marking-notice` (and `gamut-vtk`'s). A program that turns it
   off takes on any duty to show the marking: Gamut cannot make anything
   display it, since any HDF5 tool reads the file.
 - `validate` checks a file against the rules of the specification. Each
