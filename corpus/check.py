@@ -29,8 +29,51 @@ def described(f, p: dict) -> str | None:
     return None if got == p["value"] else f"describe {p['describe']}: {got!r} != {p['value']!r}"
 
 
+def noticed(path: str, want: str | None) -> str | None:
+    """Opening the file twice under a capturing sink (which forgets what was
+    shown): the notice once, `want` after its first line, or none."""
+    got: list[str] = []
+    gamut.set_marking_notice(lambda shown_path, text: got.append(text))
+    try:
+        for _ in range(2):
+            gamut.open(path).close()
+    finally:
+        gamut.set_marking_notice(True)
+    if want is None:
+        return None if not got else f"notice: {got!r}, expected none"
+    first = f"gamut: {path} carries a portion marking\n"
+    return None if got == [first + want] else f"notice: {got!r} != {[first + want]!r}"
+
+
+def appended(path: str, p: dict) -> str | None:
+    """This file appended into a copy of another case, or another case into a
+    copy of this one: refused with the file unchanged, or appended."""
+    other = os.path.join(os.path.dirname(path), p.get("append_into", p.get("append_from")) + ".gamut")
+    dst_case, src = (other, path) if "append_into" in p else (path, other)
+    with tempfile.TemporaryDirectory() as tmp:
+        dst = os.path.join(tmp, "dst.gamut")
+        shutil.copy(dst_case, dst)
+        before = open(dst, "rb").read()
+        try:
+            gamut.append(dst, src, marking=p.get("marking"))
+        except gamut.GamutError as exc:
+            if exc.rule != p.get("refused"):
+                return f"append: refused with {exc.rule!r}, expected {p.get('refused')!r}: {exc}"
+            return None if open(dst, "rb").read() == before else "append: refused, the destination changed"
+        if "refused" in p:
+            return f"append: appended, expected refusal {p['refused']}"
+        with gamut.open(dst) as f:
+            if f.row_count != p["rows"]:
+                return f"append: {f.row_count} rows, not {p['rows']}"
+            return described(f, p)
+
+
 def probe(path: str, p: dict) -> str | None:
     """None when the probe holds, else what differed."""
+    if "notice" in p:
+        return noticed(path, p["notice"])
+    if "append_into" in p or "append_from" in p:
+        return appended(path, p)
     if "evaluate" in p:
         with gamut.evaluate(path, p["evaluate"]) as out:
             if "describe" in p:
@@ -175,6 +218,10 @@ def main() -> int:
                                         f"{e['refused']}: {exc}")
                 except Exception as exc:
                     failures.append(f"{name}: raised {type(exc).__name__}: {exc}")
+                for p in e.get("probes", []):
+                    why = probe(path, p)
+                    if why:
+                        failures.append(f"{name}: {why}")
     total = sum(counts.values())
     print(f"{total} cases ({counts['valid']} valid, {counts['rules']} rule, {counts['hostile']} "
           f"hostile): {total - len({x.split(':')[0] for x in failures})} hold")

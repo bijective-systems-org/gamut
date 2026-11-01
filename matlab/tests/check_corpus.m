@@ -46,6 +46,14 @@ for k = 1:numel(names)
         if strcmp(e.group, 'hostile')
             why = hostile(path, e);
             if ~isempty(why), fails{end + 1} = sprintf('%s: %s', name, why); end %#ok<SAGROW>
+            if isfield(e, 'probes')
+                probes = e.probes;
+                if ~iscell(probes), probes = num2cell(probes); end
+                for j = 1:numel(probes)
+                    why = probe(path, probes{j});
+                    if ~isempty(why), fails{end + 1} = sprintf('%s: %s', name, why); end %#ok<SAGROW>
+                end
+            end
         end
     end
 end
@@ -105,8 +113,89 @@ if ~isequal(got, p.value)
 end
 end
 
+function why = noticed(path, want)
+% The notice is the warning gamut:marking: the gateway's sink set again
+% (which forgets what was shown), then two opens; the first gives the notice
+% (want after its first line), the second nothing.  An empty want is none.
+why = '';
+gamut_mex('marking_notice');
+state = warning('on', 'gamut:marking');
+cw = onCleanup(@() warning(state));
+got = cell(1, 2);
+for k = 1:2
+    lastwarn('');
+    r = gamut.open(path);
+    r.close();
+    [msg, id] = lastwarn;
+    if strcmp(id, 'gamut:marking'), got{k} = msg; end
+end
+if isempty(want)
+    if ~isempty(got{1}) || ~isempty(got{2}), why = 'notice: shown, expected none'; end
+    return
+end
+expect = [sprintf('gamut: %s carries a portion marking\n', path) want];
+if ~strcmp(got{1}, expect)
+    why = sprintf('notice: %s ~= %s', got{1}, expect);
+elseif ~isempty(got{2})
+    why = 'notice: shown again on the second open';
+end
+end
+
+function b = file_bytes(f)
+fid = fopen(f, 'r');
+b = fread(fid, inf, '*uint8');
+fclose(fid);
+end
+
+function why = appended(path, p)
+% This file appended into a copy of another case, or another case into a
+% copy of this one: refused with the file unchanged, or appended.
+why = '';
+into = isfield(p, 'append_into');
+if into, other = p.append_into; else, other = p.append_from; end
+other = fullfile(fileparts(path), [other '.gamut']);
+tmp = tempname; mkdir(tmp);
+ct = onCleanup(@() rmdir(tmp, 's'));
+dst = fullfile(tmp, 'dst.gamut');
+if into, copyfile(other, dst); src = path; else, copyfile(path, dst); src = other; end
+before = file_bytes(dst);
+try
+    if isfield(p, 'marking')
+        gamut.append(dst, src, 'Marking', p.marking);
+    else
+        gamut.append(dst, src);
+    end
+catch err
+    if ~isfield(p, 'refused') || ~strcmp(err.identifier, ['gamut:' p.refused])
+        why = sprintf('append: refused with %s: %s', err.identifier, err.message);
+    elseif ~isequal(file_bytes(dst), before)
+        why = 'append: refused, the destination changed';
+    end
+    return
+end
+if isfield(p, 'refused')
+    why = sprintf('append: appended, expected refusal %s', p.refused);
+    return
+end
+f = gamut.open(dst);
+cf = onCleanup(@() f.close());
+if f.rowCount() ~= p.rows
+    why = sprintf('append: %d rows, not %d', f.rowCount(), p.rows);
+    return
+end
+why = described(f, p);
+end
+
 function why = probe(path, p)
 why = '';
+if isfield(p, 'notice')
+    why = noticed(path, p.notice);
+    return
+end
+if isfield(p, 'append_into') || isfield(p, 'append_from')
+    why = appended(path, p);
+    return
+end
 if isfield(p, 'evaluate')
     out = gamut.evaluate(path, p.evaluate);
     c = onCleanup(@() out.close());
