@@ -1107,11 +1107,16 @@ unsafe extern "C" fn show_notice(path: *const c_char, text: *const c_char, _: *m
 pub fn set_marking_notice(show: Option<MarkingNotice>) {
     // The function and the core's sink change together under the lock, so
     // two threads setting sinks leave the one set last in both; notices are
-    // shown outside it.
-    let mut current = NOTICE.lock().unwrap_or_else(PoisonError::into_inner);
-    let given = show.is_some();
-    *current = show.map(Arc::from);
-    unsafe { sys::gamut_set_marking_notice(if given { Some(show_notice) } else { None }, ptr::null_mut()) }
+    // shown outside it, and the function displaced is dropped outside it
+    // too, since what it holds may set a sink as it goes.
+    let displaced = {
+        let mut current = NOTICE.lock().unwrap_or_else(PoisonError::into_inner);
+        let given = show.is_some();
+        let displaced = std::mem::replace(&mut *current, show.map(Arc::from));
+        unsafe { sys::gamut_set_marking_notice(if given { Some(show_notice) } else { None }, ptr::null_mut()) }
+        displaced
+    };
+    drop(displaced);
 }
 
 /// Writes the chosen runs of src as a new file, their ids kept.

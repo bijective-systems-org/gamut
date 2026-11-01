@@ -158,6 +158,22 @@ fn marked_appends_and_the_notice() -> Result<(), gamut::Error> {
     gamut::open(&marked)?;
     gamut::set_marking_notice(Some(Box::new(|_, _| {})));
     gamut::open(&marked)?;
+    // A sink holding something whose drop sets a sink: replacing it drops
+    // it outside the lock, so the nested call does not deadlock.
+    static DROPPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    struct SetsOnDrop;
+    impl Drop for SetsOnDrop {
+        fn drop(&mut self) {
+            gamut::set_marking_notice(Some(Box::new(|_, _| {})));
+            DROPPED.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+    let held = SetsOnDrop;
+    gamut::set_marking_notice(Some(Box::new(move |_, _| {
+        let _ = &held;
+    })));
+    gamut::set_marking_notice(None);
+    assert!(DROPPED.load(std::sync::atomic::Ordering::SeqCst));
     gamut::set_marking_notice(None);
     Ok(())
 }

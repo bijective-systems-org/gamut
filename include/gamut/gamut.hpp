@@ -733,12 +733,17 @@ inline void show_notice(const char* path, const char* text, void*) {
 
 // The function and the core's sink change together under the lock, so two
 // threads setting sinks leave the one set last in both; notices are shown
-// outside it.
+// outside it, and the function displaced is destroyed outside it too, since
+// what it holds may set a sink as it goes.
 inline void set_marking_notice(MarkingNotice show) {
-  const std::lock_guard<std::mutex> lock(detail::notice_sink().mutex);
-  const bool given = static_cast<bool>(show);
-  detail::notice_sink().show = std::move(show);
-  gamut_set_marking_notice(given ? detail::show_notice : nullptr, nullptr);
+  MarkingNotice displaced;
+  {
+    const std::lock_guard<std::mutex> lock(detail::notice_sink().mutex);
+    const bool given = static_cast<bool>(show);
+    displaced = std::move(detail::notice_sink().show);
+    detail::notice_sink().show = std::move(show);
+    gamut_set_marking_notice(given ? detail::show_notice : nullptr, nullptr);
+  }
 }
 
 inline std::string version() { return gamut_version(); }

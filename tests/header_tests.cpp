@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -546,6 +547,21 @@ void test_marking() {
   gamut::open("marked.gamut");                 // a throwing sink is not let through
   gamut::set_marking_notice([](const std::string&, const std::string&) {});
   gamut::open("marked.gamut");
+  // A sink holding something whose destructor sets a sink: replacing it
+  // destroys it outside the lock, so the nested call does not deadlock.
+  struct SetsOnDestruction {
+    bool* ran;
+    ~SetsOnDestruction() {
+      gamut::set_marking_notice([](const std::string&, const std::string&) {});
+      *ran = true;
+    }
+  };
+  bool ran = false;
+  std::shared_ptr<SetsOnDestruction> held(new SetsOnDestruction{&ran});
+  gamut::set_marking_notice([held](const std::string&, const std::string&) {});
+  held.reset();
+  gamut::set_marking_notice(nullptr);          // the last reference goes: it sets a sink
+  CHECK(ran);
   gamut::set_marking_notice(nullptr);
 }
 
