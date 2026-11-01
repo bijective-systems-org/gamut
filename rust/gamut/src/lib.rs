@@ -1105,8 +1105,12 @@ unsafe extern "C" fn show_notice(path: *const c_char, text: *const c_char, _: *m
 /// and the program then takes on any duty to show the marking. A panic in
 /// it is caught there.
 pub fn set_marking_notice(show: Option<MarkingNotice>) {
+    // The function and the core's sink change together under the lock, so
+    // two threads setting sinks leave the one set last in both; notices are
+    // shown outside it.
+    let mut current = NOTICE.lock().unwrap_or_else(PoisonError::into_inner);
     let given = show.is_some();
-    *NOTICE.lock().unwrap_or_else(PoisonError::into_inner) = show.map(Arc::from);
+    *current = show.map(Arc::from);
     unsafe { sys::gamut_set_marking_notice(if given { Some(show_notice) } else { None }, ptr::null_mut()) }
 }
 
