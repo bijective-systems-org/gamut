@@ -46,7 +46,16 @@ function show_notice(path::Cstring, text::Cstring, ::Ptr{Cvoid})::Cvoid
             show(unsafe_string(path), unsafe_string(text))
         end
     catch e
-        @error "the marking notice failed" exception=(e, catch_backtrace())
+        # The logger itself may be what failed: then a line on stderr, and
+        # if even that fails, nothing.
+        try
+            @error "the marking notice failed" exception=(e, catch_backtrace())
+        catch
+            try
+                Core.println(Core.stderr, "gamut: the marking notice failed")
+            catch
+            end
+        end
     end
     return nothing
 end

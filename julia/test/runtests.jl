@@ -18,6 +18,13 @@ function grid(nx, ny)
     return pts, (fill(UInt8(9), n), collect(Int64, 0:4:4n), conn)
 end
 
+# A logger that throws on every message, for the marking notice's fallback.
+struct Throwing <: Base.CoreLogging.AbstractLogger end
+Base.CoreLogging.min_enabled_level(::Throwing) = Base.CoreLogging.Debug
+Base.CoreLogging.shouldlog(::Throwing, args...) = true
+Base.CoreLogging.catch_exceptions(::Throwing) = false
+Base.CoreLogging.handle_message(::Throwing, args...; kw...) = error("logger failed")
+
 mktempdir() do tmp
     @testset "a table, one run at a time" begin
         p = joinpath(tmp, "polar.gamut")
@@ -307,6 +314,10 @@ mktempdir() do tmp
         @test_logs Gamut.open(identity, a)         # once per file
         Gamut.set_marking_notice((path, text) -> error("a broken sink"))
         @test_logs (:error, "the marking notice failed") Gamut.open(identity, a)
+        # A logger that throws: the notice and its report of the failure both
+        # go through it, and nothing reaches the core or the open.
+        Gamut.set_marking_notice(true)
+        @test Base.CoreLogging.with_logger(() -> Gamut.open(f -> f.row_count, a), Throwing()) == 1
         Gamut.set_marking_notice(false)
         @test_logs Gamut.open(identity, a)
         @test_throws GamutError Gamut.set_marking_notice("stderr")
