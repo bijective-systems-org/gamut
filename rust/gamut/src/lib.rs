@@ -28,8 +28,10 @@ use std::collections::BTreeMap;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::ops::{Index, Range, RangeFull};
-use std::os::raw::{c_char, c_int};
+use std::os::raw::{c_char, c_int, c_void};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use gamut_sys as sys;
 
@@ -1059,12 +1061,53 @@ pub fn open_append(path: &str) -> Result<Study> {
     Ok(s)
 }
 
-/// Adds src's runs to dst in place; returns how many.
+/// Adds src's runs to dst in place; returns how many. A marked src whose
+/// portion marking is not dst's is refused (E27); [`append_marked`] states
+/// the result's marking.
 pub fn append(dst: &str, src: &str) -> Result<usize> {
     let (dst, src) = (c(dst)?, c(src)?);
     let mut n = 0;
     call(|e| unsafe { sys::gamut_append(dst.as_ptr(), src.as_ptr(), &mut n, e) })?;
     Ok(n as usize)
+}
+
+/// [`append`], with the marking the result carries: dst is marked with it
+/// and src's runs added, whatever the two files carried. It is not empty.
+pub fn append_marked(dst: &str, src: &str, marking: &str) -> Result<usize> {
+    let (dst, src, marking) = (c(dst)?, c(src)?, c(marking)?);
+    let mut n = 0;
+    call(|e| unsafe { sys::gamut_append_marked(dst.as_ptr(), src.as_ptr(), marking.as_ptr(), &mut n, e) })?;
+    Ok(n as usize)
+}
+
+/// Where the notice on opening a marked file goes (see [`set_marking_notice`]):
+/// a function of the path and the notice's text.
+pub type MarkingNotice = Box<dyn Fn(&str, &str) + Send + Sync>;
+
+type Shown = Arc<dyn Fn(&str, &str) + Send + Sync>;
+
+static NOTICE: Mutex<Option<Shown>> = Mutex::new(None);
+
+// The core's sink. Another thread may set a new one meanwhile, so each call
+// takes its own reference; a panic may not unwind into the core.
+unsafe extern "C" fn show_notice(path: *const c_char, text: *const c_char, _: *mut c_void) {
+    let show = NOTICE.lock().unwrap_or_else(PoisonError::into_inner).clone();
+    if let Some(show) = show {
+        let (path, text) = unsafe { (CStr::from_ptr(path).to_string_lossy(), CStr::from_ptr(text).to_string_lossy()) };
+        let _ = catch_unwind(AssertUnwindSafe(|| show(&path, &text)));
+    }
+}
+
+/// Where the notice on opening a marked file goes: a function of the path
+/// and the notice's text, or `None` for the default, stderr. The core
+/// composes the text, the marking whole, once per file per process; setting
+/// a sink shows every file anew. One that does nothing turns the notice off,
+/// and the program then takes on any duty to show the marking. A panic in
+/// it is caught there.
+pub fn set_marking_notice(show: Option<MarkingNotice>) {
+    let given = show.is_some();
+    *NOTICE.lock().unwrap_or_else(PoisonError::into_inner) = show.map(Arc::from);
+    unsafe { sys::gamut_set_marking_notice(if given { Some(show_notice) } else { None }, ptr::null_mut()) }
 }
 
 /// Writes the chosen runs of src as a new file, their ids kept.

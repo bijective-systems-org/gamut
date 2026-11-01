@@ -4,8 +4,9 @@ and fails when src/lib.rs is not what it would write (CI runs that).
 
     python3 rust/gamut-sys/generate.py [--check]
 
-gamut.h is plain C: opaque handles, two structs, enums of constants, and
-functions with no callbacks.  This reads that much as a grammar, and every
+gamut.h is plain C: opaque handles, two structs, enums of constants, a
+callback type (a function pointer returning void), and functions.  This
+reads that much as a grammar, and every
 declaration is read whole with C's meaning or generation stops: nothing is
 skipped, and a header that grows past the grammar is refused, not misread."""
 import pathlib
@@ -114,7 +115,19 @@ def main() -> None:
     if text[start:].strip():
         refuse(f"text after the last declaration: {text[start:].strip()[:80]!r}")
 
-    consts, structs, opaque, functions = [], [], [], []
+    def parameters(text: str, where: str) -> list[str]:
+        params = " ".join(text.split())
+        args = []
+        if params != "void":
+            for p in params.split(","):
+                spec, rest = split_type(p, where)
+                pname, t = declarator(spec, rest, where)
+                if t.startswith("["):                       # C passes a pointer
+                    refuse(f"the array parameter {pname} of {where}")
+                args.append(f"{pname + '_' if pname in KEYWORDS else pname}: {t}")
+        return args
+
+    consts, structs, opaque, callbacks, functions = [], [], [], [], []
     for d in decls:
         if m := re.fullmatch(r"enum\s*\{(.*)\}", d, re.S):
             for item in m.group(1).split(","):
@@ -136,17 +149,13 @@ def main() -> None:
             if m.group(1) != m.group(2):
                 refuse(f"the typedef {d!r}")
             opaque += ["#[repr(C)]", f"pub struct {m.group(1)} {{", "    _private: [u8; 0],", "}", ""]
+        elif m := re.fullmatch(r"typedef\s+void\s*\(\s*\*\s*(gamut_\w+)\s*\)\s*\(([^()]*)\)", d, re.S):
+            # A pointer C may pass as NULL: Option of the function, as Rust's FFI lays it out.
+            args = parameters(m.group(2), m.group(1))
+            callbacks += [f"pub type {m.group(1)} = Option<unsafe extern \"C\" fn({', '.join(args)})>;", ""]
         elif m := re.fullmatch(r"GAMUT_API\s+(.*?)\b(gamut_\w+)\s*\(([^()]*)\)", d, re.S):
             ret = m.group(1).strip()
-            params = " ".join(m.group(3).split())
-            args = []
-            if params != "void":
-                for p in params.split(","):
-                    spec, rest = split_type(p, m.group(2))
-                    pname, t = declarator(spec, rest, m.group(2))
-                    if t.startswith("["):                       # C passes a pointer
-                        refuse(f"the array parameter {pname} of {m.group(2)}")
-                    args.append(f"{pname + '_' if pname in KEYWORDS else pname}: {t}")
+            args = parameters(m.group(3), m.group(2))
             if ret == "void":
                 r = ""
             else:
@@ -167,7 +176,7 @@ def main() -> None:
            "",
            "use std::os::raw::{c_char, c_int, c_void};",
            ""]
-    out += consts + [""] + structs + opaque
+    out += consts + [""] + structs + opaque + callbacks
     out += ['#[link(name = "gamut")]', 'extern "C" {', *functions, "}", ""]
     target, text = HERE / "src" / "lib.rs", "\n".join(out)
     if "--check" in sys.argv[1:]:
