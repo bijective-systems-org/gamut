@@ -519,6 +519,36 @@ void test_evaluation_through_the_c_interface() {
   std::remove("lift_model.gamut");
 }
 
+// A marked source into an unmarked file is refused (E27) and the file left
+// as it was; the stated marking appends and marks the result.  The notice
+// reaches a std::function sink once per file, and again once a sink is set.
+void test_marking() {
+  for (const char* p : {"marked.gamut", "plain.gamut"}) {
+    auto s = gamut::create(p, "header tests");
+    if (std::string(p) == "marked.gamut") s.set_attribute("portion_marking", "PLACEHOLDER-A");
+    s.declare_parameter("x", "design", "1");
+    s.add_run({{"x", 1.0}});
+  }
+  std::vector<std::string> shown;
+  gamut::set_marking_notice([&](const std::string& path, const std::string& text) {
+    shown.push_back(path + "|" + text);
+  });
+  CHECK(refused([] { gamut::append("plain.gamut", "marked.gamut"); }) == "E27");
+  CHECK(shown.size() == 1 && shown[0].rfind("marked.gamut|gamut: marked.gamut carries", 0) == 0 &&
+        shown[0].find("\nPLACEHOLDER-A\n") != std::string::npos);
+  CHECK(gamut::open("plain.gamut").row_count() == 1);
+  CHECK(gamut::append("plain.gamut", "marked.gamut", "PLACEHOLDER-B") == 1);
+  CHECK(gamut::open("plain.gamut").describe()["portion_marking"] == "PLACEHOLDER-B");
+  CHECK(shown.size() == 2);                    // plain.gamut, opened marked B
+  gamut::open("marked.gamut");
+  CHECK(shown.size() == 2);
+  gamut::set_marking_notice([](const std::string&, const std::string&) { throw 1; });
+  gamut::open("marked.gamut");                 // a throwing sink is not let through
+  gamut::set_marking_notice([](const std::string&, const std::string&) {});
+  gamut::open("marked.gamut");
+  gamut::set_marking_notice(nullptr);
+}
+
 int main() {
   namespace fs = std::filesystem;
   const auto original = fs::current_path();
@@ -536,6 +566,7 @@ int main() {
   test_refusals_before_the_library();
   test_calls_from_several_threads();
   test_evaluation_through_the_c_interface();
+  test_marking();
   std::printf("%d checks, %d failures\n", g_checks, g_failures);
   fs::current_path(original);
   fs::remove_all(directory);
