@@ -56,7 +56,16 @@ void forget(gamut_file* f) {
   if (g_files.empty()) mexUnlock();
 }
 
+// The notice on opening a marked file, as the warning gamut:marking, so
+// warning('off', 'gamut:marking') turns it off.  The text is the format's
+// argument, never the format: a % in a marking is text.
+void warn_marking(const char*, const char* text, void*) {
+  mexWarnMsgIdAndTxt("gamut:marking", "%s", text);
+}
+
 void finish_open_files() {
+  // The core outlives this gateway when another user loaded it.
+  gamut_set_marking_notice(nullptr, nullptr);
   for (const auto& kv : g_evaluations) gamut_evaluation_free(reinterpret_cast<gamut_evaluation*>(kv.first));
   g_evaluations.clear();
   for (const std::uintptr_t p : g_files) {
@@ -902,9 +911,17 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
           e);
     std::vector<int64_t> dims = {rows, per};
     plhs[0] = from_c_order(reinterpret_cast<const unsigned char*>(out.data()), dims, GAMUT_FLOAT64);
+  } else if (cmd == "marking_notice") {
+    // The warning again, and every file shown anew (what a checker needs).
+    gamut_set_marking_notice(warn_marking, nullptr);
   } else if (cmd == "append") {
     int64_t n = 0;
-    check(gamut_append(text(arg(1), "dst").c_str(), text(arg(2), "src").c_str(), &n, &e), e);
+    const std::string dst = text(arg(1), "dst"), src = text(arg(2), "src");
+    if (arg(3) == nullptr) {
+      check(gamut_append(dst.c_str(), src.c_str(), &n, &e), e);
+    } else {
+      check(gamut_append_marked(dst.c_str(), src.c_str(), text(arg(3), "marking").c_str(), &n, &e), e);
+    }
     plhs[0] = mxCreateDoubleScalar(static_cast<double>(n));
   } else if (cmd == "extract") {
     const Sel rows = selection(arg(3));   // ':' every row, [] none
@@ -991,7 +1008,8 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 }
 
 void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
-  static const bool at_exit = (mexAtExit(finish_open_files), true);
+  static const bool at_exit =
+      (mexAtExit(finish_open_files), gamut_set_marking_notice(warn_marking, nullptr), true);
   (void)at_exit;
   // The error is copied to fixed storage and every C++ object is gone before
   // mexErrMsgIdAndTxt, which leaves without running destructors.
