@@ -403,8 +403,8 @@ void test_refusals() {
 // The portion marking (spec section 8): a root attribute read as written,
 // absent when not set, kept by extract and write_copy, and accepted by the
 // validator.  HDF5 holds a root attribute in compact storage at the
-// writer's libver bounds, so one of 64 KiB or more is refused and nothing
-// is written.
+// writer's libver bounds, so one past kMaxRootTextBytes is refused and
+// nothing is written (HDF5 itself refuses or damages the header near 64 KiB).
 void test_portion_marking() {
   const std::string path = "wr_marked.gamut", plain = "wr_plain.gamut";
   const std::string copy = "wr_marked_copy.gamut", part = "wr_marked_part.gamut";
@@ -436,6 +436,8 @@ void test_portion_marking() {
     auto w = Writer::create("wr_long.gamut", "tests", "", "fixed");
     w->set_attribute("portion_marking", std::string(60000, 'm'));
     CHECK(rule_of([&] { w->set_attribute("portion_marking", std::string(65536, 'm')); }) == "error");
+    // HDF5 1.14.6 writes 65,490 bytes and cannot open the header again.
+    CHECK(rule_of([&] { w->set_attribute("portion_marking", std::string(65490, 'm')); }) == "error");
     w->set_attribute("portion_marking", "short again");
     w->declare_parameter(param("x", "design", "1"));
     Batch b;
@@ -502,6 +504,8 @@ void test_append_marking() {
   CHECK(refused(e, a, std::nullopt) == "E27");   // an empty marking is none
   CHECK(refused(a, b, std::string()) == "error");             // a stated marking is never empty
   CHECK(refused(a, b, std::string("\xff")) == "E3");
+  CHECK(refused(a, b, std::string(kMaxRootTextBytes + 1, 'm')) == "error");   // too long to store
+  CHECK(refused(u, a, std::string(65490, 'm')) == "error");   // HDF5 would damage the header
   CHECK(append_file(a, a2) == 2);                // equal markings
   CHECK(marking(a) == "PLACEHOLDER-A" && rows(a) == 4);
   CHECK(append_file(a, u) == 2);                 // unmarked into marked
@@ -514,6 +518,9 @@ void test_append_marking() {
   CHECK(append_file(u, e, std::string("PLACEHOLDER-C")) == 2);   // whatever the two carry
   CHECK(marking(u) == "PLACEHOLDER-C" && rows(u) == 6);
   CHECK(validate_file(a).findings.empty() && validate_file(u).findings.empty());
+  // The longest marking stated is stored, and the file opens again.
+  CHECK(append_file(u, e, std::string(kMaxRootTextBytes, 'm')) == 2);
+  CHECK(marking(u).size() == kMaxRootTextBytes && validate_file(u).findings.empty());
   // Rows from elsewhere meet the same rule.
   CHECK(rule_of([] { check_marking("", "PLACEHOLDER-A"); }) == "E27");
   CHECK(rule_of([] { check_marking("PLACEHOLDER-B", "PLACEHOLDER-A"); }) == "E27");

@@ -546,13 +546,17 @@ def cmd_append(args: argparse.Namespace) -> int:
                 raise
             raise _Usage("", e.message, e.path) from None
         with appending as study:
-            # The document's marking meets the rule a source file's does (E27).
+            # The document's marking meets the rule a source file's does (E27);
+            # a stated one is set first, so a marking refused adds no rows.
             if args.marking is None:
                 _lib.call("gamut_check_marking", study._handle(), _lib.b(doc.get("portion_marking")))
+            else:
+                try:
+                    _lib.call("gamut_set_attribute", study._handle(), b"portion_marking",
+                              _lib.b(args.marking))
+                except GamutError as e:     # a --marking the file cannot hold: the argument's
+                    raise _Usage(e.rule, e.message, e.path) from None
             n = _add_rows(study, doc, base, fields, labels)
-            if args.marking is not None:
-                _lib.call("gamut_set_attribute", study._handle(), b"portion_marking",
-                          _lib.b(args.marking))
     except Problems as e:
         return _report_problems(args, e.problems)
     except GamutError:

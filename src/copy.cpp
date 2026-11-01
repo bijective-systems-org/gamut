@@ -452,6 +452,9 @@ std::int64_t append_file(const std::string& dst, const std::string& src,
       need(!marking->empty(), "", "the marking the result carries is empty; a marking is "
                                   "stated to keep one, never to remove one");
       need(valid_utf8(*marking), "E3", "the marking the result carries is not valid UTF-8");
+      need(marking->size() <= kMaxRootTextBytes, "",
+           "the marking the result carries is " + std::to_string(marking->size()) +
+               " bytes, and a root attribute holds at most " + std::to_string(kMaxRootTextBytes));
     } else {
       check_marking(d->schema().portion_marking, s->schema().portion_marking);
     }

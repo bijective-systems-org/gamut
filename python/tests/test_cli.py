@@ -457,6 +457,10 @@ def test_marked_files_and_documents_meet_the_append_rule(tmp_path, capsys):
     doc.write_text(json.dumps({"runs": "runs.csv", "portion_marking": "PLACEHOLDER-D"}))
     code, out, _ = run(capsys, "append", u, str(doc), "--json")
     assert code == 2 and json.loads(out)["problems"][0]["rule"] == "E27", out
+    code, out, _ = run(capsys, "append", u, str(doc), "--marking", "m" * 65490, "--json")
+    assert code == 2 and "at most" in out, out             # too long to store: no rows added
+    with gamut.open(u) as f:
+        assert f.describe()["portion_marking"] == "PLACEHOLDER-C" and f.row_count == 2
     code, out, _ = run(capsys, "append", u, str(doc), "--marking", "PLACEHOLDER-D", "--json")
     assert code == 0 and json.loads(out)["rows"] == 1
     code, out, _ = run(capsys, "append", u, str(doc), "--json")      # the same marking now

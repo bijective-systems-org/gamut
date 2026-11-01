@@ -26,6 +26,11 @@ The file format (`gamut/1`) is unchanged; the C interface only adds calls.
   it off, as do `warning('off', 'gamut:marking')` in MATLAB and
   `gamut --no-marking-notice`. `gamut info` shows the marking as that
   block in its output, where it printed the raw text before.
+- A root text attribute (a title, a portion marking) holds at most 65,000
+  bytes, refused before anything is written. HDF5 1.14.6 refused a
+  portion marking above 65,495 bytes, but between 65,489 and 65,495 wrote
+  a root it could not open again. A stated marking for `append` is
+  checked before the destination is opened, so its bytes stay as they were.
 - `gamut-format` stays at 2.0.0. Its 2.1.0, which only installed
   `bijective-gamut`, is yanked: both names install the same `gamut`
   module, so upgrading `gamut-format` to it removed that module. To move
