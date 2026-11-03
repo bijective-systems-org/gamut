@@ -409,7 +409,7 @@ name takes, the name and its terminating NUL rounded up to a multiple of
 keeps the attribute in the root's object header as one message of at
 most 64 KiB; HDF5 1.14.6 writes a slightly longer value as a root that
 does not open again, and refuses one longer still. A writer refuses a
-longer value before it writes anything.
+longer value rather than write it.
 
 ---
 
