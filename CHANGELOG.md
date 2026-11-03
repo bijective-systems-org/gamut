@@ -34,7 +34,8 @@ The file format (`gamut/1`) is unchanged; the C interface only adds calls.
   HDF5 1.14.6 accepted a few bytes more and wrote a root it could not open
   again. A stated marking for `append`, or for `gamut append` with a
   document, is checked before the destination is opened, so a refusal
-  leaves its bytes as they were.
+  leaves its bytes as they were. Specification section 8 and
+  `help(gamut.create)` give the limit.
 - `gamut-format` stays at 2.0.0. Its 2.1.0, which only installed
   `bijective-gamut`, is yanked: both names install the same `gamut`
   module, so upgrading `gamut-format` to it removed that module. To move

@@ -400,6 +400,17 @@ reader should show a non-empty marking when it opens a file and let its
 caller route or suppress that; the text is shown whole, never truncated or
 rewrapped.
 
+A root text attribute that a writer sets (`title`, `license`,
+`references`, `source`, `portion_marking`, `trained_on`,
+`evaluated_from`) holds at most 65,504 bytes of UTF-8 less the room its
+name takes, the name and its terminating NUL rounded up to a multiple of
+8 bytes: 65,496 bytes for `title`, `license` and `source`, and 65,488 for
+`references`, `portion_marking`, `trained_on` and `evaluated_from`. HDF5
+keeps the attribute in the root's object header as one message of at
+most 64 KiB; HDF5 1.14.6 writes a slightly longer value as a root that
+does not open again, and refuses one longer still. A writer refuses a
+longer value rather than write it.
+
 ---
 
 # Part II. On disk
