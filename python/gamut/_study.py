@@ -673,6 +673,10 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
     - `title`, `license`, `references`, `source`: describe the file.
     - `portion_marking`: a marking the author set, as free text; `evaluate`
       copies it into every answer, `extract` and `write_copy` keep it.
+      Each of these five texts holds at most 65,496 bytes of UTF-8
+      (`title`, `license`, `source`) or 65,488 (`references`,
+      `portion_marking`), the most HDF5 keeps in a file's root (spec
+      section 8); a longer one is refused.
     - `precision`, `round_bits`, `compression`: storage; the defaults suit
       most studies.
 
