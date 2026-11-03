@@ -5,7 +5,9 @@
                       [--fields CSV] [--skip a,b] [--round-bits N] [--json]
     gamut-vtk export study.gamut OUT_DIR [--json]
 
-(or `python -m gamut.vtk ...`).
+(or `python -m gamut.vtk ...`). Opening a marked file prints its portion
+marking on stderr, once per file; `gamut-vtk --no-marking-notice ...` turns
+that off.
 
 `import` turns a folder of VTK runs (one .vtu, .vtp or legacy .vtk file per
 run) into one study file. It needs two small tables beside
@@ -499,6 +501,8 @@ def _counted(n: int, noun: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="gamut-vtk", description=__doc__.split("\n\n")[0])
+    ap.add_argument("--no-marking-notice", action="store_true",
+                    help="do not print a marked file's portion marking on stderr when it opens")
     sub = ap.add_subparsers(dest="command", required=True)
     imp = sub.add_parser("import", help="a folder of VTK runs to one study file")
     imp.add_argument("folder")
@@ -513,6 +517,9 @@ def main(argv: list[str] | None = None) -> int:
     exp.add_argument("folder")
     exp.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
+    shown = gamut._notice._show
+    if a.no_marking_notice:
+        gamut.set_marking_notice(False)
     try:
         if a.command == "import":
             out = a.output or os.path.normpath(a.folder) + ".gamut"
@@ -529,6 +536,9 @@ def main(argv: list[str] | None = None) -> int:
             for p in problems:
                 print(f"  {p}", file=sys.stderr)
         return 1
+    finally:
+        if gamut._notice._show is not shown:
+            gamut.set_marking_notice(shown)
     if a.json:
         print(json.dumps(report, indent=1))
     elif "templates" in report:

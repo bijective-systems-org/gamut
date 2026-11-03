@@ -123,7 +123,64 @@ fn same<T: Element + PartialEq>(f: &Study, p: &Json, want: &[Json], shape: &[usi
     holds(got == want, || format!("read {name}: {got:?} != {want:?} (as bits)"))
 }
 
+// Opening the file twice under a capturing sink (which forgets what was
+// shown): the notice once, `want` after its first line, or none. This test
+// is the only one in its program, so nothing else sets the sink meanwhile.
+fn noticed(path: &str, want: &Json) -> Held {
+    let got = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let into = got.clone();
+    gamut::set_marking_notice(Some(Box::new(move |_, text| into.lock().unwrap().push(text.to_string()))));
+    let opened = (0..2).try_for_each(|_| gamut::open(path).map(drop));
+    gamut::set_marking_notice(None);
+    opened.map_err(refused("open"))?;
+    let got = got.lock().unwrap().clone();
+    let expect: Vec<String> = want
+        .as_str()
+        .map(|w| format!("gamut: {path} carries a portion marking\n{w}"))
+        .into_iter()
+        .collect();
+    holds(got == expect, || format!("notice: {got:?} != {expect:?}"))
+}
+
+// This file appended into a copy of another case, or another case into a
+// copy of this one: refused with the file unchanged, or appended.
+fn appended(path: &str, p: &Json, tmp: &Path) -> Held {
+    let into = p.get("append_into").is_some();
+    let other = p.get("append_into").or(p.get("append_from")).and_then(Json::as_str).unwrap();
+    let other = Path::new(path).with_file_name(format!("{other}.gamut"));
+    let other = other.to_str().unwrap();
+    let dst = tmp.join("dst.gamut");
+    std::fs::copy(if into { other } else { path }, &dst).map_err(|e| e.to_string())?;
+    let (dst, src) = (dst.to_str().unwrap(), if into { path } else { other });
+    let before = std::fs::read(dst).map_err(|e| e.to_string())?;
+    let done = match p.get("marking").and_then(Json::as_str) {
+        Some(marking) => gamut::append_marked(dst, src, marking),
+        None => gamut::append(dst, src),
+    };
+    let want = p.get("refused").and_then(Json::as_str);
+    match (done, want) {
+        (Err(x), Some(rule)) if x.rule() == rule => {
+            holds(std::fs::read(dst).map_err(|e| e.to_string())? == before, || "append: refused, the destination changed".into())
+        }
+        (Err(x), _) => Err(format!("append: refused with {:?}, expected {want:?}: {x}", x.rule())),
+        (Ok(_), Some(rule)) => Err(format!("append: appended, expected refusal {rule}")),
+        (Ok(_), None) => {
+            let f = gamut::open(dst).map_err(refused("open the copy"))?;
+            let rows = f.row_count().map_err(refused("row_count"))?;
+            let want = p["rows"].as_u64().unwrap() as usize;
+            holds(rows == want, || format!("append: {rows} rows, not {want}"))?;
+            described(&f, p)
+        }
+    }
+}
+
 fn probe(path: &str, p: &Json, tmp: &Path) -> Held {
+    if let Some(want) = p.get("notice") {
+        return noticed(path, want);
+    }
+    if p.get("append_into").is_some() || p.get("append_from").is_some() {
+        return appended(path, p, tmp);
+    }
     if let Some(given) = p.get("evaluate") {
         let out = evaluate(path, &inputs(given), tmp).map_err(refused("evaluate"))?;
         if p.get("describe").is_some() {
@@ -252,6 +309,11 @@ fn corpus() {
             if group == "hostile" {
                 if let Some(why) = hostile(path, e, &tmp) {
                     failures.push(format!("{name}: {why}"));
+                }
+                for p in e.get("probes").and_then(Json::as_array).into_iter().flatten() {
+                    if let Err(why) = probe(path, p, &tmp) {
+                        failures.push(format!("{name}: {why}"));
+                    }
                 }
             }
         }

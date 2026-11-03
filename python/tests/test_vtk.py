@@ -268,3 +268,21 @@ def test_export_names_stay_apart_and_csv_is_quoted(tmp_path):
         assert x.get_label("config").tolist() == y.get_label("config").tolist()
         assert y.get_label("config")[0] == "flaps, down"
         np.testing.assert_array_equal(x.get_field("p"), y.get_field("p"))
+
+
+def test_export_shows_a_marking_unless_told_not_to(tmp_path, capsys):
+    """Exporting opens the study: a marked one shows its notice on stderr,
+    and --no-marking-notice turns it off for the command's run."""
+    path = str(tmp_path / "m.gamut")
+    points = np.array([[0.0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]])
+    cells = (np.array([5, 5], np.uint8), np.array([0, 3, 6]), np.array([0, 1, 2, 0, 2, 3]))
+    with gamut.create(path, writer="t", mesh="shared", per="fixed", parameters={"x": "1"},
+                      coordinates={"units": "m", "axes": 3}, fields={"p": {"units": "Pa", "at": "node"}},
+                      portion_marking="Example marking: for the study team only") as s:
+        s.set_mesh(points, cells)
+        s.add_runs({"x": [1.0]}, fields={"p": np.zeros((1, 4))})
+    gamut.set_marking_notice(True)
+    assert gamut_vtk.main(["--no-marking-notice", "export", path, str(tmp_path / "a")]) == 0
+    assert "portion marking" not in capsys.readouterr().err
+    assert gamut_vtk.main(["export", path, str(tmp_path / "b")]) == 0
+    assert "Example marking: for the study team only" in capsys.readouterr().err

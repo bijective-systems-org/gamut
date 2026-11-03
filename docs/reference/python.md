@@ -44,6 +44,10 @@ package's own version.
 
 ::: gamut.Finding
 
+## The marking notice
+
+::: gamut.set_marking_notice
+
 ## Errors and the library
 
 ::: gamut.GamutError

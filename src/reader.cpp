@@ -8,6 +8,7 @@
 
 #include "codec.hpp"
 #include "names.hpp"
+#include "notice.hpp"
 
 namespace gamut_core {
 namespace internal {
@@ -111,6 +112,9 @@ Schema load_schema(const File& f, const std::string& path) {
   s.generalisation_group = root.text("generalisation_group");
   s.trained_on = root.text("trained_on");
   s.evaluated_from = root.text("evaluated_from");
+  // The notice is queued as soon as the root is read, so a file refused
+  // below for its structure (E22, say) still shows its marking.
+  marking_opened(s, path);
   const DsetInfo row = f.dataset_shape("/row");
   s.rows = row.is_dataset && row.shape.size() == 1
                ? static_cast<std::int64_t>(row.shape[0])

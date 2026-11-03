@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,7 @@
 #include "evaluate.hpp"
 #include "names.hpp"
 #include "nearest.hpp"
+#include "notice.hpp"
 #include "reader.hpp"
 #include "select.hpp"
 #include "types.hpp"
@@ -30,6 +32,7 @@ using gamut_core::Error;
 using gamut_core::Selection;
 using gamut_core::internal::Batch;
 using gamut_core::internal::Column;
+using gamut_core::internal::DeliverNotices;
 using gamut_core::internal::Geometry;
 using gamut_core::internal::Reader;
 using gamut_core::internal::Schema;
@@ -271,6 +274,7 @@ int gamut_create_model(const char* path, const char* writer, const char* mesh_ki
 }
 
 int gamut_open_append(const char* path, gamut_file** out, gamut_error* err) {
+  const DeliverNotices notices;
   try {
     const Lock lock(hdf5_mutex());
     clear(err);
@@ -710,11 +714,34 @@ int gamut_close(gamut_file* f, gamut_error* err) {
 
 int gamut_append(const char* dst_path, const char* src_path, int64_t* rows_added,
                gamut_error* err) {
+  return gamut_append_marked(dst_path, src_path, nullptr, rows_added, err);
+}
+
+int gamut_append_marked(const char* dst_path, const char* src_path, const char* marking,
+                      int64_t* rows_added, gamut_error* err) {
+  const DeliverNotices notices;
   try {
     const Lock lock(hdf5_mutex());
     clear(err);
-    const int64_t n = gamut_core::internal::append_file(str(dst_path), str(src_path));
+    std::optional<std::string> stated;
+    if (marking != nullptr) stated = marking;
+    const int64_t n = gamut_core::internal::append_file(str(dst_path), str(src_path), stated);
     if (rows_added != nullptr) *rows_added = n;
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int gamut_check_marking(const gamut_file* f, const char* rows_marking, const char* marking,
+                      gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    std::optional<std::string> stated;
+    if (marking != nullptr) stated = marking;
+    gamut_core::internal::check_marking(reader_of(f).schema().portion_marking, str(rows_marking),
+                                        stated);
     return 0;
   } catch (...) {
     return fail(err);
@@ -723,6 +750,7 @@ int gamut_append(const char* dst_path, const char* src_path, int64_t* rows_added
 
 int gamut_extract(const char* src_path, const char* dst_path, const gamut_sel* rows,
                 gamut_error* err) {
+  const DeliverNotices notices;
   try {
     const Lock lock(hdf5_mutex());
     clear(err);
@@ -734,6 +762,7 @@ int gamut_extract(const char* src_path, const char* dst_path, const gamut_sel* r
 }
 
 int gamut_write_copy(const char* src_path, const char* dst_path, gamut_error* err) {
+  const DeliverNotices notices;
   try {
     const Lock lock(hdf5_mutex());
     clear(err);
@@ -757,6 +786,7 @@ void gamut_abandon(gamut_file* f, int remove_file) {
 }
 
 int gamut_open(const char* path, gamut_file** out, gamut_error* err) {
+  const DeliverNotices notices;
   try {
     const Lock lock(hdf5_mutex());
     clear(err);

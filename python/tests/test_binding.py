@@ -322,6 +322,41 @@ def test_portion_marking_is_free_text_under_64_kib(tmp_path):
     assert not os.path.exists(refused)
 
 
+
+def test_the_marking_notice_goes_to_sys_stderr_a_function_or_nowhere(tmp_path, capsys):
+    """Opening a marked file shows the core's block on sys.stderr, once per
+    file; setting the notice again shows every file anew; a function
+    receives it, one that raises is reported and the open goes on; False
+    turns it off; an unmarked file shows nothing."""
+    marked, plain = str(tmp_path / "m.gamut"), str(tmp_path / "p.gamut")
+    marking = "Example marking: for the study team only\n\nA second paragraph, 100% whole."
+    for path, mark in ((marked, marking), (plain, None)):
+        with gamut.create(path, writer="t", parameters={"x": "1"}, portion_marking=mark) as s:
+            s.add_run({"x": 1.0})
+    try:
+        gamut.set_marking_notice(True)
+        for _ in range(2):
+            gamut.open(marked).close()
+            gamut.open(plain).close()
+        err = capsys.readouterr().err
+        assert err.count("carries a portion marking") == 1
+        assert f"---- portion marking ----\n{marking}\n---- end of portion marking ----\n" in err
+        got = []
+        gamut.set_marking_notice(lambda path, text: got.append((path, text)))
+        with gamut.open(marked, mode="a"):        # opened twice inside, shown once
+            pass
+        assert len(got) == 1 and got[0][0] == marked and marking in got[0][1]
+        gamut.set_marking_notice(lambda path, text: 1 / 0)
+        gamut.open(marked).close()
+        assert "ZeroDivisionError" in capsys.readouterr().err
+        gamut.set_marking_notice(False)
+        gamut.open(marked).close()
+        assert capsys.readouterr().err == ""
+        with pytest.raises(gamut.GamutError, match="True, False or a function"):
+            gamut.set_marking_notice("stderr")
+    finally:
+        gamut.set_marking_notice(True)
+
 def test_package_and_core_versions_agree():
     from importlib import metadata
     try:

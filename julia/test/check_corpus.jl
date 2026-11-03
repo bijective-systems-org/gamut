@@ -24,7 +24,51 @@ function described(f, p)
     return got == p["value"] ? nothing : "describe $(p["describe"]): $(repr(got)) != $(repr(p["value"]))"
 end
 
+# Opening the file twice under a capturing sink (which forgets what was
+# shown): the notice once, `want` after its first line, or none.
+function noticed(path, want)
+    got = String[]
+    Gamut.set_marking_notice((shown_path, text) -> push!(got, text))
+    try
+        for _ in 1:2
+            close(Gamut.open(path))
+        end
+    finally
+        Gamut.set_marking_notice(true)
+    end
+    want === nothing && return isempty(got) ? nothing : "notice: $(repr(got)), expected none"
+    expect = ["gamut: $path carries a portion marking\n" * want]
+    return got == expect ? nothing : "notice: $(repr(got)) != $(repr(expect))"
+end
+
+# This file appended into a copy of another case, or another case into a
+# copy of this one: refused with the file unchanged, or appended.
+function appended(path, p)
+    into = haskey(p, "append_into")
+    other = joinpath(dirname(path), (into ? p["append_into"] : p["append_from"]) * ".gamut")
+    mktempdir() do tmp
+        dst = joinpath(tmp, "dst.gamut")
+        cp(into ? other : path, dst)
+        before = read(dst)
+        try
+            Gamut.append!(dst, into ? path : other; marking=get(p, "marking", nothing))
+        catch x
+            x isa GamutError || rethrow()
+            x.rule == get(p, "refused", nothing) ||
+                return "append: refused with $(repr(x.rule)), expected $(repr(get(p, "refused", nothing)))"
+            return read(dst) == before ? nothing : "append: refused, the destination changed"
+        end
+        haskey(p, "refused") && return "append: appended, expected refusal $(p["refused"])"
+        Gamut.open(dst) do f
+            f.row_count == p["rows"] || return "append: $(f.row_count) rows, not $(p["rows"])"
+            described(f, p)
+        end
+    end
+end
+
 function probe(path, p)
+    haskey(p, "notice") && return noticed(path, p["notice"])
+    (haskey(p, "append_into") || haskey(p, "append_from")) && return appended(path, p)
     if haskey(p, "evaluate")
         inputs = Dict(k => (v[1] isa AbstractString ? String.(v) : Float64.(v)) for (k, v) in p["evaluate"])
         out = Gamut.evaluate(path, inputs)
@@ -134,6 +178,10 @@ function main(corpus)
             if e["group"] == "hostile"
                 why = hostile(path, e)
                 why === nothing || push!(failures, "$name: $why")
+                for p in get(e, "probes", [])
+                    why = probe(path, p)
+                    why === nothing || push!(failures, "$name: $why")
+                end
             end
         end
     end

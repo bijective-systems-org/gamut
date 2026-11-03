@@ -22,6 +22,7 @@ folder with `julia --project=<checkout>/julia <checkout>/examples/julia/run_tabl
 | `study.related("cl")` | `Gamut.related(study, "cl")` |
 | `study.model_numbers("fit")` | `Gamut.model_numbers(study, "fit")` |
 | `gamut.append`, `extract`, `write_copy`, `validate` | `Gamut.append!`, `extract`, `write_copy`, `validate` |
+| `gamut.set_marking_notice(show)` | `Gamut.set_marking_notice(show)`: `true` logs with `@info` |
 
 ## Conventions
 

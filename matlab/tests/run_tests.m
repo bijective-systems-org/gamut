@@ -15,6 +15,12 @@ failures = 0; checks = 0;
         end
     end
 
+    function b = file_bytes(f)
+        fid = fopen(f, 'r');
+        b = fread(fid, inf, '*uint8');
+        fclose(fid);
+    end
+
 % A table, one run at a time.
 p = fullfile(tmp, 'polar.gamut');
 s = gamut.create(p, 'writer', 'matlab tests', ...
@@ -226,6 +232,78 @@ try
 catch err
     ok(startsWith(err.identifier, 'gamut:'), 'append to itself refused');
 end
+
+% A marked source into an unmarked file is refused (E27) and the file left
+% as it was; 'Marking' states the result's.  The notice on opening a marked
+% file is the warning gamut:marking, once per file, its % kept as text.
+mu = fullfile(tmp, 'unmarked.gamut'); mp = fullfile(tmp, 'percent.gamut');
+s = gamut.create(mu, 'writer', 't', 'parameters', struct('x', 'm'));
+s.addRuns(struct('x', [3; 4]));
+s.close();
+s = gamut.create(mp, 'writer', 't', 'parameters', struct('x', 'm'), 'portionMarking', 'PLACEHOLDER 100% %s');
+s.addRuns(struct('x', 5));
+s.close();
+before = file_bytes(mu);
+try
+    gamut.append(mu, mm);
+    ok(false, 'a marked source refused');
+catch err
+    ok(strcmp(err.identifier, 'gamut:E27'), 'a marked source refused (E27)');
+end
+ok(isequal(before, file_bytes(mu)), 'a refused append leaves the file as it was');
+ok(gamut.append(mu, mm, 'Marking', 'PLACEHOLDER-B') == 2, 'a stated marking appends');
+r = gamut.open(mu);
+ok(strcmp(r.describe().portion_marking, 'PLACEHOLDER-B'), 'the stated marking kept');
+r.close();
+try
+    gamut.append(mu, mm, 'Marking', '');
+    ok(false, 'an empty stated marking refused');
+catch err
+    ok(strcmp(err.identifier, 'gamut:error'), 'an empty stated marking refused');
+end
+gamut_mex('marking_notice');
+lastwarn('');
+r = gamut.open(mp); r.close();
+[msg, id] = lastwarn;
+ok(strcmp(id, 'gamut:marking') && contains(msg, sprintf('\nPLACEHOLDER 100%% %%s\n')), ...
+    'the notice is the warning gamut:marking');
+lastwarn('');
+r = gamut.open(mp); r.close();
+ok(isempty(lastwarn), 'the notice comes once per file');
+gamut_mex('marking_notice');
+state = warning('off', 'gamut:marking');
+shown = evalc('r = gamut.open(mp); r.close();');   % lastwarn is set even for a warning off
+ok(isempty(shown), 'warning off turns the notice off');
+warning(state);
+% A notice made an error is raised at the top of the call, after the core
+% has returned: the open fails with gamut:marking and closes what it
+% opened, and the file opens again once the warning is a warning.
+gamut_mex('marking_notice');
+state = warning('error', 'gamut:marking');
+locked = mislocked('gamut_mex');
+try
+    r = gamut.open(mp);
+    r.close();
+    ok(false, 'a notice made an error is raised');
+catch err
+    ok(strcmp(err.identifier, 'gamut:marking') && contains(err.message, 'PLACEHOLDER 100% %s'), ...
+        'a notice made an error is raised as gamut:marking');
+end
+ok(mislocked('gamut_mex') == locked, 'the file the failed open opened is closed');
+% A call that changes a file is not undone or hidden by it: the append is
+% made and returns its rows, and the notice is printed.
+ma = fullfile(tmp, 'marked_again.gamut');
+s = gamut.create(ma, 'writer', 't', 'parameters', struct('x', 'm'), 'portionMarking', 'PLACEHOLDER 100% %s');
+s.addRuns(struct('x', 6));
+s.close();
+gamut_mex('marking_notice');
+n = 0;   % declared: run_tests has nested functions, so eval cannot add a variable
+printed = evalc('n = gamut.append(mp, ma);');
+ok(n == 1 && contains(printed, 'PLACEHOLDER 100% %s'), 'an append is made, its notice printed');
+warning(state);
+r = gamut.open(mp);
+ok(r.rowCount() == 2, 'the file opens once the notice is a warning again, the run appended');
+r.close();
 
 % Errors carry their rule.
 try

@@ -15,13 +15,19 @@ def _path(p: Any) -> bytes:
     return b(os.fspath(p))
 
 
-def append(dst: str, src: str) -> int:
+def append(dst: str, src: str, marking: str | None = None) -> int:
     """Adds the rows of `src` to `dst` in place and returns how many. The
     rows get new ids continuing dst's; category tables merge by name. Both
     files need the same declarations (bounds may differ), the same mesh,
-    and one geometry for a group member found in both."""
+    and one geometry for a group member found in both. A marked `src`
+    whose portion marking is not dst's is refused (E27); `marking` states
+    the marking the result carries, which dst then carries, whatever the
+    two files did."""
     n = ctypes.c_int64()
-    call("gamut_append", _path(dst), _path(src), ctypes.byref(n))
+    if marking is None:
+        call("gamut_append", _path(dst), _path(src), ctypes.byref(n))
+    else:
+        call("gamut_append_marked", _path(dst), _path(src), b(marking), ctypes.byref(n))
     return n.value
 
 

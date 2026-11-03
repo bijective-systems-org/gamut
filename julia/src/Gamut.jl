@@ -32,6 +32,34 @@ function library_path()
     return normpath(joinpath(@__DIR__, "..", "..", "build", name))
 end
 
+# The notice on opening a marked file, which the library is given when it loads.
+const NOTICE = Ref{Any}(true)
+
+# The core's sink: the core composed and sanitised the text; nothing thrown
+# here may unwind into it.
+function show_notice(path::Cstring, text::Cstring, ::Ptr{Cvoid})::Cvoid
+    try
+        show = NOTICE[]
+        if show === true
+            @info unsafe_string(text) _group=:marking
+        elseif show !== false
+            show(unsafe_string(path), unsafe_string(text))
+        end
+    catch e
+        # The logger itself may be what failed: then a line on stderr, and
+        # if even that fails, nothing.
+        try
+            @error "the marking notice failed" exception=(e, catch_backtrace())
+        catch
+            try
+                Core.println(Core.stderr, "gamut: the marking notice failed")
+            catch
+            end
+        end
+    end
+    return nothing
+end
+
 function sym(name::Symbol)
     lock(SYMBOLS_LOCK) do
         get!(SYMBOLS, name) do
@@ -43,6 +71,9 @@ function sym(name::Symbol)
                                    "print(gamut.library_path())\"), or one built from a " *
                                    "checkout with cmake -S . -B build && cmake --build build")
                 HANDLE[] = Libdl.dlopen(p)
+                # The notice on opening a marked file goes to the logger from the start.
+                ccall(Libdl.dlsym(HANDLE[], :gamut_set_marking_notice), Cvoid, (Ptr{Cvoid}, Ptr{Cvoid}),
+                      @cfunction(show_notice, Cvoid, (Cstring, Cstring, Ptr{Cvoid})), C_NULL)
             end
             Libdl.dlsym(HANDLE[], name)
         end
@@ -121,6 +152,26 @@ function take_strings(h::Ptr{Cvoid})
     finally
         ccall(sym(:gamut_strings_free), Cvoid, (Ptr{Cvoid},), h)
     end
+end
+
+# --- the notice on opening a marked file ------------------------------------------------
+
+"""
+    Gamut.set_marking_notice(show=true)
+
+Where the notice on opening a marked file goes: `true` (the default) logs
+it with `@info` (group `:marking`), `false` turns it off, and a function of
+`(path, text)` receives it. It comes once per file per process; setting it
+again shows every file anew. A program that turns it off takes on any duty
+to show the marking: the file carries it whatever reads it.
+"""
+function set_marking_notice(show=true)
+    show isa Bool || applicable(show, "", "") ||
+        throw(GamutError("", "show is true, false or a function of (path, text), not $(repr(show))"))
+    NOTICE[] = show
+    ccall(sym(:gamut_set_marking_notice), Cvoid, (Ptr{Cvoid}, Ptr{Cvoid}),
+          @cfunction(show_notice, Cvoid, (Cstring, Cstring, Ptr{Cvoid})), C_NULL)
+    return nothing
 end
 
 version() = unsafe_string(ccall(sym(:gamut_version), Cstring, ()))
@@ -837,16 +888,23 @@ end
 # --- copies between files --------------------------------------------------------------
 
 """
-    Gamut.append!(dst, src)
+    Gamut.append!(dst, src; marking=nothing)
 
 Adds the rows of `src` to `dst` in place and returns how many: new ids
 continuing dst's, tables merged by name. Both need the same declarations
 (bounds may differ), the same mesh, and one geometry for a group member
-found in both; everything is checked before the first row is written.
+found in both; everything is checked before the first row is written. A
+marked `src` whose portion marking is not dst's is refused (E27);
+`marking` states the marking the result carries, which dst then carries,
+whatever the two files did.
 """
-function append!(dst::AbstractString, src::AbstractString)
+function append!(dst::AbstractString, src::AbstractString; marking=nothing)
     n = Ref{Int64}(0)
-    @mes gamut_append (Cstring, Cstring, Ref{Int64}) cs(dst) cs(src) n
+    if marking === nothing
+        @mes gamut_append (Cstring, Cstring, Ref{Int64}) cs(dst) cs(src) n
+    else
+        @mes gamut_append_marked (Cstring, Cstring, Cstring, Ref{Int64}) cs(dst) cs(src) cs(marking) n
+    end
     return Int(n[])
 end
 

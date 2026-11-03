@@ -568,6 +568,9 @@ void Writer::set_attribute(const std::string& name, const std::string& value) {
        "\"" + name + "\" is not one of title, license, references, source, portion_marking" +
            std::string(model_ ? ", trained_on" : ", evaluated_from"));
   need(valid_utf8(value), "E3", name + " is not valid UTF-8");
+  need(value.size() <= max_root_text_bytes(name), "",
+       name + " is " + std::to_string(value.size()) + " bytes, and holds at most " +
+           std::to_string(max_root_text_bytes(name)));
   file_->replace_attr("/", name, AttrValue::text(value));
   if (name == "title") schema_.title = value;
   if (name == "license") schema_.license = value;

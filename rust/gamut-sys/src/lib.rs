@@ -70,6 +70,8 @@ pub struct gamut_report {
     _private: [u8; 0],
 }
 
+pub type gamut_notice_fn = Option<unsafe extern "C" fn(path: *const c_char, text: *const c_char, context: *mut c_void)>;
+
 #[link(name = "gamut")]
 extern "C" {
     pub fn gamut_version() -> *const c_char;
@@ -106,6 +108,7 @@ extern "C" {
     pub fn gamut_close(f: *mut gamut_file, err: *mut gamut_error) -> c_int;
     pub fn gamut_abandon(f: *mut gamut_file, remove_file: c_int);
     pub fn gamut_open(path: *const c_char, out: *mut *mut gamut_file, err: *mut gamut_error) -> c_int;
+    pub fn gamut_set_marking_notice(fn_: gamut_notice_fn, context: *mut c_void);
     pub fn gamut_set_threads(f: *mut gamut_file, threads: c_int, err: *mut gamut_error) -> c_int;
     pub fn gamut_info(f: *const gamut_file, key: *const c_char, out: *mut *mut gamut_strings, err: *mut gamut_error) -> c_int;
     pub fn gamut_names(f: *const gamut_file, group: *const c_char, out: *mut *mut gamut_strings, err: *mut gamut_error) -> c_int;
@@ -151,6 +154,8 @@ extern "C" {
     pub fn gamut_evaluation_finish(ev: *mut gamut_evaluation, err: *mut gamut_error) -> c_int;
     pub fn gamut_evaluation_free(ev: *mut gamut_evaluation);
     pub fn gamut_append(dst_path: *const c_char, src_path: *const c_char, rows_added: *mut i64, err: *mut gamut_error) -> c_int;
+    pub fn gamut_append_marked(dst_path: *const c_char, src_path: *const c_char, marking: *const c_char, rows_added: *mut i64, err: *mut gamut_error) -> c_int;
+    pub fn gamut_check_marking(f: *const gamut_file, rows_marking: *const c_char, marking: *const c_char, err: *mut gamut_error) -> c_int;
     pub fn gamut_extract(src_path: *const c_char, dst_path: *const c_char, rows: *const gamut_sel, err: *mut gamut_error) -> c_int;
     pub fn gamut_write_copy(src_path: *const c_char, dst_path: *const c_char, err: *mut gamut_error) -> c_int;
     pub fn gamut_validate(path: *const c_char, out: *mut *mut gamut_report, err: *mut gamut_error) -> c_int;

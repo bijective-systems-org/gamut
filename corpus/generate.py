@@ -269,6 +269,7 @@ def case_table(path):
         {"info": "addons", "value": ["time", "gradients", "uncertainty"]},
         {"info": "type", "value": "table"},
         {"describe": "portion_marking", "value": None},
+        {"notice": None},
     ]}
 
 
@@ -470,9 +471,31 @@ def case_fixed_layout(path):
     return probes
 
 
+def notice(marking: str) -> str:
+    """The notice on opening a corpus file marked `marking` (as shown), after
+    its first line, which names the path the reader was given."""
+    return ("  created 2026-10-18T00:00:00Z by corpus generator, file_id "
+            "00000000-0000-4000-8000-000000000000\n---- portion marking ----\n" + marking +
+            "\n---- end of portion marking ----")
+
+
+def appended(how: str, other: str, rows: int, value: str | None, marking: str | None = None) -> dict:
+    """An append probe (spec section 11.5): with "append_into", this case's
+    file appended to a copy of the case `other`; with "append_from", the
+    case `other` appended to a copy of this one; with a stated marking or
+    none. The copy then has `rows` rows and the marking `value` (None: none).
+    A refusal probe gives "refused" instead, and the copy is unchanged."""
+    p = {how: other, "rows": rows, "describe": "portion_marking", "value": value}
+    if marking is not None:
+        p["marking"] = marking
+    return p
+
+
 def case_marked_table(path):
     """A data file carrying `portion_marking` (spec section 8): read as given,
-    kept by extract and write_copy."""
+    kept by extract and write_copy, shown once on opening; appended only
+    where the destination carries the same marking, or with a stated one
+    (spec section 11.5, E27), and a refusal leaves the destination as it was."""
     e = case_table(path)
     with h5py.File(path, "r+") as f:
         sattr(f, "portion_marking", MARKING)
@@ -481,7 +504,37 @@ def case_marked_table(path):
         {"copy": "extract", "rows": [1, 3], "describe": "portion_marking", "value": MARKING},
         {"copy": "write_copy", "describe": "portion_marking", "value": MARKING},
         {"read": "cl", "rows": [1, 3], "dtype": "float64", "values": [0.2, 0.4]},
+        {"notice": notice(MARKING)},
+        {"append_into": "table", "refused": "E27"},             # marked into unmarked
+        {"append_into": "marked_other", "refused": "E27"},      # two markings
+        {"append_into": "marked_empty", "refused": "E27"},      # an empty marking is none
+        appended("append_into", "marked_other", 8, "PLACEHOLDER-C", "PLACEHOLDER-C"),
+        appended("append_into", "table", 8, "PLACEHOLDER-C", "PLACEHOLDER-C"),
+        appended("append_into", "marked_table", 8, MARKING),    # one marking
+        appended("append_from", "table", 8, MARKING),           # unmarked into marked
+        appended("append_from", "marked_empty", 8, MARKING),
     ]
+    return e
+
+
+def case_marked_other(path):
+    """The table under another marking."""
+    e = case_table(path)
+    with h5py.File(path, "r+") as f:
+        sattr(f, "portion_marking", "PLACEHOLDER-B")
+    e["probes"] = [{"describe": "portion_marking", "value": "PLACEHOLDER-B"},
+                   {"notice": notice("PLACEHOLDER-B")}]
+    return e
+
+
+def case_marked_empty(path):
+    """The table with an empty `portion_marking`, which counts as none: no
+    notice, and its rows take a destination's marking (marked_table's
+    probes append it)."""
+    e = case_table(path)
+    with h5py.File(path, "r+") as f:
+        sattr(f, "portion_marking", "")
+    e["probes"] = [{"notice": None}]
     return e
 
 
@@ -504,6 +557,7 @@ def case_marked_model(path):
 VALID = {"table": case_table, "shared_fixed": case_shared_fixed, "point_cloud": case_point_cloud,
          "shared_group": case_shared_group, "changing": case_changing,
          "model_nearest": case_model_nearest, "marked_table": case_marked_table,
+         "marked_other": case_marked_other, "marked_empty": case_marked_empty,
          "marked_model": case_marked_model, "wide_integers": case_wide_integers,
          "fixed_layout": case_fixed_layout}
 
@@ -815,6 +869,19 @@ def hostile_cases(out):
         for name in ("row", "cl"):
             f[name].resize(((1 << 31) + 1,))
     cases["hostile_read_huge"] = {"rules": [], "reads": [{"scalar": "cl"}]}
+    # A marking of several paragraphs holding what a terminal or a decoder
+    # would act on: ESC, CR, a C1 control (U+0085), a bidi override
+    # (U+202E) and a byte that is not UTF-8 (E3). The notice shows U+FFFD for
+    # each, CR as LF, and the rest whole.
+    p = os.path.join(out, "hostile_marking_controls.gamut")
+    shutil.copy(os.path.join(out, "table.gamut"), p)
+    raw = ("Example marking: for the study team only.\n\nA second paragraph \x1b[2J cleared"
+           "\r\nthird line\rfourth \u0085 next \u202e reversed").encode("utf-8") + b" \xff end"
+    with h5py.File(p, "r+") as f:
+        f.attrs.create("portion_marking", np.array(raw, dtype=h5py.string_dtype("utf-8", len(raw))))
+    shown = ("Example marking: for the study team only.\n\nA second paragraph \ufffd[2J cleared"
+             "\nthird line\nfourth \ufffd next \ufffd reversed \ufffd end")
+    cases["hostile_marking_controls"] = {"rules": ["E3"], "probes": [{"notice": notice(shown)}]}
     return cases
 
 

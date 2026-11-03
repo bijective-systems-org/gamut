@@ -181,6 +181,26 @@ GAMUT_API void gamut_abandon(gamut_file* f, int remove_file);
 
 /* --- Reading ------------------------------------------------------------- */
 GAMUT_API int gamut_open(const char* path, gamut_file** out, gamut_error* err);
+
+/* The notice on opening a marked file (spec section 8).  When a call opens
+ * a file whose portion_marking is not empty (gamut_open, gamut_open_append,
+ * both files of gamut_append, the source of gamut_extract and
+ * gamut_write_copy), the notice goes to the sink once per file per process:
+ * a file is its file_id with its marking (its path when it has no file_id),
+ * and a file evaluated from a model is known by its evaluated_from, the
+ * model file's file_id, so the model file and the answers of many
+ * evaluations show their marking once.
+ * text is the same block in every language, the marking whole, with CR and
+ * CRLF as LF and U+FFFD in place of invalid UTF-8, control characters but
+ * LF and TAB, C1 controls and bidirectional overrides and isolates; path is
+ * the path the call was given, sanitised the same way.  The sink is called
+ * after the call's work, outside its lock, on failure too, so it may call
+ * Gamut; it must not throw or unwind.  Setting a sink, NULL included,
+ * forgets which files were shown.  NULL restores the default, text and a
+ * line break on stderr; a sink that does nothing turns the notice off, and
+ * the program then has any duty to show the marking itself. */
+typedef void (*gamut_notice_fn)(const char* path, const char* text, void* context);
+GAMUT_API void gamut_set_marking_notice(gamut_notice_fn fn, void* context);
 /* Worker threads for reading fields: raw chunks come through HDF5 one at a
  * time and are decompressed in parallel outside it.  1 (the default) reads
  * serially. */
@@ -362,6 +382,23 @@ GAMUT_API void gamut_evaluation_free(gamut_evaluation* ev);
  * the default layout, keeping its identity (file_id, created). */
 GAMUT_API int gamut_append(const char* dst_path, const char* src_path, int64_t* rows_added,
                        gamut_error* err);
+/* gamut_append, and the result's portion marking (spec section 11.5).
+ * With marking NULL, a source whose marking is not the destination's (an
+ * empty marking is none) is refused (E27) and an unmarked source takes the
+ * destination's.  With marking, the caller states the result's marking:
+ * not empty and valid UTF-8; the destination is marked with it and the rows
+ * added, whatever the two files carried.  Either way every check comes
+ * before the destination is opened to write. */
+GAMUT_API int gamut_append_marked(const char* dst_path, const char* src_path, const char* marking,
+                              int64_t* rows_added, gamut_error* err);
+/* The marking checks of gamut_append_marked for rows from elsewhere (a
+ * document), on the destination open to read, before it is opened to add
+ * runs: with marking NULL, refuses (E27) rows_marking (NULL or empty: none)
+ * when it is set and is not the file's; with marking, refuses one that is
+ * empty, not UTF-8 or too long for portion_marking, and the caller then
+ * sets it with gamut_set_attribute after adding the rows. */
+GAMUT_API int gamut_check_marking(const gamut_file* f, const char* rows_marking, const char* marking,
+                              gamut_error* err);
 GAMUT_API int gamut_extract(const char* src_path, const char* dst_path, const gamut_sel* rows,
                         gamut_error* err);
 GAMUT_API int gamut_write_copy(const char* src_path, const char* dst_path, gamut_error* err);

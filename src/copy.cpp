@@ -7,6 +7,7 @@
 #include <memory>
 #include <set>
 
+#include "names.hpp"
 #include "reader.hpp"
 #include "validate.hpp"
 #include "writer.hpp"
@@ -423,7 +424,30 @@ CodeMaps check_same(const Reader& dst, const Reader& src) {
 
 }  // namespace
 
-std::int64_t append_file(const std::string& dst, const std::string& src) {
+void check_marking(const std::string& file_marking, const std::string& rows_marking,
+                   const std::optional<std::string>& stated) {
+  if (stated) {
+    need(!stated->empty(), "", "the marking the result carries is empty; a marking is stated to "
+                               "keep one, never to remove one");
+    need(valid_utf8(*stated), "E3", "the marking the result carries is not valid UTF-8");
+    const std::size_t most = max_root_text_bytes("portion_marking");
+    need(stated->size() <= most, "", "the marking the result carries is " +
+                                         std::to_string(stated->size()) +
+                                         " bytes, and portion_marking holds at most " +
+                                         std::to_string(most));
+    return;
+  }
+  if (rows_marking.empty() || rows_marking == file_marking) return;
+  throw Error("E27", std::string(file_marking.empty()
+                                     ? "the rows carry a portion marking and the file none"
+                                     : "the rows carry another portion marking than the file's") +
+                         "; state the marking the result carries (the marking argument) to add "
+                         "them",
+              "portion_marking");
+}
+
+std::int64_t append_file(const std::string& dst, const std::string& src,
+                         const std::optional<std::string>& marking) {
   need_distinct(src, dst);
   need_valid(src);
   std::int64_t n = 0;
@@ -434,6 +458,9 @@ std::int64_t append_file(const std::string& dst, const std::string& src) {
     need(d->schema().kind == "data" && s->schema().kind == "data", "E16",
          "a model file has no rows; append joins data files");
     maps = check_same(*d, *s);
+    // The marking is checked here, before the writer opens the
+    // destination, so a refusal leaves its bytes as they were.
+    check_marking(d->schema().portion_marking, s->schema().portion_marking, marking);
     n = s->schema().rows;
   }
   const auto s = Reader::open(src);
@@ -443,6 +470,7 @@ std::int64_t append_file(const std::string& dst, const std::string& src) {
   // writer refuses can leave part of the source behind. (An I/O failure
   // partway still keeps the rows written before it.)
   copy_rows(*s, *w, rows, false, maps, true);
+  if (marking) w->set_attribute("portion_marking", *marking);
   copy_rows(*s, *w, rows, false, maps, false);
   w->close();
   return n;

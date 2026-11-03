@@ -15,8 +15,10 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <functional>
 #include <initializer_list>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -641,11 +643,19 @@ inline Study open(const std::string& path, const std::string& mode, int threads)
   return s;
 }
 
-// Adds src's runs to dst in place; returns how many.
+// Adds src's runs to dst in place; returns how many.  A marked source whose
+// marking is not dst's is refused (E27); with `marking`, the caller states
+// the result's marking, which dst then carries.
 inline int64_t append(const std::string& dst, const std::string& src) {
   gamut_error e{};
   int64_t n = 0;
   detail::check(gamut_append(dst.c_str(), src.c_str(), &n, &e), e);
+  return n;
+}
+inline int64_t append(const std::string& dst, const std::string& src, const std::string& marking) {
+  gamut_error e{};
+  int64_t n = 0;
+  detail::check(gamut_append_marked(dst.c_str(), src.c_str(), marking.c_str(), &n, &e), e);
   return n;
 }
 // Writes the chosen runs of src as a new file, their ids kept.
@@ -685,6 +695,55 @@ inline Report validate(const std::string& path) {
   }
   out.ok = out.errors.empty();
   return out;
+}
+
+// Where the notice on opening a marked file goes (gamut.h): a function of
+// the path and the notice's text, or an empty one for the default, stderr.
+// One that does nothing turns the notice off.  It must not throw; an
+// exception it throws is dropped.
+using MarkingNotice = std::function<void(const std::string& path, const std::string& text)>;
+
+namespace detail {
+
+struct NoticeSink {
+  std::mutex mutex;
+  MarkingNotice show;
+};
+
+inline NoticeSink& notice_sink() {
+  static NoticeSink* s = new NoticeSink();
+  return *s;
+}
+
+// Another thread may set a new sink while this one shows a notice: each
+// call takes its own copy.
+inline void show_notice(const char* path, const char* text, void*) {
+  MarkingNotice show;
+  {
+    const std::lock_guard<std::mutex> lock(notice_sink().mutex);
+    show = notice_sink().show;
+  }
+  try {
+    if (show) show(path, text);
+  } catch (...) {
+  }
+}
+
+}  // namespace detail
+
+// The function and the core's sink change together under the lock, so two
+// threads setting sinks leave the one set last in both; notices are shown
+// outside it, and the function displaced is destroyed outside it too, since
+// what it holds may set a sink as it goes.
+inline void set_marking_notice(MarkingNotice show) {
+  MarkingNotice displaced;
+  {
+    const std::lock_guard<std::mutex> lock(detail::notice_sink().mutex);
+    const bool given = static_cast<bool>(show);
+    displaced = std::move(detail::notice_sink().show);
+    detail::notice_sink().show = std::move(show);
+    gamut_set_marking_notice(given ? detail::show_notice : nullptr, nullptr);
+  }
 }
 
 inline std::string version() { return gamut_version(); }
