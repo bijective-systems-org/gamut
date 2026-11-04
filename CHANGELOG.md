@@ -37,9 +37,9 @@ The file format (`gamut/1`) is unchanged; the C interface only adds calls.
   leaves its bytes as they were. Specification section 8 and
   `help(gamut.create)` give the limit.
 - The specification and guide said a batch refused for its data leaves
-  the file as it was. It changes no content, but opening a file to append
-  can change its bytes through HDF5's bookkeeping, as it always has; they
-  now say so.
+  the file as it was. It adds nothing and changes no run, but opening a
+  file to append and closing it can change its bytes and the metadata a
+  writer sets on close, as it always has; they now say so.
 - `gamut-format` stays at 2.0.0. Its 2.1.0, which only installed
   `bijective-gamut`, is yanked: both names install the same `gamut`
   module, so upgrading `gamut-format` to it removed that module. To move
@@ -53,13 +53,13 @@ The file format (`gamut/1`) is unchanged; the C interface only adds calls.
 C interface only adds calls, so programs written for 2.0 build and run
 against 2.1; what `evaluate` now does differently is listed below. To
 move from `gamut-format`, uninstall it, then install `bijective-gamut`
-(see Unreleased).
+(see 2.2.0).
 
 - The Python package is now `bijective-gamut` on PyPI, and the Rust crates
   are `bijective-gamut` and `bijective-gamut-sys`; the code still says
   `import gamut` and `gamut::`. `gamut-format`, the name through 2.0.0,
   was published at 2.1.0 to install `bijective-gamut`; that release is
-  yanked (see Unreleased).
+  yanked (see 2.2.0).
 - Rust: the `bijective-gamut` crate (`gamut` in code), over
   `bijective-gamut-sys`, the declarations of `gamut.h` that
   `rust/gamut-sys/generate.py` writes from it. It writes and reads

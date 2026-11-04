@@ -2,8 +2,8 @@
 
 Studies grow: a second batch of runs on another day, a few failed runs
 repeated. Three calls move runs between files, and each checks everything
-before it writes the first row, so a refused call leaves both files as they
-were.
+before it writes the first row, so a refused call adds no
+row and changes no run in either file.
 
 | Call | Does |
 |---|---|
@@ -183,8 +183,8 @@ identity: its `file_id` and creation time.
 - To add runs as they finish, open the file to append instead
   ([run tables](01-run-tables.md#notes) gives each language's spelling):
   it takes `add_run` and `add_runs` as a new file does, without copying
-  the file. A batch refused for its data (a missing value, a wrong shape) changes
-  nothing the file holds. A process killed while it appends, by a crash or a job's
+  the file. A batch refused for its data (a missing value, a wrong shape) adds
+  nothing and changes no run. A process killed while it appends, by a crash or a job's
   time limit, or a write that fails (a full disk), can leave the whole file
   unreadable, the runs written before included:
   keep a copy of a file you cannot regenerate before appending to it, or
