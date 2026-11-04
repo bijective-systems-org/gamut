@@ -713,7 +713,9 @@ as a writer of this format makes them, so new runs may bring new members (a
 group table grows) or new instances. A file whose growable dimensions are
 fixed is read-only: appending refuses it (E25), and a copy rewritten with
 the default layout (`write_copy`) can grow. Every check of a batch's own data is made before its first write, so
-a batch refused for its data leaves the file as it was. A failure of the
+a batch refused for its data changes no content: every run, attribute and
+table reads as it did, though opening a file to append can change its bytes
+through HDF5's own bookkeeping. A failure of the
 file itself while it is written (a damaged chunk, a full disk) can come
 after writes, and HDF5 does not keep a file consistent on disk while it is
 written: such a failure, or a writer stopped partway (a crash, a killed

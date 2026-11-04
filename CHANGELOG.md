@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.2.0 (2026-11-04)
 
 The file format (`gamut/1`) is unchanged; the C interface only adds calls.
 
@@ -36,6 +36,10 @@ The file format (`gamut/1`) is unchanged; the C interface only adds calls.
   document, is checked before the destination is opened, so a refusal
   leaves its bytes as they were. Specification section 8 and
   `help(gamut.create)` give the limit.
+- The specification and guide said a batch refused for its data leaves
+  the file as it was. It changes no content, but opening a file to append
+  can change its bytes through HDF5's bookkeeping, as it always has; they
+  now say so.
 - `gamut-format` stays at 2.0.0. Its 2.1.0, which only installed
   `bijective-gamut`, is yanked: both names install the same `gamut`
   module, so upgrading `gamut-format` to it removed that module. To move

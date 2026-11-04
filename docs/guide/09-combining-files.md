@@ -183,8 +183,8 @@ identity: its `file_id` and creation time.
 - To add runs as they finish, open the file to append instead
   ([run tables](01-run-tables.md#notes) gives each language's spelling):
   it takes `add_run` and `add_runs` as a new file does, without copying
-  the file. A batch refused for its data (a missing value, a wrong shape) leaves the
-  file as it was. A process killed while it appends, by a crash or a job's
+  the file. A batch refused for its data (a missing value, a wrong shape) changes
+  nothing the file holds. A process killed while it appends, by a crash or a job's
   time limit, or a write that fails (a full disk), can leave the whole file
   unreadable, the runs written before included:
   keep a copy of a file you cannot regenerate before appending to it, or
