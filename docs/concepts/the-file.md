@@ -54,7 +54,8 @@ algorithm; it is off by default.
 ## When a write fails
 
 Every check of a batch's own data is made before its first write, so a
-batch refused for its data leaves the file as it was. HDF5 does not keep
+batch refused for its data adds nothing and changes no run (opening a file
+to append and closing it can still change its bytes and metadata). HDF5 does not keep
 a file consistent on disk while it is written, though: a failure of the
 file itself during a write (a full disk, a damaged chunk), or a writer
 stopped partway, can leave it unreadable, rows written before included.
