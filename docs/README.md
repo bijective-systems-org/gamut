@@ -1,19 +1,34 @@
 # Gamut documentation
 
 Gamut, by [Bijective Systems](https://github.com/bijective-systems-org), is
-an open file format for parametric simulation studies and the models
-fitted to them. A `.gamut` file is HDF5 laid out as valid netCDF-4, with
-libraries for Python, MATLAB, Julia, C++, C and Rust.
+an open format for sharing engineering studies and models with their
+definitions intact: units, roles, relationships, results and mesh structure.
+A `.gamut` file is HDF5 laid out as valid netCDF-4, with libraries for Python,
+MATLAB, Julia, C++, C and Rust.
 
-## A study in four languages
+Start with the working study below. The same file can then be inspected,
+selected and read by another tool using its declared definitions. A model's
+declared inputs and outputs can be inspected without its implementation.
+Interpreting its state and evaluating it require an implementation of the
+recorded model type in the consuming runtime.
+
+<!-- Keep existing links to this example working after adding the fifth language. -->
+<span id="a-study-in-four-languages"></span>
+
+## A study in five languages
 
 A sweep of a wing's angle of attack: six runs written at once, a seventh
 added by reopening the file, then the lift of the runs that converged read
-back. The
-same program in each language; choosing one here shows it in every
-example.
+back. Choose a language here to use it throughout the examples.
+
+The excerpts below show the file operations. Each tab links to the complete
+program, including imports, setup and printed output. [Install the library
+for your language](install.md), then run that program in a new working
+directory: it creates `sweep.gamut` and refuses to replace an existing file.
 
 /// tab | Python
+
+[Complete Python example](https://github.com/bijective-systems-org/gamut/blob/main/examples/00_readme.py)
 
 ```python
 alpha = np.arange(0.0, 11.0, 2.0)  # six angles of attack, in degrees
@@ -37,6 +52,8 @@ with gamut.open("sweep.gamut") as study:
 ///
 
 /// tab | MATLAB
+
+[Complete MATLAB example](https://github.com/bijective-systems-org/gamut/blob/main/examples/matlab/sweep.m)
 
 ```matlab
 alpha = (0:2:10)';   % six angles of attack, in degrees
@@ -65,6 +82,8 @@ study.close();
 
 /// tab | Julia
 
+[Complete Julia example](https://github.com/bijective-systems-org/gamut/blob/main/examples/julia/sweep.jl)
+
 ```julia
 alpha = collect(0.0:2.0:10.0)  # six angles of attack, in degrees
 cl = 0.11 .* alpha             # stands for the solver's lift coefficients
@@ -90,6 +109,8 @@ end
 ///
 
 /// tab | C++
+
+[Complete C++ example](https://github.com/bijective-systems-org/gamut/blob/main/examples/cpp/sweep.cpp)
 
 ```cpp
 const std::vector<double> alpha = {0, 2, 4, 6, 8, 10};  // angles of attack, degrees
@@ -117,6 +138,8 @@ const std::vector<double> lift =
 
 /// tab | Rust
 
+[Complete Rust example](https://github.com/bijective-systems-org/gamut/blob/main/examples/rust/sweep.rs)
+
 ```rust
 let alpha = vec![0.0, 2.0, 4.0, 6.0, 8.0, 10.0];   // angles of attack, degrees
 let cl: Vec<f64> = alpha.iter().map(|a| 0.11 * a).collect();   // stands for the solver's lift coefficients
@@ -139,7 +162,7 @@ let lift = study.get_scalar("cl", study.select("status == converged")?)?;
 
 ///
 
-Each prints:
+The complete programs print:
 
 ```text
 lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10

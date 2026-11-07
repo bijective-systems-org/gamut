@@ -87,6 +87,10 @@ def _emit(args: argparse.Namespace, doc: dict, text: str) -> None:
     if args.json:
         print(json.dumps(doc, indent=1, default=_jsonable))
     else:
+        # A redirected Windows stream may not represent the file's name.
+        # Reporting a completed write must not turn success into a failure.
+        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+        text = text.encode(encoding, "backslashreplace").decode(encoding)
         print(text)
 
 

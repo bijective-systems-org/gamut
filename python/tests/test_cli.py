@@ -10,6 +10,7 @@ import subprocess
 import sys
 
 import numpy as np
+import pytest
 
 import gamut
 from gamut import cli
@@ -182,6 +183,41 @@ def test_an_existing_export_is_replaced_only_with_force(tmp_path, capsys):
     assert code == 2 and "--force" in err and out.read_text() == "keep me"
     code, _, _ = run(capsys, "get", m, "x", "--force", "-o", str(out))
     assert code == 0 and out.read_text() != "keep me"
+
+
+@pytest.mark.parametrize("encoding", ["cp1252", "utf-8"])
+def test_unicode_paths_keep_export_success_and_retry_refusal(tmp_path, encoding):
+    source = tmp_path / "study-\u03b1.gamut"
+    output = tmp_path / "answer-\u03b1.csv"
+    with gamut.create(str(source), writer="t", parameters={"x": "1"}, scalars={"y": "1"}) as s:
+        s.add_run({"x": 1.0, "y": 2.0})
+    original_bytes = source.read_bytes()
+    env = {**os.environ, "PYTHONIOENCODING": encoding}
+
+    def command(*args):
+        return subprocess.run([sys.executable, "-m", "gamut", *map(str, args)],
+                              capture_output=True, text=True, encoding=encoding, env=env)
+
+    displayed = "\\u03b1" if encoding == "cp1252" else "\u03b1"
+    info = command("info", source)
+    assert info.returncode == 0 and info.stderr == ""
+    assert f"study-{displayed}.gamut" in info.stdout
+
+    exported = command("get", source, "y", "-o", output)
+    assert exported.returncode == 0 and exported.stderr == ""
+    assert f"answer-{displayed}.csv" in exported.stdout
+    written_bytes = output.read_bytes()
+    assert output.read_text().splitlines() == ["row,y", "0,2.0"]
+
+    retry = command("get", source, "y", "-o", output)
+    assert retry.returncode == 2 and retry.stdout == "" and "--force" in retry.stderr
+    assert "Traceback" not in retry.stderr
+    assert output.read_bytes() == written_bytes
+    assert source.read_bytes() == original_bytes
+
+    info_json = command("info", source, "--json")
+    assert info_json.returncode == 0 and info_json.stderr == ""
+    assert json.loads(info_json.stdout)["file"] == str(source)
 
 
 def test_an_npy_output_named_in_capitals_is_checked_where_numpy_writes(tmp_path, capsys):
