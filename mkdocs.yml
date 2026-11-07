@@ -6,7 +6,7 @@
 # publishes it from main.
 site_name: Gamut
 site_url: https://bijective-systems-org.github.io/gamut/
-site_description: An open file format for parametric simulation studies and the models fitted to them.
+site_description: An open format for sharing engineering studies and models with their units, relationships and mesh structure intact.
 repo_url: https://github.com/bijective-systems-org/gamut
 docs_dir: docs
 site_dir: site

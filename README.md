@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-# Gamut: an open file format for parametric simulation studies
+# Gamut: a file format for parametric studies and models, with definitions intact
 
 By [Bijective Systems](https://github.com/bijective-systems-org), with
 libraries for Python, MATLAB, Julia, C++, C and Rust.
@@ -24,14 +24,19 @@ libraries for Python, MATLAB, Julia, C++, C and Rust.
 
 ---
 
-Gamut is a file format for parametric simulation studies: the hundreds or
-thousands of CFD or FEA runs behind a design sweep, an aerodynamic
-database or a surrogate model. One file holds the run table, each run's
-inputs, results and status, and, when the runs have a mesh, the mesh and
-every field on it, all with units. A model fitted to the runs is saved the
-same way, as plain numbers with no code. Every language reads and writes
-the file through one core, so each reads what another wrote, value for
-value.
+Gamut is an open file format for exchanging engineering studies and models
+with their definitions intact. Study files describe runs, parameters,
+results, units and relationships, including fields on shared or varying
+meshes. Those definitions travel with the data, so another person or tool
+can inspect the study without reconstructing its meaning from filenames
+and separate notes.
+
+Libraries for Python, MATLAB, Julia, C++, C and Rust use one core to read
+and write the format, so each reads what another wrote, value for value.
+Model files hold their definitions and state as plain data, without
+executable code. Reading that state and evaluating the model are different
+operations: evaluation requires an implementation of the recorded model
+type in the consuming runtime.
 
 <p align="center">
   <picture>

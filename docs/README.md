@@ -1,9 +1,15 @@
 # Gamut documentation
 
 Gamut, by [Bijective Systems](https://github.com/bijective-systems-org), is
-an open file format for parametric simulation studies and the models
-fitted to them. A `.gamut` file is HDF5 laid out as valid netCDF-4, with
-libraries for Python, MATLAB, Julia, C++, C and Rust.
+an open format for sharing engineering studies and models with their
+definitions intact: units, roles, relationships, results and mesh structure.
+A `.gamut` file is HDF5 laid out as valid netCDF-4, with libraries for Python,
+MATLAB, Julia, C++, C and Rust.
+
+Start with the working study below. The same file can then be inspected,
+selected and read by another tool using its declared definitions. Stored
+model state remains readable without its model implementation; evaluating
+it requires a supported model type in the consuming runtime.
 
 <!-- Keep existing links to this example working after adding the fifth language. -->
 <span id="a-study-in-four-languages"></span>
