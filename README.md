@@ -34,9 +34,9 @@ and separate notes.
 Libraries for Python, MATLAB, Julia, C++, C and Rust use one core to read
 and write the format, so each reads what another wrote, value for value.
 Model files hold their definitions and state as plain data, without
-executable code. Reading that state and evaluating the model are different
-operations: evaluation requires an implementation of the recorded model
-type in the consuming runtime.
+executable code. Declared inputs and outputs can be inspected without the
+model implementation. Interpreting its state and evaluating the model
+require an implementation of the recorded type in the consuming runtime.
 
 <p align="center">
   <picture>

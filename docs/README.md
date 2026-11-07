@@ -7,9 +7,10 @@ A `.gamut` file is HDF5 laid out as valid netCDF-4, with libraries for Python,
 MATLAB, Julia, C++, C and Rust.
 
 Start with the working study below. The same file can then be inspected,
-selected and read by another tool using its declared definitions. Stored
-model state remains readable without its model implementation; evaluating
-it requires a supported model type in the consuming runtime.
+selected and read by another tool using its declared definitions. A model's
+declared inputs and outputs can be inspected without its implementation.
+Interpreting its state and evaluating it require an implementation of the
+recorded model type in the consuming runtime.
 
 <!-- Keep existing links to this example working after adding the fifth language. -->
 <span id="a-study-in-four-languages"></span>
