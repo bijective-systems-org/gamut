@@ -226,3 +226,5 @@ agents a plain-text overview.
 
 [Apache 2.0](https://github.com/bijective-systems-org/gamut/blob/main/LICENSE). Made by [Bijective Systems](https://github.com/bijective-systems-org).
 If you use Gamut in published work, please cite it ([CITATION.cff](https://github.com/bijective-systems-org/gamut/blob/main/CITATION.cff)).
+
+Gamut is developed in collaboration with AI coding agents (Claude Code and Codex).

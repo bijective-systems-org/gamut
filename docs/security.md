@@ -17,9 +17,12 @@ virtual dataset): a file cannot make a reader or a writer open another
 file or path.
 
 A file holds no executable code. A model's numbers are plain data, read by
-software the reader has installed and registered. The packaged core loads
-no HDF5 filter plugins: the format allows only gzip and shuffle, which
-HDF5 has built in, and a file naming another filter is refused. The core
+software the reader has installed and registered. The format allows only
+the gzip and shuffle filters, which HDF5 has built in, and a file naming
+another filter is refused. The core in the wheels, the toolbox and the
+release archives, which carries its own HDF5, also switches HDF5's filter
+plugins off; a core built against a shared HDF5, from source or in a conda
+package, leaves that switch to the other HDF5 users in the process. The core
 reads compressed data itself, chunk by chunk, and a chunk that is not
 stored whole, or does not inflate to its full size, is refused (E23)
 before anything is copied from it; HDF5 trusts these sizes, and a crafted
