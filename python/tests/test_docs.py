@@ -67,6 +67,12 @@ def test_julia_install_names_this_release():
 
 
 @pytest.mark.skipif(not PAGES, reason="the documentation is not beside this test (an installed package)")
+def test_julia_package_carries_the_licence():
+    # The registry takes julia/ as the package, so it holds its own copy.
+    assert (ROOT / "julia" / "LICENSE").read_bytes() == (ROOT / "LICENSE").read_bytes()
+
+
+@pytest.mark.skipif(not PAGES, reason="the documentation is not beside this test (an installed package)")
 def test_rust_install_names_this_release():
     # The crates carry the package's version and are added from its tag.
     package = re.search(r'^version = "(.+)"', (ROOT / "pyproject.toml").read_text(), re.M)[1]

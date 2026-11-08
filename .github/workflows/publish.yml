@@ -32,8 +32,10 @@ name: publish
 # App installed on this repository) to register the Julia package in
 # `julia/` at the tagged commit. The tag comes first, so no TagBot is
 # needed. conda-forge, MATLAB File Exchange and Zenodo need no job here:
-# conda-forge's bot follows PyPI, and File Exchange and Zenodo act when the
-# draft release is published, after the toolbox is attached.
+# conda-forge's bot opens a version update from PyPI on the feedstock, which
+# merges itself once its tests pass (`bot: automerge` in the feedstock's
+# conda-forge.yml), and File Exchange and Zenodo act when the draft release
+# is published, after the toolbox is attached.
 #
 # A pull request that changes the packaging, or a manual run, builds and
 # tests the wheels, the sdist, the cores and the toolbox and uploads
@@ -369,8 +371,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
-      # To comment on the tagged commit; nothing else.
-      contents: write
+      # Commenting on a commit needs only read access to the contents.
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -385,8 +387,16 @@ jobs:
       - name: Ask the General registry's bot to register the tagged commit
         # Registrator answers on the commit and opens the registry pull
         # request; that pull request, not this job, says whether it merged.
+        # The registry merges a breaking version by itself only when its
+        # release notes name the changes, so they point at the changelog.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -f body='@JuliaRegistrator register subdir=julia'
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" -f body="$(cat <<'BODY'
+          @JuliaRegistrator register subdir=julia
+
+          Release notes:
+
+          The changelog: https://bijective-systems-org.github.io/gamut/reference/changelog.html
+          BODY
+          )"
