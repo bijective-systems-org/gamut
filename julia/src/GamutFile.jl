@@ -1,5 +1,5 @@
 """
-    Gamut
+    GamutFile
 
 Julia over the Gamut core library: the same calls as Python and MATLAB,
 in Julia's spelling. Positions (rows, nodes, cells)
@@ -11,7 +11,7 @@ The core is found at `ENV["GAMUT_LIBRARY"]`, else beside this package in
 `build/` at the top of a checkout. Only the built-in `Nearest` model type
 evaluates here; others are registered in Python or MATLAB.
 """
-module Gamut
+module GamutFile
 
 using Libdl
 
@@ -157,7 +157,7 @@ end
 # --- the notice on opening a marked file ------------------------------------------------
 
 """
-    Gamut.set_marking_notice(show=true)
+    GamutFile.set_marking_notice(show=true)
 
 Where the notice on opening a marked file goes: `true` (the default) logs
 it with `@info` (group `:marking`), `false` turns it off, and a function of
@@ -231,8 +231,8 @@ selection(x, what) = throw(GamutError("", "$what: positions are integers, ranges
 # --- the study ------------------------------------------------------------------------
 
 """
-A study file open to write (`Gamut.create`, `Gamut.open(path; mode="a")`)
-or to read (`Gamut.open`). Close it with `close`, or use the do-block forms.
+A study file open to write (`GamutFile.create`, `GamutFile.open(path; mode="a")`)
+or to read (`GamutFile.open`). Close it with `close`, or use the do-block forms.
 """
 mutable struct Study
     handle::Ptr{Cvoid}
@@ -295,7 +295,7 @@ end
 
 Base.isopen(s::Study) = s.handle != C_NULL
 Base.show(io::IO, s::Study) =
-    print(io, "Gamut.Study(", repr(s.path), s.writing ? ", writing" : "", isopen(s) ? "" : ", closed", ")")
+    print(io, "GamutFile.Study(", repr(s.path), s.writing ? ", writing" : "", isopen(s) ? "" : ", closed", ")")
 
 function with_study(f, s::Study)
     try
@@ -396,7 +396,7 @@ function declare(h, kw)
 end
 
 """
-    Gamut.create(path; writer, parameters, labels, scalars, fields, mesh_labels,
+    GamutFile.create(path; writer, parameters, labels, scalars, fields, mesh_labels,
                   constants, mesh, per, coordinates, precision, round_bits, title,
                   license, references, source, portion_marking, generalisation_group,
                   compression)
@@ -423,7 +423,7 @@ end
 create(f::Function, path::AbstractString; kw...) = with_study(f, create(path; kw...))
 
 """
-    Gamut.create_model(path; writer, parameters, labels, scalars, fields, constants,
+    GamutFile.create_model(path; writer, parameters, labels, scalars, fields, constants,
                         mesh, per, coordinates, trained_on, title, license,
                         references, source, portion_marking)
 
@@ -461,7 +461,7 @@ function started(s::Study, kw)
 end
 
 """
-    Gamut.open(path; mode="r", threads=1)
+    GamutFile.open(path; mode="r", threads=1)
 
 Opens a file to read, or with `mode="a"` to add runs in place. `threads`
 decompresses field reads in that many threads.
@@ -846,9 +846,9 @@ end
 
 """    table(study; names=nothing, rows=nothing)    the run table as columns; labels as names."""
 function table(s::Study; names=nothing, rows=nothing)
-    params = Gamut.names(s, "parameters")
-    labels = Gamut.names(s, "labels")
-    names = something(names, vcat(params, labels, Gamut.names(s, "scalars")))
+    params = GamutFile.names(s, "parameters")
+    labels = GamutFile.names(s, "labels")
+    names = something(names, vcat(params, labels, GamutFile.names(s, "scalars")))
     out = Dict{String,Any}()
     for n in names
         out[n] = n in labels ? get_label(s, n; rows) : n in params ? get_parameter(s, n; rows) :
@@ -888,7 +888,7 @@ end
 # --- copies between files --------------------------------------------------------------
 
 """
-    Gamut.append!(dst, src; marking=nothing)
+    GamutFile.append!(dst, src; marking=nothing)
 
 Adds the rows of `src` to `dst` in place and returns how many: new ids
 continuing dst's, tables merged by name. Both need the same declarations
@@ -909,7 +909,7 @@ function append!(dst::AbstractString, src::AbstractString; marking=nothing)
 end
 
 """
-    Gamut.extract(src, dst, rows)
+    GamutFile.extract(src, dst, rows)
 
 The selected rows of `src` (1-based positions or a range) as a new file
 `dst`: ids kept, every table whole, a changing mesh's instances reduced to
@@ -926,7 +926,7 @@ function extract(src::AbstractString, dst::AbstractString, rows)
 end
 
 """
-    Gamut.write_copy(src, dst)
+    GamutFile.write_copy(src, dst)
 
 `src` rewritten as `dst` with the default layout (chunks, compression),
 keeping its identity (file_id, created).
@@ -943,7 +943,7 @@ struct Finding
     message::String
 end
 
-"""    Gamut.validate(path)    the findings of spec section 16 (empty when the file is valid)."""
+"""    GamutFile.validate(path)    the findings of spec section 16 (empty when the file is valid)."""
 function validate(path::AbstractString)
     out = Ref{Ptr{Cvoid}}(C_NULL)
     @mes gamut_validate (Cstring, Ref{Ptr{Cvoid}}) cs(path) out
@@ -1050,7 +1050,7 @@ function from_tree(t, prefix="")
 end
 
 """
-    Gamut.Nearest(columns, lower, upper, x, outputs)
+    GamutFile.Nearest(columns, lower, upper, x, outputs)
 
 The built-in model: for each input row, the outputs of the closest stored
 point (spec section 7.5), evaluated by the core so every language gets the
@@ -1132,7 +1132,7 @@ end
 const LOADERS = Dict{String,Function}("nearest" => load_nearest)
 
 """
-    Gamut.evaluate(model_path, inputs; path=nothing, coordinates=nothing)
+    GamutFile.evaluate(model_path, inputs; path=nothing, coordinates=nothing)
 
 Evaluates a model file on a table of inputs (spec section 7.4) and returns
 the resulting data file open to read. `inputs` maps each parameter to

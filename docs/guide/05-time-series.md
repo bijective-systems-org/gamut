@@ -53,7 +53,7 @@ study.close();
 /// tab | Julia
 
 ```julia
-Gamut.create("transient.gamut"; writer="example transient",
+GamutFile.create("transient.gamut"; writer="example transient",
               labels=Dict("run" => (role="group",)),
               parameters=Dict("t" => (units="s", role="time", run_group="run"),
                               "speed" => (units="m s-1", role="condition")),
@@ -61,7 +61,7 @@ Gamut.create("transient.gamut"; writer="example transient",
     for (name, speed) in ("slow" => 20.0, "fast" => 35.0)
         frequency = 0.2 * speed / 10.0                              # shedding, Strouhal 0.2
         cl = 0.8 .* sin.(2π * frequency .* steps) .* (1 .- exp.(-steps))
-        Gamut.add_runs!(study, Dict("run" => fill(name, length(steps)), "t" => steps,
+        GamutFile.add_runs!(study, Dict("run" => fill(name, length(steps)), "t" => steps,
                                     "speed" => fill(speed, length(steps)), "cl" => cl))
     end
 end
@@ -148,10 +148,10 @@ study.close();
 /// tab | Julia
 
 ```julia
-Gamut.open("transient.gamut") do study
-    println(study.row_count, " rows, ", length(Gamut.categories(study, "run")), " runs")
-    fast = Gamut.select(study, "run == fast")
-    t, cl = Gamut.get_parameter(study, "t"; rows=fast), Gamut.get_scalar(study, "cl"; rows=fast)
+GamutFile.open("transient.gamut") do study
+    println(study.row_count, " rows, ", length(GamutFile.categories(study, "run")), " runs")
+    fast = GamutFile.select(study, "run == fast")
+    t, cl = GamutFile.get_parameter(study, "t"; rows=fast), GamutFile.get_scalar(study, "cl"; rows=fast)
     peak = argmax(abs.(cl))
     @printf("fast run: %d steps, peak |cl| %.2f at t = %.1f s\n", length(fast), abs(cl[peak]), t[peak])
 end

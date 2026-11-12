@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- The Julia package is named `GamutFile`, after the General registry's
+  convention for file-format packages, and is added from the registry:
+  `Pkg.add(name="GamutFile")`, then `using GamutFile`. Calls are spelled
+  `GamutFile.open` and so on; nothing else changes. The format, the files
+  and the other languages keep the name `gamut`.
+
 ## 2.2.0 (2026-11-04)
 
 The file format (`gamut/1`) is unchanged; the C interface only adds calls.
