@@ -55,7 +55,7 @@ study.close();
 /// tab | Julia
 
 ```julia
-Gamut.create("refinement.gamut"; writer="example refinement", mesh="changing", per="run",
+GamutFile.create("refinement.gamut"; writer="example refinement", mesh="changing", per="run",
               coordinates=(units="m", axes=2),
               parameters=Dict("cells_round" => (units="1", role="design")),
               scalars=Dict("cp_min" => "1"),
@@ -66,7 +66,7 @@ Gamut.create("refinement.gamut"; writer="example refinement", mesh="changing", p
         x = vec(sum(points[corners, 1]; dims=1)) ./ 4
         y = vec(sum(points[corners, 2]; dims=1)) ./ 4
         cp = pressure(atan.(y, x), hypot.(x, y))
-        Gamut.add_run!(study, Dict("cells_round" => n, "cp_min" => minimum(cp));
+        GamutFile.add_run!(study, Dict("cells_round" => n, "cp_min" => minimum(cp));
                        fields=Dict("cp" => cp), points, cells)
     end
 end
@@ -173,13 +173,13 @@ study.close();
 /// tab | Julia
 
 ```julia
-Gamut.open("refinement.gamut") do study
-    rounds = Gamut.get_parameter(study, "cells_round")
+GamutFile.open("refinement.gamut") do study
+    rounds = GamutFile.get_parameter(study, "cells_round")
     for row in 1:study.row_count
-        types, _, _ = Gamut.get_cells(study; row)
-        cp = Gamut.get_field(study, "cp"; rows=row)
+        types, _, _ = GamutFile.get_cells(study; row)
+        cp = GamutFile.get_field(study, "cp"; rows=row)
         @printf("%g cells round: %d nodes, %d cells, lowest cell cp %.3f\n", rounds[row],
-                size(Gamut.get_points(study; row), 1), length(types), minimum(cp))
+                size(GamutFile.get_points(study; row), 1), length(types), minimum(cp))
     end
 end
 ```

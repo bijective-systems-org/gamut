@@ -1,8 +1,8 @@
 # Holds the Julia package to the corpus written by corpus/generate.py:
 # the same cases and expected answers as the Python and MATLAB checkers.
-#   julia check_corpus.jl CORPUS_DIR     (with JSON and Gamut loadable)
+#   julia check_corpus.jl CORPUS_DIR     (with JSON and GamutFile loadable)
 using JSON
-using Gamut
+using GamutFile
 
 # A nested JSON list as an array in logical order (first index outermost).
 function nested(v, ::Type{T}) where {T}
@@ -20,7 +20,7 @@ positions(x) = x === nothing ? nothing : Int.(x) .+ 1
 
 # A file-level attribute as `describe` gives it: nothing when absent.
 function described(f, p)
-    got = get(Gamut.describe(f), p["describe"], nothing)
+    got = get(GamutFile.describe(f), p["describe"], nothing)
     return got == p["value"] ? nothing : "describe $(p["describe"]): $(repr(got)) != $(repr(p["value"]))"
 end
 
@@ -28,13 +28,13 @@ end
 # shown): the notice once, `want` after its first line, or none.
 function noticed(path, want)
     got = String[]
-    Gamut.set_marking_notice((shown_path, text) -> push!(got, text))
+    GamutFile.set_marking_notice((shown_path, text) -> push!(got, text))
     try
         for _ in 1:2
-            close(Gamut.open(path))
+            close(GamutFile.open(path))
         end
     finally
-        Gamut.set_marking_notice(true)
+        GamutFile.set_marking_notice(true)
     end
     want === nothing && return isempty(got) ? nothing : "notice: $(repr(got)), expected none"
     expect = ["gamut: $path carries a portion marking\n" * want]
@@ -51,7 +51,7 @@ function appended(path, p)
         cp(into ? other : path, dst)
         before = read(dst)
         try
-            Gamut.append!(dst, into ? path : other; marking=get(p, "marking", nothing))
+            GamutFile.append!(dst, into ? path : other; marking=get(p, "marking", nothing))
         catch x
             x isa GamutError || rethrow()
             x.rule == get(p, "refused", nothing) ||
@@ -59,7 +59,7 @@ function appended(path, p)
             return read(dst) == before ? nothing : "append: refused, the destination changed"
         end
         haskey(p, "refused") && return "append: appended, expected refusal $(p["refused"])"
-        Gamut.open(dst) do f
+        GamutFile.open(dst) do f
             f.row_count == p["rows"] || return "append: $(f.row_count) rows, not $(p["rows"])"
             described(f, p)
         end
@@ -71,10 +71,10 @@ function probe(path, p)
     (haskey(p, "append_into") || haskey(p, "append_from")) && return appended(path, p)
     if haskey(p, "evaluate")
         inputs = Dict(k => (v[1] isa AbstractString ? String.(v) : Float64.(v)) for (k, v) in p["evaluate"])
-        out = Gamut.evaluate(path, inputs)
+        out = GamutFile.evaluate(path, inputs)
         try
             haskey(p, "describe") && return described(out, p)
-            got = Gamut.get_scalar(out, p["scalar"])
+            got = GamutFile.get_scalar(out, p["scalar"])
             return got == Float64.(p["values"]) ? nothing : "evaluate $(p["scalar"]): $got != $(p["values"])"
         finally
             close(out)
@@ -83,26 +83,26 @@ function probe(path, p)
     if haskey(p, "copy")
         return mktempdir() do tmp
             dst = joinpath(tmp, "copy.gamut")
-            p["copy"] == "extract" ? Gamut.extract(path, dst, positions(p["rows"])) :
-                                     Gamut.write_copy(path, dst)
-            Gamut.open(f -> described(f, p), dst)
+            p["copy"] == "extract" ? GamutFile.extract(path, dst, positions(p["rows"])) :
+                                     GamutFile.write_copy(path, dst)
+            GamutFile.open(f -> described(f, p), dst)
         end
     end
-    Gamut.open(path) do f
+    GamutFile.open(path) do f
         if haskey(p, "describe")
             return described(f, p)
         elseif haskey(p, "info")
             got = getproperty(f, Symbol(p["info"]))
             return got == p["value"] ? nothing : "$(p["info"]): $(repr(got)) != $(repr(p["value"]))"
         elseif haskey(p, "label")
-            got = Gamut.get_label(f, p["label"]; rows=positions(p["rows"]))
+            got = GamutFile.get_label(f, p["label"]; rows=positions(p["rows"]))
             return got == p["names"] ? nothing : "label $(p["label"]): $got != $(p["names"])"
         elseif haskey(p, "select")
-            got = Gamut.select(f, p["select"])
+            got = GamutFile.select(f, p["select"])
             return got == positions(p["positions"]) ? nothing : "select: $got != $(p["positions"])"
         end
         T = DTYPES[p["dtype"]]
-        got = Gamut.read(f, p["read"], positions(get(p, "rows", nothing)),
+        got = GamutFile.read(f, p["read"], positions(get(p, "rows", nothing)),
                           positions(get(p, "sites", nothing)), T; squeeze=false)
         want = nested(p["values"], T)
         size(got) == size(want) || return "read $(p["read"]): shape $(size(got)) != $(size(want))"
@@ -114,21 +114,21 @@ end
 
 function hostile(path, e)
     try
-        Gamut.open(path) do f
-            Gamut.names(f, "parameters")
+        GamutFile.open(path) do f
+            GamutFile.names(f, "parameters")
             for r in get(e, "reads", [])
                 try
                     if haskey(r, "label")
-                        Gamut.get_label(f, r["label"])
+                        GamutFile.get_label(f, r["label"])
                     elseif haskey(r, "cells")
-                        Gamut.get_cells(f; row=r["cells"] + 1)
+                        GamutFile.get_cells(f; row=r["cells"] + 1)
                     elseif haskey(r, "select")
-                        Gamut.select(f, r["select"])
+                        GamutFile.select(f, r["select"])
                     elseif haskey(r, "scalar")
-                        Gamut.get_scalar(f, r["scalar"])
+                        GamutFile.get_scalar(f, r["scalar"])
                     elseif haskey(r, "evaluate")
                         inputs = Dict(k => Float64.(v) for (k, v) in r["evaluate"])
-                        close(Gamut.evaluate(path, inputs))
+                        close(GamutFile.evaluate(path, inputs))
                     end
                 catch x
                     x isa GamutError || rethrow()
@@ -153,7 +153,7 @@ function main(corpus)
         path = joinpath(corpus, "$name.gamut")
         counts[e["group"]] += 1
         findings = try
-            Gamut.validate(path)
+            GamutFile.validate(path)
         catch x
             push!(failures, "$name: validate raised $x")
             continue

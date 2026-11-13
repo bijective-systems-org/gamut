@@ -58,7 +58,7 @@ the JSON package in its environment):
 julia --project=julia -e 'include("julia/test/runtests.jl")'
 python corpus/generate.py /tmp/corpus
 GAMUT_LIBRARY=build/libgamut.so python corpus/check.py /tmp/corpus
-julia --project=<an environment with JSON and Gamut> julia/test/check_corpus.jl /tmp/corpus
+julia --project=<an environment with JSON and GamutFile> julia/test/check_corpus.jl /tmp/corpus
 ```
 
 Rust's tests, the corpus from Rust, and the check that `bijective-gamut-sys`

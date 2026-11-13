@@ -14,7 +14,7 @@ interface, C++ included:
 |---|---|---|
 | Python | `ctypes` | the `bijective-gamut` wheel, core included |
 | MATLAB | a MEX gateway | the `Gamut.mltbx` toolbox, core included |
-| Julia | `ccall` | the package, pointed at a release's core or the wheel's |
+| Julia | `ccall` | the `GamutFile` package, pointed at a release's core or the wheel's |
 | C++ | [`gamut.hpp`](https://github.com/bijective-systems-org/gamut/blob/main/include/gamut/gamut.hpp), a header over `gamut.h` | the core built with CMake |
 | C | `gamut.h` | the core built with CMake |
 | Rust | the `bijective-gamut` crate over `bijective-gamut-sys`, the declarations of `gamut.h` | the crates, linked to a release's core |

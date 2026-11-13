@@ -58,12 +58,13 @@ def test_benchmark_page_matches_its_results():
 
 @pytest.mark.skipif(not PAGES, reason="the documentation is not beside this test (an installed package)")
 def test_julia_install_names_this_release():
-    # The Julia package is added from a tag, so that its layer matches the
-    # wheel's core; each release moves the tag the pages name.
+    # The Julia package is added at this release's version, so that its
+    # layer matches the wheel's core; each release moves the version the
+    # pages name.
     version = re.search(r'^version = "(.+)"', (ROOT / "julia" / "Project.toml").read_text(), re.M)[1]
     for page in (ROOT / "README.md", ROOT / "docs" / "install.md"):
-        revs = set(re.findall(r'rev="v([^"]+)"', page.read_text(encoding="utf-8")))
-        assert revs == {version}, f"{page.name} adds Julia at {sorted(revs)}, not v{version}"
+        adds = set(re.findall(r'Pkg\.add\(name="GamutFile", version="([^"]+)"\)', page.read_text(encoding="utf-8")))
+        assert adds == {version}, f"{page.name} adds Julia at {sorted(adds)}, not {version}"
 
 
 @pytest.mark.skipif(not PAGES, reason="the documentation is not beside this test (an installed package)")

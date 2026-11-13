@@ -45,14 +45,14 @@ study.close();
 /// tab | Julia
 
 ```julia
-Gamut.open("parts.gamut") do study
-    rows = Gamut.select(study, "speed >= 20 and gamma > 1 and status == converged")
+GamutFile.open("parts.gamut") do study
+    rows = GamutFile.select(study, "speed >= 20 and gamma > 1 and status == converged")
     println("chosen: ", length(rows), " runs")
-    wall = findfirst(==("wall"), Gamut.categories(study, "surface")) - 1   # the code that means "wall"
-    on_wall = findall(==(wall), vec(Gamut.get_mesh_label(study, "surface")))
-    p_wall = Gamut.get_field(study, "p"; rows, nodes=on_wall) ./ 1000      # stored in Pa; kPa
+    wall = findfirst(==("wall"), GamutFile.categories(study, "surface")) - 1   # the code that means "wall"
+    on_wall = findall(==(wall), vec(GamutFile.get_mesh_label(study, "surface")))
+    p_wall = GamutFile.get_field(study, "p"; rows, nodes=on_wall) ./ 1000      # stored in Pa; kPa
     @printf("wall pressure: %d runs x %d nodes, lowest %.3f kPa\n", size(p_wall)..., minimum(p_wall))
-    speeds = Gamut.get_parameter(study, "speed"; rows) .* 3.6               # stored in m s-1; km/h
+    speeds = GamutFile.get_parameter(study, "speed"; rows) .* 3.6               # stored in m s-1; km/h
     println("speeds in km/h: ", join((@sprintf("%.1f", v) for v in speeds), " "))
 end
 ```

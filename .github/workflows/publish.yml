@@ -29,8 +29,8 @@ name: publish
 # to write this repository's releases.
 #
 # `julia` then asks the General registry's bot (JuliaRegistrator, a GitHub
-# App installed on this repository) to register the Julia package in
-# `julia/` at the tagged commit. The tag comes first, so no TagBot is
+# App installed on this repository) to register the Julia package,
+# `GamutFile`, in `julia/` at the tagged commit. The tag comes first, so no TagBot is
 # needed. conda-forge, MATLAB File Exchange and Zenodo need no job here:
 # conda-forge's bot opens a version update from PyPI on the feedstock, which
 # merges itself once its tests pass (`bot: automerge` in the feedstock's

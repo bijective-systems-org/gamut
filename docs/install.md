@@ -111,21 +111,21 @@ folder is all MATLAB needs on its path.
 
 /// tab | Julia
 
-Julia 1.10 or later. Add the package from this repository, at the release
-that matches the core it calls, and point it at a core library:
+Julia 1.10 or later. Add the package, `GamutFile`, at the release that
+matches the core it calls, and point it at a core library:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v2.2.0")
+Pkg.add(name="GamutFile", version="2.2.0")
 ENV["GAMUT_LIBRARY"] = "/path/to/libgamut.dylib"   # .so on Linux, gamut.dll on Windows
-using Gamut
-Gamut.version()
+using GamutFile
+GamutFile.version()
 ```
 
 The core is in each release's `gamut-core-<version>-<platform>` archive
 (`lib/`, or `bin/` on Windows), and the Python wheel's serves too:
 `gamut.library_path()` prints its path. Set `GAMUT_LIBRARY` in the
-environment, or in `ENV` before the first call; `Gamut.version()` says
+environment, or in `ENV` before the first call; `GamutFile.version()` says
 which core was loaded. From a checkout, `julia --project=julia` uses the
 package in place, and without `GAMUT_LIBRARY` it looks in `build/` at the
 top of the checkout.

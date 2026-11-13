@@ -12,7 +12,7 @@ row and changes no run in either file.
 | `write_copy(src, dst)` | rewrites a file with the default layout |
 
 MATLAB spells them `gamut.append`, `gamut.extract` and `gamut.writeCopy`,
-Julia `Gamut.append!`, `Gamut.extract` and `Gamut.write_copy`, and C++
+Julia `GamutFile.append!`, `GamutFile.extract` and `GamutFile.write_copy`, and C++
 and Rust `gamut::append`, `gamut::extract` and `gamut::write_copy`. Row ids are the
 file's own and count from 0 in every language.
 
@@ -71,21 +71,21 @@ fprintf('valid: %s\n', answers{(isempty(found) || ~any(startsWith({found.rule}, 
 ```julia
 sweep("monday.gamut", [0.5, 0.6, 0.7])
 sweep("tuesday.gamut", [0.8, 0.9])
-println("appended ", Gamut.append!("monday.gamut", "tuesday.gamut"), " runs")
+println("appended ", GamutFile.append!("monday.gamut", "tuesday.gamut"), " runs")
 
-good = Gamut.open(study -> Gamut.select(study, "status == converged"), "monday.gamut")
-Gamut.extract("monday.gamut", "converged.gamut", good)
-Gamut.write_copy("converged.gamut", "converged_copy.gamut")
+good = GamutFile.open(study -> GamutFile.select(study, "status == converged"), "monday.gamut")
+GamutFile.extract("monday.gamut", "converged.gamut", good)
+GamutFile.write_copy("converged.gamut", "converged_copy.gamut")
 
-Gamut.open("converged.gamut") do study
-    Gamut.open("converged_copy.gamut") do copy
-        println("kept ids: ", join(Gamut.get_row_ids(study), " "), " at mach ",
-                join((@sprintf("%g", m) for m in Gamut.get_parameter(study, "mach")), " "))
-        same = Gamut.describe(study)["file_id"] == Gamut.describe(copy)["file_id"]
+GamutFile.open("converged.gamut") do study
+    GamutFile.open("converged_copy.gamut") do copy
+        println("kept ids: ", join(GamutFile.get_row_ids(study), " "), " at mach ",
+                join((@sprintf("%g", m) for m in GamutFile.get_parameter(study, "mach")), " "))
+        same = GamutFile.describe(study)["file_id"] == GamutFile.describe(copy)["file_id"]
         println("same file id after the rewrite: ", same ? "yes" : "no")
     end
 end
-println("valid: ", all(f -> f.severity != "error", Gamut.validate("converged.gamut")) ? "yes" : "no")
+println("valid: ", all(f -> f.severity != "error", GamutFile.validate("converged.gamut")) ? "yes" : "no")
 ```
 
 ///
@@ -160,7 +160,7 @@ destination's: runs from an unmarked file take it, and runs from a file
 marked otherwise are refused (E27), since they would lose their own. To
 append them, state the marking the result carries:
 `append(dst, src, marking=m)` in Python, `gamut.append(dst, src, 'Marking', m)`
-in MATLAB, `Gamut.append!(dst, src; marking=m)` in Julia,
+in MATLAB, `GamutFile.append!(dst, src; marking=m)` in Julia,
 `gamut::append(dst, src, m)` in C++, `gamut::append_marked(dst, src, m)`
 in Rust, and `gamut append FILE SRC --marking TEXT` on the command line.
 The destination then carries it, whatever the two files did; an empty

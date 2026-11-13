@@ -305,8 +305,8 @@ fprintf('the nearest run''s lift at 2.2 and 7.9 degrees: %s\n', strjoin(compose(
 /// tab | Julia
 
 ```julia
-answer = Gamut.evaluate("lift_nearest.gamut", Dict("alpha" => [2.2, 7.9]))
-lift = Gamut.get_scalar(answer, "cl")
+answer = GamutFile.evaluate("lift_nearest.gamut", Dict("alpha" => [2.2, 7.9]))
+lift = GamutFile.get_scalar(answer, "cl")
 close(answer)
 println("the nearest run's lift at 2.2 and 7.9 degrees: ", join([@sprintf("%.2f", v) for v in lift], " "))
 ```
@@ -353,7 +353,7 @@ the nearest run's lift at 2.2 and 7.9 degrees: 0.22 0.88
 
 Julia, C++ and Rust evaluate the file the Python program writes. Julia
 and Rust evaluate the built-in type only, and Julia gives any model's
-numbers with `Gamut.model_numbers`. C and C++ read a model's numbers and
+numbers with `GamutFile.model_numbers`. C and C++ read a model's numbers and
 run the built-in model through `gamut.h`
 ([C++ and C](../reference/c-and-cpp.md#a-model-file)); neither the C++
 header nor the Rust crate writes model files.

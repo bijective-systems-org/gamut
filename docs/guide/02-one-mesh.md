@@ -44,14 +44,14 @@ study.close();
 /// tab | Julia
 
 ```julia
-Gamut.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed",
+GamutFile.create("cylinder.gamut"; writer="example sweep", mesh="shared", per="fixed",
               coordinates=(units="m", axes=2),
               parameters=Dict("gamma" => (units="m2 s-1", role="design")),
               mesh_labels=Dict("surface" => (at="node", categories=["field", "wall"])),
               fields=Dict("cp" => (units="1", at="node"))) do study
-    Gamut.set_mesh!(study; points, cells, labels=Dict("surface" => surface))
+    GamutFile.set_mesh!(study; points, cells, labels=Dict("surface" => surface))
     for gamma in range(0, 3.5; length=8)
-        Gamut.add_run!(study, Dict("gamma" => gamma); fields=Dict("cp" => solve(gamma)))
+        GamutFile.add_run!(study, Dict("gamma" => gamma); fields=Dict("cp" => solve(gamma)))
     end
 end
 ```
@@ -138,8 +138,8 @@ study.close();
 /// tab | Julia
 
 ```julia
-Gamut.open("cylinder.gamut"; mode="a") do study
-    Gamut.add_run!(study, Dict("gamma" => 4.0); fields=Dict("cp" => solve(4.0)))
+GamutFile.open("cylinder.gamut"; mode="a") do study
+    GamutFile.add_run!(study, Dict("gamma" => 4.0); fields=Dict("cp" => solve(4.0)))
 end
 ```
 
@@ -201,13 +201,13 @@ fprintf('cp at the top of the cylinder, run by run:%s\n', sprintf(' %.2f', top))
 /// tab | Julia
 
 ```julia
-Gamut.open("cylinder.gamut") do study
-    println(study.type, " mesh, ", study.row_count, " runs, ", size(Gamut.get_points(study), 1), " nodes")
-    wall = findfirst(==("wall"), Gamut.categories(study, "surface")) - 1   # the code that means "wall"
-    on_wall = findall(==(wall), vec(Gamut.get_mesh_label(study, "surface")))
-    lowest = minimum(Gamut.get_field(study, "cp"; nodes=on_wall); dims=2)  # runs × wall nodes; each run's lowest
+GamutFile.open("cylinder.gamut") do study
+    println(study.type, " mesh, ", study.row_count, " runs, ", size(GamutFile.get_points(study), 1), " nodes")
+    wall = findfirst(==("wall"), GamutFile.categories(study, "surface")) - 1   # the code that means "wall"
+    on_wall = findall(==(wall), vec(GamutFile.get_mesh_label(study, "surface")))
+    lowest = minimum(GamutFile.get_field(study, "cp"; nodes=on_wall); dims=2)  # runs × wall nodes; each run's lowest
     println("lowest cp on the wall, by run: ", join((@sprintf("%.2f", v) for v in lowest), " "))
-    top = Gamut.get_field(study, "cp"; nodes=[13])                         # node 13, the top, in every run
+    top = GamutFile.get_field(study, "cp"; nodes=[13])                         # node 13, the top, in every run
     println("cp at the top of the cylinder, run by run: ", join((@sprintf("%.2f", v) for v in top), " "))
 end
 ```

@@ -105,21 +105,21 @@ study.close();
 alpha = collect(0.0:2.0:10.0)  # six angles of attack, in degrees
 cl = 0.11 .* alpha             # stands for the solver's lift coefficients
 
-Gamut.create("sweep.gamut"; writer="example sweep",
+GamutFile.create("sweep.gamut"; writer="example sweep",
               parameters=Dict("alpha" => (units="degree", role="condition")),
               labels=Dict("status" => (role="status",
                                        categories=["converged", "failed"])),
               scalars=Dict("cl" => "1")) do study
     status = fill("converged", length(alpha))
-    Gamut.add_runs!(study, Dict("alpha" => alpha, "cl" => cl, "status" => status))
+    GamutFile.add_runs!(study, Dict("alpha" => alpha, "cl" => cl, "status" => status))
 end
 
-Gamut.open("sweep.gamut"; mode="a") do study
-    Gamut.add_run!(study, Dict("alpha" => 12.0, "status" => "failed"))
+GamutFile.open("sweep.gamut"; mode="a") do study
+    GamutFile.add_run!(study, Dict("alpha" => 12.0, "status" => "failed"))
 end
 
-lift = Gamut.open("sweep.gamut") do study
-    Gamut.get_scalar(study, "cl"; rows=Gamut.select(study, "status == converged"))
+lift = GamutFile.open("sweep.gamut") do study
+    GamutFile.get_scalar(study, "cl"; rows=GamutFile.select(study, "status == converged"))
 end
 ```
 
@@ -213,7 +213,7 @@ another approach is faster.
 |---|---|
 | Python 3.11 or later | `pip install bijective-gamut` |
 | MATLAB R2023b or later | open `Gamut.mltbx` from the [latest release](https://github.com/bijective-systems-org/gamut/releases/latest) |
-| Julia 1.10 or later | `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v2.2.0")` |
+| Julia 1.10 or later | `Pkg.add(name="GamutFile", version="2.2.0")` |
 | C++ and C | CMake build and install, then `find_package(gamut)`; include `gamut/gamut.hpp` (C++17) or `gamut/gamut.h` (C) |
 | Rust 1.70 or later | `bijective-gamut = { git = "https://github.com/bijective-systems-org/gamut", tag = "v2.2.0" }`, with `GAMUT_LIB_DIR` at a release's core |
 
