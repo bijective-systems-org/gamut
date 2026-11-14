@@ -426,9 +426,11 @@ std::unique_ptr<Writer> Writer::create(const std::string& path,
 std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
   std::unique_ptr<Writer> w(new Writer());
   w->path_ = path;
-  // Everything is read and checked on a read-only handle, and the file is
-  // opened to write last: opening a file to write changes its bytes even
-  // when nothing is written, and a refused file stays as it was.
+  // The lock first, so the file cannot change between these checks and the
+  // copy.  Everything is read and checked on a read-only handle and the
+  // copy is made last, so a refused file costs no copy.  The file itself is
+  // never opened to write: the copy replaces it on close.
+  w->session_ = AppendSession::lock(path);
   {
     const File f = File::open_read(path);
     w->schema_ = load_schema(f, path);
@@ -513,7 +515,7 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
     const std::vector<std::int64_t> ids = f.read_i64("/row");
     for (const std::int64_t id : ids) w->next_id_ = std::max(w->next_id_, id + 1);
   }
-  w->file_.reset(new File(File::open_write(path)));
+  w->file_.reset(new File(File::open_write(w->session_->copy())));
   return w;
 }
 
@@ -542,7 +544,10 @@ Writer::~Writer() {
   }
 }
 
-void Writer::need_open() const { need(!closed_, "", "the file is closed"); }
+void Writer::need_open() const {
+  need(!closed_, "", "the file is closed");
+  need(!finished_, "", "the file is finished and waits to replace the original; close it again");
+}
 
 void Writer::need_no_runs(const std::string& what) const {
   need(!datasets_ready_, "", what + " must come before the first run is added");
@@ -1885,11 +1890,18 @@ void Writer::abandon(bool remove) {
   closed_ = true;
   pending_.clear();
   file_.reset();
+  session_.reset();   // the copy goes, unless it holds a finished session
   if (remove && created_) std::remove(path_.c_str());
 }
 
 void Writer::close() {
   if (closed_) return;
+  if (finished_) {   // a rename that failed before: tried again
+    session_->publish();
+    session_.reset();
+    closed_ = true;
+    return;
+  }
   // Checked before anything is written, so a refused close can be fixed
   // (add the model, set the mesh) and tried again.
   if (!datasets_ready_) {
@@ -1919,6 +1931,11 @@ void Writer::close() {
   write_cf_coordinates();
   file_->flush();
   file_.reset();
+  if (session_) {
+    finished_ = true;
+    session_->publish();
+    session_.reset();
+  }
   closed_ = true;
 }
 

@@ -466,13 +466,18 @@ std::int64_t append_file(const std::string& dst, const std::string& src,
   const auto s = Reader::open(src);
   const std::vector<std::int64_t> rows = positions(Selection::all(), n);
   auto w = Writer::open_append(dst);
-  // Every batch is checked before the first is written, so nothing the
-  // writer refuses can leave part of the source behind. (An I/O failure
-  // partway still keeps the rows written before it.)
-  copy_rows(*s, *w, rows, false, maps, true);
-  if (marking) w->set_attribute("portion_marking", *marking);
-  copy_rows(*s, *w, rows, false, maps, false);
-  w->close();
+  // Every batch is checked before the first is written, and the rows go to
+  // a copy that replaces the destination only when all are in: a failure
+  // partway leaves the destination as it was.
+  try {
+    copy_rows(*s, *w, rows, false, maps, true);
+    if (marking) w->set_attribute("portion_marking", *marking);
+    copy_rows(*s, *w, rows, false, maps, false);
+    w->close();
+  } catch (...) {
+    w->abandon(false);
+    throw;
+  }
   return n;
 }
 

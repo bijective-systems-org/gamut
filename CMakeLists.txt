@@ -74,6 +74,7 @@ set(GAMUT_CORE_SOURCES
   src/nearest.cpp
   src/evaluate.cpp
   src/copy.cpp
+  src/session.cpp
   src/notice.cpp
   src/select.cpp
   src/capi.cpp

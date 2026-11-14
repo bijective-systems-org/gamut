@@ -38,8 +38,7 @@ per model holding its numbers.
 ## Storage
 
 Every array that grows with the runs is chunked along that dimension, so
-runs can be appended in place, a batch at a time, without rewriting what
-is there. Chunked arrays are compressed with gzip and shuffle, level 1 by
+runs can be appended a batch at a time without rewriting what is there. Chunked arrays are compressed with gzip and shuffle, level 1 by
 default, filters every HDF5 build has, MATLAB's and Julia's included. A file keeps track of
 the space a rewritten chunk leaves free, so a file appended one run at a
 time stays the size of its data: 3,000 single-row appends of 20 columns,

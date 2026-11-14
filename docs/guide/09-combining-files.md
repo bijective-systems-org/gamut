@@ -182,13 +182,17 @@ identity: its `file_id` and creation time.
 
 - To add runs as they finish, open the file to append instead
   ([run tables](01-run-tables.md#notes) gives each language's spelling):
-  it takes `add_run` and `add_runs` as a new file does, without copying
-  the file. A batch refused for its data (a missing value, a wrong shape) adds
-  nothing and changes no run. A process killed while it appends, by a crash or a job's
-  time limit, or a write that fails (a full disk), can leave the whole file
-  unreadable, the runs written before included:
-  keep a copy of a file you cannot regenerate before appending to it, or
-  write each job's runs to a file of its own and `append` them at the end.
+  it takes `add_run` and `add_runs` as a new file does. A batch refused
+  for its data (a missing value, a wrong shape) adds nothing and changes
+  no run. The runs go to a copy beside the file, which replaces it when
+  the file closes: a process killed while it appends, by a crash or a
+  job's time limit, or a write that fails (a full disk), loses the runs
+  of that session and leaves the file as it was, and `append` adds all of
+  a source's runs or none. The copy is a clone, which costs nothing, on
+  filesystems that make them (APFS, Btrfs, XFS); elsewhere it is a
+  full copy, so close the file once per batch of runs rather than once
+  per run. One process appends to a file at a time; others can read it
+  meanwhile, and see the new runs once it closes.
 - Opening a file that carries a portion marking shows it, once per file
   in a process: a block naming the file, then the marking whole, the same
   in every language. Python prints it on `sys.stderr` (so it shows in a
