@@ -520,14 +520,23 @@ def cmd_append(args: argparse.Namespace) -> int:
                          "appended on its own")
     args.document = sources[0]
     if args.document.lower().endswith(".gamut"):
-        for source in sources:
+        def about(k: int) -> str:
+            # With several sources, a message names the one it is about, as the core's do.
+            return f'source {k + 1} of {len(sources)}, "{sources[k]}": ' if len(sources) > 1 else ""
+        for k, source in enumerate(sources):
             if os.path.exists(source) and os.path.exists(args.file) and \
                     os.path.samefile(source, args.file):
-                raise _Usage("", f"{source} is the destination; a file is not appended to itself"
-                             if len(sources) > 1 else "the source and the destination are one file")
-        for path in [args.file] + sources:
-            with open_file(path) as f:
-                _rows_kept(f, "appending")
+                raise _Usage("", about(k) + "the source and the destination are one file")
+        with open_file(args.file) as f:
+            _rows_kept(f, "appending")
+        for k, source in enumerate(sources):
+            try:
+                with open_file(source) as f:
+                    _rows_kept(f, "appending")
+            except GamutError as e:
+                if not about(k):
+                    raise
+                raise type(e)(e.rule, about(k) + e.message, e.path) from None
         try:
             # Every row of the other files, in one session: all of them or none.
             n = gamut_append(args.file, sources if len(sources) > 1 else args.document,

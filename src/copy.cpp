@@ -487,7 +487,7 @@ std::int64_t append_files(const std::string& dst, const std::vector<std::string>
   }
   std::vector<CodeMaps> maps(srcs.size());
   std::vector<std::int64_t> counts(srcs.size());
-  std::set<std::string> known;
+  std::vector<std::string> entries;
   {
     const auto d = Reader::open(dst);
     for (std::size_t k = 0; k < srcs.size(); ++k) {
@@ -504,14 +504,19 @@ std::int64_t append_files(const std::string& dst, const std::vector<std::string>
     }
     const std::string group = d->schema().mesh.per_group();
     if (!group.empty()) {
-      const Label* l = d->schema().label(group);
-      const auto t = d->schema().tables.find(l->category);
-      if (t != d->schema().tables.end()) known.insert(t->second.begin(), t->second.end());
+      const auto t = d->schema().tables.find(d->schema().label(group)->category);
+      if (t != d->schema().tables.end()) entries = t->second;
     }
   }
-  std::vector<std::unique_ptr<Reader>> sources;
-  for (const auto& src : srcs) sources.push_back(Reader::open(src));
   auto w = Writer::open_append(dst);
+  // The members with geometry before any source is added (a table may name
+  // members that have none).
+  std::set<std::string> known;
+  for (const std::string& e : entries) {
+    if (w->has_member(e)) known.insert(e);
+  }
+  // One source open at a time, so a merge of many files stays within the
+  // process's limit on open files.
   // Every batch of every source is checked before the first is written,
   // and the rows go to one copy that replaces the destination only when
   // all are in: a failure partway leaves the destination as it was.
@@ -519,15 +524,15 @@ std::int64_t append_files(const std::string& dst, const std::vector<std::string>
   try {
     for (std::size_t k = 0; k < srcs.size(); ++k) {
       about(k, [&] {
-        copy_rows(*sources[k], *w, positions(Selection::all(), counts[k]), false, maps[k], true,
-                  &known);
+        copy_rows(*Reader::open(srcs[k]), *w, positions(Selection::all(), counts[k]), false,
+                  maps[k], true, &known);
       });
     }
     if (marking) w->set_attribute("portion_marking", *marking);
     for (std::size_t k = 0; k < srcs.size(); ++k) {
       about(k, [&] {
-        copy_rows(*sources[k], *w, positions(Selection::all(), counts[k]), false, maps[k], false,
-                  &known);
+        copy_rows(*Reader::open(srcs[k]), *w, positions(Selection::all(), counts[k]), false,
+                  maps[k], false, &known);
       });
       total += counts[k];
     }

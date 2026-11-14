@@ -1264,9 +1264,20 @@ void test_append_many() {
     CHECK(c4.size() == 18 && c4[2] == 4.0);
   }
   CHECK(validate_file("am_mdst.gamut").findings.empty());
+  // A member the destination's table names but no run of it uses has no
+  // geometry there, so a source's runs of it bring theirs.
+  member_file("am_ab.gamut", {"a", "b"}, {1, 2});
+  std::remove("am_a_only.gamut");
+  extract_file("am_ab.gamut", "am_a_only.gamut", Selection::list({0}));
+  member_file("am_b.gamut", {"b"}, {2});
+  CHECK(append_file("am_a_only.gamut", "am_b.gamut") == 1);
+  std::remove("am_a_only.gamut");
+  extract_file("am_ab.gamut", "am_a_only.gamut", Selection::list({0}));
+  CHECK(append_files("am_a_only.gamut", {"am_b.gamut", "am_m1.gamut"}) == 3);
+  CHECK(validate_file("am_a_only.gamut").findings.empty());
   if (!std::getenv("GAMUT_KEEP")) {
     for (const char* p : {"am_dst", "am_a", "am_b", "am_c", "am_seq", "am_m", "am_mdst", "am_m1",
-                          "am_m2", "am_m3"}) {
+                          "am_m2", "am_m3", "am_ab", "am_a_only"}) {
       std::remove((std::string(p) + ".gamut").c_str());
     }
   }

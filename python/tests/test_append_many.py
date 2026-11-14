@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
+import sys
+import textwrap
 
 import pytest
 
@@ -86,5 +89,28 @@ def test_the_command_line_appends_several_files(tmp_path, capsys):
     assert cli.main(["append", dst, srcs[0], str(doc)]) == 2
     assert "a JSON document is appended on its own" in capsys.readouterr().err
     assert cli.main(["append", dst, srcs[0], dst]) == 2
+    assert f'source 2 of 2, "{dst}"' in capsys.readouterr().err
+    assert cli.main(["append", dst, srcs[0], str(tmp_path / "none.gamut")]) != 0
+    assert 'source 2 of 2' in capsys.readouterr().err
     with gamut.open(dst) as f:
         assert f.row_count == 9
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="a POSIX limit on open files")
+def test_many_files_fit_a_small_limit_on_open_files(tmp_path):
+    # One source open at a time: more sources than the process may open.
+    dst, _ = parts(tmp_path)
+    srcs = []
+    for k in range(80):
+        srcs.append(str(tmp_path / f"job{k}.gamut"))
+        table(srcs[-1], ["j"], [float(k)])
+    code = textwrap.dedent(f"""
+        import resource, gamut
+        resource.setrlimit(resource.RLIMIT_NOFILE, (48, 48))
+        print(gamut.append({dst!r}, {srcs!r}))
+        """)
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "80"
+    with gamut.open(dst) as f:
+        assert f.row_count == 82
