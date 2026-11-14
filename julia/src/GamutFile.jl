@@ -298,10 +298,8 @@ Base.show(io::IO, s::Study) =
     print(io, "GamutFile.Study(", repr(s.path), s.writing ? ", writing" : "", isopen(s) ? "" : ", closed", ")")
 
 function with_study(f, s::Study)
-    try
-        r = f(s)
-        close(s)
-        return r
+    r = try
+        f(s)
     catch
         # Leaving on an error: finish the file if it can be finished, else
         # discard a file this study created; the first error stands.
@@ -312,6 +310,15 @@ function with_study(f, s::Study)
         end
         rethrow()
     end
+    # Nothing can be fixed once the block has ended: a file that cannot be
+    # finished is discarded, and the refusal raised.
+    try
+        close(s)
+    catch
+        abandon(s, true)
+        rethrow()
+    end
+    return r
 end
 
 need_writer(s::Study) = s.writing || throw(GamutError("", "$(s.path) was opened to read"))

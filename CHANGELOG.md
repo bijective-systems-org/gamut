@@ -11,6 +11,9 @@
   one does is refused by name (a lock on `<file>.appending`), and readers
   keep reading the file meanwhile; both used to fail with "cannot open as
   an HDF5 file". Appending needs write access to the file's folder.
+  Julia's `do` block, like Python's `with`, gives a file up when its
+  close fails; it used to close a second time and could publish runs
+  while reporting the failure.
 - The Julia package is named `GamutFile`, after the General registry's
   convention for file-format packages, and is added from the registry:
   `Pkg.add(name="GamutFile")`, then `using GamutFile`. Calls are spelled
