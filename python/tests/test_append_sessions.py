@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import textwrap
+import time
 
 import pytest
 
@@ -107,6 +108,10 @@ def test_a_reader_opening_while_a_session_closes_gets_the_file(tmp_path):
                     s.row_count
             except gamut.GamutError as e:
                 failures.append(str(e))
+        if sys.platform == "win32":
+            # Windows replaces a file only while no one has it open, so a
+            # session's close waits for gaps such as any reader leaves.
+            time.sleep(0.05)
     assert child.returncode == 0
     assert failures == []
     with gamut.open(p) as s:

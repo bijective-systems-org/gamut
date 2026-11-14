@@ -219,6 +219,7 @@ std::string AppendSession::publish() {
     const DWORD e = ::GetLastError();
     why = std::system_category().message(static_cast<int>(e));
     if (e != ERROR_SHARING_VIOLATION && e != ERROR_ACCESS_DENIED) break;
+    why += " (Windows also refuses while another program has the file open)";
     ::Sleep(100);
   }
   if (!why.empty()) throw unchanged("replace the file with its appended copy", why);
