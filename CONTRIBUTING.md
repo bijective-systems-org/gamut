@@ -20,7 +20,8 @@ Open an issue first, with:
 1. a real study or workflow that the format cannot hold today;
 2. the meaning proposed, and what readers that do not know it will do;
 3. whether it is an addition within version 1 (SPEC.md section 17: a
-   reader that does not know it reports W5 and goes on) or needs a new
+   reader that does not know it ignores it and goes on, and the validator
+   reports W5) or needs a new
    major version;
 4. the corpus cases that pin it.
 

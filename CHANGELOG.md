@@ -7,6 +7,19 @@
   `Pkg.add(name="GamutFile")`, then `using GamutFile`. Calls are spelled
   `GamutFile.open` and so on; nothing else changes. The format, the files
   and the other languages keep the name `gamut`.
+- `Nearest` takes `x` as points × columns as given, in Python, MATLAB and
+  Julia, and the core refuses another shape (E17). It used to be reshaped
+  to fit first, so columns × points passed and stored pairs of one
+  column's values. One column may still be a plain list of points.
+- A field read refuses `cells` on a node field and `nodes` on a cell
+  field, naming the one to use; either used to select by position
+  whatever the field's location. Julia also refuses `nodes` and `cells`
+  together, as Python and MATLAB do. The command line's `--zone` reads
+  through the field's own keyword.
+- The specification (§17), the validation page and CONTRIBUTING say that a
+  reader ignores an attribute, group, role or statistic word it does not
+  know and goes on, and that the validator reports it (W5). They said a
+  reader reports W5; no reader does.
 
 ## 2.2.0 (2026-11-04)
 

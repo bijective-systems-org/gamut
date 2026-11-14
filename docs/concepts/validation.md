@@ -44,8 +44,9 @@ read, within the limits in [files from outside](../security.md).
 
 A file says which version of the format it follows: `gamut/1`. Within
 version 1, additions only add. A reader that meets something newer than
-itself, an attribute or role it does not know, reports it (W5) and goes
-on, so a file that uses a later addition stays readable. A change that
+itself, an attribute or role it does not know, ignores it and goes on, so
+a file that uses a later addition stays readable; `validate` reports it
+(W5). A change that
 would make an existing file mean something else is version 2 of the
 format, and a reader refuses a version it does not know, naming it.
 

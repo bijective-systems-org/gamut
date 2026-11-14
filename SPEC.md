@@ -898,8 +898,8 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 
 `format` reads `gamut/1`. A reader refuses another major version, naming
 it. Within version 1, additions are additive: a reader that meets an
-attribute, group, role or statistic word it does not know reports W5 and
-goes on, ignoring the object. A result with an unknown `statistic` is read
+attribute, group, role or statistic word it does not know goes on,
+ignoring the object, and a validator reports it as W5. A result with an unknown `statistic` is read
 as a plain result, because what it describes is still a value with units;
 an object with an unknown role is ignored, because a future role is as
 likely an output as an input. A change that makes an existing file mean something else is

@@ -822,7 +822,15 @@ end
 
 """    get_field(study, name; rows=nothing, nodes=nothing, cells=nothing)    runs × sites on a shared mesh."""
 function get_field(s::Study, name; rows=nothing, nodes=nothing, cells=nothing)
+    nodes !== nothing && cells !== nothing &&
+        throw(GamutError("", "$name: give nodes or cells, not both"))
     sites = nodes !== nothing ? nodes : cells
+    if sites !== nothing
+        given = nodes !== nothing ? "nodes" : "cells"
+        at = get(describe(s, name), "location", "")
+        at in ("node", "cell") && given != at * "s" &&
+            throw(GamutError("", "$name is a $at field: choose its sites with $(at)s, not $given"))
+    end
     if s.mesh_kind == "changing"
         rows isa Integer && !(rows isa Bool) || rows isa AbstractVector && length(rows) == 1 ||
             throw(GamutError("", "$name: a changing mesh is read one row at a time; reads " *
@@ -1060,12 +1068,15 @@ struct Nearest
     columns::Vector{String}
     lower::Vector{Float64}
     upper::Vector{Float64}
-    x::Matrix{Float64}
+    x::Array{Float64}
     outputs::Dict{String,Array{Float64}}
     function Nearest(columns, lower, upper, x, outputs)
         cols = String[string(c) for c in columns]
-        m = new(cols, Float64.(collect(lower)), Float64.(collect(upper)),
-                reshape(Float64.(collect(x)), :, length(cols)),
+        # x is points × columns as given, so the core refuses another
+        # orientation; one column may be a vector of points.
+        xs = Float64.(collect(x))
+        xs isa AbstractVector && length(cols) == 1 && (xs = reshape(xs, :, 1))
+        m = new(cols, Float64.(collect(lower)), Float64.(collect(upper)), xs,
                 Dict{String,Array{Float64}}(string(k) => Float64.(v) for (k, v) in pairs_of(outputs)))
         nearest_check(save(m))
         return m
