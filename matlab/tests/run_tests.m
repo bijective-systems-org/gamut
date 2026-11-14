@@ -160,6 +160,16 @@ numbers = r.modelNumbers('fit');
 r.close();
 back = gamut.Nearest.load(numbers);
 ok(isequal(back.X, [0; 5; 10]) && isequal(back.Lower, 0), 'nearest numbers read back');
+m2 = gamut.Nearest({'mach', 'alpha'}, [0.3 0], [0.6 4], [0.3 0; 0.6 4; 0.45 2], struct('cl', [1; 2; 3]));
+ok(isequal(m2.X, [0.3 0; 0.6 4; 0.45 2]), 'nearest keeps x as points x columns');
+try
+    gamut.Nearest({'mach', 'alpha'}, [0.3 0], [0.6 4], [0.3 0.6 0.45; 0 4 2], struct('cl', [1; 2; 3]));
+    ok(false, 'nearest x as columns x points refused');
+catch err
+    ok(contains(err.message, 'x is points x columns'), ['nearest x as columns x points: ' err.message]);
+end
+ok(isequal(gamut.Nearest({'alpha'}, 0, 10, [0 5 10], struct('cl', [1; 2; 3])).X, [0; 5; 10]), ...
+    'one column takes a row of points');
 
 lp = fullfile(tmp, 'linear.gamut');
 s = gamut.createModel(lp, 'writer', 'matlab tests', ...
@@ -595,7 +605,7 @@ r.close();
 % given; extract takes ':' or nothing for every row.
 r = gamut.open(p);
 ok(isequal(size(r.getField('pf', 'rows', 1, 'nodes', ":")), [1 6]), 'nodes ":" is every node');
-ok(isempty(r.getField('pf', 'rows', 1, 'cells', [])), 'cells [] is no cells');
+ok(isempty(r.getField('pf', 'rows', 1, 'nodes', [])), 'nodes [] is no nodes');
 r.close();
 r = gamut.open(fullfile(tmp, 'sweep.gamut'));
 ok(isequal(r.getPoints(":"), r.getPoints()), 'getPoints(":") is the fixed points');
@@ -607,6 +617,15 @@ try
     ok(false, 'nodes and cells together refused');
 catch err
     ok(contains(err.message, 'not both'), ['nodes and cells: ' err.message]);
+end
+r.close();
+try
+    r = gamut.open(p);
+    r.getField('pf', 'rows', 1, 'cells', 1);
+    ok(false, 'cells on a node field refused');
+catch err
+    ok(contains(err.message, 'pf is a node field: choose its sites with nodes, not cells'), ...
+        ['cells on a node field: ' err.message]);
 end
 r.close();
 xp = fullfile(tmp, 'extracted.gamut');

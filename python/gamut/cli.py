@@ -775,7 +775,7 @@ def _gather(args: argparse.Namespace) -> tuple[dict[str, np.ndarray], dict[str, 
                 if zone_at and at != zone_at:
                     raise GamutError("", f"the zone {args.zone} marks {zone_at}s and {name} is at "
                                           f"{at}s; choose a zone at {at}s")
-                arr = f.get_field(name, rows=rows, nodes=sites)
+                arr = f.get_field(name, rows=rows, **{f"{at}s": sites})
                 # A changing mesh's one row comes back as its sites: one row of them.
                 data[name] = arr.reshape(1, -1) if f.type == "changing" and arr.ndim == 1 else arr
             elif name in labels:

@@ -504,7 +504,6 @@ void nearest_tree(gamut_tree* t, const mxArray* numbers) {
   const auto columns = cellstr(field("columns"), "columns");
   const auto p = pointers(columns);
   check(gamut_tree_set_strings(t, "columns", p.data(), static_cast<int64_t>(p.size()), &e), e);
-  const int64_t k = static_cast<int64_t>(columns.size());
   for (const char* name : {"lower", "upper"}) {
     const mxArray* a = field(name);
     doubles(a, name);
@@ -513,18 +512,13 @@ void nearest_tree(gamut_tree* t, const mxArray* numbers) {
   }
   const mxArray* x = field("x");
   doubles(x, "x");
-  const int64_t total = static_cast<int64_t>(mxGetNumberOfElements(x));
-  if (k == 0 || total % k != 0) usage("x is points x columns");
-  const int64_t points = total / k;
   {
-    // x(i, j) in MATLAB's column order to C order.
-    std::vector<double> c(static_cast<std::size_t>(total));
-    const double* m = mxGetPr(x);
-    for (int64_t i = 0; i < points; ++i) {
-      for (int64_t j = 0; j < k; ++j) c[static_cast<std::size_t>(i * k + j)] = m[j * points + i];
-    }
-    const int64_t dims[2] = {points, k};
-    check(gamut_tree_set_array(t, "x", GAMUT_FLOAT64, c.data(), static_cast<int64_t>(c.size()), 2, dims, &e),
+    // x in C order in its own shape: the core refuses one that is not
+    // points x columns.
+    std::vector<int64_t> dims;
+    const auto bytes = to_c_order(x, mxGetNumberOfDimensions(x), &dims);
+    check(gamut_tree_set_array(t, "x", GAMUT_FLOAT64, bytes.data(), static_cast<int64_t>(mxGetNumberOfElements(x)),
+                             static_cast<int>(dims.size()), dims.data(), &e),
           e);
   }
   check(gamut_tree_set_dict(t, "outputs", &e), e);
@@ -538,7 +532,6 @@ void nearest_tree(gamut_tree* t, const mxArray* numbers) {
     const mwSize* md = mxGetDimensions(v);
     std::vector<int64_t> dims(md, md + nd);
     while (dims.size() > 1 && dims.back() == 1) dims.pop_back();
-    if (dims.empty() || dims[0] != points) usage(key + ": one entry per point, points first");
     std::vector<int64_t> c_dims;
     const auto bytes = to_c_order(v, dims.size(), &c_dims);
     check(gamut_tree_set_array(t, key.c_str(), GAMUT_FLOAT64, bytes.data(),

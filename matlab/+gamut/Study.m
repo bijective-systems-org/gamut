@@ -236,6 +236,14 @@ classdef Study < handle
             sites = ':';
             if ismember('nodes', given), sites = o.nodes; end
             if ismember('cells', given), sites = o.cells; end
+            if any(ismember({'nodes', 'cells'}, given))
+                at = gamut.internal.field(s.describe(name), 'location', '');
+                key = given{find(ismember(given, {'nodes', 'cells'}), 1)};
+                if ~isempty(at) && ~strcmp(key, [at 's'])
+                    error('gamut:usage', '%s is a %s field: choose its sites with %ss, not %s', ...
+                        name, at, at, key);
+                end
+            end
             if strcmp(s.MeshKind, 'changing') && (s.isall(o.rows) || numel(o.rows) ~= 1)
                 error('gamut:usage', ['%s: a changing mesh is read one row at a time; ' ...
                     'reads across rows need a shared mesh'], name);

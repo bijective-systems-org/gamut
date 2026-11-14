@@ -102,6 +102,13 @@ mktempdir() do tmp
             @test GamutFile.get_field(f, "p") == prun
             @test GamutFile.get_field(f, "p"; rows=2:3, nodes=[1, 5, 12]) == prun[2:3, [1, 5, 12]]
             @test GamutFile.get_field(f, "p"; rows=4) == prun[4, :]
+            e = try GamutFile.get_field(f, "p"; cells=[1]); nothing catch x; x end
+            @test e isa GamutError && occursin("p is a node field: choose its sites with nodes, not cells", e.message)
+            e = try GamutFile.get_field(f, "u"; nodes=[1]); nothing catch x; x end
+            @test e isa GamutError && occursin("u is a cell field: choose its sites with cells, not nodes", e.message)
+            @test GamutFile.get_field(f, "u"; rows=1, cells=[2]) == [0.0]
+            e = try GamutFile.get_field(f, "p"; nodes=[1], cells=[1]); nothing catch x; x end
+            @test e isa GamutError && occursin("nodes or cells, not both", e.message)
             @test GamutFile.get_points(f) == pts
             types, offsets, conn = GamutFile.get_cells(f)
             @test types == cells[1] && offsets == cells[2] && conn == cells[3]   # 0-based nodes
@@ -357,6 +364,13 @@ mktempdir() do tmp
         end
         @test isempty(GamutFile.validate(mp))
         @test GamutFile.open(f -> GamutFile.describe(f)["portion_marking"], mp) == "Example marking"
+        mach, alpha = collect(0.3:0.075:0.6), collect(0.0:1.0:4.0)
+        @test GamutFile.Nearest(["mach", "alpha"], [0.3, 0.0], [0.6, 4.0], hcat(mach, alpha),
+                                Dict("cl" => collect(1.0:5.0))).x == hcat(mach, alpha)
+        e = try GamutFile.Nearest(["mach", "alpha"], [0.3, 0.0], [0.6, 4.0], permutedims(hcat(mach, alpha)),
+                                  Dict("cl" => collect(1.0:5.0))); nothing catch x; x end
+        @test e isa GamutError && occursin("x is points x columns", e.message)   # not reshaped into pairs
+        @test size(GamutFile.Nearest(["alpha"], [0.0], [10.0], [0.0, 5.0, 10.0], Dict("cl" => [1.0, 2.0, 3.0])).x) == (3, 1)
         e = try GamutFile.evaluate(mp, Dict("alpha" => [2^53 + 1])); nothing catch x; x end
         @test e isa GamutError && e.rule == "E4"       # Float64 would round it
         e = try GamutFile.evaluate(mp, Dict("alpha" => [1.0], "typo" => ["steel"])); nothing catch x; x end

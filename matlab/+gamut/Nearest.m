@@ -24,7 +24,12 @@ classdef Nearest
             m.Columns = m.Columns(:)';
             m.Lower = double(lower(:)');
             m.Upper = double(upper(:)');
-            m.X = reshape(double(x), [], numel(m.Columns));
+            % x is points x columns as given, so the core refuses another
+            % orientation; one column may be a vector of points.
+            m.X = double(x);
+            if isvector(m.X) && isscalar(m.Columns)
+                m.X = m.X(:);
+            end
             m.Outputs = outputs;
             names = fieldnames(outputs);
             for k = 1:numel(names)
