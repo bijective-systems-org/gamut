@@ -191,8 +191,9 @@ identity: its `file_id` and creation time.
   a source's runs or none. The copy is a clone, which costs nothing, on
   filesystems that make them (APFS, Btrfs, XFS); elsewhere it is a
   full copy, so close the file once per batch of runs rather than once
-  per run. One process appends to a file at a time; others can read it
-  meanwhile, and see the new runs once it closes.
+  per run. One process appends to a file at a time, and only on a
+  filesystem with file locks; others can read it meanwhile, and a reader
+  that opens it after it closes sees the new runs.
 - Opening a file that carries a portion marking shows it, once per file
   in a process: a block naming the file, then the marking whole, the same
   in every language. Python prints it on `sys.stderr` (so it shows in a

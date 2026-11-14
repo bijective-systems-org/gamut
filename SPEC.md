@@ -724,8 +724,9 @@ closes, renames the copy over the file. A session stopped partway (a
 crash, a killed process, a full disk) leaves the file as it was and loses
 only its own rows; the next session removes the copy it left. One session
 appends to a file at a time: it holds a lock on `<file>.appending`, and a
-second is refused, while readers keep reading the file until the copy
-replaces it. A session needs write access to the folder, and room for a
+second is refused, as is a session where the filesystem has no file locks;
+readers keep reading the file until the copy replaces it, and an open that
+meets the rename is tried again. A session needs write access to the folder, and room for a
 copy where the filesystem does not clone. A library checks the structure
 and the appended rows, and does not re-read the whole file.
 

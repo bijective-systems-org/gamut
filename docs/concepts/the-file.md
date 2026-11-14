@@ -54,11 +54,11 @@ algorithm; it is off by default.
 
 Every check of a batch's own data is made before its first write, so a
 batch refused for its data adds nothing and changes no run (opening a file
-to append and closing it can still change its bytes and metadata). HDF5 does not keep
-a file consistent on disk while it is written, though: a failure of the
-file itself during a write (a full disk, a damaged chunk), or a writer
-stopped partway, can leave it unreadable, rows written before included.
-Keep a copy of a file that matters before appending to it.
+to append and closing it can still change its bytes and metadata). HDF5
+does not keep a file consistent on disk while it is written, so runs are
+appended to a copy beside the file that replaces it when the file closes:
+a write that fails (a full disk) or a writer stopped partway loses that
+session's runs and leaves the file as it was.
 
 ## Reading files from elsewhere
 

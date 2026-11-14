@@ -6,6 +6,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
 #include <fstream>
 #include <functional>
 #include <iterator>
@@ -1105,6 +1108,46 @@ void test_append_sessions() {
   CHECK(std::filesystem::status(path).permissions() ==
         (std::filesystem::perms::owner_read | std::filesystem::perms::owner_write |
          std::filesystem::perms::group_read));
+
+  // A rename that fails (here a folder made read-only before the close)
+  // leaves the file as it was; closing again retries, and giving up removes
+  // the copy.
+  namespace sfs = std::filesystem;
+  const sfs::path folder = sfs::absolute("wr_session_dir");
+  sfs::remove_all(folder);
+  sfs::create_directory(folder);
+  const std::string inner = (folder / "s.gamut").string();
+  sfs::copy_file(path, inner);
+  const sfs::perms open_folder = sfs::status(folder).permissions();
+  const sfs::perms shut = sfs::perms::owner_read | sfs::perms::owner_exec;
+  bool writable_anyway = false;
+  for (const bool retry : {true, false}) {
+    const std::string before_close = file_bytes(inner);
+    auto w = Writer::open_append(inner);
+    add_xy(*w, 8.0);
+    sfs::permissions(folder, shut);
+    writable_anyway = ::access(folder.string().c_str(), W_OK) == 0;   // root ignores modes
+    std::string message;
+    try {
+      w->close();
+    } catch (const gamut_core::Error& e) {
+      message = e.what();
+    }
+    sfs::permissions(folder, open_folder);
+    if (writable_anyway) break;
+    CHECK(message.find("is unchanged: close again to retry") != std::string::npos);
+    CHECK(file_bytes(inner) == before_close);
+    CHECK(rule_of([&] { add_xy(*w, 9.0); }) == "error");   // finished: no more runs
+    if (retry) {
+      w->close();
+      CHECK(Reader::open(inner)->schema().rows == 7);
+    } else {
+      w->abandon(false);
+      CHECK(file_bytes(inner) == before_close);
+    }
+    CHECK(beside(inner).empty());
+  }
+  sfs::remove_all(folder);
 #endif
   std::remove(path.c_str());
 }

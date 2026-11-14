@@ -1890,16 +1890,17 @@ void Writer::abandon(bool remove) {
   closed_ = true;
   pending_.clear();
   file_.reset();
-  session_.reset();   // the copy goes, unless it holds a finished session
+  session_.reset();   // the copy goes and the file stays as it was
   if (remove && created_) std::remove(path_.c_str());
 }
 
 void Writer::close() {
   if (closed_) return;
   if (finished_) {   // a rename that failed before: tried again
-    session_->publish();
+    const std::string note = session_->publish();
     session_.reset();
     closed_ = true;
+    if (!note.empty()) throw Error("", note);
     return;
   }
   // Checked before anything is written, so a refused close can be fixed
@@ -1931,12 +1932,14 @@ void Writer::close() {
   write_cf_coordinates();
   file_->flush();
   file_.reset();
+  std::string note;
   if (session_) {
     finished_ = true;
-    session_->publish();
+    note = session_->publish();
     session_.reset();
   }
   closed_ = true;
+  if (!note.empty()) throw Error("", note);
 }
 
 }  // namespace internal

@@ -61,12 +61,14 @@ std::string busy(const std::string& path) {
 std::string os_error() { return std::strerror(errno); }
 
 // Writes the file or folder at `path` to the disk: the copy before it is
-// renamed, then its folder, so the rename lasts.
-void sync_path(const std::string& path) {
+// renamed, then its folder, so the rename lasts.  Empty, or why it failed.
+std::string sync_path(const std::string& path) {
   const int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
-  if (fd < 0) return;
-  ::fsync(fd);
+  if (fd < 0) return os_error();
+  const bool ok = ::fsync(fd) == 0;
+  const std::string why = ok ? std::string() : os_error();
   ::close(fd);
+  return why;
 }
 #endif
 
@@ -132,10 +134,11 @@ std::unique_ptr<AppendSession> AppendSession::lock(const std::string& path) {
   s->handle_ = h;
 #else
   // flock on a lock file beside the file: the lock ends with the process,
-  // and readers, which never take it, keep reading the file meanwhile.
-  bool unlocked = false;
+  // and readers, which never take it, keep reading the file meanwhile.  The
+  // file is opened to write where it can be, as NFS's emulated flock needs.
   for (int attempt = 0; attempt < 16 && s->fd_ < 0; ++attempt) {
-    const int fd = ::open(s->lock_path_.c_str(), O_RDONLY | O_CREAT | O_CLOEXEC, 0666);
+    int fd = ::open(s->lock_path_.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0666);
+    if (fd < 0 && errno == EACCES) fd = ::open(s->lock_path_.c_str(), O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
       throw Error("", "cannot create \"" + s->lock_path_ + "\" to append to \"" + path +
                           "\": " + os_error());
@@ -144,14 +147,13 @@ std::unique_ptr<AppendSession> AppendSession::lock(const std::string& path) {
       const int e = errno;
       ::close(fd);
       if (e == EWOULDBLOCK) throw Error("", busy(path));
-      // A filesystem without locks: the session goes on unlocked, as HDF5's
-      // best-effort locking does.
-      if (e != ENOLCK && e != ENOTSUP && e != EOPNOTSUPP && e != ENOSYS) {
-        errno = e;
-        throw Error("", "cannot lock \"" + s->lock_path_ + "\": " + os_error());
-      }
-      unlocked = true;
-      break;
+      // Without the lock two sessions could each replace the file, and the
+      // second would drop the first's runs: no session goes on unlocked.
+      errno = e;
+      throw Error("", "cannot lock \"" + s->lock_path_ + "\" to append to \"" + path + "\": " +
+                          os_error() + "; appending needs a filesystem with file locks. On one "
+                          "without, write each job's runs to a file of its own and append them "
+                          "on a local disk");
     }
     // A session that ended between the open and the lock removed the file
     // this lock is on; the lock counts only on the file at the path now.
@@ -163,9 +165,7 @@ std::unique_ptr<AppendSession> AppendSession::lock(const std::string& path) {
       ::close(fd);
     }
   }
-  if (s->fd_ < 0 && !unlocked) {
-    throw Error("", "cannot take the append lock \"" + s->lock_path_ + "\"");
-  }
+  if (s->fd_ < 0) throw Error("", "cannot take the append lock \"" + s->lock_path_ + "\"");
 #endif
   // Every copy beside the file is a stopped session's: a live one would hold
   // the lock.
@@ -195,18 +195,21 @@ const std::string& AppendSession::copy() {
   return copy_path_;
 }
 
-void AppendSession::publish() {
-  keep_copy_ = true;   // from here the copy holds the session's runs
+std::string AppendSession::publish() {
+  auto unchanged = [&](const std::string& what, const std::string& why) {
+    return Error("", "cannot " + what + ": " + why + "; \"" + target_ +
+                         "\" is unchanged: close again to retry, or give up and leave it as it was");
+  };
   std::string why;
 #if defined(_WIN32)
   const std::wstring from = fs::u8path(copy_path_).wstring();
   const std::wstring to = fs::u8path(target_).wstring();
   HANDLE h = ::CreateFileW(from.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                            FILE_ATTRIBUTE_NORMAL, nullptr);
-  if (h != INVALID_HANDLE_VALUE) {
-    ::FlushFileBuffers(h);
-    ::CloseHandle(h);
-  }
+  const bool synced = h != INVALID_HANDLE_VALUE && ::FlushFileBuffers(h);
+  if (!synced) why = std::system_category().message(static_cast<int>(::GetLastError()));
+  if (h != INVALID_HANDLE_VALUE) ::CloseHandle(h);
+  if (!synced) throw unchanged("write the appended copy to disk", why);
   // A reader holding the file open blocks the rename while it does.
   for (int attempt = 0; attempt < 50; ++attempt) {
     if (::MoveFileExW(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
@@ -218,22 +221,23 @@ void AppendSession::publish() {
     if (e != ERROR_SHARING_VIOLATION && e != ERROR_ACCESS_DENIED) break;
     ::Sleep(100);
   }
+  if (!why.empty()) throw unchanged("replace the file with its appended copy", why);
+  published_ = true;
+  release();
+  return {};
 #else
-  sync_path(copy_path_);
-  if (::rename(copy_path_.c_str(), target_.c_str()) == 0) {
-    sync_path(fs::u8path(target_).parent_path().u8string());
-  } else {
-    why = os_error();
-  }
-#endif
-  if (!why.empty()) {
-    throw Error("", "cannot replace \"" + target_ + "\" with its appended copy: " + why +
-                        "; the runs added are in \"" + copy_path_ +
-                        "\": rename it over the file before appending to it again, which removes "
-                        "such copies");
+  why = sync_path(copy_path_);
+  if (!why.empty()) throw unchanged("write the appended copy to disk", why);
+  if (::rename(copy_path_.c_str(), target_.c_str()) != 0) {
+    throw unchanged("replace the file with its appended copy", os_error());
   }
   published_ = true;
   release();
+  why = sync_path(fs::u8path(target_).parent_path().u8string());
+  if (why.empty()) return {};
+  return "the runs were added to \"" + target_ + "\", but its folder could not be written to "
+         "disk: " + why + "; after a power failure the file may be as it was before";
+#endif
 }
 
 void AppendSession::release() {
@@ -254,7 +258,7 @@ void AppendSession::release() {
 }
 
 AppendSession::~AppendSession() {
-  if (!published_ && !keep_copy_ && !copy_path_.empty()) {
+  if (!published_ && !copy_path_.empty()) {
     std::error_code ignored;
     fs::remove(fs::u8path(copy_path_), ignored);
   }

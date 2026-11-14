@@ -82,3 +82,32 @@ def test_an_error_inside_append_keeps_the_runs_before_it(tmp_path):
     with gamut.open(p) as r:
         assert r.row_count == 3
     assert beside(p) == []
+
+
+def test_a_reader_opening_while_a_session_closes_gets_the_file(tmp_path):
+    # Each close renames the copy over the file; an open that meets the
+    # rename is tried again, through a symbolic link too.
+    p = str(tmp_path / "r.gamut")
+    table(p, 1)
+    paths = [p]
+    if hasattr(os, "symlink") and sys.platform != "win32":
+        os.symlink(p, p + ".link")
+        paths.append(p + ".link")
+    child = subprocess.Popen([sys.executable, "-c", textwrap.dedent(f"""
+        import gamut
+        for i in range(150):
+            with gamut.open({p!r}, mode="a") as s:
+                s.add_run({{"a": float(i), "member": "m0", "cl": float(i)}})
+        """)])
+    failures = []
+    while child.poll() is None:
+        for q in paths:
+            try:
+                with gamut.open(q) as s:
+                    s.row_count
+            except gamut.GamutError as e:
+                failures.append(str(e))
+    assert child.returncode == 0
+    assert failures == []
+    with gamut.open(p) as s:
+        assert s.row_count == 151

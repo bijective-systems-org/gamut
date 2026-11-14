@@ -22,9 +22,11 @@ class AppendSession {
   // Copies the file beside itself (a clone where the filesystem has them)
   // and returns the copy's path, which the session writes.
   const std::string& copy();
-  // Makes the copy durable and renames it over the file.  When the rename
-  // fails the copy is kept and the error names it.
-  void publish();
+  // Makes the copy durable and renames it over the file; until it does the
+  // file is unchanged, and it can be called again.  Returns a note when the
+  // file was replaced but its folder could not be written to disk.  A
+  // session ended unpublished removes its copy.
+  std::string publish();
 
  private:
   AppendSession() = default;
@@ -34,7 +36,6 @@ class AppendSession {
   std::string lock_path_;
   std::string copy_path_;
   bool published_ = false;
-  bool keep_copy_ = false;
 #ifdef _WIN32
   void* handle_ = nullptr;  // the lock file, deleted when this handle closes
 #else
