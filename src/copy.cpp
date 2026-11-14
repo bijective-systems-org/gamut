@@ -152,8 +152,15 @@ std::size_t changing_row_bytes(const Reader& r, std::int64_t row, std::size_t ba
 // writer; with `check_only`, every batch is checked and nothing is written.
 // Peak memory is a few batches (the values, the writer's converted copy,
 // HDF5's working set), whatever the file's size.
+//
+// A member of a group mesh is given its geometry unless `known` holds it
+// (members the destination had, whose geometry check_same compared); given
+// again, the writer compares it with what it holds, so two sources cannot
+// give one new member two geometries.  Without `known`, every member the
+// writer already has is skipped.
 void copy_rows(const Reader& src, Writer& w, const std::vector<std::int64_t>& rows,
-               bool keep_ids, const CodeMaps& maps, bool check_only) {
+               bool keep_ids, const CodeMaps& maps, bool check_only,
+               const std::set<std::string>* known = nullptr) {
   const Schema& s = src.schema();
   const Mesh& m = s.mesh;
   const std::string group = m.per_group();
@@ -196,7 +203,8 @@ void copy_rows(const Reader& src, Writer& w, const std::vector<std::int64_t>& ro
       const std::vector<std::string>& members = batch.names.at(group);
       for (std::size_t i = 0; i < pos.size(); ++i) {
         const std::string& name = members[i];
-        if (w.has_member(name) || batch.member_geometry.count(name)) continue;
+        const bool has = known != nullptr ? known->count(name) == 1 : w.has_member(name);
+        if (has || batch.member_geometry.count(name)) continue;
         batch.member_geometry[name] = geometry_of(src, pos[i], maps);
       }
     } else if (m.per == "run") {
@@ -448,37 +456,87 @@ void check_marking(const std::string& file_marking, const std::string& rows_mark
 
 std::int64_t append_file(const std::string& dst, const std::string& src,
                          const std::optional<std::string>& marking) {
-  need_distinct(src, dst);
-  need_valid(src);
-  std::int64_t n = 0;
-  CodeMaps maps;
+  return append_files(dst, {src}, marking);
+}
+
+std::int64_t append_files(const std::string& dst, const std::vector<std::string>& srcs,
+                          const std::optional<std::string>& marking) {
+  need(!srcs.empty(), "", "no source file is given; append takes one or more");
+  // With several sources, an error names the one it is about.
+  const bool many = srcs.size() > 1;
+  auto about = [&](std::size_t k, auto&& step) {
+    try {
+      step();
+    } catch (const Error& e) {
+      if (!many) throw;
+      throw Error(e.rule(), "source " + std::to_string(k + 1) + " of " +
+                                std::to_string(srcs.size()) + ", \"" + srcs[k] + "\": " + e.what(),
+                  e.path());
+    }
+  };
+  for (std::size_t k = 0; k < srcs.size(); ++k) {
+    about(k, [&] {
+      need_distinct(srcs[k], dst);
+      for (std::size_t j = 0; j < k; ++j) {
+        std::error_code e;
+        need(!std::filesystem::equivalent(srcs[j], srcs[k], e), "",
+             "it is source " + std::to_string(j + 1) + " too; a file is appended once");
+      }
+      need_valid(srcs[k]);
+    });
+  }
+  std::vector<CodeMaps> maps(srcs.size());
+  std::vector<std::int64_t> counts(srcs.size());
+  std::set<std::string> known;
   {
     const auto d = Reader::open(dst);
-    const auto s = Reader::open(src);
-    need(d->schema().kind == "data" && s->schema().kind == "data", "E16",
-         "a model file has no rows; append joins data files");
-    maps = check_same(*d, *s);
-    // The marking is checked here, before the writer opens the
-    // destination, so a refusal leaves its bytes as they were.
-    check_marking(d->schema().portion_marking, s->schema().portion_marking, marking);
-    n = s->schema().rows;
+    for (std::size_t k = 0; k < srcs.size(); ++k) {
+      about(k, [&] {
+        const auto s = Reader::open(srcs[k]);
+        need(d->schema().kind == "data" && s->schema().kind == "data", "E16",
+             "a model file has no rows; append joins data files");
+        maps[k] = check_same(*d, *s);
+        // The marking is checked here, before the writer opens the
+        // destination, so a refusal leaves its bytes as they were.
+        check_marking(d->schema().portion_marking, s->schema().portion_marking, marking);
+        counts[k] = s->schema().rows;
+      });
+    }
+    const std::string group = d->schema().mesh.per_group();
+    if (!group.empty()) {
+      const Label* l = d->schema().label(group);
+      const auto t = d->schema().tables.find(l->category);
+      if (t != d->schema().tables.end()) known.insert(t->second.begin(), t->second.end());
+    }
   }
-  const auto s = Reader::open(src);
-  const std::vector<std::int64_t> rows = positions(Selection::all(), n);
+  std::vector<std::unique_ptr<Reader>> sources;
+  for (const auto& src : srcs) sources.push_back(Reader::open(src));
   auto w = Writer::open_append(dst);
-  // Every batch is checked before the first is written, and the rows go to
-  // a copy that replaces the destination only when all are in: a failure
-  // partway leaves the destination as it was.
+  // Every batch of every source is checked before the first is written,
+  // and the rows go to one copy that replaces the destination only when
+  // all are in: a failure partway leaves the destination as it was.
+  std::int64_t total = 0;
   try {
-    copy_rows(*s, *w, rows, false, maps, true);
+    for (std::size_t k = 0; k < srcs.size(); ++k) {
+      about(k, [&] {
+        copy_rows(*sources[k], *w, positions(Selection::all(), counts[k]), false, maps[k], true,
+                  &known);
+      });
+    }
     if (marking) w->set_attribute("portion_marking", *marking);
-    copy_rows(*s, *w, rows, false, maps, false);
+    for (std::size_t k = 0; k < srcs.size(); ++k) {
+      about(k, [&] {
+        copy_rows(*sources[k], *w, positions(Selection::all(), counts[k]), false, maps[k], false,
+                  &known);
+      });
+      total += counts[k];
+    }
     w->close();
   } catch (...) {
     w->abandon(false);
     throw;
   }
-  return n;
+  return total;
 }
 
 void extract_file(const std::string& src, const std::string& dst, const Selection& rows) {

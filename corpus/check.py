@@ -159,6 +159,20 @@ def appends_to_itself(path: str) -> str:
         with gamut.open(copy) as f:
             if f.row_count != 2 * rows:
                 return f"appended to itself, it has {f.row_count} rows, not {2 * rows}"
+        # Two sources in one session: the result of appending them one by one.
+        again = os.path.join(tmp, "again.gamut")
+        shutil.copy(path, again)
+        try:
+            gamut.append(copy, [path, again])
+        except gamut.GamutError as exc:
+            return f"appending it twice in one session was refused: {exc}"
+        errors = [f for f in gamut.validate(copy).findings if f.severity == "error"]
+        if errors:
+            return "appended twice in one session, it drew " + "; ".join(
+                f"{f.rule} {f.path}: {f.message}" for f in errors)
+        with gamut.open(copy) as f:
+            if f.row_count != 4 * rows:
+                return f"appended twice in one session, it has {f.row_count} rows, not {4 * rows}"
     return ""
 
 

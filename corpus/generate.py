@@ -405,6 +405,65 @@ def case_changing(path):
     ]}
 
 
+def case_changing_group(path):
+    """A mesh per member: members out of their declared order, instances
+    numbered by first appearance, a member's later rows sharing its mesh."""
+    big, bc = quad_grid(3, 3)
+    small, sc = quad_grid(2, 2)
+    s = Study(path)
+    s.row(3)
+    s.parameter("r", [1.0, 2.0, 3.0], "design", "m")
+    s.label("member", [1, 0, 1], "group", ["a", "b"])    # b, then a, then b again
+    f = s.f
+    m = f.create_group("mesh")
+    sattr(m, "kind", "changing")
+    sattr(m, "per", "group:member")
+    insts = [(big, bc), (small, sc)]                     # instance 0 = b, 1 = a
+    inst_nodes, inst_cells = [9, 4], [4, 1]
+    row_nodes, row_cells = [9, 4, 9], [4, 1, 4]
+    conn = np.concatenate([c[2] for _, c in insts])
+    types = np.concatenate([c[0] for _, c in insts]).astype("u1")
+    offs = [0]
+    for _, c in insts:
+        offs += (np.asarray(c[1][1:]) + offs[-1]).tolist()
+    for name, n in (("instance_plus_one", 3), ("node", sum(inst_nodes)), ("cell", sum(inst_cells)),
+                    ("cell_plus_one", sum(inst_cells) + 1), ("index", len(conn)),
+                    ("node_value", sum(row_nodes)), ("cell_value", sum(row_cells))):
+        dim(f, f"mesh/{name}", n, True)
+    dim(f, "mesh/axis", 2, False)
+
+    def e2e(name, data, scale, dtype):
+        data = np.asarray(data, dtype)
+        d = f.create_dataset(f"mesh/{name}", data=data, maxshape=(None,) + data.shape[1:],
+                             chunks=end_chunk(data.dtype.itemsize, data.shape[1:]),
+                             compression="gzip", compression_opts=1, shuffle=True)
+        d.dims[0].attach_scale(f[f"mesh/{scale}"])
+        if data.ndim == 2:
+            d.dims[1].attach_scale(f["mesh/axis"])
+        return d
+
+    e2e("instance_nodes", np.cumsum([0] + inst_nodes), "instance_plus_one", "<i8")
+    e2e("instance_cells", np.cumsum([0] + inst_cells), "instance_plus_one", "<i8")
+    sattr(e2e("coordinates", np.concatenate([p for p, _ in insts]), "node", "<f8"), "units", "m")
+    e2e("cell_types", types, "cell", "u1")
+    e2e("cell_offsets", offs, "cell_plus_one", "<i8")
+    e2e("cell_connectivity", conn, "index", "<i8")
+    s.column("mesh/row_instance", [0, 1, 0], "<i8", {})
+    s.column("mesh/row_node_start", np.cumsum([0] + row_nodes[:-1]), "<i8", {})
+    s.column("mesh/row_cell_start", np.cumsum([0] + row_cells[:-1]), "<i8", {})
+    p = np.concatenate([np.arange(9.0), np.arange(4.0) + 100, np.arange(9.0) + 200])
+    sattr(e2e("node_fields/p", p, "node_value", "<f8"), "units", "Pa")
+    s.finish()
+    return {"probes": [
+        {"read": "p", "rows": [2], "sites": None, "dtype": "float64",
+         "values": (np.arange(9.0) + 200).tolist()},
+        {"read": "coordinates", "rows": [1], "dtype": "float64", "values": small.tolist()},
+        {"read": "cells/connectivity", "rows": [2], "dtype": "int64", "values": bc[2].tolist()},
+        {"label": "member", "rows": None, "names": ["b", "a", "b"]},
+        {"info": "type", "value": "changing"},
+    ]}
+
+
 def case_model_nearest(path):
     s = Study(path, kind="model")
     s.row(0)
@@ -559,7 +618,8 @@ VALID = {"table": case_table, "shared_fixed": case_shared_fixed, "point_cloud": 
          "model_nearest": case_model_nearest, "marked_table": case_marked_table,
          "marked_other": case_marked_other, "marked_empty": case_marked_empty,
          "marked_model": case_marked_model, "wide_integers": case_wide_integers,
-         "fixed_layout": case_fixed_layout}
+         "fixed_layout": case_fixed_layout,
+         "changing_group": case_changing_group}
 
 
 # --- rule cases: a valid file broken to break one rule ---------------------------------

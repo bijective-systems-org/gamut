@@ -643,7 +643,7 @@ inline Study open(const std::string& path, const std::string& mode, int threads)
   return s;
 }
 
-// Adds src's runs to dst in place; returns how many.  A marked source whose
+// Adds src's runs to dst; returns how many.  A marked source whose
 // marking is not dst's is refused (E27); with `marking`, the caller states
 // the result's marking, which dst then carries.
 inline int64_t append(const std::string& dst, const std::string& src) {
@@ -657,6 +657,23 @@ inline int64_t append(const std::string& dst, const std::string& src, const std:
   int64_t n = 0;
   detail::check(gamut_append_marked(dst.c_str(), src.c_str(), marking.c_str(), &n, &e), e);
   return n;
+}
+// append for several sources at once, in order: one copy of dst, and all of
+// their runs or none.  An error names the source it is about.
+inline int64_t append_files(const std::string& dst, const std::vector<std::string>& srcs,
+                            const char* marking = nullptr) {
+  std::vector<const char*> paths;
+  for (const std::string& s : srcs) paths.push_back(s.c_str());
+  gamut_error e{};
+  int64_t n = 0;
+  detail::check(gamut_append_files(dst.c_str(), paths.data(), static_cast<int64_t>(paths.size()),
+                                   marking, &n, &e),
+                e);
+  return n;
+}
+inline int64_t append_files(const std::string& dst, const std::vector<std::string>& srcs,
+                            const std::string& marking) {
+  return append_files(dst, srcs, marking.c_str());
 }
 // Writes the chosen runs of src as a new file, their ids kept.
 inline void extract(const std::string& src, const std::string& dst, const Selection& rows) {

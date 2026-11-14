@@ -24,6 +24,7 @@
 #include "gamut/gamut.h"
 #include "chunk.hpp"
 #include "copy.hpp"
+#include "session.hpp"
 #include "h5.hpp"
 #include "notice.hpp"
 #include "reader.hpp"
@@ -1154,6 +1155,123 @@ void test_append_sessions() {
 
 // The threaded reader given more selections than a dataset has axes falls
 // back to the serial read, which refuses it, rather than index past them.
+// Many sources in one session (append_files): the result of appending
+// them one by one, one copy of the destination, all or none, and an error
+// that names its source.
+void xy_table(const std::string& path, std::vector<double> xs) {
+  std::remove(path.c_str());
+  auto w = Writer::create(path, "tests", "", "fixed");
+  w->declare_parameter(param("x", "design", "1"));
+  w->declare_result(scalar("y", "1"));
+  for (const double x : xs) add_xy(*w, x);
+  w->close();
+}
+
+// A mesh per member: rows of `members`, each new member with geometry
+// scaled by `scales`.
+void member_file(const std::string& path, std::vector<std::string> members,
+                 std::vector<double> scales) {
+  std::remove(path.c_str());
+  auto w = Writer::create(path, "tests", "shared", "group:member");
+  w->declare_label("member", "group", {});
+  w->declare_parameter(param("mach", "condition", "1"));
+  w->declare_coordinates("m", DType::Float64, 2);
+  w->declare_result(field("p", "node", "Pa"));
+  Geometry cells = grid(3, 3);
+  cells.points = Column();
+  w->set_mesh(cells);
+  Batch b;
+  b.runs = static_cast<std::int64_t>(members.size());
+  b.names["member"] = members;
+  b.values["mach"] = f64(std::vector<double>(members.size(), 5.0));
+  b.values["p"] = f64(std::vector<double>(9 * members.size(), 1.0));
+  for (std::size_t i = 0; i < members.size(); ++i) {
+    if (!b.member_geometry.count(members[i])) {
+      b.member_geometry[members[i]] = grid(3, 3, scales[i], false);
+    }
+  }
+  w->add_runs(b);
+  w->close();
+}
+
+std::string refusal(const std::function<void()>& f) {
+  try {
+    f();
+  } catch (const gamut_core::Error& e) {
+    return e.what();
+  }
+  return "";
+}
+
+void test_append_many() {
+  xy_table("am_dst.gamut", {1, 2});
+  xy_table("am_a.gamut", {10});
+  xy_table("am_b.gamut", {20, 21});
+  xy_table("am_c.gamut", {30});
+  xy_table("am_seq.gamut", {1, 2});
+  const long long c0 = AppendSession::copies_made();
+  for (const char* src : {"am_a.gamut", "am_b.gamut", "am_c.gamut"}) append_file("am_seq.gamut", src);
+  const long long c1 = AppendSession::copies_made();
+  CHECK(append_files("am_dst.gamut", {"am_a.gamut", "am_b.gamut", "am_c.gamut"}) == 4);
+  CHECK(c1 - c0 == 3 && AppendSession::copies_made() - c1 == 1);
+  {
+    auto r = Reader::open("am_dst.gamut");
+    auto q = Reader::open("am_seq.gamut");
+    CHECK(read_f64(*r, "x", Selection::all()) == read_f64(*q, "x", Selection::all()));
+    CHECK(read_f64(*r, "y", Selection::all()) == read_f64(*q, "y", Selection::all()));
+    CHECK(read_i64(*r, "row") == read_i64(*q, "row"));
+  }
+  CHECK(validate_file("am_dst.gamut").findings.empty());
+  CHECK(beside("am_dst.gamut").empty());
+
+  // Refused before a copy is made.
+  const std::string six = file_bytes("am_dst.gamut");
+  const long long c2 = AppendSession::copies_made();
+  CHECK(refusal([] { append_files("am_dst.gamut", {}); }).find("no source file") !=
+        std::string::npos);
+  CHECK(refusal([] { append_files("am_dst.gamut", {"am_a.gamut", "am_a.gamut"}); })
+            .find("source 2 of 2, \"am_a.gamut\": it is source 1 too") != std::string::npos);
+  CHECK(refusal([] { append_files("am_dst.gamut", {"am_a.gamut", "am_dst.gamut"}); })
+            .find("source 2 of 2") != std::string::npos);
+  CHECK(refusal([] { append_files("am_dst.gamut", {"am_a.gamut", "am_none.gamut"}); })
+            .find("source 2 of 2, \"am_none.gamut\"") != std::string::npos);
+  member_file("am_m.gamut", {"a"}, {1});
+  CHECK(refusal([] { append_files("am_dst.gamut", {"am_a.gamut", "am_m.gamut"}); })
+            .find("source 2 of 2, \"am_m.gamut\": the files differ") != std::string::npos);
+  CHECK(AppendSession::copies_made() == c2);
+  CHECK(file_bytes("am_dst.gamut") == six);
+
+  // One new member, two geometries from two sources: refused while
+  // writing, and the destination as it was.
+  member_file("am_mdst.gamut", {"a"}, {1});
+  member_file("am_m1.gamut", {"b", "a"}, {2, 1});
+  member_file("am_m2.gamut", {"b"}, {3});
+  member_file("am_m3.gamut", {"b", "c"}, {2, 4});
+  const std::string one = file_bytes("am_mdst.gamut");
+  const std::string m = refusal([] {
+    append_files("am_mdst.gamut", {"am_m1.gamut", "am_m2.gamut"});
+  });
+  CHECK(m.find("source 2 of 2, \"am_m2.gamut\"") != std::string::npos &&
+        m.find("already has other geometry") != std::string::npos);
+  CHECK(file_bytes("am_mdst.gamut") == one);
+  CHECK(beside("am_mdst.gamut").empty());
+  // The same geometry is the same member.
+  CHECK(append_files("am_mdst.gamut", {"am_m1.gamut", "am_m3.gamut"}) == 4);
+  {
+    auto r = Reader::open("am_mdst.gamut");
+    CHECK(r->schema().rows == 5 && r->schema().mesh.n_instances == 3);
+    const auto c4 = read_f64(*r, "coordinates", Selection::list({4}));
+    CHECK(c4.size() == 18 && c4[2] == 4.0);
+  }
+  CHECK(validate_file("am_mdst.gamut").findings.empty());
+  if (!std::getenv("GAMUT_KEEP")) {
+    for (const char* p : {"am_dst", "am_a", "am_b", "am_c", "am_seq", "am_m", "am_mdst", "am_m1",
+                          "am_m2", "am_m3"}) {
+      std::remove((std::string(p) + ".gamut").c_str());
+    }
+  }
+}
+
 void test_threaded_read_of_fewer_axes() {
   const std::string path = "wr_rank.gamut";
   {
@@ -1579,6 +1697,7 @@ int main() {
       {"outside", test_values_stored_outside},
       {"growable", test_append_needs_growable_columns},
       {"append_sessions", test_append_sessions},
+      {"append_many", test_append_many},
       {"rank", test_threaded_read_of_fewer_axes},
       {"read_limit", test_read_limit_before_allocation},
       {"short_chunk", test_short_unfiltered_chunk},

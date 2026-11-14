@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `append` takes several source files at once (a list in Python, a cell
+  or string array in MATLAB, a vector in Julia, `append_files` in C++ and
+  Rust, `gamut_append_files` in C, several files on the command line).
+  The result is that of appending them one by one, made in one session:
+  the destination is copied once rather than once per file, and gets
+  every file's runs or none. An error names the file it is about.
 - Appending is safe against a crash: the runs go to a copy beside the
   file (`<file>.appending-…`, a clone where the filesystem makes one) that
   replaces the file when it closes. A process killed while it appends, or

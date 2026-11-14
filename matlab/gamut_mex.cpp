@@ -942,6 +942,17 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
       check(gamut_append_marked(dst.c_str(), src.c_str(), text(arg(3), "marking").c_str(), &n, &e), e);
     }
     plhs[0] = mxCreateDoubleScalar(static_cast<double>(n));
+  } else if (cmd == "append_files") {
+    int64_t n = 0;
+    const std::string dst = text(arg(1), "dst");
+    const auto srcs = cellstr(arg(2), "src");
+    std::vector<const char*> paths;
+    for (const std::string& s : srcs) paths.push_back(s.c_str());
+    const std::string marking = arg(3) == nullptr ? std::string() : text(arg(3), "marking");
+    check(gamut_append_files(dst.c_str(), paths.data(), static_cast<int64_t>(paths.size()),
+                             arg(3) == nullptr ? nullptr : marking.c_str(), &n, &e),
+          e);
+    plhs[0] = mxCreateDoubleScalar(static_cast<double>(n));
   } else if (cmd == "extract") {
     const Sel rows = selection(arg(3));   // ':' every row, [] none
     check(gamut_extract(text(arg(1), "src").c_str(), text(arg(2), "dst").c_str(), rows.ptr(), &e), e);

@@ -252,6 +252,11 @@ void test_copies_and_errors() {
   gamut::write_copy("subset.gamut", "subset_copy.gamut");
   CHECK(gamut::open("subset_copy.gamut").describe()["file_id"] ==
         gamut::open("subset.gamut").describe()["file_id"]);
+  // Several sources in one append: all of their runs, or none.
+  gamut::write_copy("subset.gamut", "many.gamut");
+  CHECK(gamut::append_files("many.gamut", {"subset.gamut", "subset_copy.gamut"}) == 4);
+  CHECK(refused([] { gamut::append_files("many.gamut", {"subset.gamut", "subset.gamut"}); }) != "");
+  CHECK(gamut::open("many.gamut").get_row_ids().size() == 6);
   CHECK(refused([] { gamut::open("no such file.gamut"); }) != "");
   CHECK(refused([] { gamut::open("table.gamut", "w"); }) == "error");
   CHECK(refused([] {

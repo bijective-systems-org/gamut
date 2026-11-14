@@ -299,6 +299,11 @@ mktempdir() do tmp
         @test !haskey(GamutFile.open(GamutFile.describe, a), "portion_marking")
         @test_throws GamutError GamutFile.append!(a, a)
         @test isempty(GamutFile.validate(e)) && isempty(GamutFile.validate(w))
+        # Several files at once: all of their rows, or none, and an error names its file.
+        @test GamutFile.append!(e, [w, b]) == 6
+        err = try GamutFile.append!(e, [b, b]); nothing catch x; x end
+        @test err isa GamutError && occursin("source 2 of 2", sprint(showerror, err))
+        @test GamutFile.open(f -> f.row_count, e) == 8
     end
 
     @testset "a marked append and the notice on opening" begin

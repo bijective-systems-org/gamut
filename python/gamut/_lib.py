@@ -163,6 +163,7 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "gamut_close": (_I, [_P, _E]),
     "gamut_append": (_I, [_S, _S, ctypes.POINTER(_L), _E]),
     "gamut_append_marked": (_I, [_S, _S, _S, ctypes.POINTER(_L), _E]),
+    "gamut_append_files": (_I, [_S, _SS, _L, _S, ctypes.POINTER(_L), _E]),
     "gamut_check_marking": (_I, [_P, _S, _S, _E]),
     "gamut_set_marking_notice": (None, [NOTICE_FN, _P]),
     "gamut_extract": (_I, [_S, _S, _SEL, _E]),
