@@ -1,8 +1,10 @@
-// Internal helpers for names, strings and formatting.
+// Internal helpers for names, strings and formatting, and the tables of
+// the specification that the writer, the reader and the validator share.
 #ifndef GAMUT_CORE_NAMES_HPP
 #define GAMUT_CORE_NAMES_HPP
 
 #include <cstdint>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -21,6 +23,20 @@ const char kLegalName[] =
 
 // The reserved prefix `gamut_`.
 bool reserved_name(const std::string& name);
+
+// Section 9.3: the names the root keeps for itself, and `category_...`.
+bool reserved_root_name(const std::string& name);
+
+// Section 3: the roles of parameters and of labels.
+extern const std::set<std::string> kParameterRoles;
+extern const std::set<std::string> kLabelRoles;
+
+// HDF5 and netCDF attributes that carry the layout, not the study.
+extern const std::set<std::string> kMachinery;
+
+// Section 15: the nodes a cell of a type has; -3 is three or more, 0 an
+// unknown type.
+int nodes_of_type(int code);
 
 // Valid UTF-8 with no NUL anywhere.
 bool valid_utf8(const std::string& s);

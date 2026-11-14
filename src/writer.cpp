@@ -43,12 +43,6 @@ std::string per_run(std::int64_t given, std::int64_t runs, std::string what = "v
          (runs == 1 ? " run" : " runs") + "; give one per run";
 }
 
-const std::set<std::string> kParameterRoles = {"design", "condition", "time"};
-const std::set<std::string> kLabelRoles = {"group", "categorical", "status",
-                                           "split"};
-const std::set<std::string> kReserved = {"row", "coordinates", "categories",
-                                         "mesh", "models", "notes", "private",
-                                         "VTKHDF"};
 
 bool is_float(DType t) { return t == DType::Float32 || t == DType::Float64; }
 bool is_int(DType t) {
@@ -214,29 +208,6 @@ void check_units(const std::string& units, const std::string& path) {
   need(units_parse(units), "E7",
        path + ": the units \"" + units + "\" do not parse (spec section 13)",
        path);
-}
-
-// Spec section 15.
-int nodes_of_type(int code) {
-  switch (code) {
-    case 1: return 1;
-    case 3: return 2;
-    case 5: return 3;
-    case 7: return -3;    // three or more
-    case 9: return 4;
-    case 10: return 4;
-    case 12: return 8;
-    case 13: return 6;
-    case 14: return 5;
-    case 21: return 3;
-    case 22: return 6;
-    case 23: return 8;
-    case 24: return 10;
-    case 25: return 20;
-    case 26: return 15;
-    case 27: return 13;
-    default: return 0;
-  }
 }
 
 void check_cells(const std::vector<std::uint8_t>& types,
@@ -558,7 +529,7 @@ void Writer::check_new_root_name(const std::string& name) const {
        "\"" + name + "\" is not a legal name; " + std::string(kLegalName), name);
   need(!reserved_name(name), "E8",
        "\"" + name + "\" takes the reserved prefix gamut_", name);
-  need(kReserved.count(name) == 0 && name.compare(0, 9, "category_") != 0, "E8",
+  need(!reserved_root_name(name), "E8",
        "\"" + name + "\" is a reserved name (spec section 9.3)", name);
   need(!schema_.name_taken(name), "E8",
        "\"" + name + "\" is already used; names are unique in a file", name);
@@ -1283,6 +1254,12 @@ void Writer::check_relations() const {
            path + ": with_respect_to names \"" + rel.with_respect_to +
                "\", which is not a parameter",
            path);
+    }
+    const std::string axis = !rel.axis.empty() ? rel.axis : r.axis;
+    if (rel.with_respect_to == "coordinates" && !axis.empty()) {
+      const int index = axis == "x" ? 0 : (axis == "y" ? 1 : 2);
+      need(index < s.mesh.axes, "E13",
+           path + ": axis " + axis + " is not among the coordinates' axes", path);
     }
   }
   std::map<std::string, std::vector<const Result*>> vectors;

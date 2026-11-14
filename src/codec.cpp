@@ -20,9 +20,6 @@ namespace {
 // Spec section 12: one NUL byte then "null", size 5.
 const char kNull[5] = {'\0', 'n', 'u', 'l', 'l'};
 
-const std::set<std::string> kMachinery = {
-    "CLASS", "NAME", "DIMENSION_LIST", "REFERENCE_LIST", "DIMENSION_LABELS",
-    "_Netcdf4Dimid", "_Netcdf4Coordinates", "_nc3_strict", "_NCProperties"};
 const std::set<std::string> kTopLevel = {"type", "inputs", "repr"};
 
 // One budget for all of a model's arrays: each is capped as one read, and
