@@ -121,7 +121,8 @@ selection can come from the program just as well.
 ### Nodes and cells
 
 Reads take nodes or cells as positions: one, a list, or every one when
-left out. A zone comes from a mesh label: `categories` gives its names,
+left out. The keyword is where the field lives: `cells` on a node field
+is refused. A zone comes from a mesh label: `categories` gives its names,
 and the positions where the label holds a name's code are that zone. The
 codes count from 0 in every language, so a name's code is its place in
 `categories` less one in MATLAB and Julia.

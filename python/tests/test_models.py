@@ -121,6 +121,22 @@ def test_nearest_matches_the_written_out_rule_exactly():
         m.call({"a": q[:, 0], "b": q[:, 1]}, [("i", "values")])
 
 
+def test_nearest_takes_x_as_points_by_columns_as_given():
+    mach, alpha = np.linspace(0.3, 0.6, 5), np.linspace(0.0, 4.0, 5)
+    outputs = {"cl": np.arange(5.0)}
+    m = gamut.Nearest(["mach", "alpha"], [0.3, 0.0], [0.6, 4.0], np.column_stack([mach, alpha]), outputs)
+    assert m.x.tolist() == np.column_stack([mach, alpha]).tolist()
+    # Columns by points is refused, not reshaped into pairs of one column's values.
+    with pytest.raises(gamut.GamutError, match="x is points x columns") as e:
+        gamut.Nearest(["mach", "alpha"], [0.3, 0.0], [0.6, 4.0], np.array([mach, alpha]), outputs)
+    assert e.value.rule == "E17"
+    with pytest.raises(gamut.GamutError, match="x is points x columns"):
+        gamut.Nearest(["mach", "alpha"], [0.3, 0.0], [0.6, 4.0], np.column_stack([mach, alpha]).ravel(), outputs)
+    # One column may be a plain list of points.
+    one = gamut.Nearest(["mach"], [0.3], [0.6], mach, outputs)
+    assert one.x.shape == (5, 1)
+
+
 @gamut.register_model_type
 class Line:
     """A model type of a user's own: y = a * x + b with a constant spread."""

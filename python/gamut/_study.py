@@ -490,6 +490,12 @@ class Study:
         if nodes is not None and cells is not None:
             raise GamutError("", f"{name}: give nodes or cells, not both")
         sites = nodes if nodes is not None else cells
+        if sites is not None:
+            given = "nodes" if nodes is not None else "cells"
+            at = self.describe(name).get("location")
+            if at in ("node", "cell") and given != at + "s":
+                raise GamutError("", f"{name} is a {at} field: choose its sites with "
+                                      f"{at}s, not {given}")
         if self._mesh_kind == "changing":
             one = isinstance(rows, (list, tuple, np.ndarray)) and len(rows) == 1
             if not one and (rows is None or _lib.iterable(rows) or isinstance(rows, slice)):

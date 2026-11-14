@@ -170,7 +170,8 @@ def _nearest_check(numbers: Mapping[str, Any]) -> None:
 class Nearest:
     """The built-in model: for each input row, the outputs of the closest
     stored point (spec section 7.5).  Evaluated by the core, so every
-    language gets the same answers."""
+    language gets the same answers.  `x` is points x columns; each output
+    has points first."""
 
     type = "nearest"
 
@@ -179,7 +180,11 @@ class Nearest:
         self.columns = [str(c) for c in columns]
         self.lower = np.asarray(lower, dtype=np.float64)
         self.upper = np.asarray(upper, dtype=np.float64)
-        self.x = np.asarray(x, dtype=np.float64).reshape(-1, len(self.columns))
+        # x is points x columns as given, so the core refuses another
+        # orientation; one column may be a plain list of points.
+        self.x = np.asarray(x, dtype=np.float64)
+        if self.x.ndim == 1 and len(self.columns) == 1:
+            self.x = self.x[:, None]
         self.outputs = {k: np.asarray(v, dtype=np.float64) for k, v in outputs.items()}
         _nearest_check(self.save())
 

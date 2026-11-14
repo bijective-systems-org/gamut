@@ -949,6 +949,26 @@ def test_nodes_and_cells_together_are_refused(tmp_path):
             f.get_field("q", nodes=[0], cells=[0])
 
 
+def test_sites_are_chosen_by_where_the_field_lives(tmp_path):
+    p = str(tmp_path / "m.gamut")
+    pts, cells = grid(3, 2)
+    with gamut.create(p, writer="t", mesh="shared", per="fixed", coordinates={"units": "m", "axes": 2},
+                      parameters={"x": "1"}, fields={"q": {"units": "1", "at": "node"},
+                                                     "c": {"units": "1", "at": "cell"}}) as s:
+        s.set_mesh(pts, cells)
+        s.add_run({"x": 1.0}, fields={"q": np.arange(6.0), "c": np.array([7.0, 8.0])})
+    with gamut.open(p) as f:
+        assert f.get_field("q", nodes=[1]).tolist() == [[1.0]]
+        assert f.get_field("c", cells=[1]).tolist() == [[8.0]]
+        with pytest.raises(gamut.GamutError, match="q is a node field: choose its sites with nodes, not cells"):
+            f.get_field("q", cells=[0])
+        with pytest.raises(gamut.GamutError, match="c is a cell field: choose its sites with cells, not nodes"):
+            f.get_field("c", nodes=[0])
+        # A run-table column is left to the core, which says it has no sites.
+        with pytest.raises(gamut.GamutError, match="no sites"):
+            f.get_field("x", nodes=[0])
+
+
 def test_an_integer_past_2_53_is_refused_where_float64_would_round_it(tmp_path):
     p = str(tmp_path / "t.gamut")
     with gamut.create(p, writer="t", parameters={"x": {"units": "1", "dtype": "float64"}},
