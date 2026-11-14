@@ -6,13 +6,14 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "types.hpp"
 
 namespace gamut_core {
 namespace internal {
 
-// The rows of `src` added to `dst` in place, with new ids continuing
+// The rows of `src` added to `dst`, with new ids continuing
 // dst's; tables merge by name. Both need the same declarations (bounds may
 // differ), the same mesh and, for members in both, the same geometry.
 // Everything is checked before the first row is written. Returns the rows
@@ -21,6 +22,14 @@ namespace internal {
 // section 11.5).
 std::int64_t append_file(const std::string& dst, const std::string& src,
                          const std::optional<std::string>& marking = std::nullopt);
+
+// append_file for several sources at once, in the order given: the same
+// result as appending them one by one, in one append session (one copy of
+// dst) and all or none.  Every source is checked before dst is opened to
+// write; an error names the source it is about.  The marking rule holds
+// for each source; a stated marking is the result's whatever they carried.
+std::int64_t append_files(const std::string& dst, const std::vector<std::string>& srcs,
+                          const std::optional<std::string>& marking = std::nullopt);
 
 // The marking checks of append (spec section 11.5), for rows from a file or
 // from elsewhere: with `stated`, that it is a marking the file can carry

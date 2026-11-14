@@ -166,6 +166,15 @@ in Rust, and `gamut append FILE SRC --marking TEXT` on the command line.
 The destination then carries it, whatever the two files did; an empty
 marking is none, and is never stated.
 
+Jobs that run at once each write their runs to a file of their own, and
+the last step appends them all in one call: a list of files in Python
+(`append(dst, [a, b, c])`), a cell or string array in MATLAB, a vector in
+Julia, `gamut::append_files` in C++ and Rust, and several files on the
+command line (`gamut append study.gamut parts/*.gamut`). The result is
+that of appending them one by one, in order, but the destination is
+copied once rather than once per file, and it gets every file's runs or
+none; an error names the file it is about.
+
 ### Extract
 
 The chosen runs keep their ids, so a run can be traced back

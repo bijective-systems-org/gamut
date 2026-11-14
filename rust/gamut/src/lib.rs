@@ -1061,7 +1061,7 @@ pub fn open_append(path: &str) -> Result<Study> {
     Ok(s)
 }
 
-/// Adds src's runs to dst in place; returns how many. A marked src whose
+/// Adds src's runs to dst; returns how many. A marked src whose
 /// portion marking is not dst's is refused (E27); [`append_marked`] states
 /// the result's marking.
 pub fn append(dst: &str, src: &str) -> Result<usize> {
@@ -1077,6 +1077,28 @@ pub fn append_marked(dst: &str, src: &str, marking: &str) -> Result<usize> {
     let (dst, src, marking) = (c(dst)?, c(src)?, c(marking)?);
     let mut n = 0;
     call(|e| unsafe { sys::gamut_append_marked(dst.as_ptr(), src.as_ptr(), marking.as_ptr(), &mut n, e) })?;
+    Ok(n as usize)
+}
+
+/// [`append`] for several sources at once, in order: dst is copied once and
+/// gets all of their runs or none; `marking`, if given, as in
+/// [`append_marked`]. An error names the source it is about.
+pub fn append_files(dst: &str, srcs: &[&str], marking: Option<&str>) -> Result<usize> {
+    let dst = c(dst)?;
+    let srcs = srcs.iter().map(|s| c(s)).collect::<Result<Vec<_>>>()?;
+    let ptrs: Vec<*const std::os::raw::c_char> = srcs.iter().map(|s| s.as_ptr()).collect();
+    let marking = marking.map(c).transpose()?;
+    let mut n = 0;
+    call(|e| unsafe {
+        sys::gamut_append_files(
+            dst.as_ptr(),
+            ptrs.as_ptr(),
+            ptrs.len() as i64,
+            marking.as_ref().map_or(std::ptr::null(), |m| m.as_ptr()),
+            &mut n,
+            e,
+        )
+    })?;
     Ok(n as usize)
 }
 

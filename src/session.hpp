@@ -27,6 +27,8 @@ class AppendSession {
   // file was replaced but its folder could not be written to disk.  A
   // session ended unpublished removes its copy.
   std::string publish();
+  // How many copies sessions of this process have made (for the tests).
+  static long long copies_made();
 
  private:
   AppendSession() = default;

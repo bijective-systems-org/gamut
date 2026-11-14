@@ -242,6 +242,14 @@ try
 catch err
     ok(startsWith(err.identifier, 'gamut:'), 'append to itself refused');
 end
+ok(gamut.append(ce, {cw, cb}) == 6, 'append takes several files at once');
+ok(gamut.append(ce, [string(cb) string(cw)]) == 6, 'append takes a string array of files');
+try
+    gamut.append(ce, {cb, cb});
+    ok(false, 'a file given twice refused');
+catch err
+    ok(contains(err.message, 'source 2 of 2'), 'a file given twice refused, by name');
+end
 
 % A marked source into an unmarked file is refused (E27) and the file left
 % as it was; 'Marking' states the result's.  The notice on opening a marked

@@ -1,5 +1,6 @@
 #include "session.hpp"
 
+#include <atomic>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
@@ -181,6 +182,12 @@ std::unique_ptr<AppendSession> AppendSession::lock(const std::string& path) {
   return s;
 }
 
+namespace {
+std::atomic<long long> copies{0};
+}  // namespace
+
+long long AppendSession::copies_made() { return copies.load(); }
+
 const std::string& AppendSession::copy() {
   for (int attempt = 0; copy_path_.empty(); ++attempt) {
     const std::string candidate = target_ + kCopySuffix + hex8();
@@ -190,6 +197,7 @@ const std::string& AppendSession::copy() {
       continue;
     }
     copy_file(target_, candidate);
+    ++copies;
     copy_path_ = candidate;
   }
   return copy_path_;

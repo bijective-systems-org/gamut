@@ -177,3 +177,22 @@ fn marked_appends_and_the_notice() -> Result<(), gamut::Error> {
     gamut::set_marking_notice(None);
     Ok(())
 }
+
+// Several sources in one append: all of their runs or none, and an error
+// names its source.
+#[test]
+fn several_files_in_one_append() -> Result<(), gamut::Error> {
+    let dir = Folder::new("many");
+    let paths: Vec<String> = ["dst", "a", "b"].iter().map(|n| dir.path(&format!("{n}.gamut"))).collect();
+    for path in &paths {
+        let mut s = gamut::create(path, "tests", "", "")?;
+        s.declare_parameter("x", "design", "1")?;
+        s.add_run(&[("x", 1.0.into())], &[])?;
+        s.close()?;
+    }
+    assert_eq!(gamut::append_files(&paths[0], &[&paths[1], &paths[2]], None)?, 2);
+    let refused = gamut::append_files(&paths[0], &[&paths[1], &paths[1]], None).unwrap_err();
+    assert!(refused.to_string().contains("source 2 of 2"));
+    assert_eq!(gamut::open(&paths[0])?.row_count()?, 3);
+    Ok(())
+}

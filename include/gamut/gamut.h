@@ -394,6 +394,15 @@ GAMUT_API int gamut_append(const char* dst_path, const char* src_path, int64_t* 
  * before the destination is opened to write. */
 GAMUT_API int gamut_append_marked(const char* dst_path, const char* src_path, const char* marking,
                               int64_t* rows_added, gamut_error* err);
+/* gamut_append_marked for `count` sources (one or more) at once, in order:
+ * the result of appending them one by one, made in one append session, so
+ * the destination is copied once and gets all of their rows or none.
+ * Every source is checked before the destination is opened to write; a
+ * source given twice, or that is the destination, is refused, and an
+ * error about one source names it.  rows_added is the total. */
+GAMUT_API int gamut_append_files(const char* dst_path, const char* const* src_paths,
+                                 int64_t count, const char* marking, int64_t* rows_added,
+                                 gamut_error* err);
 /* The marking checks of gamut_append_marked for rows from elsewhere (a
  * document), on the destination open to read, before it is opened to add
  * runs: with marking NULL, refuses (E27) rows_marking (NULL or empty: none)

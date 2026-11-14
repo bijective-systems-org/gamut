@@ -733,6 +733,26 @@ int gamut_append_marked(const char* dst_path, const char* src_path, const char* 
   }
 }
 
+int gamut_append_files(const char* dst_path, const char* const* src_paths, int64_t count,
+                       const char* marking, int64_t* rows_added, gamut_error* err) {
+  const DeliverNotices notices;
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    need(count >= 0 && (count == 0 || src_paths != nullptr), "",
+         "src_paths holds count source paths");
+    std::vector<std::string> srcs;
+    for (int64_t k = 0; k < count; ++k) srcs.push_back(str(src_paths[k]));
+    std::optional<std::string> stated;
+    if (marking != nullptr) stated = marking;
+    const int64_t n = gamut_core::internal::append_files(str(dst_path), srcs, stated);
+    if (rows_added != nullptr) *rows_added = n;
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
 int gamut_check_marking(const gamut_file* f, const char* rows_marking, const char* marking,
                       gamut_error* err) {
   try {

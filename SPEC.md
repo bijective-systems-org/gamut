@@ -732,7 +732,10 @@ the file, then reports it in use; a writer closed by hand can close again
 to retry, while a `with` or `do` block gives the session up, leaving the
 file as it was. A session needs write access to the folder, and room for a
 copy where the filesystem does not clone. A library checks the structure
-and the appended rows, and does not re-read the whole file.
+and the appended rows, and does not re-read the whole file. Rows from
+several files can be appended in one session, one file after another: the
+result is that of appending them one by one, and the file gets all of them
+or none.
 
 Rows appended from a file whose `portion_marking` is not empty and not,
 byte for byte, the destination's are refused (E27). Rows from an unmarked

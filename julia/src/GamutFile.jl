@@ -905,7 +905,7 @@ end
 """
     GamutFile.append!(dst, src; marking=nothing)
 
-Adds the rows of `src` to `dst` in place and returns how many: new ids
+Adds the rows of `src` to `dst` and returns how many: new ids
 continuing dst's, tables merged by name. Both need the same declarations
 (bounds may differ), the same mesh, and one geometry for a group member
 found in both; everything is checked before the first row is written. A
@@ -919,6 +919,23 @@ function append!(dst::AbstractString, src::AbstractString; marking=nothing)
         @mes gamut_append (Cstring, Cstring, Ref{Int64}) cs(dst) cs(src) n
     else
         @mes gamut_append_marked (Cstring, Cstring, Cstring, Ref{Int64}) cs(dst) cs(src) cs(marking) n
+    end
+    return Int(n[])
+end
+
+"""
+    GamutFile.append!(dst, srcs::AbstractVector; marking=nothing)
+
+`append!` for several files at once, in order: `dst` is copied once and
+gets every file's rows or none. An error names the file it is about.
+"""
+function append!(dst::AbstractString, srcs::AbstractVector{<:AbstractString}; marking=nothing)
+    n = Ref{Int64}(0)
+    strs, ptrs = cstrings(srcs)
+    m = marking === nothing ? "" : cs(marking)
+    GC.@preserve strs m begin
+        mp = marking === nothing ? Ptr{UInt8}(C_NULL) : pointer(m)
+        @mes gamut_append_files (Cstring, Ptr{Ptr{UInt8}}, Int64, Ptr{UInt8}, Ref{Int64}) cs(dst) ptrs length(ptrs) mp n
     end
     return Int(n[])
 end

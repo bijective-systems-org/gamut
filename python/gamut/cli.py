@@ -514,22 +514,41 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 def cmd_append(args: argparse.Namespace) -> int:
     """--json: {"appended": FILE, "rows": n}"""
+    sources = args.document
+    if len(sources) > 1 and not all(s.lower().endswith(".gamut") for s in sources):
+        raise _Usage("", "several sources are study files (.gamut); a JSON document is "
+                         "appended on its own")
+    args.document = sources[0]
     if args.document.lower().endswith(".gamut"):
-        if os.path.exists(args.document) and os.path.exists(args.file) and \
-                os.path.samefile(args.document, args.file):
-            raise _Usage("", "the source and the destination are one file")
-        for path in (args.file, args.document):
-            with open_file(path) as f:
-                _rows_kept(f, "appending")
+        def about(k: int) -> str:
+            # With several sources, a message names the one it is about, as the core's do.
+            return f'source {k + 1} of {len(sources)}, "{sources[k]}": ' if len(sources) > 1 else ""
+        for k, source in enumerate(sources):
+            if os.path.exists(source) and os.path.exists(args.file) and \
+                    os.path.samefile(source, args.file):
+                raise _Usage("", about(k) + "the source and the destination are one file")
+        with open_file(args.file) as f:
+            _rows_kept(f, "appending")
+        for k, source in enumerate(sources):
+            try:
+                with open_file(source) as f:
+                    _rows_kept(f, "appending")
+            except GamutError as e:
+                if not about(k):
+                    raise
+                raise type(e)(e.rule, about(k) + e.message, e.path) from None
         try:
-            n = gamut_append(args.file, args.document, marking=args.marking)  # every row of another file
+            # Every row of the other files, in one session: all of them or none.
+            n = gamut_append(args.file, sources if len(sources) > 1 else args.document,
+                             marking=args.marking)
         except GamutError as e:
-            # Two valid files that do not fit together (no rule): the command's mistake.
+            # Valid files that do not fit together (no rule): the command's mistake.
             if e.rule:
                 raise
             raise _Usage("", e.message, e.path) from None
+        origin = args.document if len(sources) == 1 else _counted(len(sources), "file")
         _emit(args, {"appended": args.file, "rows": n},
-              f"appended {_counted(n, 'run')} from {args.document} to {args.file}")
+              f"appended {_counted(n, 'run')} from {origin} to {args.file}")
         return 0
     doc = _document(args.document)
     base = os.path.dirname(os.path.abspath(args.document))
@@ -904,10 +923,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--example", action="store_true", help="print a filled-in document")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_build)
-    p = sub.add_parser("append", help="add runs to a file in place, from a JSON document or "
-                                      "every row of another study file (.gamut)")
+    p = sub.add_parser("append", help="add runs to a file, from a JSON document or every row "
+                                      "of other study files (.gamut), all of them or none")
     p.add_argument("file")
-    p.add_argument("document")
+    p.add_argument("document", nargs="+", metavar="document",
+                   help="a JSON document, or one or more study files (.gamut)")
     p.add_argument("--marking", help="the portion marking the result carries, whatever the two did")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_append)
