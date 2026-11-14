@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Appending is safe against a crash: the runs go to a copy beside the
+  file (`<file>.appending-…`, a clone where the filesystem makes one) that
+  replaces the file when it closes. A process killed while it appends, or
+  a write that fails, now loses only that session's runs; it used to be
+  able to leave the whole file unreadable (#92). `append` adds all of a
+  source's runs or none. A second process opening a file to append while
+  one does is refused by name (a lock on `<file>.appending`), and readers
+  keep reading the file meanwhile; both used to fail with "cannot open as
+  an HDF5 file". Appending needs write access to the file's folder.
 - The Julia package is named `GamutFile`, after the General registry's
   convention for file-format packages, and is added from the registry:
   `Pkg.add(name="GamutFile")`, then `using GamutFile`. Calls are spelled

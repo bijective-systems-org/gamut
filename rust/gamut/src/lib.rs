@@ -515,7 +515,7 @@ impl Study {
     }
 
     /// Gives up on the file without finishing it; with remove, deletes a
-    /// file this study created (a file opened to append is never deleted).
+    /// file this study created (a file opened to append is left as it was).
     pub fn abandon(&mut self, remove: bool) {
         if !self.f.is_null() {
             unsafe { sys::gamut_abandon(self.f, remove as c_int) };

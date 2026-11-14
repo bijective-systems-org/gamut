@@ -715,14 +715,20 @@ fixed is read-only: appending refuses it (E25), and a copy rewritten with
 the default layout (`write_copy`) can grow. Every check of a batch's own data is made before its first write, so
 a batch refused for its data adds nothing and changes no run. Opening a file
 to append and closing it can still change its bytes and the metadata a writer
-sets on close, such as the `coordinates` attributes. A failure of the
-file itself while it is written (a damaged chunk, a full disk) can come
-after writes, and HDF5 does not keep a file consistent on disk while it is
-written: such a failure, or a writer stopped partway (a crash, a killed
-process), can leave the file unreadable, rows written before included. A
-library says so; this version defines no recovery. A
-library appends without copying or re-reading the whole file, and checks
-the structure and the appended rows.
+sets on close, such as the `coordinates` attributes. HDF5 does not keep
+a file consistent on disk while it is written, so a library appends in a
+session: it copies the file beside itself as `<file>.appending-<8 hex
+digits>` (a clone where the filesystem makes one, which takes no space
+until the copy changes), adds the rows to the copy and, when the session
+closes, renames the copy over the file. A session stopped partway (a
+crash, a killed process, a full disk) leaves the file as it was and loses
+only its own rows; the next session removes the copy it left. One session
+appends to a file at a time: it holds a lock on `<file>.appending`, and a
+second is refused, as is a session where the filesystem has no file locks;
+readers keep reading the file until the copy replaces it, and an open that
+meets the rename is tried again. A session needs write access to the folder, and room for a
+copy where the filesystem does not clone. A library checks the structure
+and the appended rows, and does not re-read the whole file.
 
 Rows appended from a file whose `portion_marking` is not empty and not,
 byte for byte, the destination's are refused (E27). Rows from an unmarked

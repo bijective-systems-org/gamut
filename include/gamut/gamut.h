@@ -80,7 +80,10 @@ typedef struct gamut_strings gamut_strings;  /* a list of UTF-8 strings */
  * per: "fixed", "run" or "group:<label>" (NULL or "" without a mesh). */
 GAMUT_API int gamut_create(const char* path, const char* writer, const char* mesh_kind,
                        const char* per, gamut_file** out, gamut_error* err);
-/* An existing data file, to add rows in place. */
+/* An existing data file, to add rows.  The rows go to a copy beside it that
+ * replaces it on gamut_close, so a process stopped partway leaves the file
+ * as it was (spec section 11.5); a file another process is appending to is
+ * refused. */
 GAMUT_API int gamut_open_append(const char* path, gamut_file** out, gamut_error* err);
 
 /* A new model file (spec section 7).  mesh_kind: NULL or "" or "shared";
@@ -175,7 +178,7 @@ GAMUT_API int gamut_set_private(gamut_file* f, const char* name, const void* byt
 GAMUT_API int gamut_close(gamut_file* f, gamut_error* err);
 /* Gives up on a file and frees the handle without finishing it: nothing
  * more is written.  remove_file (non-zero) deletes a file this handle
- * created; a file opened for appending is never deleted.  f may be NULL.
+ * created; a file opened for appending is left as it was.  f may be NULL.
  * For a writer whose earlier call failed and whose file is not wanted. */
 GAMUT_API void gamut_abandon(gamut_file* f, int remove_file);
 

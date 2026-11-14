@@ -214,7 +214,7 @@ class Study {
     f_ = nullptr;
   }
   // Gives up on the file without finishing it; with remove, deletes a file
-  // this study created (a file opened to append is never deleted).
+  // this study created (a file opened to append is left as it was).
   void abandon(bool remove = true) noexcept {
     if (f_) gamut_abandon(std::exchange(f_, nullptr), remove ? 1 : 0);
   }
