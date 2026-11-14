@@ -20,9 +20,6 @@ void need(bool ok, const std::string& rule, const std::string& message,
   if (!ok) throw Error(rule, message, path);
 }
 
-const std::set<std::string> kParameterRoles = {"design", "condition", "time"};
-const std::set<std::string> kLabelRoles = {"group", "categorical", "status",
-                                           "split"};
 
 struct Attrs {
   std::vector<RawAttr> list;

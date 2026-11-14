@@ -585,6 +585,8 @@ RULES = {
     "E7_units": ("table", "E7", lambda f: sattr(f["cd"], "units", "m//s")),
     "E7_no_units": ("table", "E7", lambda f: f["mach"].attrs.__delitem__("units")),
     "E8_reserved": ("table", "E8", lambda f: f.move("cd", "category_cd")),
+    "E8_illegal": ("table", "E8", lambda f: f.move("cd", "c d")),
+    "E8_twice": ("shared_fixed", "E8", lambda f: _node_field(f, "k")),
     "E9_code": ("table", "E9", lambda f: f["run"].__setitem__(0, 7)),
     "E9_repeat": ("table", "E9", lambda f: f["categories/run"].__setitem__(1, b"a")),
     "E10_node": ("shared_fixed", "E10", lambda f: f["mesh/cell_connectivity"].__setitem__(0, 99)),
@@ -595,6 +597,8 @@ RULES = {
     "E13_axis": ("shared_fixed", "E13", lambda f: sattr(f["mesh/cell_fields/v"], "axis", "x")),
     "E14_ids": ("table", "E14", lambda f: f["row"].__setitem__(1, 0)),
     "E15_run_group": ("table", ("E15", "W9"), lambda f: sattr(f["t"], "run_group", "status")),
+    "E15_generalisation_group": ("table", "E15", lambda f: sattr(f, "generalisation_group", "status")),
+    "E15_two_status": ("table", "E15", lambda f: _second_status(f)),
     "E16_bounds": ("table", ("E16", "W4"), lambda f: fattr(f["mach"], "lower", 2.0)),
     "E16_model_attr": ("table", "E16", lambda f: sattr(f["cl"], "model", "m")),
     "E16_coordinate_model": ("shared_fixed", "E16", lambda f: sattr(f["mesh/coordinates"], "model", "m")),
@@ -604,10 +608,12 @@ RULES = {
     "E19_scale": ("table", "E19", lambda f: f["cl"].dims[0].detach_scale(f["row"])),
     "E19_extent": ("shared_group", "E19", lambda f: f["mesh/instance"].resize((5,))),
     "E20_filter": ("table", "E20", lambda f: _swap(f, "cl", "<f8", compression="lzf")),
+    "E20_fill_value": ("table", "E20", lambda f: _swap(f, "cl", "<f8", fillvalue=-7.0)),
     "E21_instance": ("shared_group", "E21", lambda f: f["mesh/row_instance"].__setitem__(1, 1)),
     "E21_start": ("changing", "E21", lambda f: f["mesh/row_node_start"].__setitem__(1, 5)),
     "E22_soft": ("table", "E22", lambda f: f.__setitem__("alias", h5py.SoftLink("/cl"))),
     "E22_external": ("table", "E22", lambda f: f.__setitem__("ext", h5py.ExternalLink("x.h5", "/y"))),
+    "E24_four_axes": ("shared_fixed", "E24", lambda f: _four_axes(f)),
     "W1_split": ("table", "W1", lambda f: _add_split(f, [0, 1, 0, 0])),
     "W2_status": ("table", "W2", lambda f: f["status"].__setitem__(2, 1)),
     "W3_nan": ("table", "W3", lambda f: f["cl"].__setitem__(0, np.nan)),
@@ -620,10 +626,11 @@ RULES = {
     "W8_created": ("table", "W8", lambda f: sattr(f, "created", "yesterday")),
     "W9_time": ("table", "W9", lambda f: f["t"].__setitem__(1, 0.0)),
     "W10_std": ("table", "W10", lambda f: f["cl_std"].__setitem__(0, -1.0)),
+    "W11_unchecked": ("table", "W11", lambda f: _grow_rows(f, (1 << 26) + 1)),
 }
 
 
-def _swap(f, name, dtype, compression="gzip", chunks=None):
+def _swap(f, name, dtype, compression="gzip", chunks=None, fillvalue=None):
     data = f[name][:]
     # Each attribute keeps its stored type, so the swap breaks one rule only.
     attrs = {k: (f[name].attrs[k], f[name].attrs.get_id(k).dtype)
@@ -633,11 +640,62 @@ def _swap(f, name, dtype, compression="gzip", chunks=None):
     kw = {"compression": compression}
     if compression == "gzip":
         kw.update(compression_opts=1, shuffle=True)
+    if fillvalue is not None:
+        kw["fillvalue"] = fillvalue
     d = f.create_dataset(name, data=data.astype(dtype), maxshape=(None,),
                          chunks=chunks or leading_chunk(np.dtype(dtype).itemsize, ()), **kw)
     for k, (v, t) in attrs.items():
         d.attrs.create(k, v, dtype=t)
     d.dims[0].attach_scale(f["row"])
+
+
+def _node_field(f, name):
+    # A node field taking the name of a root object.
+    p = f["mesh/node_fields/p"]
+    d = f.create_dataset(f"mesh/node_fields/{name}", data=p[:], maxshape=p.maxshape, chunks=p.chunks,
+                         compression="gzip", compression_opts=1, shuffle=True)
+    d.dims[0].attach_scale(f["row"])
+    d.dims[1].attach_scale(f["mesh/node"])
+    sattr(d, "units", "Pa")
+
+
+def _second_status(f):
+    dim(f, "category_state", 2, True)
+    t = f.create_dataset("categories/state", shape=(2,), maxshape=(None,),
+                         dtype=h5py.string_dtype("utf-8", 9), chunks=leading_chunk(9, ()),
+                         compression="gzip", compression_opts=1, shuffle=True)
+    t[:] = np.array([b"converged", b"failed"], dtype=h5py.string_dtype("utf-8", 9))
+    t.dims[0].attach_scale(f["category_state"])
+    d = f.create_dataset("state", data=np.zeros(f["row"].shape[0], "<i4"), maxshape=(None,),
+                         chunks=leading_chunk(4, ()), compression="gzip", compression_opts=1,
+                         shuffle=True)
+    d.dims[0].attach_scale(f["row"])
+    sattr(d, "role", "status")
+    sattr(d, "category", "state")
+
+
+def _four_axes(f):
+    # Coordinates with a fourth axis, every scale and extent consistent.
+    pts = f["mesh/coordinates"][:]
+    del f["mesh/coordinates"]
+    del f["mesh/axis"]
+    dim(f, "mesh/axis", 4, False)
+    data = np.concatenate([pts, np.zeros((pts.shape[0], 4 - pts.shape[1]))], axis=1)
+    d = f.create_dataset("mesh/coordinates", data=data,
+                         chunks=end_chunk(8, data.shape[1:], data.shape[0]),
+                         compression="gzip", compression_opts=1, shuffle=True)
+    d.dims[0].attach_scale(f["mesh/node"])
+    d.dims[1].attach_scale(f["mesh/axis"])
+    sattr(d, "units", "m")
+
+
+def _grow_rows(f, n):
+    # Every row-long dataset grown to n rows without writing: the file stays
+    # small, and a validator that does not read past its limit says so.
+    for name, obj in list(f.items()):
+        if (isinstance(obj, h5py.Dataset) and obj.maxshape[:1] == (None,)
+                and (name == "row" or obj.dims[0] and obj.dims[0][0].name == "/row")):
+            obj.resize((n,) + obj.shape[1:])
 
 
 def _add_split(f, codes):

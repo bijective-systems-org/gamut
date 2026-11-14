@@ -39,13 +39,6 @@ std::size_t Report::warnings() const {
 
 namespace {
 
-const std::set<std::string> kMachinery = {
-    "CLASS", "NAME", "DIMENSION_LIST", "REFERENCE_LIST", "DIMENSION_LABELS",
-    "_Netcdf4Dimid", "_Netcdf4Coordinates", "_nc3_strict", "_NCProperties"};
-const std::set<std::string> kParameterRoles = {"design", "condition", "time"};
-const std::set<std::string> kLabelRoles = {"group", "categorical", "status", "split"};
-const std::set<std::string> kReservedRoot = {"row", "coordinates", "categories", "mesh",
-                                             "models", "notes", "private", "VTKHDF"};
 
 enum class Kind { S, F, I, Bits };   // string, float64, int64, int32-or-int64
 
@@ -78,28 +71,6 @@ std::string counted(std::int64_t n, const char* one, const char* many) {
 
 std::string where_word(const std::string& prefix) {
   return prefix.compare(0, 4, "node") == 0 ? "node" : "cell";
-}
-
-int nodes_of_type(int code) {
-  switch (code) {
-    case 1: return 1;
-    case 3: return 2;
-    case 5: return 3;
-    case 7: return -3;
-    case 9: return 4;
-    case 10: return 4;
-    case 12: return 8;
-    case 13: return 6;
-    case 14: return 5;
-    case 21: return 3;
-    case 22: return 6;
-    case 23: return 8;
-    case 24: return 10;
-    case 25: return 20;
-    case 26: return 15;
-    case 27: return 13;
-    default: return 0;
-  }
 }
 
 // One dataset or served object, as the validator sees it.
@@ -255,7 +226,7 @@ void Validator::check_name(const std::string& name, const std::string& concept, 
     add("E8", concept, "\"" + name + "\" is not a legal name; " + std::string(kLegalName));
   } else if (reserved_name(name)) {
     add("E8", concept, "\"" + name + "\" takes the reserved prefix gamut_");
-  } else if (root && (kReservedRoot.count(name) || name.compare(0, 9, "category_") == 0)) {
+  } else if (root && reserved_root_name(name)) {
     add("E8", concept, "\"" + name + "\" is a reserved name at the root (spec section 9.3)");
   }
   if (!used_names_.insert(name).second) {

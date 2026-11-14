@@ -241,7 +241,7 @@ def test_a_name_used_twice(shared, tmp_path):
 
 
 def test_storage_rules(table, tmp_path):
-    def unchunked(f):
+    def other_filter(f):
         data = f["cl"][:]
         attrs = dict(f["cl"].attrs)
         del f["cl"]
@@ -250,7 +250,7 @@ def test_storage_rules(table, tmp_path):
             if k not in ("DIMENSION_LIST",):
                 d.attrs[k] = v
         d.dims[0].attach_scale(f["row"])
-    fires(broken(table, tmp_path, unchunked), "E20")
+    fires(broken(table, tmp_path, other_filter), "E20")
 
 
 def test_unreadable_file_is_one_finding(tmp_path):
@@ -321,6 +321,20 @@ def test_a_derivative_along_an_axis_the_coordinates_lack_is_e13(tmp_path):
         del d.attrs["axis"]
         d.attrs.create("axis", np.array(b"z", dtype=h5py.string_dtype("utf-8", 1)))
     assert _rules(p) == {"E13"}
+
+
+def test_the_writer_refuses_a_derivative_along_an_axis_the_coordinates_lack(tmp_path):
+    # It wrote the file, and the validator then refused it (E13).
+    p = str(tmp_path / "m.gamut")
+    pts, cells = grid(3, 2)
+    with pytest.raises(gamut.GamutError, match="E13.*axis z is not among the coordinates' axes"):
+        with gamut.create(p, writer="t", mesh="shared", per="fixed",
+                          coordinates={"units": "m", "axes": 2},
+                          parameters={"mach": "1"}, scalars={"s": "1"},
+                          fields={"ds": {"units": "m-1", "at": "node", "of": "s",
+                                         "with_respect_to": "coordinates", "axis": "z"}}) as s:
+            s.set_mesh(pts, cells)
+            s.add_run({"mach": 0.3, "s": 1.0}, fields={"ds": np.zeros(6)})
 
 
 def test_an_unknown_statistic_still_has_its_vector_and_axis_checked(tmp_path):
