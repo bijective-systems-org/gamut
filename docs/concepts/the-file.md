@@ -38,8 +38,7 @@ per model holding its numbers.
 ## Storage
 
 Every array that grows with the runs is chunked along that dimension, so
-runs can be appended in place, a batch at a time, without rewriting what
-is there. Chunked arrays are compressed with gzip and shuffle, level 1 by
+runs can be appended a batch at a time without rewriting what is there. Chunked arrays are compressed with gzip and shuffle, level 1 by
 default, filters every HDF5 build has, MATLAB's and Julia's included. A file keeps track of
 the space a rewritten chunk leaves free, so a file appended one run at a
 time stays the size of its data: 3,000 single-row appends of 20 columns,
@@ -55,11 +54,11 @@ algorithm; it is off by default.
 
 Every check of a batch's own data is made before its first write, so a
 batch refused for its data adds nothing and changes no run (opening a file
-to append and closing it can still change its bytes and metadata). HDF5 does not keep
-a file consistent on disk while it is written, though: a failure of the
-file itself during a write (a full disk, a damaged chunk), or a writer
-stopped partway, can leave it unreadable, rows written before included.
-Keep a copy of a file that matters before appending to it.
+to append and closing it can still change its bytes and metadata). HDF5
+does not keep a file consistent on disk while it is written, so runs are
+appended to a copy beside the file that replaces it when the file closes:
+a write that fails (a full disk) or a writer stopped partway loses that
+session's runs and leaves the file as it was.
 
 ## Reading files from elsewhere
 

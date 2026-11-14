@@ -5,6 +5,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
 #include <fstream>
 #include <functional>
 #include <iterator>
@@ -973,6 +977,19 @@ void test_private_values_stored_outside() {
 
 // A run-table column grows with each run, so appending refuses one that
 // cannot grow (E25) before writing anything.
+// What is left beside a file by its append sessions: the lock file and
+// the copies.
+std::vector<std::string> beside(const std::string& path) {
+  std::vector<std::string> out;
+  const std::filesystem::path p = std::filesystem::absolute(path);
+  const std::string prefix = p.filename().string() + ".appending";
+  for (const auto& e : std::filesystem::directory_iterator(p.parent_path())) {
+    const std::string name = e.path().filename().string();
+    if (name.compare(0, prefix.size(), prefix) == 0) out.push_back(name);
+  }
+  return out;
+}
+
 void test_append_needs_growable_columns() {
   const std::string path = "wr_fixed.gamut";
   {
@@ -996,6 +1013,142 @@ void test_append_needs_growable_columns() {
   const std::string before = file_bytes(path);
   CHECK(rule_of([&] { Writer::open_append(path); }) == "E25");
   CHECK(file_bytes(path) == before);
+  CHECK(beside(path).empty());   // a refusal makes no copy and keeps no lock
+  std::remove(path.c_str());
+}
+
+void add_xy(Writer& w, double x) {
+  Batch b;
+  b.runs = 1;
+  b.values["x"] = f64({x});
+  b.values["y"] = f64({2 * x});
+  w.add_runs(b);
+}
+
+// Spec section 11.5: an append session writes a copy that replaces the file
+// on close; until then the file is as it was and readable, a second session
+// is refused, and a session given up leaves nothing behind.
+void test_append_sessions() {
+  const std::string path = "wr_session.gamut";
+  std::remove(path.c_str());
+  {
+    auto w = Writer::create(path, "tests", "", "fixed");
+    w->declare_parameter(param("x", "design", "1"));
+    w->declare_result(scalar("y", "1"));
+    add_xy(*w, 1.0);
+    add_xy(*w, 2.0);
+    w->close();
+  }
+  const std::string before = file_bytes(path);
+  {
+    auto w = Writer::open_append(path);
+    add_xy(*w, 3.0);
+    w->flush();
+    CHECK(file_bytes(path) == before);
+    CHECK(Reader::open(path)->schema().rows == 2);   // readers keep the file
+    std::string message;
+    try {
+      Writer::open_append(path);
+    } catch (const gamut_core::Error& e) {
+      message = e.what();
+    }
+    CHECK(message.find("being appended to by another session") != std::string::npos);
+    w->close();
+  }
+  CHECK(Reader::open(path)->schema().rows == 3);
+  CHECK(beside(path).empty());
+  CHECK(validate_file(path).findings.empty());
+
+  // Given up: the file as it was, and nothing beside it.
+  const std::string three = file_bytes(path);
+  {
+    auto w = Writer::open_append(path);
+    add_xy(*w, 4.0);
+    w->abandon(false);
+  }
+  CHECK(file_bytes(path) == three);
+  CHECK(beside(path).empty());
+
+  // What a stopped session left goes with the next session; other names stay.
+  for (const char* name : {".appending", ".appending-0123abcd", ".appending-keep"}) {
+    std::ofstream(path + name) << "left";
+  }
+  {
+    auto w = Writer::open_append(path);
+    add_xy(*w, 5.0);
+    w->close();
+  }
+  CHECK(beside(path) == std::vector<std::string>({path + ".appending-keep"}));
+  CHECK(Reader::open(path)->schema().rows == 4);
+  std::remove((path + ".appending-keep").c_str());
+
+#if !defined(_WIN32)
+  // Through a symbolic link: the file it names is replaced, the link kept.
+  const std::string link = "wr_session_link.gamut";
+  std::remove(link.c_str());
+  std::filesystem::create_symlink(path, link);
+  {
+    auto w = Writer::open_append(link);
+    add_xy(*w, 6.0);
+    w->close();
+  }
+  CHECK(std::filesystem::is_symlink(link));
+  CHECK(Reader::open(path)->schema().rows == 5);
+  CHECK(beside(path).empty() && beside(link).empty());
+  std::remove(link.c_str());
+  // The file keeps its permissions.
+  std::filesystem::permissions(path, std::filesystem::perms::owner_read |
+                                         std::filesystem::perms::owner_write |
+                                         std::filesystem::perms::group_read);
+  {
+    auto w = Writer::open_append(path);
+    add_xy(*w, 7.0);
+    w->close();
+  }
+  CHECK(std::filesystem::status(path).permissions() ==
+        (std::filesystem::perms::owner_read | std::filesystem::perms::owner_write |
+         std::filesystem::perms::group_read));
+
+  // A rename that fails (here a folder made read-only before the close)
+  // leaves the file as it was; closing again retries, and giving up removes
+  // the copy.
+  namespace sfs = std::filesystem;
+  const sfs::path folder = sfs::absolute("wr_session_dir");
+  sfs::remove_all(folder);
+  sfs::create_directory(folder);
+  const std::string inner = (folder / "s.gamut").string();
+  sfs::copy_file(path, inner);
+  const sfs::perms open_folder = sfs::status(folder).permissions();
+  const sfs::perms shut = sfs::perms::owner_read | sfs::perms::owner_exec;
+  bool writable_anyway = false;
+  for (const bool retry : {true, false}) {
+    const std::string before_close = file_bytes(inner);
+    auto w = Writer::open_append(inner);
+    add_xy(*w, 8.0);
+    sfs::permissions(folder, shut);
+    writable_anyway = ::access(folder.string().c_str(), W_OK) == 0;   // root ignores modes
+    std::string message;
+    try {
+      w->close();
+    } catch (const gamut_core::Error& e) {
+      message = e.what();
+    }
+    sfs::permissions(folder, open_folder);
+    if (writable_anyway) break;
+    CHECK(message.find("is unchanged: close again to retry") != std::string::npos);
+    CHECK(file_bytes(inner) == before_close);
+    CHECK(rule_of([&] { add_xy(*w, 9.0); }) == "error");   // finished: no more runs
+    if (retry) {
+      w->close();
+      CHECK(Reader::open(inner)->schema().rows == 7);
+    } else {
+      w->abandon(false);
+      CHECK(file_bytes(inner) == before_close);
+    }
+    CHECK(beside(inner).empty());
+  }
+  sfs::remove_all(folder);
+#endif
   std::remove(path.c_str());
 }
 
@@ -1425,6 +1578,7 @@ int main() {
       {"other_major", test_other_major_version},
       {"outside", test_values_stored_outside},
       {"growable", test_append_needs_growable_columns},
+      {"append_sessions", test_append_sessions},
       {"rank", test_threaded_read_of_fewer_axes},
       {"read_limit", test_read_limit_before_allocation},
       {"short_chunk", test_short_unfiltered_chunk},

@@ -12,6 +12,7 @@
 
 #include "h5.hpp"
 #include "schema.hpp"
+#include "session.hpp"
 #include "types.hpp"
 #include "value.hpp"
 
@@ -87,7 +88,8 @@ class Writer {
                                         const std::string& writer_name,
                                         const std::string& mesh_kind,
                                         const std::string& per);
-  // An existing data file, to add runs in place.
+  // An existing data file, to add runs: they are written to a copy that
+  // replaces the file on close (spec section 11.5).
   static std::unique_ptr<Writer> open_append(const std::string& path);
   // A new model file (spec section 7): no runs; inputs with bounds; results
   // served by models.  `mesh_kind` is "" or "shared", `per` "fixed" or "run".
@@ -139,14 +141,15 @@ class Writer {
   void keep_identity(const std::string& file_id, const std::string& created);
 
   // Writes every staged partial chunk.  Reading through the same handle
-  // flushes first.
+  // flushes first.  When appending, the runs reach the file on close.
   void flush();
   void close();
   // A fingerprint of a geometry as it would be stored: points at the
   // coordinates' dtype, cells, mesh labels.
   std::string geometry_print(const Geometry& g) const;
   // Releases the file without finishing it; with `remove`, deletes a file
-  // this writer created.  For giving up after an error.
+  // this writer created.  An append leaves the file as it was.  For giving
+  // up after an error.
   void abandon(bool remove);
 
  private:
@@ -182,6 +185,8 @@ class Writer {
 
   std::unique_ptr<File> file_;
   std::string path_;
+  std::unique_ptr<AppendSession> session_;   // appending: the copy written
+  bool finished_ = false;                    // appending: the copy is complete
   Schema schema_;
   FilterPipeline filters_ = default_pipeline();
   bool closed_ = false;

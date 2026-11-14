@@ -378,7 +378,12 @@ std::string cannot_open(const std::string& path, const std::string& as) {
 
 File File::open_read(const std::string& path) {
   File f;
-  f.id_ = Id(H5Fopen(path.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT));
+  // An append session that closes replaces the file by a rename, which an
+  // open can meet halfway (HDF5 sees the file change under it); the file at
+  // the path is whole before and after, so the open is tried again.
+  for (int attempt = 0; attempt < 3 && !f.id_.valid(); ++attempt) {
+    f.id_ = Id(H5Fopen(path.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT));
+  }
   if (!f.id_.valid()) {
     throw Error("E1", cannot_open(path, "as an HDF5 file"));
   }
