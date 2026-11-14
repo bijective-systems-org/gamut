@@ -8,6 +8,40 @@
 namespace gamut_core {
 namespace internal {
 
+const std::set<std::string> kParameterRoles = {"design", "condition", "time"};
+const std::set<std::string> kLabelRoles = {"group", "categorical", "status", "split"};
+const std::set<std::string> kMachinery = {
+    "CLASS", "NAME", "DIMENSION_LIST", "REFERENCE_LIST", "DIMENSION_LABELS",
+    "_Netcdf4Dimid", "_Netcdf4Coordinates", "_nc3_strict", "_NCProperties"};
+
+bool reserved_root_name(const std::string& name) {
+  static const std::set<std::string> kRoot = {"row",    "coordinates", "categories", "mesh",
+                                              "models", "notes",       "private",    "VTKHDF"};
+  return kRoot.count(name) == 1 || name.compare(0, 9, "category_") == 0;
+}
+
+int nodes_of_type(int code) {
+  switch (code) {
+    case 1: return 1;
+    case 3: return 2;
+    case 5: return 3;
+    case 7: return -3;
+    case 9: return 4;
+    case 10: return 4;
+    case 12: return 8;
+    case 13: return 6;
+    case 14: return 5;
+    case 21: return 3;
+    case 22: return 6;
+    case 23: return 8;
+    case 24: return 10;
+    case 25: return 20;
+    case 26: return 15;
+    case 27: return 13;
+    default: return 0;
+  }
+}
+
 // ASCII letters and digits, whatever locale the host program set.
 static bool ascii_alnum(unsigned char c) {
   return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
