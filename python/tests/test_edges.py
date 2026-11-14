@@ -964,6 +964,9 @@ def test_sites_are_chosen_by_where_the_field_lives(tmp_path):
             f.get_field("q", cells=[0])
         with pytest.raises(gamut.GamutError, match="c is a cell field: choose its sites with cells, not nodes"):
             f.get_field("c", nodes=[0])
+        # A run-table column is left to the core, which says it has no sites.
+        with pytest.raises(gamut.GamutError, match="no sites"):
+            f.get_field("x", nodes=[0])
 
 
 def test_an_integer_past_2_53_is_refused_where_float64_would_round_it(tmp_path):

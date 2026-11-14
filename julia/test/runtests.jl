@@ -107,6 +107,8 @@ mktempdir() do tmp
             e = try GamutFile.get_field(f, "u"; nodes=[1]); nothing catch x; x end
             @test e isa GamutError && occursin("u is a cell field: choose its sites with cells, not nodes", e.message)
             @test GamutFile.get_field(f, "u"; rows=1, cells=[2]) == [0.0]
+            e = try GamutFile.get_field(f, "mach"; nodes=:); nothing catch x; x end
+            @test e === nothing || !occursin("choose its sites", e.message)   # left to the core
             e = try GamutFile.get_field(f, "p"; nodes=[1], cells=[1]); nothing catch x; x end
             @test e isa GamutError && occursin("nodes or cells, not both", e.message)
             @test GamutFile.get_points(f) == pts

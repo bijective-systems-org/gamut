@@ -828,7 +828,7 @@ function get_field(s::Study, name; rows=nothing, nodes=nothing, cells=nothing)
     if sites !== nothing
         given = nodes !== nothing ? "nodes" : "cells"
         at = get(describe(s, name), "location", "")
-        isempty(at) || given == at * "s" ||
+        at in ("node", "cell") && given != at * "s" &&
             throw(GamutError("", "$name is a $at field: choose its sites with $(at)s, not $given"))
     end
     if s.mesh_kind == "changing"

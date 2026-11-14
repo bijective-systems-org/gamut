@@ -628,6 +628,14 @@ catch err
         ['cells on a node field: ' err.message]);
 end
 r.close();
+r = gamut.open(p);
+try
+    r.getField('k', 'nodes', ':');
+    ok(true, 'a parameter with nodes is left to the core');
+catch err
+    ok(~contains(err.message, 'choose its sites'), ['a parameter with nodes: ' err.message]);
+end
+r.close();
 xp = fullfile(tmp, 'extracted.gamut');
 gamut.extract(p, xp);
 r = gamut.open(xp); ok(r.rowCount() == 4, 'extract without rows takes every row'); r.close();

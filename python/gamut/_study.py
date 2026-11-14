@@ -493,7 +493,7 @@ class Study:
         if sites is not None:
             given = "nodes" if nodes is not None else "cells"
             at = self.describe(name).get("location")
-            if at is not None and given != at + "s":
+            if at in ("node", "cell") and given != at + "s":
                 raise GamutError("", f"{name} is a {at} field: choose its sites with "
                                       f"{at}s, not {given}")
         if self._mesh_kind == "changing":

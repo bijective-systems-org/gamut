@@ -239,7 +239,7 @@ classdef Study < handle
             if any(ismember({'nodes', 'cells'}, given))
                 at = gamut.internal.field(s.describe(name), 'location', '');
                 key = given{find(ismember(given, {'nodes', 'cells'}), 1)};
-                if ~isempty(at) && ~strcmp(key, [at 's'])
+                if any(strcmp(at, {'node', 'cell'})) && ~strcmp(key, [at 's'])
                     error('gamut:usage', '%s is a %s field: choose its sites with %ss, not %s', ...
                         name, at, at, key);
                 end
