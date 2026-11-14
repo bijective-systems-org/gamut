@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The writer refuses a derivative with respect to coordinates along an
+  axis the coordinates do not have (E13). It used to write the file, which
+  the validator then refused with the same rule.
+- The conformance corpus has a case for every rule of the specification:
+  E24 and W11 had none, and five more clauses of E8, E15 and E20 are
+  covered.
 - Appending is safe against a crash: the runs go to a copy beside the
   file (`<file>.appending-…`, a clone where the filesystem makes one) that
   replaces the file when it closes. A process killed while it appends, or
