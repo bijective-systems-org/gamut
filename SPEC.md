@@ -728,7 +728,9 @@ second is refused, as is a session where the filesystem has no file locks;
 readers keep reading the file until the copy replaces it, and an open that
 meets the rename is tried again. Windows cannot replace a file another
 program has open, so there closing waits a few seconds for readers to close
-the file, then reports it in use, and closing again retries. A session needs write access to the folder, and room for a
+the file, then reports it in use; a writer closed by hand can close again
+to retry, while a `with` or `do` block gives the session up, leaving the
+file as it was. A session needs write access to the folder, and room for a
 copy where the filesystem does not clone. A library checks the structure
 and the appended rows, and does not re-read the whole file.
 

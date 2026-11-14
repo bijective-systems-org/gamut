@@ -195,8 +195,9 @@ identity: its `file_id` and creation time.
   filesystem with file locks; others can read it meanwhile, and a reader
   that opens it after it closes sees the new runs. On Windows, which
   cannot replace a file another program has open, closing waits a few
-  seconds for readers to let go of the file, then says it is in use, and
-  closing again retries.
+  seconds for readers to let go of the file, then says it is in use:
+  calling `close` again retries, while a `with` or `do` block gives the
+  session up and leaves the file as it was.
 - Opening a file that carries a portion marking shows it, once per file
   in a process: a block naming the file, then the marking whole, the same
   in every language. Python prints it on `sys.stderr` (so it shows in a
