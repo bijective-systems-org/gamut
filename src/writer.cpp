@@ -620,6 +620,11 @@ void Writer::declare_array(const Array& a) {
   need(a.dtype == DType::Float64 || a.dtype == DType::Int64, "E4",
        a.name + ": an array is float64 or int64", a.name);
   need(a.length >= 1, "E5", a.name + ": an array has a length of at least 1", a.name);
+  // One row larger than a read returns could be written but never read back.
+  need(static_cast<std::uint64_t>(a.length) <= kMaxDatasetBytes / 8, "E26",
+       a.name + ": an array of " + std::to_string(a.length) + " values per run is more than a read returns (" +
+           std::to_string(kMaxDatasetBytes / 8) + " values, 8 GiB)",
+       a.name);
   need(a.lower.has_value() == a.upper.has_value(), "E16",
        a.name + ": give both bounds or neither", a.name);
   if (a.lower) {
