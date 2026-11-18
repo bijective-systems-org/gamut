@@ -46,6 +46,7 @@ struct Array {
   DType dtype = DType::Float64;   // int64 only when declared so
   std::int64_t length = 0;        // values per row, at least 1
   std::optional<double> lower, upper;
+  std::int64_t stored_rows = -1;  // read from a file: the rows its dataset holds
 };
 
 struct Label {

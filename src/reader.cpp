@@ -176,7 +176,10 @@ Schema load_schema(const File& f, const std::string& path) {
       if (typed) x.dtype = t;
       // The length is the extent of the values' axis; a dataset of another
       // rank keeps 0, which a read refuses and the validator reports (E5).
-      if (info.is_dataset && info.shape.size() == 2) x.length = static_cast<std::int64_t>(info.shape[1]);
+      if (info.is_dataset && info.shape.size() == 2) {
+        x.stored_rows = static_cast<std::int64_t>(info.shape[0]);
+        x.length = static_cast<std::int64_t>(info.shape[1]);
+      }
       x.lower = a.real("lower");
       x.upper = a.real("upper");
       s.arrays.push_back(x);
@@ -517,6 +520,12 @@ std::vector<std::int64_t> Reader::shape(const std::string& path,
   return out;
 }
 
+std::string array_rows_message(const Array& a, std::int64_t rows) {
+  return a.name + " holds " + std::to_string(a.stored_rows) + " rows and the file " + std::to_string(rows) +
+         "; a library that does not know arrays (before 2.3) added or copied runs without it (spec "
+         "section 17)";
+}
+
 std::vector<std::int64_t> Reader::unchecked_shape(const std::string& path,
                                                   const Selection& runs,
                                                   const Selection& sites) const {
@@ -536,6 +545,7 @@ std::vector<std::int64_t> Reader::unchecked_shape(const std::string& path,
   if (s.constant(path)) return {};
   if (const Array* a = s.array(path)) {
     need(a->length >= 1, "E5", path + ": an array is (row, values) with at least one value", path);
+    need(a->stored_rows == s.rows, "E5", array_rows_message(*a, s.rows), path);
     return {runs.count(s.rows, path), sites.count(a->length, path)};
   }
   const Result* r = s.result(path);

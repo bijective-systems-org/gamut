@@ -446,7 +446,12 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
     for (const auto& p : scales) growable(p, f.dataset_info(p, false));
     resume("/row");
     for (const auto& x : s.parameters) resume(root(x.name));
-    for (const auto& x : s.arrays) resume(root(x.name));
+    for (const auto& x : s.arrays) {
+      // Runs added by a library that does not know arrays left this one
+      // short; adding more would put its rows against other runs (E5).
+      need(x.stored_rows == s.rows && x.length >= 1, "E5", array_rows_message(x, s.rows), x.name);
+      resume(root(x.name));
+    }
     for (const auto& x : s.labels) resume(root(x.name));
     for (const auto& r : s.results) {
       resume(r.where == "scalar" ? root(r.name) : field_path(r));

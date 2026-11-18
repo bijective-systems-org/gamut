@@ -20,7 +20,8 @@
   (their validator reports W5); they cannot validate or evaluate a model
   file whose models read one (E17), and appending to or copying a file
   that has arrays needs this release: an earlier one leaves the array
-  short of the new rows, or out of the copy.
+  short of the new rows, or out of the copy. This release refuses to read
+  or append to an array left short that way (E5), and says why.
 - `append` takes several source files at once (a list in Python, a cell
   or string array in MATLAB, a vector in Julia, `append_files` in C++ and
   Rust, `gamut_append_files` in C, several files on the command line).

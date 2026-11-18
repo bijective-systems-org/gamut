@@ -87,6 +87,10 @@ class Reader {
   int threads_ = 1;
 };
 
+// Why an array whose rows are not the file's is refused (E5): what an
+// earlier library leaves when it appends to a file it reads arrays out of.
+std::string array_rows_message(const Array& a, std::int64_t rows);
+
 // -1, 0 or 1 as the int64 v is below, at or above the finite b, exactly
 // (as doubles, integers lose bits past 2^53).
 int compare_int64(std::int64_t v, double b);

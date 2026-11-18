@@ -1110,6 +1110,35 @@ void test_array_rules() {
     auto r = Reader::open(path);
     CHECK(r->names("arrays").empty());
   }
+  {
+    File f = File::open_write(path);
+    f.replace_attr("/prof", "role", AttrValue::text("design_array"));
+  }
+  {
+    hid_t h = H5Fopen(path.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+    CHECK(H5Adelete_by_name(h, "/prof", "run_group", H5P_DEFAULT) >= 0);
+    H5Fclose(h);
+  }
+  {
+    // What a library before arrays leaves when it appends: the array one
+    // row short. Reading it and appending to it are refused (E5), by name.
+    hid_t h = H5Fopen(path.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+    hid_t d = H5Dopen2(h, "/prof", H5P_DEFAULT);
+    const hsize_t shorter[2] = {1, 2};
+    CHECK(H5Dset_extent(d, shorter) >= 0);
+    H5Dclose(d);
+    H5Fclose(h);
+    auto r = Reader::open(path);
+    std::string why;
+    try {
+      read_f64(*r, "prof");
+    } catch (const gamut_core::Error& e) {
+      why = e.rule() + ": " + e.what();
+    }
+    CHECK(why.find("E5: prof holds 1 rows and the file 2") == 0);
+    r.reset();
+    CHECK(rule_of([&] { Writer::open_append(path); }) == "E5");
+  }
   if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
 }
 
