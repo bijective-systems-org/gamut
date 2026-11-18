@@ -289,7 +289,7 @@ void Evaluation::ready() {
     for (const char r : row_out) rows += r;
     if (rows == 0) return;
     std::string what = std::to_string(rows) + " of " + std::to_string(rows_) + " rows";
-    if (width > 1) what += " (" + std::to_string(values) + " values)";
+    if (width > 1) what += " (" + std::to_string(values) + (values == 1 ? " value)" : " values)");
     warnings_.push_back("W4: " + name + " is outside the model's domain [" + number(*lower) + ", " +
                         number(*upper) + "] in " + what);
   };

@@ -1397,13 +1397,14 @@ int gamut_nearest_call(const gamut_tree* numbers, const char* const* input_names
       for (std::size_t k = 0; k < m.columns.size(); ++k) {
         if (m.columns[k] == name) width = m.widths[k];
       }
-      need(n_rows == 0 || (column_lengths[j] % width == 0 && column_lengths[j] / width == n_rows), "E5",
-           "nearest needs rows x width values of every input; " + name + " has " +
-               std::to_string(column_lengths[j]) + " for " + std::to_string(n_rows) + " rows of width " +
-               std::to_string(width));
-      need(n_rows != 0 || column_lengths[j] == 0, "E5",
-           "nearest has no rows to read, and " + name + " has " + std::to_string(column_lengths[j]) +
-               " values");
+      // width >= 1 (nearest_from), so the division is exact or the count is wrong.
+      const bool fits = column_lengths[j] % width == 0 && column_lengths[j] / width == n_rows;
+      need(fits || width != 1, "E5",
+           "nearest needs " + std::to_string(n_rows) + " values of every input, one per row; " + name +
+               " has " + std::to_string(column_lengths[j]));
+      need(fits, "E5",
+           "nearest needs " + std::to_string(n_rows) + " x " + std::to_string(width) + " values of " + name +
+               ", rows x its length; " + name + " has " + std::to_string(column_lengths[j]));
       table[name] = columns[j];
     }
     const auto idx = gamut_core::internal::nearest_indices(m, table, n_rows);

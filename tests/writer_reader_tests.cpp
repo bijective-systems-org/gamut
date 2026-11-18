@@ -1171,7 +1171,7 @@ void test_array_model_and_evaluation() {
     ev.values("prof", f64({1, 2, 9, 9, 4, 12}), 3);
     ev.ready();
     CHECK(ev.warnings().size() == 1 &&
-          ev.warnings()[0].find("prof is outside the model's domain [0, 10] in 1 of 3 rows (1 values)") !=
+          ev.warnings()[0].find("prof is outside the model's domain [0, 10] in 1 of 3 rows (1 value)") !=
               std::string::npos);
     CHECK(ev.input_shape("prof") == std::vector<std::int64_t>({3, 2}));
     ev.finish();

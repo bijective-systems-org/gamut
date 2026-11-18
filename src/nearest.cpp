@@ -83,7 +83,8 @@ Nearest nearest_from(const Dict& numbers) {
   const Value* x = find_path(numbers, "x");
   need(x != nullptr && x->kind() == Value::Kind::Numbers && x->shape().size() == 2 &&
            x->shape()[1] == values,
-       "E17", "nearest: x is points x values, the sum of the widths (" + std::to_string(values) + ")");
+       "E17", "nearest: x is points x columns, " + std::to_string(values) +
+                  (values == 1 ? " value" : " values") + " a point (the columns' widths summed)");
   m.points = x->shape()[0];
   need(m.points >= 1, "E17", "nearest: a model holds at least one point");
   m.x = as_doubles(*x, "x");
