@@ -72,6 +72,11 @@ fn column(v: &Json) -> Column {
     let items = v.as_array().unwrap();
     if items.first().is_some_and(Json::is_string) {
         Column::Names(items.iter().map(|s| s.as_str().unwrap().to_string()).collect())
+    } else if items.first().is_some_and(Json::is_array) {
+        // An array's rows: runs x length.
+        let rows: Vec<Vec<f64>> = items.iter().map(|r| r.as_array().unwrap().iter().map(number).collect()).collect();
+        let length = rows.first().map_or(0, Vec::len);
+        Column::FloatArray(gamut::Array { shape: vec![rows.len(), length], values: rows.concat() })
     } else {
         Column::Float(items.iter().map(number).collect())
     }

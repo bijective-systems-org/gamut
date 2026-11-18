@@ -74,8 +74,9 @@ classdef Study < handle
         end
 
         function id = addRun(s, values, varargin)
-            %ADDRUN Adds one run: values is a struct of parameters, label names
-            %   and scalars; 'fields', 'points', 'cells', 'meshLabels' optional.
+            %ADDRUN Adds one run: values is a struct of parameters, label names,
+            %   scalars and arrays (a vector of its values); 'fields', 'points',
+            %   'cells', 'meshLabels' optional.
             p = inputParser;
             p.addParameter('fields', struct());
             p.addParameter('points', []);
@@ -106,7 +107,8 @@ classdef Study < handle
         function ids = addRuns(s, columns, varargin)
             %ADDRUNS Adds many runs: columns maps each name to one value per run,
             %   as a struct of columns or a table (readtable's) does, with a
-            %   label as names (text or categorical); 'fields' rows x sites.
+            %   label as names (text or categorical) and an array as runs x
+            %   length; 'fields' rows x sites.
             p = inputParser;
             p.addParameter('fields', struct());
             p.addParameter('points', {});
@@ -115,7 +117,13 @@ classdef Study < handle
             p.parse(varargin{:});
             if istable(columns), columns = table2struct(columns, 'ToScalar', true); end
             names = fieldnames(columns);
-            n = numel(columns.(names{1}));
+            first = columns.(names{1});
+            % Runs: a column's length, an array's rows.
+            if isnumeric(first) && ~isvector(first) && ~isempty(first)
+                n = size(first, 1);
+            else
+                n = numel(first);
+            end
             ids = s.commit(n, columns, p.Results.fields, p.Results.points, p.Results.cells, ...
                 p.Results.meshLabels);
         end
@@ -194,12 +202,25 @@ classdef Study < handle
             v = gamut_mex('read', s.Handle, name, s.pos(o.rows), ':', code);
         end
 
+        function v = getArray(s, name, varargin)
+            %GETARRAY An array's values, runs x length: 'rows' and 'values'
+            %   select (1-based).
+            p = inputParser;
+            p.addParameter('rows', ':');
+            p.addParameter('values', ':');
+            p.parse(varargin{:});
+            code = 6;
+            if strcmp(gamut.internal.field(s.describe(name), 'dtype', ''), 'int64'), code = 4; end
+            v = gamut_mex('read', s.Handle, name, s.pos(p.Results.rows), s.pos(p.Results.values), code);
+        end
+
         function v = outside(s, name, varargin)
-            %OUTSIDE How far each row's value of the parameter NAME lies
-            %   outside the bounds the file declares for it, in its units: 0
-            %   inside or on a bound, value - lower (negative) below, value -
-            %   upper (positive) above, NaN where the value is missing.  A
-            %   parameter without bounds is refused.  'rows' selects (1-based).
+            %OUTSIDE How far each row's value of the parameter NAME, or each
+            %   value of the array NAME (runs x length), lies outside the
+            %   bounds the file declares for it, in its units: 0 inside or on
+            %   a bound, value - lower (negative) below, value - upper
+            %   (positive) above, NaN where the value is missing.  One
+            %   without bounds is refused.  'rows' selects (1-based).
             %   The answer of gamut.evaluate keeps the model's bounds, so this
             %   says which of its rows lie outside the range the model was
             %   fitted on, and how far.
@@ -395,6 +416,9 @@ classdef Study < handle
                 elseif islogical(v)
                     words = {'false', 'true'};
                     gamut_mex('batch_names', h, names{k}, words(double(v) + 1));
+                elseif isnumeric(v) && ~isvector(v) && ~isempty(v)
+                    % An array, runs x length: the gateway gives it rows first.
+                    gamut_mex('batch_values', h, names{k}, v);
                 else
                     gamut_mex('batch_values', h, names{k}, v(:));
                 end

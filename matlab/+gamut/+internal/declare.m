@@ -31,6 +31,17 @@ for k = 1:numel(names)
         gamut.internal.field(v, 'lower', NaN), gamut.internal.field(v, 'upper', NaN), ...
         gamut.internal.field(v, 'runGroup', ''));
 end
+if isfield(o, 'arrays')
+    names = fieldnames(o.arrays);
+    for k = 1:numel(names)
+        v = gamut.internal.spec(o.arrays.(names{k}));
+        has = isfield(v, 'lower') || isfield(v, 'upper');
+        gamut_mex('declare_array', h, names{k}, gamut.internal.field(v, 'role', 'design'), ...
+            v.units, gamut.internal.field(v, 'length', 0), ...
+            gamut.internal.dtype(gamut.internal.field(v, 'dtype', '')), double(has), ...
+            gamut.internal.field(v, 'lower', NaN), gamut.internal.field(v, 'upper', NaN));
+    end
+end
 if ~isempty(o.coordinates)
     c = o.coordinates;
     gamut_mex('declare_coordinates', h, c.units, ...

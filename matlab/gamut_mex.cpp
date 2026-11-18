@@ -771,7 +771,11 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
   } else if (cmd == "declare_array") {
     // f, name, role, units, length, dtype, hasBounds, lower, upper
     check(gamut_declare_array(file(arg(1)), text(arg(2), "name").c_str(), text(arg(3), "role").c_str(),
-                              text(arg(4), "units").c_str(), one_integer(arg(5)),
+                              text(arg(4), "units").c_str(), [&] {
+                                const std::vector<int64_t> n = integers(arg(5), "length");
+                                if (n.size() != 1) usage("length is one whole number");
+                                return n[0];
+                              }(),
                               static_cast<int>(scalar(arg(6), "dtype")), static_cast<int>(scalar(arg(7), "hasBounds")),
                               scalar(arg(8), "lower"), scalar(arg(9), "upper"), &e),
           e);

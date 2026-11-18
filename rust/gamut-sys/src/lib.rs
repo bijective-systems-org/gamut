@@ -82,6 +82,7 @@ extern "C" {
     pub fn gamut_create_model(path: *const c_char, writer: *const c_char, mesh_kind: *const c_char, per: *const c_char, out: *mut *mut gamut_file, err: *mut gamut_error) -> c_int;
     pub fn gamut_set_attribute(f: *mut gamut_file, name: *const c_char, value: *const c_char, err: *mut gamut_error) -> c_int;
     pub fn gamut_declare_parameter(f: *mut gamut_file, name: *const c_char, role: *const c_char, units: *const c_char, dtype: c_int, has_bounds: c_int, lower: f64, upper: f64, run_group: *const c_char, err: *mut gamut_error) -> c_int;
+    pub fn gamut_declare_array(f: *mut gamut_file, name: *const c_char, role: *const c_char, units: *const c_char, length: i64, dtype: c_int, has_bounds: c_int, lower: f64, upper: f64, err: *mut gamut_error) -> c_int;
     pub fn gamut_declare_label(f: *mut gamut_file, name: *const c_char, role: *const c_char, categories: *const *const c_char, n_categories: i64, err: *mut gamut_error) -> c_int;
     pub fn gamut_declare_result(f: *mut gamut_file, name: *const c_char, where_: *const c_char, units: *const c_char, dtype: c_int, of: *const c_char, statistic: *const c_char, has_q: c_int, q: f64, method: *const c_char, with_respect_to: *const c_char, axis: *const c_char, vector: *const c_char, round_bits: c_int, model: *const c_char, output: *const c_char, err: *mut gamut_error) -> c_int;
     pub fn gamut_declare_mesh_label(f: *mut gamut_file, name: *const c_char, where_: *const c_char, categories: *const *const c_char, n_categories: i64, err: *mut gamut_error) -> c_int;
@@ -144,6 +145,7 @@ extern "C" {
     pub fn gamut_evaluate_begin(model: *const gamut_file, out_path: *const c_char, out: *mut *mut gamut_file, err: *mut gamut_error) -> c_int;
     pub fn gamut_evaluation_begin(model: *const gamut_file, rows: i64, out_path: *const c_char, out: *mut *mut gamut_evaluation, err: *mut gamut_error) -> c_int;
     pub fn gamut_evaluation_values(ev: *mut gamut_evaluation, name: *const c_char, dtype: c_int, values: *const c_void, count: i64, err: *mut gamut_error) -> c_int;
+    pub fn gamut_evaluation_array(ev: *mut gamut_evaluation, name: *const c_char, dtype: c_int, values: *const c_void, first_axis: i64, count: i64, err: *mut gamut_error) -> c_int;
     pub fn gamut_evaluation_names(ev: *mut gamut_evaluation, name: *const c_char, names: *const *const c_char, count: i64, err: *mut gamut_error) -> c_int;
     pub fn gamut_evaluation_coordinates(ev: *mut gamut_evaluation, dtype: c_int, values: *const c_void, count: i64, err: *mut gamut_error) -> c_int;
     pub fn gamut_evaluation_ready(ev: *mut gamut_evaluation, warnings: *mut *mut gamut_strings, models: *mut *mut gamut_strings, err: *mut gamut_error) -> c_int;
