@@ -140,7 +140,7 @@ constant per component.
 
 Units are strings in the UDUNITS-2 grammar that CF uses (`Pa`, `m s-1`,
 `W m-2`, `1` for dimensionless; §13). They are required on every
-parameter, scalar, constant, field and on coordinates; a string that does
+parameter, array, scalar, constant, field and on coordinates; a string that does
 not parse is an error (E7). Labels carry none. A library may convert
 values to other units when reading and when appending; the file stores
 the units the producer declared.
@@ -148,8 +148,31 @@ the units the producer declared.
 ### 3.8 Missing values
 
 A result a row does not have (a failed run, withheld test outputs) is NaN;
-it is reported with the row and the name (W3). Parameters and labels are
-never missing.
+it is reported with the row and the name (W3). Parameters, arrays and
+labels are never missing.
+
+### 3.9 Arrays
+
+An array is an input whose value in each row is a fixed number of numbers,
+its *length*: a wall temperature at 200 stations along the body, 40 shape
+coefficients, an inflow profile. It is the input counterpart of a profile
+or a field when the values have no mesh, or are not on the file's mesh.
+An array has:
+
+- `role`: `design` or `condition`, as for a parameter (§3.2). An array is
+  never a time.
+- `units`, required, one for all its values (§3.7).
+- a length of at least 1, the same in every row. Value i of every row is
+  the same quantity (station i, coefficient i): the order is the
+  producer's, and the file does not say where value i is.
+- `lower`, `upper`: optional in a data file; required in a model file,
+  where they are the model's domain. One pair holds for every value: the
+  domain is the box whose sides are all [`lower`, `upper`], and a model
+  that knows a narrower range for each value checks it itself.
+
+Values are float64, or int64 for counts. An array is not a parameter:
+where this specification says parameter it does not mean an array unless
+it says so.
 
 ## 4. The shared mesh
 
@@ -212,8 +235,8 @@ fields of one vector have one location, one set of units and distinct
 axes, and only axes the coordinates have (E13). Tools use the declaration
 to draw arrows, compute magnitudes and write VTK vectors.
 
-**Names are unique in a file.** No two of its parameters, labels, scalars,
-constants, fields and mesh labels share a name (E8), so every call can take
+**Names are unique in a file.** No two of its parameters, arrays, labels,
+scalars, constants, fields and mesh labels share a name (E8), so every call can take
 a bare name. A tool importing data that has a point array and a cell array
 of one name renames one and says so.
 
@@ -263,7 +286,7 @@ Either may carry `method`: one line on how it was obtained. Its units
 string equals that of `of`.
 
 **Derivative of a result** (`with_respect_to`): the partial derivative of
-`of` with respect to a parameter, or with respect to node position
+`of` with respect to a parameter (not an array), or with respect to node position
 (`with_respect_to = coordinates`, with `axis` naming the coordinate). A
 derivative of a scalar with respect to node position is a node field per
 axis: an adjoint shape sensitivity. A gradient over many parameters is one
@@ -285,9 +308,9 @@ derivatives of an output; a Gaussian process takes a `std` as per-run noise.
 
 A model file has no runs. It holds:
 
-- the inputs a model takes: parameters with required bounds (the domain),
-  labels with their tables, and, when a model reads geometry, the mesh's
-  coordinates;
+- the inputs a model takes: parameters and arrays with required bounds
+  (the domain), labels with their tables, and, when a model reads
+  geometry, the mesh's coordinates;
 - the results it produces: scalars and fields, each a zero-length dataset
   of the shape and dtype it has in a data file, naming the model and the
   output that computes it, with relations (a model serves quantiles, a std
@@ -303,7 +326,8 @@ Which data a model was trained on may be recorded in the root attribute
 ### 7.2 A model
 
 A model has a `type`, naming the software that runs it; `inputs`, the
-public list of what it reads (parameters, labels, and `coordinates`); and
+public list of what it reads (parameters, arrays, labels, and
+`coordinates`); and
 its own numbers, stored as plain data by the codec of §12. The format
 standardizes the interface, never the internals: only the software that
 owns the type interprets the numbers. A file never holds executable code.
@@ -324,8 +348,8 @@ as three operations:
 - **save**: from a working model to numbers to store.
 
 The input table maps each input to an array whose first axis is the row:
-`(row)` for a parameter or a label code, `(row, node, axis)` for
-coordinates. An output's values are `(row)` for a scalar and `(row, node)`
+`(row)` for a parameter or a label code, `(row, length)` for an array,
+`(row, node, axis)` for coordinates. An output's values are `(row)` for a scalar and `(row, node)`
 or `(row, cell)` for a field; a std or quantile has the shape of its
 values; a derivative with respect to a parameter has the shape of its
 values; a derivative of a scalar with respect to node position is
@@ -334,7 +358,7 @@ values; a derivative of a scalar with respect to node position is
 ### 7.4 Evaluation
 
 Evaluating a model file on an input table of n rows yields a data file of
-n rows: the inputs as parameters and labels, the constants, the mesh, and
+n rows: the inputs as parameters, arrays and labels, the constants, the mesh, and
 every result filled by calling its model. The mesh's coordinates are per
 run in the result when a model computes them or when the caller supplies
 coordinates (a model that reads `coordinates` evaluated on new
@@ -343,11 +367,12 @@ model that reads `coordinates` receives those. The data file records the model f
 `evaluated_from`, and carries its `portion_marking` when it has one (§8).
 An input outside its bounds is reported (W4) and
 evaluated; refusing is the caller's choice. The data file keeps the
-model's bounds on its parameters, so a reader can tell which rows lie
+model's bounds on its parameters and arrays, so a reader can tell which rows lie
 outside them and by how much (W4).
 
 The input table maps names to columns of one length n: a parameter by its
-values (an int64 parameter accepts integers), a label by its names, each in
+values (an int64 parameter accepts integers), an array by n × length
+values, a label by its names, each in
 the model file's table (a name outside it is an error), and `coordinates`,
 when a model reads them, as n × nodes × axes in the coordinates' units.
 The data file's rows get ids 0 to n − 1. A label's codes are the model
@@ -360,21 +385,28 @@ stored point. It exists so that model files can be tested in every
 language with no proprietary software, and as a baseline ("the closest run
 we have"). Its numbers (§12):
 
-- `columns`: the input names, in the column order of `x`;
-- `lower`, `upper`: one bound per column;
-- `x`: float64, (points, columns);
+- `columns`: the input names, in the order their values have in `x`;
+- `widths`: int64, one per entry of `columns`: 1 for a parameter, the
+  length for an array. It may be left out when every input is a
+  parameter, and is then 1 for each;
+- `lower`, `upper`: one bound per entry of `columns`;
+- `x`: float64, (points, values): each point's inputs side by side in the
+  order of `columns`, an array's values in order, so that values is the
+  sum of `widths`;
 - `outputs`: a dictionary with one array per output, float64, first axis
   points: `(points)` for a scalar, `(points, node)` or `(points, cell)` for
   a field.
 
-Inputs are parameters only; `columns` holds exactly the model's `inputs`,
-and `lower` and `upper` equal those parameters' bounds (E17); there is at
-least one point (E17). Int64 inputs are taken as float64. For a query row q
-and point i, with t_j = (q_j − x_ij) / (upper_j − lower_j) rounded to
-float64 before it is squared, the distance is t_1² + t_2² + … summed left
-to right in column order, each step rounded to float64, with no fused
-multiply-add; a column whose `upper_j = lower_j` is left out. A non-finite
-value in a used column of the query gives NaN outputs for that row. The
+Inputs are parameters and arrays; `columns` holds exactly the model's
+`inputs`, `widths` their lengths, and `lower` and `upper` equal their
+bounds (E17); there is at least one point (E17). Int64 inputs are taken as
+float64. Number the values of a row j = 1, 2, … in the order of `x`, and
+give value j the bounds of the input it belongs to. For a query row q and
+point i, with t_j = (q_j − x_ij) / (upper_j − lower_j) rounded to float64
+before it is squared, the distance is t_1² + t_2² + … summed left to right
+in that order, each step rounded to float64, with no fused multiply-add; a
+value whose `upper_j = lower_j` is left out. A non-finite value of the
+query that is not left out gives NaN outputs for that row. The
 nearest point is the one with the smallest distance; ties go to the lowest
 i. Outputs are float64 values only: no std, quantiles or derivatives.
 
@@ -532,6 +564,11 @@ model data.
     /<parameter>               (row) float64 | int64
                                role (design | condition | time), units,
                                lower?, upper?, run_group? (time only)
+    /<array>                   (row, gamut_<array>_d1) float64 | int64
+                               role (design_array | condition_array), units,
+                               lower?, upper?
+    /gamut_<array>_d1          dimension scale of the array's values,
+                               fixed, length at least 1
     /<label>                   (row) int32 | int64
                                role (group | categorical | status | split),
                                category (the table's name)
@@ -545,6 +582,10 @@ model data.
     /mesh?                     §10.2 to §10.4
     /models/<id>?              model files only (§10.5)
     /notes?, /private?
+
+An array's role is written `design_array` or `condition_array`, its
+role (§3.9) followed by `_array`, so that a reader of an earlier release
+of version 1, which does not know arrays, ignores it (§17).
 
 Every root dataset or served group carries `role`. A root dataset without
 one, such as a variable another netCDF tool added, is not part of the
@@ -636,7 +677,7 @@ offsets and starts must agree (E21).
     /models/<id>               type, inputs, repr?
                                the model's numbers below, by the codec of §12
 
-`inputs` names parameters, labels and `coordinates` (E17). `type`,
+`inputs` names parameters, arrays, labels and `coordinates` (E17). `type`,
 `inputs` and `repr` are attributes of the group, not part of the numbers;
 the numbers' top level must not use those three names.
 
@@ -647,7 +688,7 @@ the numbers' top level must not use those three names.
 | Object | Allowed |
 |---|---|
 | `row` | int64 |
-| Parameter | float64, int64 |
+| Parameter, array | float64, int64 |
 | Row label, mesh label | int32, int64 |
 | Scalar, constant, field, coordinates | float32, float64 (a constant also int64) |
 | Category table | fixed-length UTF-8 |
@@ -682,13 +723,13 @@ fixed instead is valid and read-only (§11.5). Larger fixed datasets may be
 chunked too, to be compressed. With T = 262,144 bytes and b the bytes of one entry along
 the first axis (dtype size times the other extents):
 
-- **Leading axis grows** (root datasets; category tables; shared-mesh
+- **Leading axis grows** (root datasets, arrays among them; category tables; shared-mesh
   fields and coordinates per run or per instance; `row_instance`; a
   changing mesh's `row_node_start` and `row_cell_start`): when b ≤ T the
   chunk holds c = min(512, max(1, ⌊T / b⌋)) entries along the first axis,
-  the other axes whole; when b > T it holds one entry and, along the node
-  or cell axis, m = min(n, max(1, ⌊T / (dtype size × trailing
-  extents)⌋)), other axes whole.
+  the other axes whole; when b > T it holds one entry and, along the second axis (an
+  array's values, nodes or cells) of extent n, m = min(n, max(1, ⌊T /
+  (dtype size × trailing extents)⌋)), other axes whole.
 - **Every other chunked dataset** (the other changing-mesh datasets, fixed
   coordinates, cells, mesh labels): max(1, ⌊T / b⌋) entries
   along the first axis, other axes whole.
@@ -867,19 +908,19 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 | E2 | a required attribute or object of §10 absent: the rule an absent object breaks, whatever rules its contents would |
 | E3 | an attribute stored with an encoding other than §9.2's, or not valid UTF-8 |
 | E4 | a dataset with a dtype §11.1 does not allow; a string dataset not valid UTF-8 or holding a NUL |
-| E5 | a dataset whose dimensions or lengths disagree with §10: the row count, the node or cell count, a table's length, the instance count, or the shape `per` requires; a parameter with a missing value (§3.8) |
+| E5 | a dataset whose dimensions or lengths disagree with §10: the row count, the node or cell count, a table's length, the instance count, the shape `per` requires, or an array of length 0; a parameter or an array with a missing value (§3.8) |
 | E6 | a mesh `kind` or `per` this version does not define; `per = group:<k>` naming anything but a group label; a cell type code not in §15 |
 | E7 | units absent where §3.7 requires them, or not parsing by §13 |
 | E8 | a name that is not legal, takes a reserved name or prefix (§9.3), or is used twice in the file (§4.4) |
 | E9 | a label or mesh-label code outside its table; a `category` naming no table; a category table with a repeated entry |
 | E10 | cell arrays inconsistent (§10.2): offsets, node counts by type, or a node number outside the mesh or the cell's instance |
 | E11 | a `support_id` that does not match §14 |
-| E12 | a relation incomplete or inconsistent: `of` naming nothing, a label or a relation; `quantile` without `q` in (0, 1); `std` or `quantile` units unequal to those of `of`; `with_respect_to` naming neither a parameter nor `coordinates`; `coordinates` without `axis`; both `statistic` and `with_respect_to`; `q` without `statistic = quantile`; a location unlike that of `of` (a derivative with respect to node position excepted) |
+| E12 | a relation incomplete or inconsistent: `of` naming nothing, a label or a relation; `quantile` without `q` in (0, 1); `std` or `quantile` units unequal to those of `of`; `with_respect_to` naming neither a parameter nor `coordinates` (an array included); `coordinates` without `axis`; both `statistic` and `with_respect_to`; `q` without `statistic = quantile`; a location unlike that of `of` (a derivative with respect to node position excepted) |
 | E13 | a vector inconsistent: two fields with one `vector` and `axis`; one vector across locations or units; `axis` without `vector` on a field that is not a derivative; an axis the coordinates do not have, on a vector or on a derivative with respect to `coordinates` |
 | E14 | repeated row ids |
-| E15 | `generalisation_group` or `run_group` naming anything but a group label; `run_group` on a parameter whose role is not `time`; two `status` labels |
-| E16 | a data file with a result naming a `model`, or with `/models`; coordinates naming a `model` or `output` outside a model file whose mesh is per run, or a model file whose mesh is per run without that model; a model file with rows, a result without `model`, no model, or a parameter without bounds; in any file, bounds that are not finite or have `lower` > `upper`, or bounds on a label |
-| E17 | a result or computed coordinates naming a model that does not exist, or without `output`; a model without `type` or `inputs`; an `inputs` entry naming anything but a parameter, a label or `coordinates`; a `nearest` model breaking §7.5 (columns, bounds, no points) |
+| E15 | `generalisation_group` or `run_group` naming anything but a group label; `run_group` on a parameter whose role is not `time`, or on an array; two `status` labels |
+| E16 | a data file with a result naming a `model`, or with `/models`; coordinates naming a `model` or `output` outside a model file whose mesh is per run, or a model file whose mesh is per run without that model; a model file with rows, a result without `model`, no model, or a parameter or an array without bounds; in any file, bounds that are not finite or have `lower` > `upper`, or bounds on a label |
+| E17 | a result or computed coordinates naming a model that does not exist, or without `output`; a model without `type` or `inputs`; an `inputs` entry naming anything but a parameter, an array, a label or `coordinates`; a `nearest` model breaking §7.5 (columns, widths, bounds, no points) |
 | E18 | model data that §12 cannot represent (an integer not int64, a number not float64, a group reachable by more than one hard link), or whose top level uses `type`, `inputs` or `repr` |
 | E19 | an axis of a dataset that is not itself a scale with no dimension scale, more than one, or one not named as §10 gives; a scale without attribute creation order tracked and indexed; a scale whose extent differs from an axis attached to it; an unlimited dimension §10 does not let grow (a zero-extent axis inside model data excepted, §12) |
 | E20 | an unlimited dimension that is not chunked; a filter other than gzip 1–9 and shuffle; a user-defined fill value or a `_FillValue` attribute |
@@ -898,7 +939,7 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 | W1 | a published split that places rows of one generalisation group, or of one run, on both sides |
 | W2 | rows whose status is not `converged`, by row |
 | W3 | NaN or infinite values in a result, by row and name |
-| W4 | a parameter value outside its bounds (and, on evaluation, an input outside a model's domain) |
+| W4 | a parameter's or an array's value outside its bounds (and, on evaluation, an input outside a model's domain) |
 | W5 | something this version does not define (an attribute, group, role or statistic word), reported and ignored, or read as a plain object (§17) |
 | W6 | a chunk larger than §11.4's default |
 | W7 | a fixed-length string dataset wider than its longest element |
@@ -918,14 +959,24 @@ an object with an unknown role is ignored, because a future role is as
 likely an output as an input. A change that makes an existing file mean something else is
 version 2.
 
+A library that does not know an addition reads around it but cannot keep
+it in step when it writes: appending rows grows only the objects it knows,
+and a copy leaves out what it ignored. Appending to or copying a file that
+uses an addition needs a library that knows it. A model whose `inputs`
+name an addition is refused by a library that does not know it (E17).
+
+Arrays (§3.9) were added within version 1, in Gamut 2.3: earlier releases
+ignore them when they read a data file and refuse a model that reads one.
+
 ## 18. Additions planned within version 1
 
 These would be additive under §17, so files written today stay valid:
 
 1. **Tensors.** `axis` takes `x`, `y`, `z`; a symmetric or full tensor
    declaration (`xx`, `xy` …) may follow.
-2. **Fields as model inputs.** Model inputs are parameters, labels and
-   `coordinates`; a field as an input may follow.
+2. **Arrays on the mesh.** An array's values have no place (§3.9); an
+   array whose values lie on the nodes or cells of the file's mesh, so
+   that a viewer can draw it on the geometry, may follow.
 
 ---
 
@@ -976,3 +1027,14 @@ Each of these is the simpler of the choices considered.
     time, stays the size of its data (measured: 20 columns and 3,000
     single-row appends, each reopening the file, give 0.49 MB, against
     32 MB without).
+15. **An array is its own kind of input, with its own role words.** A
+    parameter with a second axis would read, to a library that knows only
+    parameters, as a parameter of the wrong shape (E5), and every tool that
+    takes a parameter as one number per run would have to learn otherwise.
+    An unknown role is ignored (§17), so `design_array` and
+    `condition_array` keep a file with arrays readable by earlier releases.
+    The values' axis has its own scale, named as model data names its
+    scales (§12), so a later array on the mesh can use the mesh's `node` or
+    `cell` scale instead (§18). One pair of bounds holds for every value,
+    as one unit does: the domain a format can check without knowing the
+    model.
