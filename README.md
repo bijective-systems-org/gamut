@@ -189,7 +189,7 @@ meshes that change, time series, uncertainty, and models fitted to the
 runs.
 
 To see a whole study in one file, download the
-[capsule aeroheating dataset](https://huggingface.co/datasets/bijective-systems/capsule-aeroheating):
+[capsule aeroheating dataset](https://huggingface.co/datasets/bijective/capsule-aeroheating):
 1,024 heat shields on one shared mesh, in a single 55 MB Gamut file.
 
 ## Performance
