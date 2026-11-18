@@ -51,6 +51,8 @@ const AttrSpec kRootAttrs = {
     {"trained_on", Kind::S}, {"evaluated_from", Kind::S}};
 const AttrSpec kParameterAttrs = {{"role", Kind::S}, {"units", Kind::S}, {"lower", Kind::F},
                                   {"upper", Kind::F}, {"run_group", Kind::S}};
+const AttrSpec kArrayAttrs = {{"role", Kind::S}, {"units", Kind::S}, {"lower", Kind::F},
+                              {"upper", Kind::F}};
 const AttrSpec kLabelAttrs = {{"role", Kind::S}, {"category", Kind::S}};
 const AttrSpec kResultAttrs = {
     {"role", Kind::S}, {"units", Kind::S}, {"of", Kind::S}, {"statistic", Kind::S},
@@ -160,7 +162,7 @@ class Validator {
   std::int64_t rows_ = 0;
   std::map<std::string, std::vector<std::string>> tables_;
   bool stored_outside_ = false;
-  std::map<std::string, Object> parameters_, labels_, scalars_, constants_;
+  std::map<std::string, Object> parameters_, arrays_, labels_, scalars_, constants_;
   std::map<std::string, Object> fields_;      // by name; concept path inside
   std::map<std::string, Object> mesh_labels_;
   std::set<std::string> used_names_;
@@ -735,6 +737,41 @@ void Validator::root_objects() {
         }
         if (check_dims(o, {"row"}, {"/row"})) check_storage(o, true, {true});
         parameters_[m.name] = o;
+      } else if (!array_role_of(role).empty()) {
+        // run_group is a parameter's attribute; on an array it is E15, not W5.
+        Object named = o;
+        named.attrs.clear();
+        for (const auto& a : o.attrs) {
+          if (a.name != "run_group") named.attrs.push_back(a);
+        }
+        check_attrs(named, kArrayAttrs);
+        if (o.has("run_group")) add("E15", m.name, "run_group belongs on a time parameter, never on an array");
+        if (!typed || (t != DType::Float64 && t != DType::Int64)) {
+          add("E4", m.name, "an array is float64 or int64");
+        }
+        check_units(o, true);
+        const auto lo = o.real("lower"), hi = o.real("upper");
+        if (lo.has_value() != hi.has_value()) {
+          add("E16", m.name, "give both bounds or neither");
+        } else if (lo && (!std::isfinite(*lo) || !std::isfinite(*hi) || *lo > *hi)) {
+          add("E16", m.name, "bounds must be finite with lower <= upper");
+        }
+        if (kind_ == "model" && !lo) {
+          add("E16", m.name, "a model file's arrays need bounds: the model's domain");
+        }
+        const std::string scale = array_scale(m.name);
+        if (o.info.shape.size() == 2 && o.info.shape[1] == 0) {
+          add("E5", m.name, "an array has at least one value per row");
+        }
+        // The values' scale is fixed (§10.1): only the row axis grows.
+        const DsetInfo si = file_->dataset_info(scale, false);
+        if (si.is_dataset && !si.maxshape.empty() && si.maxshape[0] == H5S_UNLIMITED) {
+          add("E19", m.name, "its scale " + scale.substr(1) + " is unlimited, and an array's length is fixed");
+        }
+        if (check_dims(o, {"row", scale.substr(1)}, {"/row", scale})) {
+          check_storage(o, true, {true, false});
+        }
+        arrays_[m.name] = o;
       } else if (kLabelRoles.count(role)) {
         check_attrs(o, kLabelAttrs);
         if (!typed || (t != DType::Int32 && t != DType::Int64)) {
@@ -1252,8 +1289,9 @@ void Validator::models() {
     if (!o.has("inputs")) add("E17", concept, "a model lists its inputs");
     const auto inputs = split_spaces(o.text("inputs"));
     for (const auto& in : inputs) {
-      if (in != "coordinates" && !parameters_.count(in) && !labels_.count(in)) {
-        add("E17", concept, "the input \"" + in + "\" is not a parameter, a label or coordinates");
+      if (in != "coordinates" && !parameters_.count(in) && !arrays_.count(in) && !labels_.count(in)) {
+        add("E17", concept, "the input \"" + in + "\" is not a parameter, an array, a label or "
+                            "coordinates");
       }
     }
     model_ids_.insert(m.name);
@@ -1311,15 +1349,27 @@ void Validator::models() {
         add("E17", concept, "a nearest model's columns are exactly its inputs");
       }
       for (std::size_t j = 0; j < nm.columns.size(); ++j) {
-        const auto it = parameters_.find(nm.columns[j]);
-        if (it == parameters_.end()) {
-          add("E17", concept, "a nearest model reads parameters only (" + nm.columns[j] + ")");
+        const std::string& c = nm.columns[j];
+        auto it = parameters_.find(c);
+        const bool array = it == parameters_.end();
+        if (array) it = arrays_.find(c);
+        if (it == arrays_.end()) {
+          add("E17", concept, "a nearest model reads parameters and arrays only (" + c + ")");
           continue;
+        }
+        const DsetInfo& info = it->second.info;
+        const std::int64_t width = !array ? 1
+                                   : info.shape.size() == 2 ? static_cast<std::int64_t>(info.shape[1])
+                                                            : -1;
+        if (nm.widths[j] != width) {
+          add("E17", concept, "a nearest model's width for " + c + " is " +
+                              std::to_string(nm.widths[j]) + ", and " + c +
+                              (array ? " has " + std::to_string(width) + " values"
+                                     : " is a parameter, of width 1"));
         }
         const auto lo = it->second.real("lower"), hi = it->second.real("upper");
         if (!lo || !hi || *lo != nm.lower[j] || *hi != nm.upper[j]) {
-          add("E17", concept, "a nearest model's bounds equal its parameters' bounds (" +
-                              nm.columns[j] + ")");
+          add("E17", concept, "a nearest model's bounds equal its inputs' bounds (" + c + ")");
         }
       }
     });
@@ -1408,7 +1458,8 @@ void Validator::relations_and_vectors() {
         }
       }
       if (!wrt.empty() && wrt != "coordinates" && !parameters_.count(wrt)) {
-        add("E12", o.concept, "with_respect_to names \"" + wrt + "\", which is not a parameter");
+        add("E12", o.concept, "with_respect_to names \"" + wrt + "\", which is not a parameter" +
+                              std::string(arrays_.count(wrt) ? " (it is an array)" : ""));
       }
       if (wrt == "coordinates" && o.text("axis").empty()) {
         add("E12", o.concept, "a derivative with respect to coordinates names its axis");
@@ -1559,6 +1610,26 @@ void Validator::warnings() {
         outside = true;
         add("W4", kv.first, "row " + std::to_string(r) + " is outside the bounds [" +
                             format_f64(*lo) + ", " + format_f64(*hi) + "]");
+      }
+      return !(missing && (outside || !lo || !hi));
+    });
+  }
+  for (const auto& kv : arrays_) {
+    // An array is never missing (spec section 3.8): E5; bounds give W4.
+    const DsetInfo& info = kv.second.info;
+    const std::size_t width =
+        info.shape.size() == 2 && info.shape[1] > 0 ? static_cast<std::size_t>(info.shape[1]) : 1;
+    const auto lo = kv.second.real("lower"), hi = kv.second.real("upper");
+    bool missing = false, outside = false;
+    each<double>(kv.second, [&](std::size_t i, double x) {
+      const std::string at = "row " + std::to_string(i / width) + ", value " + std::to_string(i % width);
+      if (std::isnan(x) && !missing) {
+        missing = true;
+        add("E5", kv.first, at + " is missing; an array is never missing (spec section 3.8)");
+      } else if (lo && hi && !outside && (x < *lo || x > *hi)) {
+        outside = true;
+        add("W4", kv.first, at + " is outside the bounds [" + format_f64(*lo) + ", " +
+                            format_f64(*hi) + "]");
       }
       return !(missing && (outside || !lo || !hi));
     });

@@ -31,6 +31,16 @@ bool reserved_root_name(const std::string& name);
 extern const std::set<std::string> kParameterRoles;
 extern const std::set<std::string> kLabelRoles;
 
+// Section 3.9: an array's role (design or condition) and the word its
+// dataset carries, the role followed by "_array" (section 10.1).
+extern const std::set<std::string> kArrayRoles;
+std::string array_role_word(const std::string& role);
+// The role an array's word gives: "design_array" -> "design"; empty for a
+// word that is not an array's.
+std::string array_role_of(const std::string& word);
+// The dimension scale of an array's values: "/gamut_<name>_d1".
+std::string array_scale(const std::string& name);
+
 // HDF5 and netCDF attributes that carry the layout, not the study.
 extern const std::set<std::string> kMachinery;
 

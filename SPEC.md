@@ -365,14 +365,15 @@ coordinates (a model that reads `coordinates` evaluated on new
 geometries); otherwise they are the model file's stored coordinates, and a
 model that reads `coordinates` receives those. The data file records the model file's `file_id` in
 `evaluated_from`, and carries its `portion_marking` when it has one (§8).
-An input outside its bounds is reported (W4) and
-evaluated; refusing is the caller's choice. The data file keeps the
+An input outside its bounds, for an array any of its values, is
+reported (W4), compared exactly in the input's dtype, and evaluated; refusing is the caller's choice. The data file keeps the
 model's bounds on its parameters and arrays, so a reader can tell which rows lie
 outside them and by how much (W4).
 
 The input table maps names to columns of one length n: a parameter by its
 values (an int64 parameter accepts integers), an array by n × length
-values, a label by its names, each in
+values in row order (an int64 array accepts integers, kept as integers),
+a label by its names, each in
 the model file's table (a name outside it is an error), and `coordinates`,
 when a model reads them, as n × nodes × axes in the coordinates' units.
 The data file's rows get ids 0 to n − 1. A label's codes are the model
@@ -386,9 +387,10 @@ language with no proprietary software, and as a baseline ("the closest run
 we have"). Its numbers (§12):
 
 - `columns`: the input names, in the order their values have in `x`;
-- `widths`: int64, one per entry of `columns`: 1 for a parameter, the
-  length for an array. It may be left out when every input is a
-  parameter, and is then 1 for each;
+- `widths`: an int64 dataset of shape (columns), one per entry of
+  `columns` even when there is one: 1 for a parameter, the length for an
+  array. Left out, every width is 1, so a model whose inputs are all
+  parameters (or arrays of length 1) may leave it out;
 - `lower`, `upper`: one bound per entry of `columns`;
 - `x`: float64, (points, values): each point's inputs side by side in the
   order of `columns`, an array's values in order, so that values is the
@@ -399,8 +401,9 @@ we have"). Its numbers (§12):
 
 Inputs are parameters and arrays; `columns` holds exactly the model's
 `inputs`, `widths` their lengths, and `lower` and `upper` equal their
-bounds (E17); there is at least one point (E17). Int64 inputs are taken as
-float64. Number the values of a row j = 1, 2, … in the order of `x`, and
+bounds (E17), and a `widths` of another shape or dtype is E17 too; there is
+at least one point (E17). Int64 inputs are taken as float64 for the
+distance only: the data file keeps the values given. Number the values of a row j = 1, 2, … in the order of `x`, and
 give value j the bounds of the input it belongs to. For a query row q and
 point i, with t_j = (q_j − x_ij) / (upper_j − lower_j) rounded to float64
 before it is squared, the distance is t_1² + t_2² + … summed left to right
@@ -587,15 +590,18 @@ An array's role is written `design_array` or `condition_array`, its
 role (§3.9) followed by `_array`, so that a reader of an earlier release
 of version 1, which does not know arrays, ignores it (§17).
 
-Every root dataset or served group carries `role`. A root dataset without
+Every root dataset or served group carries `role`, except the dimension
+scales (`row`, `category_<t>`, `gamut_<array>_d1`). A root dataset without
 one, such as a variable another netCDF tool added, is not part of the
 study: it is reported (W5) and ignored, and anything that names it names
 nothing. Relation attributes are
 `of`, `statistic`, `q`, `method`, `with_respect_to`, `axis` (§6). Writers
 add a CF `coordinates` attribute to each scalar listing the parameters and
-labels, so generic netCDF tools show the run table; nothing depends on it.
+labels (not the arrays, whose second axis a scalar does not have), so
+generic netCDF tools show the run table; nothing depends on it.
 A model file has zero rows; its parameters, labels and results are
-zero-length datasets carrying their attributes, and a result's `model`
+zero-length datasets carrying their attributes, an array is (0, length)
+with its scale of that length, and a result's `model`
 and `output` say what computes it.
 
 ### 10.2 Shared mesh
@@ -963,10 +969,12 @@ A library that does not know an addition reads around it but cannot keep
 it in step when it writes: appending rows grows only the objects it knows,
 and a copy leaves out what it ignored. Appending to or copying a file that
 uses an addition needs a library that knows it. A model whose `inputs`
-name an addition is refused by a library that does not know it (E17).
+name an addition still opens in a library that does not know it, but its
+validator reports E17 and it cannot evaluate the model.
 
 Arrays (§3.9) were added within version 1, in Gamut 2.3: earlier releases
-ignore them when they read a data file and refuse a model that reads one.
+read a data file that has arrays and ignore them (W5), and cannot
+validate, copy or evaluate a model file whose models read one.
 
 ## 18. Additions planned within version 1
 
@@ -1007,9 +1015,9 @@ Each of these is the simpler of the choices considered.
    evaluated files a traceable link to their data without embedding it.
 5. **A served result is a zero-length dataset** naming `model` and
    `output`, so a model file is a data file with no rows, plus models.
-6. **Model inputs are parameters, labels and `coordinates`**; `nearest`
-   takes parameters only, with an exact evaluation order, so every
-   implementation gives the same answers.
+6. **Model inputs are parameters, arrays, labels and `coordinates`**;
+   `nearest` takes parameters and arrays, with an exact evaluation order,
+   so every implementation gives the same answers.
 7. **Instances are numbered by first appearance**, and `row_instance` maps
    rows to them when `per` names a group.
 8. **A changing mesh stores instances and fields end to end** with offsets,
@@ -1034,7 +1042,9 @@ Each of these is the simpler of the choices considered.
     An unknown role is ignored (§17), so `design_array` and
     `condition_array` keep a file with arrays readable by earlier releases.
     The values' axis has its own scale, named as model data names its
-    scales (§12), so a later array on the mesh can use the mesh's `node` or
-    `cell` scale instead (§18). One pair of bounds holds for every value,
+    scales (§12). A later array on the mesh (§18) would use the mesh's
+    `node` or `cell` scale with role words of its own, so that a reader
+    that knows only today's arrays ignores it rather than finding the
+    wrong scale. One pair of bounds holds for every value,
     as one unit does: the domain a format can check without knowing the
     model.

@@ -32,6 +32,7 @@ std::unique_ptr<Writer> begin_evaluation(const Reader& model, const std::string&
                        it == s.tables.end() ? std::vector<std::string>() : it->second);
     }
     for (const auto& p : s.parameters) w->declare_parameter(p);
+    for (const auto& a : s.arrays) w->declare_array(a);
     if (!s.mesh.kind.empty()) {
       w->declare_coordinates(s.mesh.coordinate_units, s.mesh.coordinate_dtype, s.mesh.axes);
       for (const auto& ml : s.mesh.labels) {
@@ -136,22 +137,38 @@ Evaluation::~Evaluation() {
   }
 }
 
-void Evaluation::values(const std::string& name, const Column& given) {
+void Evaluation::values(const std::string& name, const Column& given, std::int64_t first_axis) {
   const Schema& s = model_.schema();
   const Parameter* p = s.parameter(name);
-  if (p == nullptr) {
+  const Array* a = s.array(name);
+  if (p == nullptr && a == nullptr) {
     if (s.label(name) != nullptr) throw Error("E2", name + " is a label: give its names", name);
     throw Error("E2", name + " is not an input of this model", name);
   }
-  if (given.count != rows_) {
+  if (first_axis != 0 && first_axis != rows_) {
+    throw Error("E5", name + ": the array's first axis has " + std::to_string(first_axis) +
+                          " entries for " + std::to_string(rows_) + " rows; give rows first" +
+                          (a != nullptr ? " (an array is rows x " + std::to_string(a->length) + ")" : ""),
+                name);
+  }
+  if (a != nullptr) {
+    // rows x length; length >= 1, so the division is exact or the count is wrong.
+    if (given.count % a->length != 0 || given.count / a->length != rows_) {
+      throw Error("E5", name + " has " + std::to_string(given.count) + " values; an array of length " +
+                            std::to_string(a->length) + " needs rows x " + std::to_string(a->length) +
+                            " (" + std::to_string(rows_) + " rows)",
+                  name);
+    }
+  } else if (given.count != rows_) {
     throw Error("E5", name + " has " + std::to_string(given.count) + " values for " +
                           std::to_string(rows_) + " rows; every input needs the same number",
                 name);
   }
+  const DType dtype = a != nullptr ? a->dtype : p->dtype;
   Column c;
-  c.dtype = p->dtype;
-  c.count = rows_;
-  c.bytes = converted(given, p->dtype, name);
+  c.dtype = dtype;
+  c.count = given.count;
+  c.bytes = converted(given, dtype, name);
   parameters_[name] = std::move(c);
   ready_ = false;
 }
@@ -161,6 +178,7 @@ void Evaluation::names(const std::string& name, const std::vector<std::string>& 
   const Label* l = s.label(name);
   if (l == nullptr) {
     if (s.parameter(name) != nullptr) throw Error("E2", name + " is a parameter: give its values", name);
+    if (s.array(name) != nullptr) throw Error("E2", name + " is an array: give its values", name);
     throw Error("E2", name + " is not an input of this model", name);
   }
   if (static_cast<std::int64_t>(given.size()) != rows_) {
@@ -237,26 +255,46 @@ void Evaluation::ready() {
   for (const auto& p : s.parameters) {
     if (parameters_.count(p.name) == 0) throw Error("E2", "the input " + p.name + " is missing", p.name);
   }
+  for (const auto& a : s.arrays) {
+    if (parameters_.count(a.name) == 0) throw Error("E2", "the input " + a.name + " is missing", a.name);
+  }
   for (const auto& l : s.labels) {
     if (label_codes_.count(l.name) == 0) throw Error("E2", "the input " + l.name + " is missing", l.name);
   }
   // Inputs outside the range a model was fitted on are evaluated, and reported.
   warnings_.clear();
-  for (const auto& p : s.parameters) {
-    if (!p.lower || !p.upper) continue;
-    const Column& c = parameters_.at(p.name);
-    std::int64_t out = 0;
+  // Rows with a value outside [lower, upper]: one value of a parameter per
+  // row, `width` values of an array.
+  auto outside = [&](const std::string& name, const std::optional<double>& lower,
+                     const std::optional<double>& upper, std::int64_t width) {
+    if (!lower || !upper) return;
+    const Column& c = parameters_.at(name);
+    std::vector<char> row_out(static_cast<std::size_t>(rows_), 0);
+    std::int64_t values = 0;
+    auto mark = [&](std::size_t i, bool out) {
+      if (!out) return;
+      ++values;
+      row_out[i / static_cast<std::size_t>(width)] = 1;
+    };
     if (c.dtype == DType::Int64) {
-      for (const std::int64_t x : integers(c)) out += compare_int64(x, *p.lower) < 0 || compare_int64(x, *p.upper) > 0;
+      const std::vector<std::int64_t> v = integers(c);
+      for (std::size_t i = 0; i < v.size(); ++i) {
+        mark(i, compare_int64(v[i], *lower) < 0 || compare_int64(v[i], *upper) > 0);
+      }
     } else {
-      for (const double x : doubles(c, p.name)) out += x < *p.lower || x > *p.upper;
+      const std::vector<double> v = doubles(c, name);
+      for (std::size_t i = 0; i < v.size(); ++i) mark(i, v[i] < *lower || v[i] > *upper);
     }
-    if (out > 0) {
-      warnings_.push_back("W4: " + p.name + " is outside the model's domain [" + number(*p.lower) + ", " +
-                          number(*p.upper) + "] in " + std::to_string(out) + " of " +
-                          std::to_string(rows_) + " rows");
-    }
-  }
+    std::int64_t rows = 0;
+    for (const char r : row_out) rows += r;
+    if (rows == 0) return;
+    std::string what = std::to_string(rows) + " of " + std::to_string(rows_) + " rows";
+    if (width > 1) what += " (" + std::to_string(values) + " values)";
+    warnings_.push_back("W4: " + name + " is outside the model's domain [" + number(*lower) + ", " +
+                        number(*upper) + "] in " + what);
+  };
+  for (const auto& p : s.parameters) outside(p.name, p.lower, p.upper, 1);
+  for (const auto& a : s.arrays) outside(a.name, a.lower, a.upper, a.length);
   // A shared mesh's stored coordinates, for every row, when none are given.
   if (!coordinates_given_ && s.mesh.kind == "shared" && s.mesh.per == "fixed") {
     const auto all = Selection::all();
@@ -329,9 +367,18 @@ void Evaluation::ready() {
     const Nearest nm = nearest_from(model_.model_numbers(id));
     std::map<std::string, std::vector<double>> columns;
     std::map<std::string, const double*> pointers;
-    for (const auto& c : nm.columns) {
+    for (std::size_t j = 0; j < nm.columns.size(); ++j) {
+      const std::string& c = nm.columns[j];
       const auto it = parameters_.find(c);
-      if (it == parameters_.end()) throw Error("E17", "the nearest model " + id + " reads " + c + ", which is not a parameter", id);
+      if (it == parameters_.end()) {
+        throw Error("E17", "the nearest model " + id + " reads " + c + ", which is not a parameter or an array", id);
+      }
+      const Array* a = s.array(c);
+      const std::int64_t width = a != nullptr ? a->length : 1;
+      if (nm.widths[j] != width) {
+        throw Error("E17", "the nearest model " + id + " reads " + std::to_string(nm.widths[j]) + " values of " + c +
+                               ", which has " + std::to_string(width), id);
+      }
       columns[c] = as_float64(it->second, c);
       pointers[c] = columns[c].data();
     }
@@ -387,6 +434,7 @@ std::vector<std::int64_t> Evaluation::input_shape(const std::string& name) const
     return {rows_, m.n_nodes, m.axes};
   }
   input_dtype(name);
+  if (const Array* a = model_.schema().array(name)) return {rows_, a->length};
   return {rows_};
 }
 
@@ -430,6 +478,7 @@ void Evaluation::finish() {
   Batch b;
   b.runs = rows_;
   for (const auto& p : s.parameters) b.values[p.name] = parameters_.at(p.name);
+  for (const auto& a : s.arrays) b.values[a.name] = parameters_.at(a.name);
   for (const auto& l : s.labels) b.names[l.name] = label_names_.at(l.name);
   for (const auto& r : s.results) {
     const Asked* a = asked_for(r);

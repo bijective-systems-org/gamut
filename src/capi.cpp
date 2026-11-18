@@ -324,6 +324,30 @@ int gamut_declare_parameter(gamut_file* f, const char* name, const char* role, c
   }
 }
 
+int gamut_declare_array(gamut_file* f, const char* name, const char* role, const char* units,
+                        int64_t length, int dtype_code, int has_bounds, double lower, double upper,
+                        gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    gamut_core::internal::Array a;
+    a.name = str(name);
+    a.role = str(role).empty() ? std::string("design") : str(role);
+    a.units = str(units);
+    // As for a parameter, the dtype never comes from the values.
+    a.dtype = as_given(dtype_code) ? DType::Float64 : dtype(dtype_code);
+    a.length = length;
+    if (has_bounds) {
+      a.lower = lower;
+      a.upper = upper;
+    }
+    writer_of(f).declare_array(a);
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
 int gamut_declare_label(gamut_file* f, const char* name, const char* role,
                       const char* const* categories, int64_t n, gamut_error* err) {
   try {
@@ -1367,10 +1391,20 @@ int gamut_nearest_call(const gamut_tree* numbers, const char* const* input_names
     const auto m = gamut_core::internal::nearest_from(tree_of(numbers));
     std::map<std::string, const double*> table;
     for (int j = 0; j < n_inputs; ++j) {
-      need(column_lengths[j] == n_rows, "E5",
-           "nearest needs " + std::to_string(n_rows) + " values of every input, one per row; " +
-               str(input_names[j]) + " has " + std::to_string(column_lengths[j]));
-      table[str(input_names[j])] = columns[j];
+      const std::string name = str(input_names[j]);
+      // Each input's width from the model: 1 for a parameter, an array's length.
+      std::int64_t width = 1;
+      for (std::size_t k = 0; k < m.columns.size(); ++k) {
+        if (m.columns[k] == name) width = m.widths[k];
+      }
+      need(n_rows == 0 || (column_lengths[j] % width == 0 && column_lengths[j] / width == n_rows), "E5",
+           "nearest needs rows x width values of every input; " + name + " has " +
+               std::to_string(column_lengths[j]) + " for " + std::to_string(n_rows) + " rows of width " +
+               std::to_string(width));
+      need(n_rows != 0 || column_lengths[j] == 0, "E5",
+           "nearest has no rows to read, and " + name + " has " + std::to_string(column_lengths[j]) +
+               " values");
+      table[name] = columns[j];
     }
     const auto idx = gamut_core::internal::nearest_indices(m, table, n_rows);
     const auto values = gamut_core::internal::nearest_values(m, str(output), idx);
@@ -1422,6 +1456,19 @@ int gamut_evaluation_values(gamut_evaluation* ev, const char* name, int dtype_co
     const Lock lock(hdf5_mutex());
     clear(err);
     evaluation_of(ev).values(str(name), column(dtype_code, values, count));
+    return 0;
+  } catch (...) {
+    return fail(err);
+  }
+}
+
+int gamut_evaluation_array(gamut_evaluation* ev, const char* name, int dtype_code, const void* values,
+                           int64_t first_axis, int64_t count, gamut_error* err) {
+  try {
+    const Lock lock(hdf5_mutex());
+    clear(err);
+    need(first_axis >= 0, "a negative first axis");
+    evaluation_of(ev).values(str(name), column(dtype_code, values, count), first_axis);
     return 0;
   } catch (...) {
     return fail(err);

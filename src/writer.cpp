@@ -446,6 +446,7 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
     for (const auto& p : scales) growable(p, f.dataset_info(p, false));
     resume("/row");
     for (const auto& x : s.parameters) resume(root(x.name));
+    for (const auto& x : s.arrays) resume(root(x.name));
     for (const auto& x : s.labels) resume(root(x.name));
     for (const auto& r : s.results) {
       resume(r.where == "scalar" ? root(r.name) : field_path(r));
@@ -601,6 +602,28 @@ void Writer::declare_parameter(const Parameter& p) {
   need(!model_ || p.lower.has_value(), "E16",
        p.name + ": a model file's parameters need bounds, the model's domain", p.name);
   schema_.parameters.push_back(p);
+}
+
+void Writer::declare_array(const Array& a) {
+  need_open();
+  need_no_runs("declaring an array");
+  check_new_root_name(a.name);
+  need(kArrayRoles.count(a.role) == 1, "",
+       a.name + ": the role \"" + a.role + "\" is not design or condition (an array is never a time)",
+       a.name);
+  check_units(a.units, a.name);
+  need(a.dtype == DType::Float64 || a.dtype == DType::Int64, "E4",
+       a.name + ": an array is float64 or int64", a.name);
+  need(a.length >= 1, "E5", a.name + ": an array has a length of at least 1", a.name);
+  need(a.lower.has_value() == a.upper.has_value(), "E16",
+       a.name + ": give both bounds or neither", a.name);
+  if (a.lower) {
+    need(std::isfinite(*a.lower) && std::isfinite(*a.upper) && *a.lower <= *a.upper,
+         "E16", a.name + ": give both bounds as finite numbers with lower <= upper", a.name);
+  }
+  need(!model_ || a.lower.has_value(), "E16",
+       a.name + ": a model file's arrays need bounds, the model's domain", a.name);
+  schema_.arrays.push_back(a);
 }
 
 void Writer::declare_label(const std::string& name, const std::string& role,
@@ -1009,6 +1032,16 @@ void Writer::ensure_datasets(const Batch* first) {
     if (p.upper) f.write_attr(path, "upper", AttrValue::real(*p.upper));
     if (!p.run_group.empty()) f.write_attr(path, "run_group", AttrValue::text(p.run_group));
   }
+  for (const auto& a : s.arrays) {
+    const std::string path = root(a.name);
+    const std::string scale = array_scale(a.name);
+    f.make_scale(scale, static_cast<hsize_t>(a.length), false);
+    create_root_dataset(path, a.dtype, {static_cast<hsize_t>(a.length)}, {scale});
+    f.write_attr(path, "role", AttrValue::text(array_role_word(a.role)));
+    f.write_attr(path, "units", AttrValue::text(a.units));
+    if (a.lower) f.write_attr(path, "lower", AttrValue::real(*a.lower));
+    if (a.upper) f.write_attr(path, "upper", AttrValue::real(*a.upper));
+  }
   for (const auto& l : s.labels) {
     const std::string path = root(l.name);
     create_root_dataset(path, l.dtype, {}, {});
@@ -1250,6 +1283,10 @@ void Writer::check_relations() const {
       }
     }
     if (!rel.with_respect_to.empty() && rel.with_respect_to != "coordinates") {
+      need(s.array(rel.with_respect_to) == nullptr, "E12",
+           path + ": with_respect_to names the array \"" + rel.with_respect_to +
+               "\"; a derivative is with respect to a parameter or coordinates",
+           path);
       need(s.parameter(rel.with_respect_to) != nullptr, "E12",
            path + ": with_respect_to names \"" + rel.with_respect_to +
                "\", which is not a parameter",
@@ -1342,6 +1379,37 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
         double v;
         std::memcpy(&v, &root_bytes[p.name][i * 8], 8);
         need(!std::isnan(v), "E5", p.name + ": a parameter is never missing", p.name);
+      }
+    }
+  }
+  for (const auto& a : s.arrays) {
+    known.insert(a.name);
+    const auto it = batch.values.find(a.name);
+    if (it == batch.values.end()) {
+      const auto text = batch.names.find(a.name);
+      if (text != batch.names.end()) {
+        throw Error("E2", given_text(a.name, "array", text->second), a.name);
+      }
+      throw Error("E2", a.name + ": every run needs its " + std::to_string(a.length) + " values",
+                  a.name);
+    }
+    // Overflow is impossible: a batch's count fits in memory, and length >= 1.
+    need(it->second.count % a.length == 0 && it->second.count / a.length == n, "E5",
+         a.name + ": " + std::to_string(it->second.count) + " values given for " +
+             std::to_string(n) + (n == 1 ? " run" : " runs") + "; give " +
+             std::to_string(a.length) + " per run, runs x " + std::to_string(a.length),
+         a.name);
+    root_bytes[a.name] = convert(it->second, a.dtype, a.name);
+    if (a.dtype == DType::Float64) {
+      const std::size_t values = N * static_cast<std::size_t>(a.length);
+      for (std::size_t i = 0; i < values; ++i) {
+        double v;
+        std::memcpy(&v, &root_bytes[a.name][i * 8], 8);
+        need(!std::isnan(v), "E5",
+             a.name + ": an array is never missing (run " +
+                 std::to_string(i / static_cast<std::size_t>(a.length)) + ", value " +
+                 std::to_string(i % static_cast<std::size_t>(a.length)) + " is NaN)",
+             a.name);
       }
     }
   }
@@ -1554,6 +1622,7 @@ std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
   if (!batch.ids.empty()) ids = batch.ids;
   append_rows("/row", reinterpret_cast<const unsigned char*>(ids.data()), n, DType::Int64);
   for (const auto& p : s.parameters) append_rows(root(p.name), root_bytes[p.name].data(), n, p.dtype);
+  for (const auto& a : s.arrays) append_rows(root(a.name), root_bytes[a.name].data(), n, a.dtype);
   // Codes in the label's own dtype: a file another writer made may hold int64 (§10.1).
   auto append_codes = [&](const std::string& path, const std::vector<std::int64_t>& codes_in,
                           DType dtype) {
@@ -1760,8 +1829,9 @@ void Writer::add_model(const std::string& id, const std::string& type,
   for (const auto& in : inputs) {
     need(seen.insert(in).second, "E17", id + ": the input " + in + " is listed twice");
     need(in == "coordinates" ? !schema_.mesh.kind.empty()
-                             : (schema_.parameter(in) != nullptr || schema_.label(in) != nullptr),
-         "E17", id + ": the input \"" + in + "\" is not a parameter, a label or coordinates");
+                             : (schema_.parameter(in) != nullptr || schema_.array(in) != nullptr ||
+                                schema_.label(in) != nullptr),
+         "E17", id + ": the input \"" + in + "\" is not a parameter, an array, a label or coordinates");
   }
   if (type == "nearest") {
     const Nearest nm = nearest_from(numbers);
@@ -1769,10 +1839,20 @@ void Writer::add_model(const std::string& id, const std::string& type,
     std::set<std::string> have(nm.columns.begin(), nm.columns.end());
     need(want == have, "E17", id + ": a nearest model's columns are exactly its inputs");
     for (std::size_t j = 0; j < nm.columns.size(); ++j) {
-      const Parameter* p = schema_.parameter(nm.columns[j]);
-      need(p != nullptr, "E17", id + ": a nearest model reads parameters only");
-      need(p->lower && *p->lower == nm.lower[j] && *p->upper == nm.upper[j], "E17",
-           id + ": a nearest model's bounds equal its parameters' bounds (" + nm.columns[j] + ")");
+      const std::string& c = nm.columns[j];
+      const Parameter* p = schema_.parameter(c);
+      const Array* a = schema_.array(c);
+      need(p != nullptr || a != nullptr, "E17",
+           id + ": a nearest model reads parameters and arrays only, and " + c + " is neither");
+      const std::int64_t width = a != nullptr ? a->length : 1;
+      need(nm.widths[j] == width, "E17",
+           id + ": a nearest model's width for " + c + " is " + std::to_string(nm.widths[j]) +
+               ", and " + c + (a != nullptr ? " has " + std::to_string(width) + " values"
+                                            : " is a parameter, of width 1"));
+      const std::optional<double>& lo = a != nullptr ? a->lower : p->lower;
+      const std::optional<double>& hi = a != nullptr ? a->upper : p->upper;
+      need(lo && *lo == nm.lower[j] && *hi == nm.upper[j], "E17",
+           id + ": a nearest model's bounds equal its inputs' bounds (" + c + ")");
     }
   }
   need(valid_utf8(type) && type.find('\0') == std::string::npos, "E3",

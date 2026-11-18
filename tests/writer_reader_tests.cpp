@@ -24,6 +24,9 @@
 #include "gamut/gamut.h"
 #include "chunk.hpp"
 #include "copy.hpp"
+#include "evaluate.hpp"
+#include "nearest.hpp"
+#include "select.hpp"
 #include "session.hpp"
 #include "h5.hpp"
 #include "notice.hpp"
@@ -843,7 +846,8 @@ void test_outside_bounds() {
   };
   CHECK(refused("mach", Selection::all(), sizeof buf).find("mach declares no bounds") !=
         std::string::npos);
-  CHECK(refused("cl", Selection::all(), sizeof buf).find("no parameter \"cl\"") != std::string::npos);
+  CHECK(refused("cl", Selection::all(), sizeof buf).find("no parameter or array \"cl\"") !=
+        std::string::npos);
   CHECK(refused("nothing", Selection::all(), sizeof buf).find("no parameter") != std::string::npos);
   CHECK(refused("x", Selection::list({6}), sizeof buf).find("outside the 6 positions") !=
         std::string::npos);
@@ -864,6 +868,339 @@ void test_outside_bounds() {
   CHECK(refused("n", Selection::all(), sizeof buf).compare(0, 5, "E16: ") == 0);
   r.reset();
   if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
+}
+
+Array array(const std::string& name, const std::string& role, const std::string& units,
+            std::int64_t length) {
+  Array a;
+  a.name = name;
+  a.role = role;
+  a.units = units;
+  a.length = length;
+  return a;
+}
+
+std::vector<std::string> rules_of(const Report& rep) {
+  std::vector<std::string> out;
+  for (const auto& f : rep.findings) out.push_back(f.rule + " " + f.path + ": " + f.message);
+  return out;
+}
+
+bool has_rule(const Report& rep, const std::string& rule, const std::string& path) {
+  for (const auto& f : rep.findings) {
+    if (f.rule == rule && f.path == path) return true;
+  }
+  return false;
+}
+
+// Arrays (spec section 3.9): written in batches and appended, read by row
+// and by value, measured against their bounds, copied, and checked.
+void test_arrays_in_a_data_file() {
+  const std::string path = "wr_arrays.gamut";
+  std::remove(path.c_str());
+  {
+    auto w = Writer::create(path, "tests", "", "fixed");
+    w->declare_parameter(param("mach", "condition", "1"));
+    Array wall = array("wall_t", "condition", "K", 3);
+    wall.lower = 200.0;
+    wall.upper = 400.0;
+    w->declare_array(wall);
+    Array plies = array("plies", "design", "1", 2);
+    plies.dtype = DType::Int64;
+    w->declare_array(plies);
+    w->declare_result(scalar("q", "W m-2"));
+    // Refusals before any run: names, roles, lengths, dtypes, bounds.
+    CHECK(rule_of([&] { w->declare_array(array("mach", "design", "1", 2)); }) == "E8");
+    CHECK(rule_of([&] { w->declare_array(array("gamut_x", "design", "1", 2)); }) == "E8");
+    CHECK(rule_of([&] { w->declare_array(array("t", "time", "s", 2)); }) == "error");
+    CHECK(rule_of([&] { w->declare_array(array("z", "design", "1", 0)); }) == "E5");
+    CHECK(rule_of([&] { w->declare_array(array("z", "design", "parsec^", 2)); }) == "E7");
+    Array f32a = array("z", "design", "1", 2);
+    f32a.dtype = DType::Float32;
+    CHECK(rule_of([&] { w->declare_array(f32a); }) == "E4");
+    Array half = array("z", "design", "1", 2);
+    half.lower = 0.0;
+    CHECK(rule_of([&] { w->declare_array(half); }) == "E16");
+    Batch b;
+    b.runs = 2;
+    b.values["mach"] = f64({0.5, 0.6});
+    b.values["wall_t"] = f64({300, 310, 320, 330, 340, 350});
+    const std::vector<std::int64_t> p = {4, 5, 6, 7};
+    b.values["plies"] = Column::of(DType::Int64, p.data(), 4);
+    b.values["q"] = f64({1.0, 2.0});
+    // A count that is not runs x length, a missing value and text are
+    // refused, and the refused batch writes nothing.
+    Batch short_b = b;
+    short_b.values["wall_t"] = f64({300, 310, 320, 330, 340});
+    CHECK(rule_of([&] { w->add_runs(short_b); }) == "E5");
+    Batch nan_b = b;
+    nan_b.values["wall_t"] = f64({300, 310, 320, 330, std::nan(""), 350});
+    CHECK(rule_of([&] { w->add_runs(nan_b); }) == "E5");
+    Batch none_b = b;
+    none_b.values.erase("plies");
+    CHECK(rule_of([&] { w->add_runs(none_b); }) == "E2");
+    Batch text_b = none_b;
+    text_b.names["plies"] = {"a", "b"};
+    CHECK(rule_of([&] { w->add_runs(text_b); }) == "E2");
+    CHECK(w->add_runs(b) == 0);
+    // A second batch, one run, outside the bounds.
+    Batch c;
+    c.runs = 1;
+    c.values["mach"] = f64({0.7});
+    c.values["wall_t"] = f64({150, 300, 450});
+    const std::vector<std::int64_t> p1 = {8, 9};
+    c.values["plies"] = Column::of(DType::Int64, p1.data(), 2);
+    c.values["q"] = f64({3.0});
+    w->add_runs(c);
+    w->close();
+  }
+  {
+    // On disk: the role word and the values' own fixed scale.
+    File f = File::open_read(path);
+    for (const auto& a : f.attributes("/wall_t")) {
+      if (a.name == "role") CHECK(a.value.as_text() == "condition_array");
+    }
+    const DsetInfo d = f.dataset_info("/wall_t", false);
+    CHECK(d.shape.size() == 2 && d.shape[0] == 3 && d.shape[1] == 3);
+    CHECK(d.maxshape.size() == 2 && d.maxshape[0] == H5S_UNLIMITED && d.maxshape[1] == 3);
+    const DsetInfo s = f.dataset_info("/gamut_wall_t_d1");
+    CHECK(s.is_scale && s.shape.size() == 1 && s.shape[0] == 3 && s.maxshape[0] == 3);
+  }
+  const Report clean = validate_file(path);
+  CHECK(clean.errors() == 0);
+  CHECK(has_rule(clean, "W4", "wall_t"));
+  if (clean.errors() != 0) {
+    for (const auto& line : rules_of(clean)) std::fprintf(stderr, "  %s\n", line.c_str());
+  }
+  {
+    auto r = Reader::open(path);
+    CHECK(r->names("arrays") == std::vector<std::string>({"plies", "wall_t"}));
+    CHECK(r->names("parameters") == std::vector<std::string>({"mach"}));
+    std::map<std::string, std::string> d;
+    for (const auto& kv : r->describe("wall_t")) d[kv.first] = kv.second;
+    CHECK(d["kind"] == "array" && d["role"] == "condition" && d["units"] == "K" &&
+          d["length"] == "3" && d["dtype"] == "float64" && !d["lower"].empty());
+    CHECK(r->shape("wall_t", Selection::all(), Selection::all()) == std::vector<std::int64_t>({3, 3}));
+    CHECK(read_f64(*r, "wall_t") ==
+          std::vector<double>({300, 310, 320, 330, 340, 350, 150, 300, 450}));
+    CHECK(read_f64(*r, "wall_t", Selection::list({0, 2}), Selection::list({2})) ==
+          std::vector<double>({320, 450}));
+    CHECK(read_i64(*r, "plies", Selection::range(1, 3)) == std::vector<std::int64_t>({6, 7, 8, 9}));
+    std::vector<double> out(9);
+    r->outside("wall_t", Selection::all(), out.data(), out.size() * 8);
+    CHECK(out == std::vector<double>({0, 0, 0, 0, 0, 0, -50, 0, 50}));
+    CHECK(rule_of([&] { r->outside("plies", Selection::all(), out.data(), out.size() * 8); }) ==
+          "error");
+    // where compares one number per run; an array is refused by name.
+    std::string msg;
+    try {
+      select_rows(*r, "wall_t > 3");
+    } catch (const gamut_core::Error& e) {
+      msg = e.what();
+    }
+    CHECK(msg.find("is an array") != std::string::npos);
+  }
+  // Appending in a session grows the array with the rows; a file whose
+  // array differs is refused.
+  {
+    auto w = Writer::open_append(path);
+    Batch c;
+    c.runs = 1;
+    c.values["mach"] = f64({0.8});
+    c.values["wall_t"] = f64({301, 302, 303});
+    const std::vector<std::int64_t> p1 = {10, 11};
+    c.values["plies"] = Column::of(DType::Int64, p1.data(), 2);
+    c.values["q"] = f64({4.0});
+    CHECK(w->add_runs(c) == 3);
+    w->close();
+  }
+  {
+    auto r = Reader::open(path);
+    CHECK(read_f64(*r, "wall_t", Selection::list({3})) == std::vector<double>({301, 302, 303}));
+  }
+  CHECK(validate_file(path).errors() == 0);
+  const std::string copy = "wr_arrays_copy.gamut", part = "wr_arrays_part.gamut",
+                    other = "wr_arrays_other.gamut";
+  for (const auto& p : {copy, part, other}) std::remove(p.c_str());
+  write_copy_file(path, copy);
+  extract_file(path, part, Selection::list({1, 3}));
+  {
+    auto r = Reader::open(part);
+    CHECK(read_f64(*r, "wall_t") == std::vector<double>({330, 340, 350, 301, 302, 303}));
+    CHECK(read_i64(*r, "row") == std::vector<std::int64_t>({1, 3}));
+    auto c = Reader::open(copy);
+    CHECK(read_i64(*c, "plies") == read_i64(*Reader::open(path), "plies"));
+  }
+  CHECK(validate_file(copy).errors() == 0 && validate_file(part).errors() == 0);
+  CHECK(append_file(copy, part) == 2);
+  {
+    auto w = Writer::create(other, "tests", "", "fixed");
+    w->declare_parameter(param("mach", "condition", "1"));
+    w->declare_array(array("wall_t", "condition", "K", 4));
+    Array plies = array("plies", "design", "1", 2);
+    plies.dtype = DType::Int64;
+    w->declare_array(plies);
+    w->declare_result(scalar("q", "W m-2"));
+    w->close();
+  }
+  std::string why;
+  try {
+    append_file(path, other);
+  } catch (const gamut_core::Error& e) {
+    why = e.what();
+  }
+  CHECK(why.find("the array wall_t") != std::string::npos);
+  if (!std::getenv("GAMUT_KEEP")) {
+    for (const auto& p : {path, copy, part, other}) std::remove(p.c_str());
+  }
+}
+
+// A file broken by hand: every new rule reports where it should.
+void test_array_rules() {
+  const std::string path = "wr_array_rules.gamut";
+  std::remove(path.c_str());
+  {
+    auto w = Writer::create(path, "tests", "", "fixed");
+    w->declare_parameter(param("mach", "condition", "1"));
+    Array a = array("prof", "design", "m", 2);
+    a.lower = 0.0;
+    a.upper = 1.0;
+    w->declare_array(a);
+    Result d = scalar("dq", "1");
+    d.relation.of = "q";
+    d.relation.with_respect_to = "prof";
+    w->declare_result(scalar("q", "1"));
+    w->declare_result(d);
+    CHECK(rule_of([&] { w->add_runs(Batch{}); }) == "E12");
+    w->abandon(true);
+  }
+  {
+    auto w = Writer::create(path, "tests", "", "fixed");
+    w->declare_parameter(param("mach", "condition", "1"));
+    Array a = array("prof", "design", "m", 2);
+    a.lower = 0.0;
+    a.upper = 1.0;
+    w->declare_array(a);
+    Batch b;
+    b.runs = 2;
+    b.values["mach"] = f64({0.1, 0.2});
+    b.values["prof"] = f64({0.1, 0.2, 0.3, 0.4});
+    w->add_runs(b);
+    w->close();
+  }
+  CHECK(validate_file(path).findings.empty());
+  {
+    File f = File::open_write(path);
+    const double missing = std::nan("");
+    f.write("/prof", DType::Float64, {1, 1}, {1, 1}, &missing);
+    f.write_attr("/prof", "run_group", AttrValue::text("x"));
+  }
+  Report rep = validate_file(path);
+  CHECK(has_rule(rep, "E5", "prof"));
+  CHECK(has_rule(rep, "E15", "prof"));
+  {
+    File f = File::open_write(path);
+    f.replace_attr("/prof", "role", AttrValue::text("time_array"));
+  }
+  rep = validate_file(path);
+  CHECK(has_rule(rep, "W5", "prof") && rep.errors() == 0);
+  {
+    // A reader of this version ignores an unknown role, as one of an earlier
+    // version ignores an array.
+    auto r = Reader::open(path);
+    CHECK(r->names("arrays").empty());
+  }
+  if (!std::getenv("GAMUT_KEEP")) std::remove(path.c_str());
+}
+
+// A model of an array: nearest reads it value by value; evaluation takes it
+// as rows x length, reports values outside the domain, and writes it back.
+void test_array_model_and_evaluation() {
+  const std::string model = "wr_array_model.gamut", out = "wr_array_eval.gamut";
+  for (const auto& p : {model, out}) std::remove(p.c_str());
+  Nearest nm;
+  nm.columns = {"mach", "prof"};
+  nm.widths = {1, 2};
+  nm.widths_stored = true;
+  nm.lower = {0.0, 0.0};
+  nm.upper = {1.0, 10.0};
+  nm.points = 2;
+  nm.values = 3;
+  nm.x = {0.5, 0.0, 0.0,     // point 0
+          0.5, 10.0, 10.0};  // point 1
+  std::vector<unsigned char> o(16);
+  const double ov[2] = {1.0, 2.0};
+  std::memcpy(o.data(), ov, 16);
+  nm.outputs["q"] = Value::numbers(DType::Float64, {2}, o);
+  {
+    auto w = Writer::create_model(model, "tests", "", "fixed");
+    Parameter mach = param("mach", "condition", "1");
+    mach.lower = 0.0;
+    mach.upper = 1.0;
+    w->declare_parameter(mach);
+    Array prof = array("prof", "design", "m", 2);
+    CHECK(rule_of([&] { w->declare_array(prof); }) == "E16");
+    prof.lower = 0.0;
+    prof.upper = 10.0;
+    w->declare_array(prof);
+    Result q = scalar("q", "1");
+    q.model = "nn";
+    q.output = "q";
+    w->declare_result(q);
+    Nearest wrong = nm;
+    wrong.widths = {1, 1};
+    wrong.values = 2;
+    wrong.x = {0.5, 0.0, 0.5, 10.0};
+    CHECK(rule_of([&] { w->add_model("nn", "nearest", {"mach", "prof"}, nearest_numbers(wrong), ""); }) ==
+          "E17");
+    w->add_model("nn", "nearest", {"mach", "prof"}, nearest_numbers(nm), "");
+    w->close();
+  }
+  const Report mrep = validate_file(model);
+  CHECK(mrep.errors() == 0);
+  if (mrep.errors() != 0) {
+    for (const auto& line : rules_of(mrep)) std::fprintf(stderr, "  %s\n", line.c_str());
+  }
+  {
+    auto r = Reader::open(model);
+    Evaluation ev(*r, 3, out);
+    ev.values("mach", f64({0.5, 0.5, 0.5}));
+    // length x rows is refused: 2 x 3 is not 3 x 2.
+    CHECK(rule_of([&] { ev.values("prof", f64({1, 2, 3, 4, 5, 6}), 2); }) == "E5");
+    CHECK(rule_of([&] { ev.values("prof", f64({1, 2, 3, 4, 5})); }) == "E5");
+    ev.values("prof", f64({1, 2, 9, 9, 4, 12}), 3);
+    ev.ready();
+    CHECK(ev.warnings().size() == 1 &&
+          ev.warnings()[0].find("prof is outside the model's domain [0, 10] in 1 of 3 rows (1 values)") !=
+              std::string::npos);
+    CHECK(ev.input_shape("prof") == std::vector<std::int64_t>({3, 2}));
+    ev.finish();
+  }
+  {
+    auto r = Reader::open(out);
+    CHECK(read_f64(*r, "q") == std::vector<double>({1.0, 2.0, 2.0}));
+    CHECK(read_f64(*r, "prof") == std::vector<double>({1, 2, 9, 9, 4, 12}));
+    std::map<std::string, std::string> d;
+    for (const auto& kv : r->describe("prof")) d[kv.first] = kv.second;
+    CHECK(d["kind"] == "array" && d["length"] == "2" && !d["upper"].empty());
+  }
+  const Report erep = validate_file(out);
+  CHECK(erep.errors() == 0 && has_rule(erep, "W4", "prof"));
+  // Nearest's numbers without widths read as one value per column.
+  Nearest flat = nm;
+  flat.columns = {"a", "b"};
+  flat.widths_stored = false;
+  flat.widths = {1, 1};
+  flat.values = 2;
+  flat.x = {0.0, 0.0, 1.0, 1.0};
+  CHECK(nearest_from(nearest_numbers(flat)).widths == std::vector<std::int64_t>({1, 1}));
+  CHECK(nearest_numbers(flat).count("widths") == 0);
+  Nearest zero = nm;
+  zero.widths = {1, 0};
+  CHECK(rule_of([&] { nearest_from(nearest_numbers(zero)); }) == "E17");
+  if (!std::getenv("GAMUT_KEEP")) {
+    for (const auto& p : {model, out}) std::remove(p.c_str());
+  }
 }
 
 // A file of another major format version is refused by reading and by
@@ -1703,6 +2040,9 @@ int main() {
       {"marking_notice", test_marking_notice},
       {"root_text_edges", test_root_text_edges},
       {"bounds", test_outside_bounds},
+      {"arrays", test_arrays_in_a_data_file},
+      {"array_rules", test_array_rules},
+      {"array_model", test_array_model_and_evaluation},
       {"bounds_int", test_outside_large_integers},
       {"other_major", test_other_major_version},
       {"outside", test_values_stored_outside},
@@ -1721,6 +2061,7 @@ int main() {
       {"chunk_other_filter", test_other_filter_is_not_read},
   };
   for (const auto& t : tests) {
+    if (std::getenv("GAMUT_TRACE")) std::fprintf(stderr, "== %s\n", t.first);
     try {
       t.second();
     } catch (const gamut_core::Error& e) {

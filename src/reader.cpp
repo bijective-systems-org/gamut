@@ -168,6 +168,18 @@ Schema load_schema(const File& f, const std::string& path) {
       p.upper = a.real("upper");
       p.run_group = a.text("run_group");
       s.parameters.push_back(p);
+    } else if (!array_role_of(role).empty()) {
+      Array x;
+      x.name = m.name;
+      x.role = array_role_of(role);
+      x.units = a.text("units");
+      if (typed) x.dtype = t;
+      // The length is the extent of the values' axis; a dataset of another
+      // rank keeps 0, which a read refuses and the validator reports (E5).
+      if (info.is_dataset && info.shape.size() == 2) x.length = static_cast<std::int64_t>(info.shape[1]);
+      x.lower = a.real("lower");
+      x.upper = a.real("upper");
+      s.arrays.push_back(x);
     } else if (kLabelRoles.count(role) == 1) {
       Label l;
       l.name = m.name;
@@ -198,6 +210,7 @@ Schema load_schema(const File& f, const std::string& path) {
     });
   };
   by_name(s.parameters);
+  by_name(s.arrays);
   by_name(s.labels);
   by_name(s.constants);
   if (f.is_group("/mesh")) {
@@ -301,6 +314,8 @@ std::vector<std::string> Reader::names(const std::string& group) const {
   const Schema& s = schema_;
   if (group == "parameters") {
     for (const auto& p : s.parameters) out.push_back(p.name);
+  } else if (group == "arrays") {
+    for (const auto& a : s.arrays) out.push_back(a.name);
   } else if (group == "labels") {
     for (const auto& l : s.labels) out.push_back(l.name);
   } else if (group == "scalars") {
@@ -324,7 +339,7 @@ std::vector<std::string> Reader::names(const std::string& group) const {
   } else if (group == "models") {
     for (const auto& m : s.models) out.push_back(m.id);
   } else {
-    throw Error("", "no group \"" + group + "\"; the groups are parameters, labels, scalars, "
+    throw Error("", "no group \"" + group + "\"; the groups are parameters, arrays, labels, scalars, "
                     "constants, node_fields, cell_fields, node_labels, cell_labels, tables "
                     "and models");
   }
@@ -350,6 +365,14 @@ std::vector<std::pair<std::string, std::string>> Reader::describe(
     add("lower", real(p->lower));
     add("upper", real(p->upper));
     add("run_group", p->run_group);
+  } else if (const Array* x = s.array(path)) {
+    add("kind", "array");
+    add("role", x->role);
+    add("units", x->units);
+    add("dtype", dtype_name(x->dtype));
+    add("length", format_i64(x->length));
+    add("lower", real(x->lower));
+    add("upper", real(x->upper));
   } else if (const Label* l = s.label(path)) {
     add("kind", "label");
     add("role", l->role);
@@ -511,6 +534,10 @@ std::vector<std::int64_t> Reader::unchecked_shape(const std::string& path,
     return {runs.count(s.rows, path)};
   }
   if (s.constant(path)) return {};
+  if (const Array* a = s.array(path)) {
+    need(a->length >= 1, "E5", path + ": an array is (row, values) with at least one value", path);
+    return {runs.count(s.rows, path), sites.count(a->length, path)};
+  }
   const Result* r = s.result(path);
   const MeshLabel* ml = s.mesh_label(path);
   if (r != nullptr || ml != nullptr || path == "coordinates") {
@@ -584,6 +611,10 @@ void Reader::read(const std::string& path, const Selection& runs,
   const File& f = *file_;
   if (path == "row") {
     f.read("/row", mem, {runs}, out, out_bytes);
+    return;
+  }
+  if (s.array(path)) {
+    f.read("/" + path, mem, {runs, sites}, out, out_bytes);
     return;
   }
   if (s.parameter(path) || s.label(path) ||
@@ -808,15 +839,21 @@ int compare_int64(std::int64_t v, double b) {
 void Reader::outside(const std::string& name, const Selection& runs, double* out,
                      std::size_t out_bytes) const {
   const Parameter* p = schema_.parameter(name);
-  need(p != nullptr, "", "no parameter \"" + name + "\"", name);
-  need(p->lower || p->upper, "",
-       name + " declares no bounds; outside needs a parameter with lower and upper", name);
+  const Array* x = schema_.array(name);
+  need(p != nullptr || x != nullptr, "", "no parameter or array \"" + name + "\"", name);
+  const std::optional<double>& lower = p != nullptr ? p->lower : x->lower;
+  const std::optional<double>& upper = p != nullptr ? p->upper : x->upper;
+  const DType dtype = p != nullptr ? p->dtype : x->dtype;
+  need(lower || upper, "",
+       name + " declares no bounds; outside needs a parameter or an array with lower and upper",
+       name);
   // The validator reports these (E16); measuring against them would mislead.
-  need(p->lower && p->upper && std::isfinite(*p->lower) && std::isfinite(*p->upper) &&
-           *p->lower <= *p->upper,
+  need(lower && upper && std::isfinite(*lower) && std::isfinite(*upper) && *lower <= *upper,
        "E16", name + ": its bounds are not two finite numbers with lower <= upper", name);
-  const std::int64_t n = shape(name, runs, Selection::all()).at(0);
-  if (p->dtype == DType::Int64) {
+  // Every value is measured, an array's (row, value) in C order.
+  std::int64_t n = 1;
+  for (const std::int64_t d : shape(name, runs, Selection::all())) n *= d;
+  if (dtype == DType::Int64) {
     // Integers are measured as integers: as doubles they lose bits past 2^53.
     const std::size_t want = static_cast<std::size_t>(n) * sizeof(double);
     need(out_bytes >= want, "",
@@ -827,19 +864,19 @@ void Reader::outside(const std::string& name, const Selection& runs, double* out
     // Inside or outside is decided exactly; then how far.
     for (std::size_t i = 0; i < values.size(); ++i) {
       const std::int64_t v = values[i];
-      out[i] = compare_int64(v, *p->lower) < 0   ? minus(v, *p->lower)
-               : compare_int64(v, *p->upper) > 0 ? minus(v, *p->upper)
-                                           : 0.0;
+      out[i] = compare_int64(v, *lower) < 0   ? minus(v, *lower)
+               : compare_int64(v, *upper) > 0 ? minus(v, *upper)
+                                              : 0.0;
     }
     return;
   }
   read(name, runs, Selection::all(), DType::Float64, out, out_bytes);
   for (std::int64_t i = 0; i < n; ++i) {
     double& v = out[i];
-    if (v < *p->lower) {
-      v -= *p->lower;
-    } else if (v > *p->upper) {
-      v -= *p->upper;
+    if (v < *lower) {
+      v -= *lower;
+    } else if (v > *upper) {
+      v -= *upper;
     } else if (!std::isnan(v)) {
       v = 0.0;
     }

@@ -114,7 +114,7 @@ class Selection {
 inline const Selection all{};
 
 // What a read returns: values in C order and their shape (runs x nodes for
-// a field on a shared mesh).
+// a field on a shared mesh, runs x length for an array).
 template <class T>
 struct Array {
   std::vector<int64_t> shape;
@@ -171,11 +171,14 @@ inline Relation derivative_of(const std::string& of, const std::string& with_res
 }
 
 // A run's parameters and scalars as numbers (integers stay integers), its
-// labels by name.
-using Values = std::map<std::string, std::variant<double, int64_t, std::string>>;
-// Many runs at once: a column per name, one entry per run.
+// labels by name, and its arrays as their values.
+using Values = std::map<std::string, std::variant<double, int64_t, std::string, std::vector<double>,
+                                                  std::vector<int64_t>>>;
+// Many runs at once: a column per name, one entry per run; an array as
+// runs x length.
 using Columns = std::map<std::string, std::variant<std::vector<double>, std::vector<int64_t>,
-                                                   std::vector<std::string>>>;
+                                                   std::vector<std::string>, Array<double>,
+                                                   Array<int64_t>>>;
 // A run's fields, one value per node or cell (for add_runs, every run's
 // values one after another).
 using Fields = std::map<std::string, std::vector<double>>;
@@ -250,6 +253,28 @@ class Study {
     detail::check(gamut_declare_parameter(need_writer(), name.c_str(), role.c_str(), units.c_str(),
                                           detail::dtype<T>(), 1, lower, upper, run_group.c_str(), &e), e);
   }
+  // An array (spec section 3.9): `length` values per run, one unit for all
+  // of them. role: "design" or "condition". T is double, or int64_t for
+  // counts.
+  template <class T = double>
+  void declare_array(const std::string& name, const std::string& role, const std::string& units,
+                     int64_t length) {
+    static_assert(std::is_same_v<T, double> || std::is_same_v<T, int64_t>,
+                  "an array is double or int64_t");
+    gamut_error e{};
+    detail::check(gamut_declare_array(need_writer(), name.c_str(), role.c_str(), units.c_str(), length,
+                                      detail::dtype<T>(), 0, 0.0, 0.0, &e), e);
+  }
+  // With the bounds every value lies in (a model file's domain).
+  template <class T = double>
+  void declare_array(const std::string& name, const std::string& role, const std::string& units,
+                     int64_t length, double lower, double upper) {
+    static_assert(std::is_same_v<T, double> || std::is_same_v<T, int64_t>,
+                  "an array is double or int64_t");
+    gamut_error e{};
+    detail::check(gamut_declare_array(need_writer(), name.c_str(), role.c_str(), units.c_str(), length,
+                                      detail::dtype<T>(), 1, lower, upper, &e), e);
+  }
   // role: "categorical", "status", "group" or "split"; without categories
   // the table grows as names appear.
   void declare_label(const std::string& name, const std::string& role,
@@ -317,6 +342,12 @@ class Study {
         detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, number, 0, 1, &e), e);
       } else if (const int64_t* integer = std::get_if<int64_t>(&value)) {
         detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_INT64, integer, 0, 1, &e), e);
+      } else if (const auto* numbers = std::get_if<std::vector<double>>(&value)) {
+        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, numbers->data(), 0,
+                                         static_cast<int64_t>(numbers->size()), &e), e);
+      } else if (const auto* integers = std::get_if<std::vector<int64_t>>(&value)) {
+        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_INT64, integers->data(), 0,
+                                         static_cast<int64_t>(integers->size()), &e), e);
       } else {
         const char* label = std::get<std::string>(value).c_str();
         detail::check(gamut_batch_names(f_, name.c_str(), &label, 1, &e), e);
@@ -342,8 +373,17 @@ class Study {
   std::vector<int64_t> add_runs(const Columns& columns, const Fields& fields = {}) {
     if (columns.empty()) throw Error("E5", "add_runs needs at least one column");
     int64_t n = -1;
+    // Runs: a column's length, an array's first axis.
+    auto runs = [](const auto& v) -> int64_t {
+      using V = std::decay_t<decltype(v)>;
+      if constexpr (std::is_same_v<V, Array<double>> || std::is_same_v<V, Array<int64_t>>) {
+        return v.shape.empty() ? static_cast<int64_t>(v.values.size()) : v.shape[0];
+      } else {
+        return static_cast<int64_t>(v.size());
+      }
+    };
     for (const auto& [name, column] : columns) {
-      const int64_t m = std::visit([](const auto& v) { return static_cast<int64_t>(v.size()); }, column);
+      const int64_t m = std::visit(runs, column);
       if (n >= 0 && m != n) throw Error("E5", "every column needs the same number of runs; " + name + " has " +
                                               std::to_string(m) + ", not " + std::to_string(n));
       n = m;
@@ -355,6 +395,12 @@ class Study {
         detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, numbers->data(), 0, n, &e), e);
       } else if (const auto* integers = std::get_if<std::vector<int64_t>>(&column)) {
         detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_INT64, integers->data(), 0, n, &e), e);
+      } else if (const auto* reals = std::get_if<Array<double>>(&column)) {
+        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_FLOAT64, reals->values.data(), n,
+                                         static_cast<int64_t>(reals->values.size()), &e), e);
+      } else if (const auto* counts = std::get_if<Array<int64_t>>(&column)) {
+        detail::check(gamut_batch_values(f_, name.c_str(), GAMUT_INT64, counts->values.data(), n,
+                                         static_cast<int64_t>(counts->values.size()), &e), e);
       } else {
         const std::vector<const char*> names = detail::pointers(std::get<std::vector<std::string>>(column));
         detail::check(gamut_batch_names(f_, name.c_str(), names.data(), n, &e), e);
@@ -373,8 +419,8 @@ class Study {
   int64_t row_count() const { return std::stoll(info("row_count")); }
   // "table", "shared" or "changing".
   std::string type() const { return info("type"); }
-  // group: "parameters", "labels", "scalars", "constants", "node_fields",
-  // "cell_fields", "node_labels", "cell_labels".
+  // group: "parameters", "arrays", "labels", "scalars", "constants",
+  // "node_fields", "cell_fields", "node_labels", "cell_labels".
   std::vector<std::string> names(const std::string& group) const {
     gamut_error e{};
     detail::Strings s;
@@ -444,6 +490,14 @@ class Study {
     stored_as<T>(name);
     return read<T>(name, rows, all).values;
   }
+  // An array as runs x length, in the type it is stored as (as
+  // get_parameter); `values` selects among its values.
+  template <class T>
+  Array<T> get_array(const std::string& name, const Selection& rows = all,
+                     const Selection& values = all) const {
+    stored_as<T>(name);
+    return read<T>(name, rows, values);
+  }
   std::vector<double> get_scalar(const std::string& name, const Selection& rows = all) const {
     return read<double>(name, rows, all).values;
   }
@@ -454,17 +508,20 @@ class Study {
     detail::check(gamut_label_names(need_reader(), name.c_str(), &r, &s.s, &e), e);
     return s.take();
   }
-  // How far each row's value of a parameter lies outside the bounds the
-  // file declares for it, in its units: 0 inside or on a bound, value -
-  // lower below, value - upper above, NaN where the value is missing.  A
-  // parameter without bounds is refused.
+  // How far each row's value of a parameter, or each value of an array,
+  // lies outside the bounds the file declares for it, in its units: 0
+  // inside or on a bound, value - lower below, value - upper above, NaN
+  // where the value is missing.  An array's are runs x length, in C order.
+  // One without bounds is refused.
   std::vector<double> outside(const std::string& name, const Selection& rows = all) const {
     gamut_error e{};
     const gamut_sel r = rows.c();
     int64_t shape[4] = {0, 0, 0, 0};
     int rank = 0;
     detail::check(gamut_shape(need_reader(), name.c_str(), &r, nullptr, &rank, shape, 4, &e), e);
-    std::vector<double> out(rank == 1 ? static_cast<size_t>(shape[0]) : 0);
+    int64_t n = rank >= 1 ? 1 : 0;
+    for (int i = 0; i < rank; ++i) n *= shape[i];
+    std::vector<double> out(static_cast<size_t>(n));
     detail::check(gamut_outside(f_, name.c_str(), &r, out.data(),
                                 static_cast<int64_t>(out.size() * sizeof(double)), &e),
                   e);
@@ -561,7 +618,7 @@ class Study {
   template <class T>
   void stored_as(const std::string& name) const {
     static_assert(std::is_same_v<T, double> || std::is_same_v<T, int64_t>,
-                  "a parameter or constant is read as double or int64_t");
+                  "a parameter, array or constant is read as double or int64_t");
     const auto d = describe(name);
     const auto it = d.find("dtype");
     const std::string stored = it == d.end() ? "float64" : it->second;

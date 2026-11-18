@@ -99,6 +99,14 @@ GAMUT_API int gamut_declare_parameter(gamut_file* f, const char* name, const cha
                                   const char* units, int dtype, int has_bounds,
                                   double lower, double upper, const char* run_group,
                                   gamut_error* err);
+/* An array (spec section 3.9): `length` values per row, at least 1.  role:
+ * "design" or "condition" (NULL or "" is "design"); dtype GAMUT_FLOAT64
+ * (or GAMUT_AS_GIVEN) or GAMUT_INT64.  Its values come with the runs, rows x
+ * length in C order (gamut_batch_values); it is read by name, with sites
+ * selecting its values. */
+GAMUT_API int gamut_declare_array(gamut_file* f, const char* name, const char* role,
+                                  const char* units, int64_t length, int dtype, int has_bounds,
+                                  double lower, double upper, gamut_error* err);
 GAMUT_API int gamut_declare_label(gamut_file* f, const char* name, const char* role,
                               const char* const* categories, int64_t n_categories,
                               gamut_error* err);
@@ -214,8 +222,9 @@ GAMUT_API int gamut_set_threads(gamut_file* f, int threads, gamut_error* err);
  * "trained_on", "evaluated_from", "support_id", "per", "mesh_kind").  One string, or
  * several for "addons". */
 GAMUT_API int gamut_info(const gamut_file* f, const char* key, gamut_strings** out, gamut_error* err);
-/* group: "parameters", "labels", "scalars", "constants", "node_fields",
- * "cell_fields", "node_labels", "cell_labels", "tables", "models". */
+/* group: "parameters", "arrays", "labels", "scalars", "constants",
+ * "node_fields", "cell_fields", "node_labels", "cell_labels", "tables",
+ * "models". */
 GAMUT_API int gamut_names(const gamut_file* f, const char* group, gamut_strings** out,
                       gamut_error* err);
 /* A concept's attributes as two parallel lists. */
@@ -231,9 +240,10 @@ GAMUT_API int gamut_describe(const gamut_file* f, const char* name, gamut_string
  * nothing in the file is refused, as by gamut_describe. */
 GAMUT_API int gamut_related(const gamut_file* f, const char* name, gamut_strings** kinds,
                         gamut_strings** keys, gamut_strings** names, gamut_error* err);
-/* name: a parameter, label, scalar, constant, field or mesh label, or
- * "row", "coordinates", "cells/types", "cells/offsets",
- * "cells/connectivity".  rows and sites may be NULL (everything).  shape has
+/* name: a parameter, array, label, scalar, constant, field or mesh label,
+ * or "row", "coordinates", "cells/types", "cells/offsets",
+ * "cells/connectivity".  rows and sites may be NULL (everything); an
+ * array's sites are its values.  shape has
  * room for `capacity` extents; *rank is always set, and a capacity below it
  * is refused (4 is always enough).  gamut_read converts to dtype and fills out
  * from the start, in C order; out_bytes is its capacity, at least the product
@@ -246,11 +256,12 @@ GAMUT_API int gamut_read(const gamut_file* f, const char* name, const gamut_sel*
                      gamut_error* err);
 GAMUT_API int gamut_label_names(const gamut_file* f, const char* label, const gamut_sel* rows,
                             gamut_strings** out, gamut_error* err);
-/* How far each selected row's value of the parameter `name` lies outside
- * the bounds the file declares for it, in the parameter's units: 0 inside
- * or on a bound, value - lower below, value - upper above, NaN where the
- * value is missing.  A parameter without bounds is refused.  out has the
- * shape gamut_shape gives the parameter; out_bytes is its capacity. */
+/* How far each selected row's value of the parameter or array `name` lies
+ * outside the bounds the file declares for it, in its units: 0 inside or
+ * on a bound, value - lower below, value - upper above, NaN where the
+ * value is missing.  One without bounds is refused.  out has the shape
+ * gamut_shape gives it (rows, or rows x length); out_bytes is its
+ * capacity. */
 GAMUT_API int gamut_outside(const gamut_file* f, const char* name, const gamut_sel* rows,
                         double* out, int64_t out_bytes, gamut_error* err);
 GAMUT_API int gamut_table(const gamut_file* f, const char* table, gamut_strings** out,
@@ -299,7 +310,8 @@ GAMUT_API int gamut_tree_array(const gamut_tree* t, const char* key, void* out, 
                            gamut_error* err);
 
 /* Adds a model to a model file: its type, the inputs it reads (parameters,
- * labels, "coordinates"), its numbers, and an optional one-line repr. */
+ * arrays, labels, "coordinates"), its numbers, and an optional one-line
+ * repr. */
 GAMUT_API int gamut_add_model(gamut_file* f, const char* id, const char* type,
                           const char* const* inputs, int64_t n_inputs, const gamut_tree* numbers,
                           const char* repr, gamut_error* err);
@@ -312,7 +324,8 @@ GAMUT_API int gamut_model_numbers(const gamut_file* f, const char* id, gamut_tre
 GAMUT_API int gamut_nearest_check(const gamut_tree* numbers, gamut_error* err);
 GAMUT_API int gamut_nearest_output_size(const gamut_tree* numbers, const char* output,
                                     int64_t* per_row, gamut_error* err);
-/* columns[j] holds column_lengths[j] values, each n_rows; out holds out_count. */
+/* columns[j] holds column_lengths[j] values: n_rows for a parameter, n_rows
+ * x length for an array (C order); out holds out_count. */
 GAMUT_API int gamut_nearest_call(const gamut_tree* numbers, const char* const* input_names,
                              const double* const* columns, const int64_t* column_lengths,
                              int n_inputs, int64_t n_rows, const char* output, double* out,
@@ -338,9 +351,16 @@ GAMUT_API int gamut_evaluate_begin(const gamut_file* model, const char* out_path
 typedef struct gamut_evaluation gamut_evaluation;
 GAMUT_API int gamut_evaluation_begin(const gamut_file* model, int64_t rows, const char* out_path,
                                  gamut_evaluation** out, gamut_error* err);
-/* A parameter's values (rows of them, in dtype) or a label's names. */
+/* A parameter's values (rows of them, in dtype), or an array's (rows x
+ * length, C order), or a label's names. */
 GAMUT_API int gamut_evaluation_values(gamut_evaluation* ev, const char* name, int dtype,
                                   const void* values, int64_t count, gamut_error* err);
+/* gamut_evaluation_values, with first_axis as in gamut_batch_values: the
+ * extent of the first axis of the caller's array, 0 for a flat one; an
+ * array given length x rows is refused. */
+GAMUT_API int gamut_evaluation_array(gamut_evaluation* ev, const char* name, int dtype,
+                                     const void* values, int64_t first_axis, int64_t count,
+                                     gamut_error* err);
 GAMUT_API int gamut_evaluation_names(gamut_evaluation* ev, const char* name, const char* const* names,
                                  int64_t count, gamut_error* err);
 /* rows x nodes x axes, for a model that reads geometry the file does not
@@ -355,8 +375,9 @@ GAMUT_API int gamut_evaluation_ready(gamut_evaluation* ev, gamut_strings** warni
 GAMUT_API int gamut_evaluation_requests(const gamut_evaluation* ev, const char* model_id,
                                     gamut_strings** outputs, gamut_strings** kinds,
                                     gamut_strings** keys, gamut_error* err);
-/* An input as a model reads it: a parameter in its dtype, a label's codes
- * (int64), coordinates (float64, rows x nodes x axes).  shape has room for
+/* An input as a model reads it: a parameter in its dtype (rows), an array
+ * in its dtype (rows x length), a label's codes (int64), coordinates
+ * (float64, rows x nodes x axes).  shape has room for
  * `capacity` extents (3 is always enough); out_bytes is out's capacity. */
 GAMUT_API int gamut_evaluation_input_info(const gamut_evaluation* ev, const char* name, int* dtype,
                                       int* rank, int64_t* shape, int capacity, gamut_error* err);

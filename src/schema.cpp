@@ -22,6 +22,13 @@ const Parameter* Schema::parameter(const std::string& name) const {
   return nullptr;
 }
 
+const Array* Schema::array(const std::string& name) const {
+  for (const auto& a : arrays) {
+    if (a.name == name) return &a;
+  }
+  return nullptr;
+}
+
 const Label* Schema::label(const std::string& name) const {
   for (const auto& l : labels) {
     if (l.name == name) return &l;
@@ -51,7 +58,7 @@ const MeshLabel* Schema::mesh_label(const std::string& path) const {
 }
 
 bool Schema::name_taken(const std::string& name) const {
-  if (parameter(name) || label(name) || constant(name)) return true;
+  if (parameter(name) || array(name) || label(name) || constant(name)) return true;
   for (const auto& r : results) {
     if (r.name == name) return true;
   }

@@ -104,6 +104,7 @@ class Writer {
 
   void set_attribute(const std::string& name, const std::string& value);
   void declare_parameter(const Parameter& p);
+  void declare_array(const Array& a);
   void declare_label(const std::string& name, const std::string& role,
                      const std::vector<std::string>& categories);
   void declare_result(const Result& r);

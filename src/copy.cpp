@@ -111,6 +111,7 @@ std::size_t shared_row_bytes(const Schema& s) {
   const Mesh& m = s.mesh;
   std::size_t n = 8;                                        // the row id
   for (const auto& p : s.parameters) n += dtype_size(p.dtype);
+  for (const auto& a : s.arrays) n += dtype_size(a.dtype) * static_cast<std::size_t>(a.length);
   n += 32 * s.labels.size();                                // a name each
   for (const auto& r : s.results) {
     if (r.where == "scalar") {
@@ -182,6 +183,7 @@ void copy_rows(const Reader& src, Writer& w, const std::vector<std::int64_t>& ro
     batch.runs = static_cast<std::int64_t>(pos.size());
     if (keep_ids) batch.ids = as_i64(read_column(src, "row", sel, DType::Int64));
     for (const auto& p : s.parameters) batch.values[p.name] = read_column(src, p.name, sel, p.dtype);
+    for (const auto& x : s.arrays) batch.values[x.name] = read_column(src, x.name, sel, x.dtype);
     for (const auto& l : s.labels) batch.names[l.name] = src.label_names(l.name, sel);
     for (const auto& r : s.results) {
       if (r.served()) continue;
@@ -238,6 +240,7 @@ std::unique_ptr<Writer> declare_like(const Reader& src, const std::string& dst) 
     };
     for (const auto& l : s.labels) w->declare_label(l.name, l.role, table(l.category));
     for (const auto& p : s.parameters) w->declare_parameter(p);
+    for (const auto& a : s.arrays) w->declare_array(a);
     if (!m.kind.empty()) {
       w->declare_coordinates(m.coordinate_units, m.coordinate_dtype, m.axes, m.coordinate_model,
                              m.coordinate_output);
@@ -299,10 +302,12 @@ CodeMaps check_same(const Reader& dst, const Reader& src) {
   };
   std::set<std::string> dn, sn;
   for (const auto& p : d.parameters) dn.insert(p.name);
+  for (const auto& a : d.arrays) dn.insert(a.name);
   for (const auto& l : d.labels) dn.insert(l.name);
   for (const auto& r : d.results) dn.insert(result_path(r));
   for (const auto& c : d.constants) dn.insert(c.name);
   for (const auto& p : s.parameters) sn.insert(p.name);
+  for (const auto& a : s.arrays) sn.insert(a.name);
   for (const auto& l : s.labels) sn.insert(l.name);
   for (const auto& r : s.results) sn.insert(result_path(r));
   for (const auto& c : s.constants) sn.insert(c.name);
@@ -322,6 +327,13 @@ CodeMaps check_same(const Reader& dst, const Reader& src) {
     if (q->role != p.role || q->units != p.units || q->dtype != p.dtype ||
         q->run_group != p.run_group) {
       differ("the parameter " + p.name + " (role, units, dtype or run group)", p.name);
+    }
+  }
+  for (const auto& a : s.arrays) {
+    const Array* q = d.array(a.name);
+    same_kind(q, a.name, "array");
+    if (q->role != a.role || q->units != a.units || q->dtype != a.dtype || q->length != a.length) {
+      differ("the array " + a.name + " (role, units, dtype or length)", a.name);
     }
   }
   for (const auto& l : s.labels) {
