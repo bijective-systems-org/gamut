@@ -510,6 +510,12 @@ void nearest_tree(gamut_tree* t, const mxArray* numbers) {
     int64_t n = static_cast<int64_t>(mxGetNumberOfElements(a));
     check(gamut_tree_set_array(t, name, GAMUT_FLOAT64, mxGetData(a), n, 1, &n, &e), e);
   }
+  // widths: optional, one whole number per column (spec section 7.5).
+  if (const mxArray* w = mxGetField(numbers, 0, "widths"); w != nullptr && !mxIsEmpty(w)) {
+    const std::vector<int64_t> widths = integers(w, "widths");
+    int64_t n = static_cast<int64_t>(widths.size());
+    check(gamut_tree_set_array(t, "widths", GAMUT_INT64, widths.data(), n, 1, &n, &e), e);
+  }
   const mxArray* x = field("x");
   doubles(x, "x");
   {
@@ -701,12 +707,18 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     int64_t shape[4];
     int rank = 0;
     check(gamut_shape(f, name.c_str(), rows.ptr(), nullptr, &rank, shape, 4, &e), e);
-    // Sized as a read of the parameter; for any other name the core refuses.
-    const mwSize n = rank == 1 ? static_cast<mwSize>(shape[0]) : 0;
-    plhs[0] = mxCreateDoubleMatrix(n, 1, mxREAL);
-    check(gamut_outside(f, name.c_str(), rows.ptr(), mxGetPr(plhs[0]),
-                        static_cast<int64_t>(n * sizeof(double)), &e),
+    // Sized as a read of the parameter (rows) or array (rows x length); for
+    // any other name the core refuses.
+    std::vector<int64_t> dims(shape, shape + (rank >= 1 ? rank : 0));
+    std::size_t total = dims.empty() ? 0 : 1;
+    for (const auto d : dims) total *= static_cast<std::size_t>(d);
+    std::vector<double> buf(total);
+    check(gamut_outside(f, name.c_str(), rows.ptr(), buf.data(),
+                        static_cast<int64_t>(buf.size() * sizeof(double)), &e),
           e);
+    if (dims.size() == 1) dims.push_back(1);   // a column per run
+    if (dims.empty()) dims = {0, 1};
+    plhs[0] = from_c_order(reinterpret_cast<const unsigned char*>(buf.data()), dims, GAMUT_FLOAT64);
   } else if (cmd == "label_names") {
     gamut_strings* s = nullptr;
     const Sel rows = selection(arg(3));
@@ -755,6 +767,13 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
                                 text(arg(4), "units").c_str(), static_cast<int>(scalar(arg(5), "dtype")),
                                 static_cast<int>(scalar(arg(6), "hasBounds")), scalar(arg(7), "lower"),
                                 scalar(arg(8), "upper"), text(arg(9), "run_group").c_str(), &e),
+          e);
+  } else if (cmd == "declare_array") {
+    // f, name, role, units, length, dtype, hasBounds, lower, upper
+    check(gamut_declare_array(file(arg(1)), text(arg(2), "name").c_str(), text(arg(3), "role").c_str(),
+                              text(arg(4), "units").c_str(), one_integer(arg(5)),
+                              static_cast<int>(scalar(arg(6), "dtype")), static_cast<int>(scalar(arg(7), "hasBounds")),
+                              scalar(arg(8), "lower"), scalar(arg(9), "upper"), &e),
           e);
   } else if (cmd == "declare_label" || cmd == "declare_mesh_label") {
     const auto cats = cellstr(arg(4), "categories");
@@ -895,13 +914,13 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     nearest_tree(t.t, arg(1));
     check(gamut_nearest_check(t.t, &e), e);
   } else if (cmd == "nearest_call") {
-    // numbers (struct), inputNames (cell), columns (cell of double vectors), output
+    // numbers (struct), inputNames (cell), columns (cell: a vector per
+    // parameter, rows x length per array), output, rows
     Tree t;
     check(gamut_tree_new(&t.t, &e), e);
     nearest_tree(t.t, arg(1));
     const std::vector<std::string> names = cellstr(arg(2), "input names");
     std::vector<std::vector<double>> data;
-    int64_t rows = 0;
     const mxArray* cols = arg(3);
     if (!mxIsCell(cols) || mxGetNumberOfElements(cols) != names.size()) {
       usage("one column per input name");
@@ -911,9 +930,14 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
       if (c == nullptr || !mxIsDouble(c) || mxIsComplex(c) || mxIsSparse(c)) {
         usage("input columns are real full double");
       }
-      data.emplace_back(mxGetPr(c), mxGetPr(c) + mxGetNumberOfElements(c));
+      // An array's rows x length in C order: row by row, as the core reads it.
+      std::vector<int64_t> dims;
+      const auto bytes = to_c_order(c, mxGetNumberOfDimensions(c), &dims);
+      std::vector<double> v(mxGetNumberOfElements(c));
+      if (!v.empty()) std::memcpy(v.data(), bytes.data(), v.size() * sizeof(double));
+      data.push_back(std::move(v));
     }
-    if (!data.empty()) rows = static_cast<int64_t>(data.front().size());
+    const int64_t rows = static_cast<int64_t>(scalar(arg(5), "rows"));
     std::vector<const double*> ptrs;
     std::vector<int64_t> lengths;
     for (const auto& d : data) {
@@ -987,6 +1011,17 @@ static void dispatch(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
     check(cmd == "evaluation_values"
               ? gamut_evaluation_values(ev, text(arg(2), "name").c_str(), code, bytes.data(), count, &e)
               : gamut_evaluation_coordinates(ev, code, bytes.data(), count, &e),
+          e);
+  } else if (cmd == "evaluation_array") {
+    // ev, name, values: rows x length (a 1 x length row is one row)
+    const mxArray* v = arg(3);
+    const int code = dtype_code(mxGetClassID(v));
+    if (code < 0 || mxIsLogical(v) || mxIsComplex(v) || mxIsSparse(v)) usage("values are real full numeric");
+    std::vector<int64_t> dims;
+    const auto bytes = to_c_order(v, mxGetNumberOfDimensions(v), &dims);
+    check(gamut_evaluation_array(evaluation(arg(1)), text(arg(2), "name").c_str(), code, bytes.data(),
+                                 static_cast<int64_t>(mxGetDimensions(v)[0]),
+                                 static_cast<int64_t>(mxGetNumberOfElements(v)), &e),
           e);
   } else if (cmd == "evaluation_names") {
     const auto names = cellstr(arg(3), "names");

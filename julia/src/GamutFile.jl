@@ -363,6 +363,13 @@ function declare(h, kw)
         has = haskey(d, "lower") || haskey(d, "upper")
         @mes gamut_declare_parameter (Ptr{Cvoid}, Cstring, Cstring, Cstring, Cint, Cint, Cdouble, Cdouble, Cstring) h cs(name) cs(getstr(d, "role", "design")) cs(getstr(d, "units")) precision_code(get(precision, name, get(d, "dtype", nothing))) (has ? 1 : 0) Float64(get(d, "lower", NaN)) Float64(get(d, "upper", NaN)) cs(getstr(d, "run_group"))
     end
+    for (name, v) in pairs_of(get(kw, :arrays, nothing))
+        d = spec(v, "units")
+        has = haskey(d, "lower") || haskey(d, "upper")
+        len = get(d, "length", 0)
+        (len isa Integer && !(len isa Bool)) || throw(GamutError("", "$name: length is a whole number, not $(repr(len))"))
+        @mes gamut_declare_array (Ptr{Cvoid}, Cstring, Cstring, Cstring, Int64, Cint, Cint, Cdouble, Cdouble) h cs(name) cs(getstr(d, "role", "design")) cs(getstr(d, "units")) Int64(len) precision_code(get(precision, name, get(d, "dtype", nothing))) (has ? 1 : 0) Float64(get(d, "lower", NaN)) Float64(get(d, "upper", NaN))
+    end
     c = get(kw, :coordinates, nothing)
     if c !== nothing
         d = spec(c, "units")
@@ -403,14 +410,15 @@ function declare(h, kw)
 end
 
 """
-    GamutFile.create(path; writer, parameters, labels, scalars, fields, mesh_labels,
-                  constants, mesh, per, coordinates, precision, round_bits, title,
-                  license, references, source, portion_marking, generalisation_group,
-                  compression)
+    GamutFile.create(path; writer, parameters, arrays, labels, scalars, fields,
+                  mesh_labels, constants, mesh, per, coordinates, precision, round_bits,
+                  title, license, references, source, portion_marking,
+                  generalisation_group, compression)
 
 Creates a data file and returns it open to add runs.
 Declarations are Dicts (or NamedTuples) from a name to its units text or
 to its specification, as in Python: `parameters = Dict("mach" => "1")`,
+`arrays = Dict("wall" => (units = "K", length = 200))`,
 `fields = Dict("p" => (units = "Pa", at = "node"))`.
 """
 function axes_of(kw)
@@ -430,11 +438,11 @@ end
 create(f::Function, path::AbstractString; kw...) = with_study(f, create(path; kw...))
 
 """
-    GamutFile.create_model(path; writer, parameters, labels, scalars, fields, constants,
-                        mesh, per, coordinates, trained_on, title, license,
+    GamutFile.create_model(path; writer, parameters, arrays, labels, scalars, fields,
+                        constants, mesh, per, coordinates, trained_on, title, license,
                         references, source, portion_marking)
 
-Creates a model file (spec section 7): parameters with bounds, every result
+Creates a model file (spec section 7): parameters and arrays with bounds, every result
 naming the model and output that computes it; then `add_model!`.
 """
 function create_model(path::AbstractString; writer::AbstractString, mesh=nothing, per="fixed", kw...)
@@ -445,7 +453,7 @@ function create_model(path::AbstractString; writer::AbstractString, mesh=nothing
 end
 create_model(f::Function, path::AbstractString; kw...) = with_study(f, create_model(path; kw...))
 
-const DECLARATIONS = (:parameters, :labels, :scalars, :fields, :mesh_labels, :constants,
+const DECLARATIONS = (:parameters, :arrays, :labels, :scalars, :fields, :mesh_labels, :constants,
                       :coordinates, :precision, :round_bits, :title, :license, :references,
                       :source, :portion_marking, :generalisation_group, :compression, :trained_on)
 
@@ -560,11 +568,13 @@ end
     add_run!(study, values; fields=nothing, points=nothing, cells=nothing, mesh_labels=nothing)
 
 Adds one run and returns its id. `values` maps each parameter, label (by
-name, or a Bool for a yes/no label) and scalar to this run's value;
-`fields` each field to one value per node or cell.
+name, or a Bool for a yes/no label) and scalar to this run's value, and
+each array to its values; `fields` each field to one value per node or cell.
 """
 function add_run!(s::Study, values; fields=nothing, points=nothing, cells=nothing, mesh_labels=nothing)
-    cols = Dict{String,Any}(k => [v] for (k, v) in pairs_of(values))
+    # An array's values are one run of them: a 1 × length row.
+    one_run(v) = v isa AbstractVector ? reshape(collect(v), 1, :) : [v]
+    cols = Dict{String,Any}(k => one_run(v) for (k, v) in pairs_of(values))
     flds = Dict{String,Any}(k => (s.mesh_kind == "changing" ? collect(v) : reshape(collect(v), 1, :))
                             for (k, v) in pairs_of(fields))
     return commit!(s, 1, cols, flds, points === nothing ? nothing : [points],
@@ -575,13 +585,14 @@ end
 """
     add_runs!(study, columns; fields=nothing, points=nothing, cells=nothing, mesh_labels=nothing)
 
-Adds many runs at once: `columns` maps each name to one value per run;
-`fields` to runs × sites (a changing mesh: every run's values end to end);
+Adds many runs at once: `columns` maps each name to one value per run, and
+each array to runs × length; `fields` to runs × sites (a changing mesh: every run's values end to end);
 `points`, `cells`, `mesh_labels` one per run (or per new group member).
 """
 function add_runs!(s::Study, columns; fields=nothing, points=nothing, cells=nothing, mesh_labels=nothing)
     cols = Dict{String,Any}(pairs_of(columns))
-    lengths = unique(length(v) for v in values(cols))
+    # Runs: a column's length, an array's rows.
+    lengths = unique(v isa AbstractMatrix ? size(v, 1) : length(v) for v in values(cols))
     length(lengths) == 1 || throw(GamutError("E5", "every column needs the same number of runs; given " *
         (isempty(cols) ? "no columns" : join(("$k $(length(v))" for (k, v) in sort!(collect(cols); by=first)), ", "))))
     return commit!(s, lengths[1], cols, Dict{String,Any}(pairs_of(fields)), points, cells, mesh_labels)
@@ -604,7 +615,7 @@ function commit!(s::Study, n, columns, fields, points, cells, mesh_labels)
             name == s.group && (group_names = names)
             continue
         end
-        buf = numbers(v)
+        buf = numbers(c_order(v))      # an array, runs × length, in C order
         push!(keep, buf)
         first = ndims(v) > 1 ? size(v, 1) : 0
         @mes gamut_batch_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64, Int64) h cs(name) DTYPE[eltype(buf)] pointer(buf) first length(buf)
@@ -691,7 +702,7 @@ function Base.getproperty(s::Study, name::Symbol)
 end
 Base.propertynames(::Study) = (:path, :kind, :type, :row_count, :addons)
 
-"""    names(study, group)    "parameters", "labels", "scalars", "constants", "node_fields", ..."""
+"""    names(study, group)    "parameters", "arrays", "labels", "scalars", "constants", "node_fields", ..."""
 function names(s::Study, group)
     need_reader(s)
     out = Ref{Ptr{Cvoid}}(C_NULL)
@@ -760,15 +771,24 @@ get_row_ids(s::Study; rows=nothing) = read(s, "row", rows, nothing, Int64)
 get_parameter(s::Study, name; rows=nothing) =
     read(s, name, rows, nothing, get(describe(s, name), "dtype", "") == "int64" ? Int64 : Float64)
 get_label_codes(s::Study, name; rows=nothing) = read(s, name, rows, nothing, Int64)
+"""
+    get_array(study, name; rows=nothing, values=nothing)
+
+An array's values, runs × length (one row given as an integer: its values
+alone); `values` selects among them.
+"""
+get_array(s::Study, name; rows=nothing, values=nothing) =
+    read(s, name, rows, values, get(describe(s, name), "dtype", "") == "int64" ? Int64 : Float64)
 get_scalar(s::Study, name; rows=nothing) = read(s, name, rows, nothing, result_type(s, name))
 
 """
     outside(study, name; rows=nothing)
 
-How far each row's value of the parameter `name` lies outside the bounds
-the file declares for it, in the parameter's units: 0 inside or on a bound,
-`value - lower` (negative) below, `value - upper` (positive) above, `NaN`
-where the value is missing. A parameter with no bounds is refused. The
+How far each row's value of the parameter `name`, or each value of the
+array `name` (runs × length), lies outside the bounds the file declares for
+it, in its units: 0 inside or on a bound, `value - lower` (negative) below,
+`value - upper` (positive) above, `NaN` where the value is missing. One
+with no bounds is refused. The
 answer of `evaluate` keeps the model's bounds, so this says which of its
 rows lie outside the range the model was fitted on, and how far.
 """
@@ -781,11 +801,15 @@ function outside(s::Study, name; rows=nothing)
     rk = r.keep
     GC.@preserve rk begin
         @mes gamut_shape (Ptr{Cvoid}, Cstring, Ref{CSel}, Ptr{CSel}, Ref{Cint}, Ptr{Int64}, Cint) handle(s) cs(name) rsel C_NULL rank shape length(shape)
-        # Sized as a read of the parameter; for any other name the core refuses.
-        out = Vector{Float64}(undef, rank[] == 1 ? shape[1] : 0)
+        # Sized as a read of the parameter or array; for any other name the
+        # core refuses.
+        dims = rank[] >= 1 ? shape[1:rank[]] : Int64[0]
+        out = Vector{Float64}(undef, prod(dims))
         @mes gamut_outside (Ptr{Cvoid}, Cstring, Ref{CSel}, Ptr{Float64}, Int64) handle(s) cs(name) rsel out sizeof(out)
     end
-    return r.single ? out[1] : out
+    length(dims) == 1 && return r.single ? out[1] : out
+    a = from_c_order(out, dims)
+    return r.single ? a[1, :] : a
 end
 
 function get_label(s::Study, name; rows=nothing)
@@ -863,11 +887,12 @@ end
 function table(s::Study; names=nothing, rows=nothing)
     params = GamutFile.names(s, "parameters")
     labels = GamutFile.names(s, "labels")
+    arrays = GamutFile.names(s, "arrays")
     names = something(names, vcat(params, labels, GamutFile.names(s, "scalars")))
     out = Dict{String,Any}()
     for n in names
         out[n] = n in labels ? get_label(s, n; rows) : n in params ? get_parameter(s, n; rows) :
-                 get_scalar(s, n; rows)
+                 n in arrays ? get_array(s, n; rows) : get_scalar(s, n; rows)
     end
     return out
 end
@@ -1082,11 +1107,14 @@ function from_tree(t, prefix="")
 end
 
 """
-    GamutFile.Nearest(columns, lower, upper, x, outputs)
+    GamutFile.Nearest(columns, lower, upper, x, outputs; widths=nothing)
 
 The built-in model: for each input row, the outputs of the closest stored
 point (spec section 7.5), evaluated by the core so every language gets the
-same answers. `x` is points × columns; each output has points first.
+same answers. `columns` names the inputs, parameters and arrays; `widths`
+gives each one's number of values (1 for a parameter, an array's length;
+all 1 when left out). `x` is points × values, each point's inputs side by
+side in the order of `columns`; each output has points first.
 """
 struct Nearest
     columns::Vector{String}
@@ -1094,14 +1122,16 @@ struct Nearest
     upper::Vector{Float64}
     x::Array{Float64}
     outputs::Dict{String,Array{Float64}}
-    function Nearest(columns, lower, upper, x, outputs)
+    widths::Union{Nothing,Vector{Int64}}
+    function Nearest(columns, lower, upper, x, outputs; widths=nothing)
         cols = String[string(c) for c in columns]
         # x is points × columns as given, so the core refuses another
         # orientation; one column may be a vector of points.
         xs = Float64.(collect(x))
         xs isa AbstractVector && length(cols) == 1 && (xs = reshape(xs, :, 1))
         m = new(cols, Float64.(collect(lower)), Float64.(collect(upper)), xs,
-                Dict{String,Array{Float64}}(string(k) => Float64.(v) for (k, v) in pairs_of(outputs)))
+                Dict{String,Array{Float64}}(string(k) => Float64.(v) for (k, v) in pairs_of(outputs)),
+                widths === nothing ? nothing : Int64.(collect(widths)))
         nearest_check(save(m))
         return m
     end
@@ -1115,17 +1145,25 @@ function nearest_check(numbers)
     end
 end
 model_type(::Nearest) = "nearest"
-save(m::Nearest) = Dict{String,Any}("columns" => m.columns, "lower" => m.lower, "upper" => m.upper,
-                                    "x" => m.x, "outputs" => Dict{String,Any}(m.outputs))
+function save(m::Nearest)
+    d = Dict{String,Any}("columns" => m.columns, "lower" => m.lower, "upper" => m.upper,
+                         "x" => m.x, "outputs" => Dict{String,Any}(m.outputs))
+    m.widths === nothing || (d["widths"] = m.widths)
+    return d
+end
 # Numbers from a file are checked before any is looked up: a damaged or
 # foreign file may lack one (E17).
-load_nearest(n) = (nearest_check(n); Nearest(n["columns"], n["lower"], n["upper"], n["x"], n["outputs"]))
+load_nearest(n) = (nearest_check(n); Nearest(n["columns"], n["lower"], n["upper"], n["x"], n["outputs"];
+                                             widths=get(n, "widths", nothing)))
 
 function call(m::Nearest, inputs, wanted)
     missing = [c for c in m.columns if !haskey(inputs, c)]
     isempty(missing) || throw(GamutError("", "nearest needs the inputs $(join(missing, ", "))"))
-    cols = [Vector{Float64}(vec(inputs[c])) for c in m.columns]
-    nrows = !isempty(cols) ? length(cols[1]) : isempty(inputs) ? 0 : length(first(values(inputs)))
+    # An array is rows × length; the core reads it in C order.
+    cols = [Vector{Float64}(c_order(inputs[c])) for c in m.columns]
+    rows_of(v) = v isa AbstractMatrix ? size(v, 1) : length(v)
+    nrows = !isempty(m.columns) ? rows_of(inputs[m.columns[1]]) :
+            isempty(inputs) ? 0 : rows_of(first(values(inputs)))
     t = to_tree(save(m))
     out = Dict{String,Any}()
     try
@@ -1171,14 +1209,15 @@ const LOADERS = Dict{String,Function}("nearest" => load_nearest)
 
 Evaluates a model file on a table of inputs (spec section 7.4) and returns
 the resulting data file open to read. `inputs` maps each parameter to
-values and each label to names from the model file's table, all of one
-length. Without `path` the file is temporary, removed on close.
+values, each array to rows × length and each label to names from the model
+file's table, all for the same rows. Without `path` the file is temporary, removed on close.
 """
 function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=nothing)
     open(model_path) do m
-        params, labels = names(m, "parameters"), names(m, "labels")
+        params, labels, arrays = names(m, "parameters"), names(m, "labels"), names(m, "arrays")
         given = Dict{String,Any}(pairs_of(inputs))
-        n = isempty(given) ? 0 : length(first(values(given)))
+        rows_of(v) = v isa AbstractMatrix ? size(v, 1) : length(v)
+        n = isempty(given) ? 0 : rows_of(first(values(given)))
         out_path = path === nothing ? tempname() * ".gamut" : String(path)
         # The core checks the inputs, runs the built-in models and writes the
         # answer; this layer converts values and calls the registered types.
@@ -1189,6 +1228,11 @@ function evaluate(model_path::AbstractString, inputs; path=nothing, coordinates=
                 if name in labels
                     strs, ptrs = cstrings(String[string(x) for x in v])
                     GC.@preserve strs @mes gamut_evaluation_names (Ptr{Cvoid}, Cstring, Ptr{Ptr{UInt8}}, Int64) ev[] cs(name) ptrs length(ptrs)
+                elseif name in arrays
+                    int64 = get(describe(m, name), "dtype", "") == "int64"
+                    col = int64 ? Vector{Int64}(c_order(v)) : Vector{Float64}(float64_exactly(c_order(v), name))
+                    rows = v isa AbstractMatrix ? size(v, 1) : 0
+                    @mes gamut_evaluation_array (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64, Int64) ev[] cs(name) (int64 ? 4 : 6) col rows length(col)
                 elseif !(name in params)    # the core refuses the name (E2) before its values
                     @mes gamut_evaluation_values (Ptr{Cvoid}, Cstring, Cint, Ptr{Cvoid}, Int64) ev[] cs(name) 6 C_NULL 0
                 else

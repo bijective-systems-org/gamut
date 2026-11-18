@@ -522,14 +522,16 @@ def case_arrays(path):
     s.parameter("mach", [0.3, 0.4, 0.5], "condition", "1")
     s.array("wall", [[300.0, 310.0, 320.0], [330.0, 340.0, 350.0], [360.0, 370.0, 380.0]],
             "condition", "K", 200.0, 400.0)
-    s.array("plies", [[2**53, 2**53 + 1], [3, 4], [5, 6]], "design", "1", dtype="<i8")
+    # Counts above 2**53 are exact in the core and the language tests; the
+    # checkers' JSON readers hold expected values as doubles, so not here.
+    s.array("plies", [[1, 2], [3, 4], [5, 6]], "design", "1", dtype="<i8")
     s.scalar("q", [1.0, 2.0, 3.0], "W m-2")
     s.scalar("dq_dmach", [0.5, 0.5, 0.5], "W m-2", of="q", with_respect_to="mach")
     s.finish()
     return {"probes": [
         {"read": "wall", "rows": [0, 2], "sites": [2], "dtype": "float64", "values": [[320.0], [380.0]]},
         {"read": "wall", "rows": [1], "sites": None, "dtype": "float64", "values": [[330.0, 340.0, 350.0]]},
-        {"read": "plies", "rows": [0], "sites": None, "dtype": "int64", "values": [[2**53, 2**53 + 1]]},
+        {"read": "plies", "rows": [0], "sites": None, "dtype": "int64", "values": [[1, 2]]},
         {"select": "mach > 0.35", "positions": [1, 2]},
         {"info": "type", "value": "table"},
     ]}

@@ -70,7 +70,10 @@ function probe(path, p)
     haskey(p, "notice") && return noticed(path, p["notice"])
     (haskey(p, "append_into") || haskey(p, "append_from")) && return appended(path, p)
     if haskey(p, "evaluate")
-        inputs = Dict(k => (v[1] isa AbstractString ? String.(v) : Float64.(v)) for (k, v) in p["evaluate"])
+        # An array's rows arrive as a list of lists: rows × length.
+        given(v) = v[1] isa AbstractString ? String.(v) :
+                   v[1] isa AbstractVector ? permutedims(reduce(hcat, [Float64.(r) for r in v])) : Float64.(v)
+        inputs = Dict(k => given(v) for (k, v) in p["evaluate"])
         out = GamutFile.evaluate(path, inputs)
         try
             haskey(p, "describe") && return described(out, p)

@@ -399,4 +399,50 @@ mktempdir() do tmp
         numbers = GamutFile.open(s -> GamutFile.model_numbers(s, "fit"), mp)
         @test numbers["lower"] == [0.0] && numbers["columns"] == ["alpha"]
     end
+    @testset "arrays: a fixed number of values per run" begin
+        p = joinpath(tmp, "arrays.gamut")
+        GamutFile.create(p; writer="tests", parameters=Dict("mach" => "1"),
+                         arrays=Dict("wall" => (units="K", length=3, role="condition", lower=200.0, upper=400.0),
+                                     "plies" => (units="1", length=2, dtype="int64")),
+                         scalars=Dict("q" => "W m-2")) do s
+            @test GamutFile.add_run!(s, Dict("mach" => 0.5, "wall" => [300.0, 310.0, 320.0], "plies" => [4, 5],
+                                             "q" => 1.0)) == 0
+            # Runs × length as a Julia matrix: rows are runs, whatever the memory order.
+            @test GamutFile.add_runs!(s, Dict("mach" => [0.6, 0.7], "wall" => [330.0 340.0 350.0; 150.0 300.0 450.0],
+                                              "plies" => [6 7; 8 9], "q" => [2.0, 3.0])) == [1, 2]
+            e = try GamutFile.add_runs!(s, Dict("mach" => [0.6, 0.7], "wall" => [1.0 2.0; 3.0 4.0; 5.0 6.0],
+                                                "plies" => [6 7; 8 9], "q" => [2.0, 3.0])); nothing catch x; x end
+            @test e isa GamutError && e.rule == "E5"
+        end
+        f = GamutFile.open(p)
+        @test GamutFile.names(f, "arrays") == ["plies", "wall"]
+        @test GamutFile.describe(f, "wall")["length"] == "3"
+        @test GamutFile.get_array(f, "wall") == [300.0 310.0 320.0; 330.0 340.0 350.0; 150.0 300.0 450.0]
+        @test GamutFile.get_array(f, "wall"; rows=3) == [150.0, 300.0, 450.0]
+        @test GamutFile.get_array(f, "wall"; values=[1, 3]) == [300.0 320.0; 330.0 350.0; 150.0 450.0]
+        @test GamutFile.get_array(f, "plies") == Int64[4 5; 6 7; 8 9]
+        @test GamutFile.outside(f, "wall") == [0.0 0.0 0.0; 0.0 0.0 0.0; -50.0 0.0 50.0]
+        @test GamutFile.outside(f, "wall"; rows=3) == [-50.0, 0.0, 50.0]
+        close(f)
+        @test [x.rule for x in GamutFile.validate(p)] == ["W4"]
+
+        mp = joinpath(tmp, "array_model.gamut")
+        nn = GamutFile.Nearest(["mach", "wall"], [0.0, 200.0], [1.0, 400.0],
+                               [0.5 300.0 300.0 300.0; 0.5 400.0 400.0 400.0], Dict("q" => [1.0, 2.0]);
+                               widths=[1, 3])
+        GamutFile.create_model(mp; writer="tests",
+                               parameters=Dict("mach" => (units="1", lower=0.0, upper=1.0)),
+                               arrays=Dict("wall" => (units="K", length=3, lower=200.0, upper=400.0)),
+                               scalars=Dict("q" => (units="1", model="nn", output="q"))) do s
+            GamutFile.add_model!(s, "nn", nn, ["mach", "wall"])
+        end
+        @test isempty(GamutFile.validate(mp))
+        wall = [310.0 310.0 310.0; 390.0 390.0 500.0; 350.0 360.0 370.0]
+        out = @test_logs (:warn, r"W4: wall") GamutFile.evaluate(mp, Dict("mach" => [0.5, 0.5, 0.5], "wall" => wall))
+        @test GamutFile.get_scalar(out, "q") == [1.0, 2.0, 2.0]
+        @test GamutFile.get_array(out, "wall") == wall
+        close(out)
+        e = try GamutFile.evaluate(mp, Dict("mach" => [0.5, 0.5], "wall" => fill(300.0, 3, 2))); nothing catch x; x end
+        @test e isa GamutError && e.rule == "E5"      # rows × length, never length × rows
+    end
 end
