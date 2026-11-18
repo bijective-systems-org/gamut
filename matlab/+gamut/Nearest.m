@@ -36,7 +36,7 @@ classdef Nearest
                 m.Widths = int64(widths(:)');
             end
             m.X = double(x);
-            if isvector(m.X) && isscalar(m.Columns) && (isempty(m.Widths) || m.Widths == 1)
+            if isvector(m.X) && isscalar(m.Columns) && (isempty(m.Widths) || isequal(m.Widths, 1))
                 m.X = m.X(:);
             end
             m.Outputs = outputs;

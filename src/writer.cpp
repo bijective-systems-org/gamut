@@ -623,8 +623,8 @@ void Writer::declare_array(const Array& a) {
   // One row larger than a read returns could be written but never read back.
   // (The scale of its values, one float32 chunk, also stays under HDF5's 4 GiB.)
   need(static_cast<std::uint64_t>(a.length) < kMaxDatasetBytes / 8, "E26",
-       a.name + ": an array of " + std::to_string(a.length) + " values per run is more than a read returns (" +
-           std::to_string(kMaxDatasetBytes / 8 - 1) + " values)",
+       a.name + ": an array of " + std::to_string(a.length) + " values per run is more than one can hold (" +
+           std::to_string(kMaxDatasetBytes / 8 - 1) + " values: a run's values must fit one read)",
        a.name);
   need(a.lower.has_value() == a.upper.has_value(), "E16",
        a.name + ": give both bounds or neither", a.name);
