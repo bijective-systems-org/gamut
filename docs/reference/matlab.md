@@ -16,6 +16,7 @@ An example written in MATLAB has a MATLAB tab, quoted from a program in
 | `study.add_runs(pandas.read_csv(path))` | `study.addRuns(readtable(path))`, or a struct of columns |
 | `study.get_field("p", rows=r, nodes=n)` | `study.getField('p', 'rows', r, 'nodes', n)` |
 | `study.select("mach > 0.7")` | `study.select('mach > 0.7')`, positions from 1 |
+| `study.get_array("wall", rows=r)` | `study.getArray('wall', 'rows', r)`: runs × length |
 | `study.outside("alpha", rows=r)` | `study.outside('alpha', 'rows', r)` |
 | `study.row_count` | `study.rowCount()` |
 | `study.table()` | `study.table()`: a MATLAB `table`, labels as `categorical` |

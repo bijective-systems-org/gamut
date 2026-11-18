@@ -27,6 +27,7 @@ evaluates a model fitted in Python. Without CMake, one builds as
 | `gamut.open(path, mode="a")` | `gamut::open(path, "a")` |
 | `study.get_field("p", rows=r, nodes=n)` | `study.get_field("p", r, n)` |
 | `study.get_parameter("alpha")`, `study.get_constant("area")` | `study.get_parameter<double>("alpha")`, `study.get_constant<double>("area")`: the type the value is stored as, `int64_t` for one declared int64 |
+| `study.get_array("wall", rows=r)` | `study.get_array<double>("wall", r)`: a `gamut::Array`, runs × length |
 | `study.outside("alpha", rows=r)` | `study.outside("alpha", r)` |
 | `study.related("cl")` | `study.related("cl")`: a `gamut::Related`, its std as `std_dev` |
 | `study.select("mach > 0.7")`, `study.get_label(...)`, `study.describe(...)` | the same names |
@@ -46,8 +47,10 @@ VTK's convention, node numbers from 0. Each run gives its parameters and
 scalars as numbers (a parameter is a double unless declared with
 `declare_parameter<int64_t>`) and its labels by name, then its fields;
 `add_run` writes it all or nothing and returns its id, and takes a
-`gamut::Geometry` when the run brings its own points. `add_runs` writes
-many runs at once from a column per name.
+`gamut::Geometry` when the run brings its own points. An array, declared
+with `declare_array`, gives a run its values as a `std::vector`. `add_runs`
+writes many runs at once from a column per name, an array's as a
+`gamut::Array` of runs × length.
 
 `select` returns positions counted from 0, which every `get_` call takes
 as rows: `gamut::all`, positions such as `{12}`, or
