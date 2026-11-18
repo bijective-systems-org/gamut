@@ -1,11 +1,20 @@
 # 2. One mesh
 
-When every run uses the same mesh, node k is the same point in every run.
-The file stores the mesh once, and each field as one block of runs ×
-nodes, so one run, one region of every run, or one node across every run
-is a single read. The example is potential flow past a cylinder: eight
-values of circulation written, a ninth added by reopening the file. It is
-the same program in each language.
+The cylinder mesh is fixed, so the file stores its points and cells once.
+Each run has a circulation value `gamma` and its own pressure coefficient
+`cp` at every node.
+
+```plain
+Fixed mesh (576 nodes, 528 cells)
+  ├─ gamma = 0.0   →  576 cp values
+  ├─ gamma = 0.5   →  576 cp values
+  │  …
+  └─ gamma = 4.0   →  576 cp values
+```
+
+The nine rows of `cp` use the same node order. Read a row for one run's
+pressure coefficients, or a column for one node across all runs.
+The example writes eight runs and appends the ninth.
 
 ## Writing
 

@@ -85,6 +85,7 @@ markdown_extensions:
 
 nav:
   - Home: README.md
+  - Start here: first-file.md
   - Installing: install.md
   - How it works:
       - concepts/README.md

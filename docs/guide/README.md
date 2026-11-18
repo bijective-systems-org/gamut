@@ -1,22 +1,9 @@
 # Examples
 
-Every study file is made and read the same way, in every language:
-
-1. `create` declares every name the file will hold, with its units and its
-   role: inputs (parameters), names such as a status (labels), and results
-   (scalars, and fields on a mesh).
-2. `add_run` gives each run's values; opening the file to append adds runs
-   later.
-3. `open` reads: `select` picks rows by a condition, such as
-   `status == converged`, and a `get_` call reads one name for those rows.
-4. `gamut validate` checks a file against the rules of the specification.
-
-The examples build on one another: most studies need only the first two,
-and each of the others adds one idea, for when a study has it. Each is a
-program in [`examples/`](https://github.com/bijective-systems-org/gamut/tree/main/examples),
-shown with what it prints, and the tests run every one. Where an example
-is written in more than one language, the programs are the same and print
-the same lines; choosing a language shows it in every example.
+Start with [First file](../first-file.md) to write, read and inspect a
+three-run table. Then pick the example that fits your study. Each page
+links to a [runnable program](https://github.com/bijective-systems-org/gamut/tree/main/examples)
+and shows what it prints.
 
 | | Example | For a study with | Languages |
 |---|---|---|---|

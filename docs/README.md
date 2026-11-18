@@ -1,186 +1,23 @@
 # Gamut documentation
 
-Gamut, by [Bijective Systems](https://github.com/bijective-systems-org), is
-an open format for sharing engineering studies and models with their
-definitions intact: units, roles, relationships, results and mesh structure.
-A `.gamut` file is HDF5 laid out as valid netCDF-4, with libraries for Python,
-MATLAB, Julia, C++, C and Rust.
+Gamut stores engineering studies and fitted models in `.gamut` files.
+Study data carries its column names, units and roles. A study can also
+include meshes and fields. Libraries for Python, MATLAB, Julia, C, C++
+and Rust read and write the same format.
 
-Start with the working study below. The same file can then be inspected,
-selected and read by another tool using its declared definitions. A model's
-declared inputs and outputs can be inspected without its implementation.
-Interpreting its state and evaluating it require an implementation of the
-recorded model type in the consuming runtime.
-
-<!-- Keep existing links to this example working after adding the fifth language. -->
 <span id="a-study-in-four-languages"></span>
+<span id="a-study-in-five-languages"></span>
 
-## A study in five languages
+**[Start here](first-file.md)** to write three runs, read them back and
+check what's inside the file.
 
-A sweep of a wing's angle of attack: six runs written at once, a seventh
-added by reopening the file, then the lift of the runs that converged read
-back. Choose a language here to use it throughout the examples.
+- [Examples](guide/README.md) add run status, meshes, time series and
+  models to the basic workflow.
+- [How it works](concepts/README.md) describes how a file represents a
+  study or model.
+- [Reference](reference/command-line.md) covers commands, language APIs
+  and the [format specification](reference/specification.md).
+- [Installing](install.md) covers every language and platform.
 
-The excerpts below show the file operations. Each tab links to the complete
-program, including imports, setup and printed output. [Install the library
-for your language](install.md), then run that program in a new working
-directory: it creates `sweep.gamut` and refuses to replace an existing file.
-
-/// tab | Python
-
-[Complete Python example](https://github.com/bijective-systems-org/gamut/blob/main/examples/00_readme.py)
-
-```python
-alpha = np.arange(0.0, 11.0, 2.0)  # six angles of attack, in degrees
-cl = 0.11 * alpha                  # stands for the solver's lift coefficients
-
-with gamut.create("sweep.gamut", writer="example sweep",
-                   parameters={"alpha": {"units": "degree", "role": "condition"}},
-                   labels={"status": {"role": "status",
-                                      "categories": ["converged", "failed"]}},
-                   scalars={"cl": "1"}) as study:
-    study.add_runs({"alpha": alpha, "cl": cl,
-                    "status": ["converged"] * len(alpha)})
-
-with gamut.open("sweep.gamut", mode="a") as study:
-    study.add_run({"alpha": 12, "status": "failed"})
-
-with gamut.open("sweep.gamut") as study:
-    lift = study.get_scalar("cl", rows=study.select("status == converged"))
-```
-
-///
-
-/// tab | MATLAB
-
-[Complete MATLAB example](https://github.com/bijective-systems-org/gamut/blob/main/examples/matlab/sweep.m)
-
-```matlab
-alpha = (0:2:10)';   % six angles of attack, in degrees
-cl = 0.11 * alpha;   % stands for the solver's lift coefficients
-
-study = gamut.create('sweep.gamut', 'writer', 'example sweep', ...
-    'parameters', struct('alpha', struct('units', 'degree', ...
-                                         'role', 'condition')), ...
-    'labels', struct('status', struct('role', 'status', ...
-                                      'categories', {{'converged', 'failed'}})), ...
-    'scalars', struct('cl', '1'));
-status = repmat({'converged'}, numel(alpha), 1);
-study.addRuns(struct('alpha', alpha, 'cl', cl, 'status', {status}));
-study.close();
-
-study = gamut.open('sweep.gamut', 'mode', 'a');
-study.addRun(struct('alpha', 12, 'status', 'failed'));
-study.close();
-
-study = gamut.open('sweep.gamut');
-lift = study.getScalar('cl', 'rows', study.select('status == converged'));
-study.close();
-```
-
-///
-
-/// tab | Julia
-
-[Complete Julia example](https://github.com/bijective-systems-org/gamut/blob/main/examples/julia/sweep.jl)
-
-```julia
-alpha = collect(0.0:2.0:10.0)  # six angles of attack, in degrees
-cl = 0.11 .* alpha             # stands for the solver's lift coefficients
-
-GamutFile.create("sweep.gamut"; writer="example sweep",
-              parameters=Dict("alpha" => (units="degree", role="condition")),
-              labels=Dict("status" => (role="status",
-                                       categories=["converged", "failed"])),
-              scalars=Dict("cl" => "1")) do study
-    status = fill("converged", length(alpha))
-    GamutFile.add_runs!(study, Dict("alpha" => alpha, "cl" => cl, "status" => status))
-end
-
-GamutFile.open("sweep.gamut"; mode="a") do study
-    GamutFile.add_run!(study, Dict("alpha" => 12.0, "status" => "failed"))
-end
-
-lift = GamutFile.open("sweep.gamut") do study
-    GamutFile.get_scalar(study, "cl"; rows=GamutFile.select(study, "status == converged"))
-end
-```
-
-///
-
-/// tab | C++
-
-[Complete C++ example](https://github.com/bijective-systems-org/gamut/blob/main/examples/cpp/sweep.cpp)
-
-```cpp
-const std::vector<double> alpha = {0, 2, 4, 6, 8, 10};  // angles of attack, degrees
-std::vector<double> cl;  // stands for the solver's lift coefficients
-for (const double a : alpha) cl.push_back(0.11 * a);
-
-auto study = gamut::create("sweep.gamut", "example sweep");
-study.declare_parameter("alpha", "condition", "degree");
-study.declare_label("status", "status", {"converged", "failed"});
-study.declare_scalar("cl", "1");
-const std::vector<std::string> status(alpha.size(), "converged");
-study.add_runs({{"alpha", alpha}, {"cl", cl}, {"status", status}});
-study.close();
-
-study = gamut::open("sweep.gamut", "a");
-study.add_run({{"alpha", 12.0}, {"status", "failed"}});
-study.close();
-
-study = gamut::open("sweep.gamut");
-const std::vector<double> lift =
-    study.get_scalar("cl", study.select("status == converged"));
-```
-
-///
-
-/// tab | Rust
-
-[Complete Rust example](https://github.com/bijective-systems-org/gamut/blob/main/examples/rust/sweep.rs)
-
-```rust
-let alpha = vec![0.0, 2.0, 4.0, 6.0, 8.0, 10.0];   // angles of attack, degrees
-let cl: Vec<f64> = alpha.iter().map(|a| 0.11 * a).collect();   // stands for the solver's lift coefficients
-
-let mut study = gamut::create("sweep.gamut", "example sweep", "", "")?;
-study.declare_parameter("alpha", "condition", "degree")?;
-study.declare_label("status", "status", &["converged", "failed"])?;
-study.declare_scalar("cl", "1")?;
-let status = vec!["converged"; alpha.len()];
-study.add_runs(&[("alpha", alpha.into()), ("cl", cl.into()), ("status", status.into())], &[])?;
-study.close()?;
-
-let mut study = gamut::open_append("sweep.gamut")?;
-study.add_run(&[("alpha", 12.0.into()), ("status", "failed".into())], &[])?;
-study.close()?;
-
-let study = gamut::open("sweep.gamut")?;
-let lift = study.get_scalar("cl", study.select("status == converged")?)?;
-```
-
-///
-
-The complete programs print:
-
-```text
-lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
-```
-
-## Where next
-
-- [Installing](install.md): each language, and the platforms the
-  packages are built for.
-- [How it works](concepts/README.md): what a file holds, and why it is
-  shaped as it is.
-- [Examples](guide/README.md): a study built up one idea at a time, from
-  a table of runs to meshes, models and VTK, in each language.
-- [Reference](reference/python.md): each language's calls, the command
-  line and the [specification](reference/specification.md), which defines
-  the format.
-
-For coding agents,
-[llms.txt](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/llms.txt)
-collects the API's patterns and plain-text links to these pages. To cite
-Gamut, use its [citation metadata](https://github.com/bijective-systems-org/gamut/blob/main/CITATION.cff).
+For coding agents, [llms.txt](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/llms.txt)
+lists API patterns and documentation links.

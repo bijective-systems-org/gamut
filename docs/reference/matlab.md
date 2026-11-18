@@ -44,15 +44,12 @@ rule, such as `gamut:E16`.
 
 ## Reading without the package
 
-A study file is netCDF-4, so MATLAB's own `ncread` reads it with nothing
-installed; a colleague who only reads can skip the package.
+MATLAB can read study arrays with `ncread`. First create `first.gamut`
+with the [starter example](../first-file.md).
 
 ```matlab
-f = 'sweep.gamut';
-cl = ncread(f, 'cl');                                % one value per run
-names = ncread(f, '/categories/status');             % the status names
-status = names(ncread(f, 'status') + 1);             % each run's status
-converged = status == "converged";
+f = 'first.gamut';
+cl = ncread(f, 'cl');
 ```
 
 A label comes as its codes, counted from 0; its names are the table under

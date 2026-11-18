@@ -11,9 +11,8 @@
 By [Bijective Systems](https://github.com/bijective-systems-org), with
 libraries for Python, MATLAB, Julia, C++, C and Rust.
 
+**[Start here](https://bijective-systems-org.github.io/gamut/first-file.html)** ·
 [Documentation](https://bijective-systems-org.github.io/gamut/) ·
-[Installing](https://bijective-systems-org.github.io/gamut/install.html) ·
-[Examples](https://bijective-systems-org.github.io/gamut/guide/index.html) ·
 [Specification](https://bijective-systems-org.github.io/gamut/reference/specification.html) ·
 [PyPI: bijective-gamut](https://pypi.org/project/bijective-gamut/) ·
 [Releases](https://github.com/bijective-systems-org/gamut/releases)
@@ -45,152 +44,42 @@ require an implementation of the recorded type in the consuming runtime.
   </picture>
 </p>
 
-## Example
+## First file
 
-A sweep of a wing's angle of attack: six runs written at once, a seventh
-added later, and the lift of the runs that converged read back. `cl`
-stands for your solver's results.
+Install with `python -m pip install bijective-gamut`. This example
+writes one input and one result for each of three runs.
 
 ```python
-alpha = np.arange(0.0, 11.0, 2.0)  # six angles of attack, in degrees
-cl = 0.11 * alpha                  # stands for the solver's lift coefficients
+import gamut
 
-with gamut.create("sweep.gamut", writer="example sweep",
-                   parameters={"alpha": {"units": "degree", "role": "condition"}},
-                   labels={"status": {"role": "status",
-                                      "categories": ["converged", "failed"]}},
-                   scalars={"cl": "1"}) as study:
-    study.add_runs({"alpha": alpha, "cl": cl,
-                    "status": ["converged"] * len(alpha)})
+# Values at the same position belong to the same run.
+alpha = [0.0, 2.0, 4.0]
+cl = [0.0, 0.22, 0.44]
 
-with gamut.open("sweep.gamut", mode="a") as study:
-    study.add_run({"alpha": 12, "status": "failed"})
+with gamut.create(
+    "first.gamut",
+    writer="example sweep",
+    parameters={"alpha": {"units": "degree", "role": "condition"}},
+    scalars={"cl": "1"},
+) as study:
+    study.add_runs({"alpha": alpha, "cl": cl})
 
-with gamut.open("sweep.gamut") as study:
-    lift = study.get_scalar("cl", rows=study.select("status == converged"))
+with gamut.open("first.gamut") as study:
+    lift = study.get_scalar("cl")
+
+print("cl:", " ".join(f"{value:.2f}" for value in lift))
 ```
-
-<details>
-<summary>MATLAB</summary>
-
-```matlab
-alpha = (0:2:10)';   % six angles of attack, in degrees
-cl = 0.11 * alpha;   % stands for the solver's lift coefficients
-
-study = gamut.create('sweep.gamut', 'writer', 'example sweep', ...
-    'parameters', struct('alpha', struct('units', 'degree', ...
-                                         'role', 'condition')), ...
-    'labels', struct('status', struct('role', 'status', ...
-                                      'categories', {{'converged', 'failed'}})), ...
-    'scalars', struct('cl', '1'));
-status = repmat({'converged'}, numel(alpha), 1);
-study.addRuns(struct('alpha', alpha, 'cl', cl, 'status', {status}));
-study.close();
-
-study = gamut.open('sweep.gamut', 'mode', 'a');
-study.addRun(struct('alpha', 12, 'status', 'failed'));
-study.close();
-
-study = gamut.open('sweep.gamut');
-lift = study.getScalar('cl', 'rows', study.select('status == converged'));
-study.close();
-```
-
-</details>
-
-<details>
-<summary>Julia</summary>
-
-```julia
-alpha = collect(0.0:2.0:10.0)  # six angles of attack, in degrees
-cl = 0.11 .* alpha             # stands for the solver's lift coefficients
-
-GamutFile.create("sweep.gamut"; writer="example sweep",
-              parameters=Dict("alpha" => (units="degree", role="condition")),
-              labels=Dict("status" => (role="status",
-                                       categories=["converged", "failed"])),
-              scalars=Dict("cl" => "1")) do study
-    status = fill("converged", length(alpha))
-    GamutFile.add_runs!(study, Dict("alpha" => alpha, "cl" => cl, "status" => status))
-end
-
-GamutFile.open("sweep.gamut"; mode="a") do study
-    GamutFile.add_run!(study, Dict("alpha" => 12.0, "status" => "failed"))
-end
-
-lift = GamutFile.open("sweep.gamut") do study
-    GamutFile.get_scalar(study, "cl"; rows=GamutFile.select(study, "status == converged"))
-end
-```
-
-</details>
-
-<details>
-<summary>C++</summary>
-
-```cpp
-const std::vector<double> alpha = {0, 2, 4, 6, 8, 10};  // angles of attack, degrees
-std::vector<double> cl;  // stands for the solver's lift coefficients
-for (const double a : alpha) cl.push_back(0.11 * a);
-
-auto study = gamut::create("sweep.gamut", "example sweep");
-study.declare_parameter("alpha", "condition", "degree");
-study.declare_label("status", "status", {"converged", "failed"});
-study.declare_scalar("cl", "1");
-const std::vector<std::string> status(alpha.size(), "converged");
-study.add_runs({{"alpha", alpha}, {"cl", cl}, {"status", status}});
-study.close();
-
-study = gamut::open("sweep.gamut", "a");
-study.add_run({{"alpha", 12.0}, {"status", "failed"}});
-study.close();
-
-study = gamut::open("sweep.gamut");
-const std::vector<double> lift =
-    study.get_scalar("cl", study.select("status == converged"));
-```
-
-</details>
-
-<details>
-<summary>Rust</summary>
-
-```rust
-let alpha = vec![0.0, 2.0, 4.0, 6.0, 8.0, 10.0];   // angles of attack, degrees
-let cl: Vec<f64> = alpha.iter().map(|a| 0.11 * a).collect();   // stands for the solver's lift coefficients
-
-let mut study = gamut::create("sweep.gamut", "example sweep", "", "")?;
-study.declare_parameter("alpha", "condition", "degree")?;
-study.declare_label("status", "status", &["converged", "failed"])?;
-study.declare_scalar("cl", "1")?;
-let status = vec!["converged"; alpha.len()];
-study.add_runs(&[("alpha", alpha.into()), ("cl", cl.into()), ("status", status.into())], &[])?;
-study.close()?;
-
-let mut study = gamut::open_append("sweep.gamut")?;
-study.add_run(&[("alpha", 12.0.into()), ("status", "failed".into())], &[])?;
-study.close()?;
-
-let study = gamut::open("sweep.gamut")?;
-let lift = study.get_scalar("cl", study.select("status == converged")?)?;
-```
-
-</details>
-
-All five print the same line:
 
 ```text
-lift of the runs that converged: 0.00 0.22 0.44 0.66 0.88 1.10
+cl: 0.00 0.22 0.44
 ```
 
-The [examples](https://bijective-systems-org.github.io/gamut/guide/index.html) go on from here, a step at a time
-and in each language: a mesh shared by every run, families of shapes,
-meshes that change, time series, uncertainty, and models fitted to the
-runs.
+[First file](https://bijective-systems-org.github.io/gamut/first-file.html)
+shows how to inspect and validate the file and runs the same example in
+MATLAB, Julia, C++ and Rust.
 
-To see a whole study in one file, download the
-[capsule aeroheating dataset](https://huggingface.co/datasets/bijective/capsule-aeroheating):
-1,024 heat shields on one shared mesh, in a single 55 MB Gamut file.
+For a full study, see the
+[capsule aeroheating dataset](https://huggingface.co/datasets/bijective/capsule-aeroheating).
 
 ## Performance
 

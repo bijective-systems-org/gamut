@@ -1,4 +1,4 @@
-%MODELS A model in a file: fitted to the README's sweep, saved, and evaluated.
+%MODELS Fit, save and evaluate a model of lift versus angle of attack.
 %   A model file holds no runs and no code: its parameters carry the range
 %   the model was fitted on, each result names the model and output that
 %   computes it, and the model's own numbers are plain data. The model here
@@ -6,8 +6,8 @@
 %   beside this file. examples/07_models.py is the same program in Python
 %   and prints the same lines.
 
-% The README's sweep: six runs that converged, one that failed.
-study = gamut.create('sweep.gamut', 'writer', 'example sweep', ...
+% Training sweep with six converged runs and one failed run.
+study = gamut.create('training_sweep.gamut', 'writer', 'example sweep', ...
     'parameters', struct('alpha', struct('units', 'degree', 'role', 'condition')), ...
     'labels', struct('status', struct('role', 'status', 'categories', {{'converged', 'failed'}})), ...
     'scalars', struct('cl', '1'));
@@ -19,7 +19,7 @@ study.close();
 
 gamut.registerModelType('Polynomial');
 
-study = gamut.open('sweep.gamut');
+study = gamut.open('training_sweep.gamut');
 rows = study.select('status == converged');
 alpha = study.getParameter('alpha', 'rows', rows);
 cl = study.getScalar('cl', 'rows', rows);

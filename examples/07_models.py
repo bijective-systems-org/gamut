@@ -1,4 +1,4 @@
-"""A model in a file: fitted to the README's sweep, saved, and evaluated.
+"""Fit, save and evaluate a model of lift versus angle of attack.
 
 A model file holds no runs and no code: its parameters carry the range the
 model was fitted on, each result names the model and output that computes
@@ -17,8 +17,8 @@ import numpy as np
 
 import gamut
 
-# The README's sweep (examples/00_readme.py): six runs that converged, one that failed.
-with gamut.create("sweep.gamut", writer="example sweep",
+# Training sweep with six converged runs and one failed run.
+with gamut.create("training_sweep.gamut", writer="example sweep",
                    parameters={"alpha": {"units": "degree", "role": "condition"}},
                    labels={"status": {"role": "status", "categories": ["converged", "failed"]}},
                    scalars={"cl": "1"}) as study:
@@ -47,7 +47,7 @@ class Polynomial:
         return {output: {"values": np.polyval(self.coefficients, x)} for output, *_ in wanted}
 
 
-with gamut.open("sweep.gamut") as study:
+with gamut.open("training_sweep.gamut") as study:
     rows = study.select("status == converged")
     alpha, cl = study.get_parameter("alpha", rows=rows), study.get_scalar("cl", rows=rows)
     sweep_id = study.describe()["file_id"]

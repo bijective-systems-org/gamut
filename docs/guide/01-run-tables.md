@@ -1,10 +1,10 @@
 # 1. Run tables
 
-The simplest study has no mesh: a list of runs, each with the inputs that
-define it and the numbers it produced. A wing's polar is one. The example
-sweeps Mach number and angle of attack, records whether each run
-converged, and keeps the lift and drag coefficients. It is the same
-program in each language.
+The [first sweep](../first-file.md) had one input and one result.
+This sweep writes a new file, `polar.gamut`, with two inputs (Mach number
+and angle of attack) and two results (lift and drag coefficients).
+A `status` label records whether each run converged, so you can find
+failed runs even when they produced no results.
 
 ## Writing
 
@@ -84,15 +84,11 @@ study.set_attribute("title", "Wing A polar")?;
 ///
 
 Parameters place a run in the study. Their role is `condition` (how it is
-operated: Mach, incidence, altitude), `design` (the shape: a geometry or
-design variable) or `time`. Tools use the role: a geometry model takes the
-design parameters, a viewer animates time. Labels name rather than
-measure; a label with the role `status` says which runs can be trusted.
-A run is usable when its status is `converged`, the one name with that
-meaning (`failed` and `partial` are the usual others), and tools that
-train on the data skip the rest unless told otherwise. Scalars are
-results with one value per run, and constants hold one value for the
-whole study.
+operated), `design` (what was designed) or `time` (when it was sampled).
+A label stores a category per run. Here `status` records the solver's
+outcome, and `converged` marks runs eligible for training by default.
+A scalar stores one result per run. A constant, such as reference area,
+applies to the whole study.
 
 Units are required on every number. They use the grammar of UDUNITS, as
 netCDF and CF do: `1` for dimensionless, `degree`, `m s-1`, `W m-2`.
@@ -201,7 +197,18 @@ Closing the file finishes it: leaving the `with` block in Python or the
 block ends with an error, the runs added so far are kept if the file can
 still be finished, and the file is removed if it cannot.
 
-## Reading
+## Reading selected runs {#reading}
+
+`select("status == failed")` finds the failed row. Give that selection to
+both parameter reads to recover the inputs for the same run.
+
+| Mach | Angle of attack (degrees) | Status | Matches `status == failed` |
+|---:|---:|---|---|
+| 0.8 | 4 | converged | |
+| 0.8 | 6 | converged | |
+| **0.8** | **8** | **failed** | **Yes** |
+
+Shown are the last three rows of the study.
 
 /// tab | Python
 
@@ -299,12 +306,10 @@ failed: Mach 0.8, alpha 8 degree
 reference area: 12.5 m2
 ```
 
-`select` takes a condition and returns the positions of the rows that meet
-it, counted from 0 in Python, C++ and Rust and from 1 in MATLAB and Julia; every
-`get_` call takes such positions as its rows. Conditions compare
-parameters, scalars and labels, joined by `and`, `or` and `not`
-([selecting runs](../reference/selecting.md)). `describe` returns what the
-file says about a name, or about the file itself.
+Selections count from 0 in Python, C++ and Rust and from 1 in MATLAB
+and Julia. See [Selecting runs](../reference/selecting.md) for conditions
+on parameters, results and labels. Use `describe` to look up metadata
+such as the reference area's unit.
 
 ## Notes
 
