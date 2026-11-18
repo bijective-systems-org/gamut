@@ -510,3 +510,35 @@ def test_marked_files_and_documents_meet_the_append_rule(tmp_path, capsys):
     assert code == 0, out
     with gamut.open(u) as f:
         assert f.describe()["portion_marking"] == "PLACEHOLDER-D" and f.row_count == 4
+
+
+def test_arrays_are_built_appended_described_and_read(tmp_path, capsys):
+    """An array in a build document: a column naming each run's .npy, as a
+    field does; info shows it on its own line; get writes it runs x length."""
+    for i in range(3):
+        np.save(tmp_path / f"wall_{i}.npy", np.array([300.0 + i, 310.0, 320.0]))
+    with open(tmp_path / "runs.csv", "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["mach", "wall", "q"])
+        for i in range(3):
+            w.writerow([0.5 + i / 10, f"wall_{i}.npy", float(i)])
+    doc = {"writer": "t", "parameters": {"mach": "1"},
+           "arrays": {"wall": {"units": "K", "length": 3, "role": "condition"}},
+           "scalars": {"q": "1"}, "runs": "runs.csv"}
+    (tmp_path / "doc.json").write_text(json.dumps(doc))
+    out_file = str(tmp_path / "s.gamut")
+    assert run(capsys, "build", str(tmp_path / "doc.json"), "-o", out_file)[0] == 0
+    assert run(capsys, "append", out_file, str(tmp_path / "doc.json"))[0] == 0
+    code, out, _ = run(capsys, "info", out_file)
+    assert code == 0 and "  arrays      wall [K] (3 values) 300 to 320" in out
+    code, out, _ = run(capsys, "info", out_file, "--json")
+    entry = json.loads(out)["arrays"][0]
+    assert (entry["name"], entry["role"], entry["length"], entry["range"]) == ("wall", "condition", 3, [300, 320])
+    code, _, _ = run(capsys, "get", out_file, "wall", "-o", str(tmp_path / "w.csv"))
+    assert code == 0
+    lines = (tmp_path / "w.csv").read_text().splitlines()
+    assert lines[0] == "row,wall[0],wall[1],wall[2]" and lines[2] == "1,301.0,310.0,320.0" and len(lines) == 7
+    doc["arrays"]["wall"].pop("length")
+    (tmp_path / "bad.json").write_text(json.dumps(doc))
+    code, out, err = run(capsys, "build", str(tmp_path / "bad.json"), "-o", str(tmp_path / "b.gamut"))
+    assert code != 0 and "arrays.wall.length" in out + err
