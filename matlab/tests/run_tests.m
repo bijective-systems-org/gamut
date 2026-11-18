@@ -735,6 +735,9 @@ warning(w);
 ok(isequal(o.getScalar('q'), [1; 2; 2]), 'nearest reads an array value by value');
 ok(isequal(o.getArray('wall'), wall), 'the answer keeps the array');
 o.close();
+% One stored point, read by one array: x is that point's row of values.
+one = gamut.Nearest({'wall'}, 200, 400, [300 300 300], struct('q', 1), 3);
+ok(isequal(size(one.X), [1 3]), 'a one-point model of one array keeps x as one row');
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end
 end

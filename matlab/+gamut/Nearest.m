@@ -30,13 +30,14 @@ classdef Nearest
             m.Lower = double(lower(:)');
             m.Upper = double(upper(:)');
             % x is points x columns as given, so the core refuses another
-            % orientation; one column may be a vector of points.
-            m.X = double(x);
-            if isvector(m.X) && isscalar(m.Columns)
-                m.X = m.X(:);
-            end
+            % orientation; one column of one value each may be a vector of
+            % points (an array's points are rows of x, even one).
             if nargin >= 6 && ~isempty(widths)
                 m.Widths = int64(widths(:)');
+            end
+            m.X = double(x);
+            if isvector(m.X) && isscalar(m.Columns) && (isempty(m.Widths) || m.Widths == 1)
+                m.X = m.X(:);
             end
             m.Outputs = outputs;
             names = fieldnames(outputs);

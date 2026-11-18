@@ -778,14 +778,16 @@ RULES = {
     "E17_nearest_widths": ("model_arrays", "E17", lambda f: f["models/fit/widths"].__setitem__(1, 2)),
     "E19_array_scale": ("arrays", "E19", lambda f: f["wall"].dims[1].detach_scale(f["gamut_wall_d1"])),
     "E19_array_scale_grows": ("arrays", "E19", lambda f: _swap_array(f, "wall", "<f8", scale_unlimited=True)),
+    "E19_array_scale_order": ("arrays", "E19", lambda f: _swap_array(f, "wall", "<f8", scale_order=False)),
     "W4_array": ("arrays", "W4", lambda f: f["wall"].__setitem__((2, 0), 450.0)),
     "W5_array_time": ("arrays", "W5", lambda f: sattr(f["wall"], "role", "time_array")),
 }
 
 
-def _swap_array(f, name, dtype, length=None, scale_unlimited=False):
+def _swap_array(f, name, dtype, length=None, scale_unlimited=False, scale_order=True):
     """Rewrites an array (§10.1) with one property changed: its dtype, its
-    length (with its scale), or an unlimited scale."""
+    length (with its scale), an unlimited scale, or a scale without
+    attribute creation order (§9.4)."""
     old = f[name]
     data = old[:]
     attrs = {k: (old.attrs[k], old.attrs.get_id(k).dtype) for k in old.attrs
@@ -799,7 +801,7 @@ def _swap_array(f, name, dtype, length=None, scale_unlimited=False):
     n = data.shape[1]
     unlimited = scale_unlimited or n == 0
     s = f.create_dataset(f"gamut_{name}_d1", shape=(n,), maxshape=(None if unlimited else n,),
-                         dtype=">f4", chunks=(max(n, 1),), track_order=True)
+                         dtype=">f4", chunks=(max(n, 1),), track_order=scale_order)
     s.make_scale(scale_name(n))
     d = f.create_dataset(name, data=data.astype(dtype), maxshape=(None, None if n == 0 else n),
                          chunks=leading_chunk(np.dtype(dtype).itemsize, (max(n, 1),)),

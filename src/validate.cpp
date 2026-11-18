@@ -1506,6 +1506,10 @@ void Validator::scales() {
       candidates.push_back("/" + m.name);
     }
   }
+  // An array's values' scale (gamut_<array>_d1); one that is missing is E19 there.
+  for (const auto& kv : arrays_) {
+    if (file_->is_dataset(array_scale(kv.first))) candidates.push_back(array_scale(kv.first));
+  }
   for (const Member& m : file_->members("/mesh")) {
     if (m.kind == LinkKind::Hard && m.is_dataset) candidates.push_back("/mesh/" + m.name);
   }

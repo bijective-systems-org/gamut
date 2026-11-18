@@ -915,6 +915,7 @@ void test_arrays_in_a_data_file() {
     CHECK(rule_of([&] { w->declare_array(array("t", "time", "s", 2)); }) == "error");
     CHECK(rule_of([&] { w->declare_array(array("z", "design", "1", 0)); }) == "E5");
     CHECK(rule_of([&] { w->declare_array(array("z", "design", "1", std::int64_t(1) << 62)); }) == "E26");
+    CHECK(rule_of([&] { w->declare_array(array("z", "design", "1", std::int64_t(1) << 30)); }) == "E26");
     CHECK(rule_of([&] { w->declare_array(array("z", "design", "parsec^", 2)); }) == "E7");
     Array f32a = array("z", "design", "1", 2);
     f32a.dtype = DType::Float32;

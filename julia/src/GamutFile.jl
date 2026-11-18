@@ -594,7 +594,8 @@ function add_runs!(s::Study, columns; fields=nothing, points=nothing, cells=noth
     # Runs: a column's length, an array's rows.
     lengths = unique(v isa AbstractMatrix ? size(v, 1) : length(v) for v in values(cols))
     length(lengths) == 1 || throw(GamutError("E5", "every column needs the same number of runs; given " *
-        (isempty(cols) ? "no columns" : join(("$k $(length(v))" for (k, v) in sort!(collect(cols); by=first)), ", "))))
+        (isempty(cols) ? "no columns" : join(("$k $(v isa AbstractMatrix ? size(v, 1) : length(v))"
+                                              for (k, v) in sort!(collect(cols); by=first)), ", "))))
     return commit!(s, lengths[1], cols, Dict{String,Any}(pairs_of(fields)), points, cells, mesh_labels)
 end
 
