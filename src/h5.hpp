@@ -24,6 +24,9 @@
 namespace gamut_core {
 namespace internal {
 
+// Turns off HDF5's printing of its error stack on the calling thread.
+void quiet_hdf5();
+
 // An HDF5 identifier that closes itself.
 class Id {
  public:

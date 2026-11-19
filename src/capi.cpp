@@ -17,6 +17,7 @@
 
 #include "copy.hpp"
 #include "evaluate.hpp"
+#include "h5.hpp"
 #include "names.hpp"
 #include "nearest.hpp"
 #include "notice.hpp"
@@ -68,7 +69,7 @@ namespace {
 const char kVersion[] = "2.3.0";
 const char kFormat[] = "gamut/1";
 
-// HDF5 keeps process-wide state and is built without its thread-safety
+// HDF5 keeps process-wide state and may be built without its thread-safety
 // option, so two handles are not independent: every call that reaches a
 // file holds this lock, and calls from several threads take turns.  Never
 // destroyed, so a handle closed during process exit still finds it.
@@ -77,7 +78,12 @@ std::recursive_mutex& hdf5_mutex() {
   return *m;
 }
 
-using Lock = std::lock_guard<std::recursive_mutex>;
+// The lock, taken by every call that reaches HDF5; on the way in it turns
+// off HDF5's error printing on this thread (quiet_hdf5).
+struct Lock {
+  explicit Lock(std::recursive_mutex& m) : guard(m) { gamut_core::internal::quiet_hdf5(); }
+  std::lock_guard<std::recursive_mutex> guard;
+};
 
 void copy_into(char* dst, std::size_t size, const std::string& src) {
   if (size == 0) return;

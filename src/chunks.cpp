@@ -370,8 +370,19 @@ void ChunkStore::fetch(hid_t dset, const std::string& path, const Dataset& d,
   }
   raw.resize(static_cast<std::size_t>(size));
   std::uint32_t got = 0;
+#if H5_VERSION_GE(2, 0, 0)
+  // HDF5 2 is also told the buffer's size, and gives back the chunk's: when
+  // the buffer is short it reads nothing.
+  std::size_t room = raw.size();
+  need(H5Dread_chunk2(dset, H5P_DEFAULT, offset.data(), &got, raw.data(), &room) >= 0,
+       "cannot read a chunk of \"" + path + "\"");
+  if (room != raw.size()) {
+    throw Error("E23", "a chunk of \"" + path + "\" " + size_mismatch(room, d.whole), path);
+  }
+#else
   need(H5Dread_chunk(dset, H5P_DEFAULT, offset.data(), &got, raw.data()) >= 0,
        "cannot read a chunk of \"" + path + "\"");
+#endif
   *mask = got;
 }
 
