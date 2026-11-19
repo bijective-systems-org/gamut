@@ -525,6 +525,87 @@ void test_evaluation_through_the_c_interface() {
   std::remove("lift_model.gamut");
 }
 
+// Arrays through the C++ layer: declared, added one run and many at a time,
+// read back by run and by value, measured against their bounds; and an
+// array input through the C interface's evaluation, rows first.
+void test_arrays() {
+  {
+    auto s = gamut::create("arrays.gamut", "header tests");
+    s.declare_parameter("mach", "condition", "1");
+    s.declare_array("wall_t", "condition", "K", 3, 200.0, 400.0);
+    s.declare_array<int64_t>("plies", "design", "1", 2);
+    CHECK(refused([&] { s.declare_array("bad", "time", "s", 3); }) == "error");
+    CHECK(s.add_run({{"mach", 0.5}, {"wall_t", std::vector<double>{300, 310, 320}},
+                     {"plies", std::vector<int64_t>{4, 5}}}) == 0);
+    gamut::Array<double> wall{{2, 3}, {330, 340, 350, 150, 300, 450}};
+    gamut::Array<int64_t> plies{{2, 2}, {6, 7, 8, 9}};
+    CHECK(s.add_runs({{"mach", std::vector<double>{0.6, 0.7}}, {"wall_t", wall}, {"plies", plies}}) ==
+          (std::vector<int64_t>{1, 2}));
+    // An array given values x runs is refused: its first axis is not the runs.
+    gamut::Array<double> sideways{{3, 2}, {1, 2, 3, 4, 5, 6}};
+    CHECK(refused([&] {
+            s.add_runs({{"mach", std::vector<double>{0.8, 0.9}}, {"wall_t", sideways}, {"plies", plies}});
+          }) != "");
+  }
+  const auto s = gamut::open("arrays.gamut");
+  CHECK(s.names("arrays") == (std::vector<std::string>{"plies", "wall_t"}));
+  CHECK(s.describe("wall_t")["kind"] == "array" && s.describe("wall_t")["length"] == "3");
+  const auto wall = s.get_array<double>("wall_t");
+  CHECK(wall.shape == (std::vector<int64_t>{3, 3}) && wall(2, 0) == 150.0 && wall(1, 2) == 350.0);
+  const auto last = s.get_array<double>("wall_t", gamut::Selection{2}, gamut::Selection{0, 2});
+  CHECK(last.shape == (std::vector<int64_t>{1, 2}) && last.values == (std::vector<double>{150, 450}));
+  CHECK(s.get_array<int64_t>("plies").values == (std::vector<int64_t>{4, 5, 6, 7, 8, 9}));
+  CHECK(refused([&] { s.get_array<double>("plies"); }) == "error");
+  CHECK(s.outside("wall_t") == (std::vector<double>{0, 0, 0, 0, 0, 0, -50, 0, 50}));
+
+  gamut_error e;
+  auto ok = [&](int status) {
+    if (status != 0) std::fprintf(stderr, "%s: %s\n", e.rule, e.message);
+    return status == 0;
+  };
+  {
+    gamut_file* f = nullptr;
+    CHECK(ok(gamut_create_model("array_model.gamut", "header tests", nullptr, nullptr, &f, &e)));
+    CHECK(ok(gamut_declare_array(f, "prof", "design", "m", 2, GAMUT_FLOAT64, 1, 0.0, 10.0, &e)));
+    CHECK(ok(gamut_declare_result(f, "q", "scalar", "1", GAMUT_FLOAT64, "", "", 0, 0.0, "", "", "", "",
+                                  -1, "sum", "q", &e)));
+    gamut_tree* numbers = nullptr;
+    CHECK(ok(gamut_tree_new(&numbers, &e)));
+    CHECK(ok(gamut_tree_set_float(numbers, "scale", 1.0, &e)));
+    const char* reads[] = {"prof"};
+    CHECK(ok(gamut_add_model(f, "sum", "summing", reads, 1, numbers, "", &e)));
+    gamut_tree_free(numbers);
+    CHECK(ok(gamut_close(f, &e)));
+  }
+  const gamut::Study model = gamut::open("array_model.gamut");
+  const double prof[] = {1, 2, 3, 4, 5, 60};   // 3 rows x 2
+  gamut_evaluation* ev = nullptr;
+  CHECK(ok(gamut_evaluation_begin(model.handle(), 3, "array_answer.gamut", &ev, &e)));
+  CHECK(gamut_evaluation_array(ev, "prof", GAMUT_FLOAT64, prof, 2, 6, &e) != 0 &&
+        std::string(e.rule) == "E5");
+  CHECK(ok(gamut_evaluation_array(ev, "prof", GAMUT_FLOAT64, prof, 3, 6, &e)));
+  gamut::detail::Strings warnings, models;
+  CHECK(ok(gamut_evaluation_ready(ev, &warnings.s, &models.s, &e)));
+  const auto found = warnings.take();
+  CHECK(found.size() == 1 && found[0].find("prof is outside") != std::string::npos &&
+        found[0].find("1 of 3 rows (1 value)") != std::string::npos);
+  int dtype = 0, rank = 0;
+  int64_t shape[3] = {0, 0, 0};
+  CHECK(ok(gamut_evaluation_input_info(ev, "prof", &dtype, &rank, shape, 3, &e)));
+  CHECK(dtype == GAMUT_FLOAT64 && rank == 2 && shape[0] == 3 && shape[1] == 2);
+  double read[6] = {};
+  CHECK(ok(gamut_evaluation_input(ev, "prof", read, sizeof read, &e)));
+  double q[3];
+  for (int i = 0; i < 3; ++i) q[i] = read[2 * i] + read[2 * i + 1];
+  CHECK(ok(gamut_evaluation_answer(ev, "sum", "q", "values", "", GAMUT_FLOAT64, q, 3, &e)));
+  CHECK(ok(gamut_evaluation_finish(ev, &e)));
+  gamut_evaluation_free(ev);
+  const auto answer = gamut::open("array_answer.gamut");
+  CHECK(answer.get_scalar("q") == (std::vector<double>{3, 7, 65}));
+  CHECK(answer.get_array<double>("prof").values == (std::vector<double>(prof, prof + 6)));
+  CHECK(answer.describe("prof")["upper"] != "");
+}
+
 // A marked source into an unmarked file is refused (E27) and the file left
 // as it was; the stated marking appends and marks the result.  The notice
 // reaches a std::function sink once per file, and again once a sink is set.
@@ -587,6 +668,7 @@ int main() {
   test_refusals_before_the_library();
   test_calls_from_several_threads();
   test_evaluation_through_the_c_interface();
+  test_arrays();
   test_marking();
   std::printf("%d checks, %d failures\n", g_checks, g_failures);
   fs::current_path(original);

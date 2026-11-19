@@ -129,6 +129,23 @@ class Study:
         self.column(name, values, dtype, attrs)
         self.params_and_labels.append(name)
 
+    def array(self, name, values, role, units, lower=None, upper=None, dtype="<f8"):
+        """An array (§3.9): (row, gamut_<name>_d1), role <role>_array."""
+        data = np.asarray(values, dtype=dtype)
+        length = data.shape[1]
+        dim(self.f, f"gamut_{name}_d1", length, False)
+        d = self.f.create_dataset(name, data=data, maxshape=(None, length),
+                                  chunks=leading_chunk(data.dtype.itemsize, (length,)),
+                                  compression="gzip", compression_opts=1, shuffle=True)
+        d.dims[0].attach_scale(self.f["row"])
+        d.dims[1].attach_scale(self.f[f"gamut_{name}_d1"])
+        sattr(d, "role", f"{role}_array")
+        sattr(d, "units", units)
+        if lower is not None:
+            fattr(d, "lower", float(lower))
+            fattr(d, "upper", float(upper))
+        return d
+
     def label(self, name, codes, role, categories):
         self.table(name, categories)
         self.column(name, codes, "<i4", {"role": role, "category": name})
@@ -498,6 +515,63 @@ def case_model_nearest(path):
     ]}
 
 
+def case_arrays(path):
+    # Arrays (§3.9): a profile per run with bounds, and whole-number counts.
+    s = Study(path)
+    s.row(3)
+    s.parameter("mach", [0.3, 0.4, 0.5], "condition", "1")
+    s.array("wall", [[300.0, 310.0, 320.0], [330.0, 340.0, 350.0], [360.0, 370.0, 380.0]],
+            "condition", "K", 200.0, 400.0)
+    # Counts above 2**53 are exact in the core and the language tests; the
+    # checkers' JSON readers hold expected values as doubles, so not here.
+    s.array("plies", [[1, 2], [3, 4], [5, 6]], "design", "1", dtype="<i8")
+    s.scalar("q", [1.0, 2.0, 3.0], "W m-2")
+    s.scalar("dq_dmach", [0.5, 0.5, 0.5], "W m-2", of="q", with_respect_to="mach")
+    s.finish()
+    return {"probes": [
+        {"read": "wall", "rows": [0, 2], "sites": [2], "dtype": "float64", "values": [[320.0], [380.0]]},
+        {"read": "wall", "rows": [1], "sites": None, "dtype": "float64", "values": [[330.0, 340.0, 350.0]]},
+        {"read": "plies", "rows": [0], "sites": None, "dtype": "int64", "values": [[1, 2]]},
+        {"select": "mach > 0.35", "positions": [1, 2]},
+        {"info": "type", "value": "table"},
+    ]}
+
+
+def case_model_arrays(path):
+    # nearest reading a parameter and an array: widths [1, 3], distance over
+    # every value, each scaled by its input's bounds (§7.5).
+    s = Study(path, kind="model")
+    s.row(0)
+    s.parameter("mach", [], "condition", "1", 0.3, 0.6)
+    s.array("wall", np.zeros((0, 3)), "condition", "K", 200.0, 400.0)
+    d = s.scalar("q", [], "1")
+    sattr(d, "model", "fit")
+    sattr(d, "output", "q")
+    g = s.f.create_group("models/fit")
+    sattr(g, "type", "nearest")
+    sattr(g, "inputs", "mach wall")
+    data = {"columns": np.array([b"mach", b"wall"], dtype=h5py.string_dtype("utf-8", 4)),
+            "widths": np.array([1, 3], dtype="<i8"),
+            "lower": np.array([0.3, 200.0]), "upper": np.array([0.6, 400.0]),
+            "x": np.array([[0.3, 200.0, 200.0, 200.0], [0.6, 400.0, 400.0, 400.0],
+                           [0.3, 400.0, 400.0, 400.0]])}
+    for name, value in data.items():
+        ds = g.create_dataset(name, data=value)
+        for axis, n in enumerate(ds.shape):
+            dim(s.f, f"models/fit/gamut_{name}_d{axis}", n, False)
+            ds.dims[axis].attach_scale(s.f[f"models/fit/gamut_{name}_d{axis}"])
+    out = g.create_group("outputs")
+    y = out.create_dataset("q", data=np.array([0.0, 0.5, 0.4]))
+    dim(s.f, "models/fit/outputs/gamut_q_d0", 3, False)
+    y.dims[0].attach_scale(s.f["models/fit/outputs/gamut_q_d0"])
+    s.finish()
+    return {"probes": [
+        {"evaluate": {"mach": [0.31, 0.58], "wall": [[390.0, 395.0, 399.0], [210.0, 205.0, 201.0]]},
+         "scalar": "q", "values": [0.4, 0.0]},
+        {"info": "kind", "value": "model"},
+    ]}
+
+
 MARKING = "Example marking: for the study team only"
 
 
@@ -619,7 +693,8 @@ VALID = {"table": case_table, "shared_fixed": case_shared_fixed, "point_cloud": 
          "marked_other": case_marked_other, "marked_empty": case_marked_empty,
          "marked_model": case_marked_model, "wide_integers": case_wide_integers,
          "fixed_layout": case_fixed_layout,
-         "changing_group": case_changing_group}
+         "changing_group": case_changing_group, "arrays": case_arrays,
+         "model_arrays": case_model_arrays}
 
 
 # --- rule cases: a valid file broken to break one rule ---------------------------------
@@ -687,7 +762,54 @@ RULES = {
     "W9_time": ("table", "W9", lambda f: f["t"].__setitem__(1, 0.0)),
     "W10_std": ("table", "W10", lambda f: f["cl_std"].__setitem__(0, -1.0)),
     "W11_unchecked": ("table", "W11", lambda f: _grow_rows(f, (1 << 26) + 1)),
+    # Arrays (§3.9).
+    "E4_array_float32": ("arrays", "E4", lambda f: _swap_array(f, "wall", "<f4")),
+    "E5_array_nan": ("arrays", "E5", lambda f: f["wall"].__setitem__((1, 1), np.nan)),
+    "E5_array_rows": ("arrays", ("E5", "E19"), lambda f: f["wall"].resize((2, 3))),
+    # Zero values: HDF5 chunks a zero extent only when it is unlimited, which
+    # §10.1 does not let an array's values be (E19).
+    "E5_array_empty": ("arrays", ("E5", "E19"), lambda f: _swap_array(f, "wall", "<f8", length=0)),
+    "E7_array_units": ("arrays", "E7", lambda f: f["wall"].attrs.__delitem__("units")),
+    "E12_array_derivative": ("arrays", "E12", lambda f: sattr(f["dq_dmach"], "with_respect_to", "wall")),
+    "E15_array_run_group": ("arrays", "E15", lambda f: sattr(f["wall"], "run_group", "mach")),
+    "E16_array_bounds": ("arrays", ("E16", "W4"), lambda f: fattr(f["wall"], "lower", 500.0)),
+    "E16_model_array_bounds": ("model_arrays", ("E16", "E17"), lambda f: (
+        f["wall"].attrs.__delitem__("lower"), f["wall"].attrs.__delitem__("upper"))),
+    "E17_nearest_widths": ("model_arrays", "E17", lambda f: f["models/fit/widths"].__setitem__(1, 2)),
+    "E19_array_scale": ("arrays", "E19", lambda f: f["wall"].dims[1].detach_scale(f["gamut_wall_d1"])),
+    "E19_array_scale_grows": ("arrays", "E19", lambda f: _swap_array(f, "wall", "<f8", scale_unlimited=True)),
+    "E19_array_scale_order": ("arrays", "E19", lambda f: _swap_array(f, "wall", "<f8", scale_order=False)),
+    "W4_array": ("arrays", "W4", lambda f: f["wall"].__setitem__((2, 0), 450.0)),
+    "W5_array_time": ("arrays", "W5", lambda f: sattr(f["wall"], "role", "time_array")),
 }
+
+
+def _swap_array(f, name, dtype, length=None, scale_unlimited=False, scale_order=True):
+    """Rewrites an array (§10.1) with one property changed: its dtype, its
+    length (with its scale), an unlimited scale, or a scale without
+    attribute creation order (§9.4)."""
+    old = f[name]
+    data = old[:]
+    attrs = {k: (old.attrs[k], old.attrs.get_id(k).dtype) for k in old.attrs
+             if k not in ("DIMENSION_LIST",)}
+    old.dims[0].detach_scale(f["row"])
+    old.dims[1].detach_scale(f[f"gamut_{name}_d1"])
+    del f[name]
+    del f[f"gamut_{name}_d1"]
+    if length is not None:
+        data = data[:, :length]
+    n = data.shape[1]
+    unlimited = scale_unlimited or n == 0
+    s = f.create_dataset(f"gamut_{name}_d1", shape=(n,), maxshape=(None if unlimited else n,),
+                         dtype=">f4", chunks=(max(n, 1),), track_order=scale_order)
+    s.make_scale(scale_name(n))
+    d = f.create_dataset(name, data=data.astype(dtype), maxshape=(None, None if n == 0 else n),
+                         chunks=leading_chunk(np.dtype(dtype).itemsize, (max(n, 1),)),
+                         compression="gzip", compression_opts=1, shuffle=True)
+    d.dims[0].attach_scale(f["row"])
+    d.dims[1].attach_scale(s)
+    for k, (v, t) in attrs.items():
+        d.attrs.create(k, v, dtype=t)
 
 
 def _swap(f, name, dtype, compression="gzip", chunks=None, fillvalue=None):

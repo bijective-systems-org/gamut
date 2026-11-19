@@ -2,8 +2,8 @@
 
 A model file is a Gamut file with no runs. It holds one or more models
 fitted to a study, and declares what they take and what they give: the
-inputs as parameters, whose bounds are the range the model was fitted
-on, and labels; the results as scalars and fields, each naming the model
+inputs as parameters and arrays, whose bounds are the range the model
+was fitted on, and labels; the results as scalars and fields, each naming the model
 and the output that computes it; the mesh its fields live on; and the
 study's constants.
 
@@ -37,14 +37,16 @@ register types as classes.
 ## Evaluating
 
 Evaluating a model file on a table of inputs gives a data file with a row
-per input: the inputs as parameters and labels, the constants, the mesh,
+per input: the inputs as parameters, arrays and labels, the constants, the mesh,
 and every result filled by its model. It is an ordinary study, read with
 the same calls as any other, and it records the model file it came from.
 
 An input outside the range a model was fitted on is evaluated, with a
 warning (W4); refusing it is the caller's choice. The answer keeps the
 model's bounds on its parameters, so `outside` can say which rows lie
-outside them and by how much.
+outside them and by how much. The bounds are a box, a range per input
+and per value of an array: an input inside every range may still be
+unlike anything the model was fitted on, and the bounds do not say so.
 
 ## The built-in model
 

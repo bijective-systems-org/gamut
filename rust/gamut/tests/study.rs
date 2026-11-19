@@ -196,3 +196,41 @@ fn several_files_in_one_append() -> Result<(), gamut::Error> {
     assert_eq!(gamut::open(&paths[0])?.row_count()?, 3);
     Ok(())
 }
+
+// Arrays: one run's values, many runs as runs x length (refused the other
+// way round), read back by run and by value, and measured against bounds.
+#[test]
+fn an_array_is_written_and_read_by_run_and_value() -> Result<(), gamut::Error> {
+    let dir = Folder::new("arrays");
+    let path = dir.path("arrays.gamut");
+    let mut s = gamut::create(&path, "tests", "", "")?;
+    s.declare_parameter("mach", "condition", "1")?;
+    s.declare_array_with("wall", "condition", "K", 3, Parameter::default().bounds(200.0, 400.0))?;
+    s.declare_array_with("plies", "design", "1", 2, Parameter::default().int64())?;
+    assert_eq!(s.declare_array_with("t", "design", "s", 2, Parameter::default().run_group("run")).err().unwrap().rule(),
+               "E15");
+    assert_eq!(s.add_run(&[("mach", 0.5.into()), ("wall", vec![300.0, 310.0, 320.0].into()),
+                           ("plies", vec![4i64, 5].into())], &[])?, 0);
+    let wall = gamut::Array { shape: vec![2, 3], values: vec![330.0, 340.0, 350.0, 150.0, 300.0, 450.0] };
+    let plies = gamut::Array { shape: vec![2, 2], values: vec![6i64, 7, 8, 9] };
+    let sideways = gamut::Array { shape: vec![3, 2], values: vec![1.0; 6] };
+    assert!(s.add_runs(&[("mach", vec![0.6, 0.7].into()), ("wall", sideways.into()), ("plies", plies.clone().into())],
+                       &[]).is_err());
+    assert_eq!(s.add_runs(&[("mach", vec![0.6, 0.7].into()), ("wall", wall.into()), ("plies", plies.into())], &[])?,
+               vec![1, 2]);
+    s.close()?;
+    let f = gamut::open(&path)?;
+    assert_eq!(f.names("arrays")?, vec!["plies", "wall"]);
+    assert_eq!(f.describe("wall")?["length"], "3");
+    let all = f.get_array::<f64>("wall", .., ..)?;
+    assert_eq!(all.shape, vec![3, 3]);
+    assert_eq!(all[[2, 0]], 150.0);
+    assert_eq!(f.get_array::<f64>("wall", 2, vec![0, 2])?.values, vec![150.0, 450.0]);
+    assert_eq!(f.get_array::<i64>("plies", .., ..)?.values, vec![4, 5, 6, 7, 8, 9]);
+    assert!(f.get_array::<f64>("plies", .., ..).is_err());           // stored as int64
+    assert_eq!(f.outside("wall", ..)?, vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -50.0, 0.0, 50.0]);
+    let report = gamut::validate(&path)?;
+    assert!(report.ok && report.errors.is_empty());
+    assert_eq!(report.warnings.iter().map(|x| x.rule.as_str()).collect::<Vec<_>>(), vec!["W4"]);
+    Ok(())
+}

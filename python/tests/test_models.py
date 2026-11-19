@@ -426,7 +426,7 @@ def test_outside_measures_each_row_against_the_bounds(tmp_path):
         np.testing.assert_array_equal(s.outside("n"), [-1.0, 0.0, 0.0, 0.0, 1.0, 2.0])
         with pytest.raises(gamut.GamutError, match="mach declares no bounds"):
             s.outside("mach")
-        with pytest.raises(gamut.GamutError, match='no parameter "cl"'):
+        with pytest.raises(gamut.GamutError, match='no parameter or array "cl"'):
             s.outside("cl")
         with pytest.raises(gamut.GamutError, match='nothing is called "y"'):
             s.outside("y")

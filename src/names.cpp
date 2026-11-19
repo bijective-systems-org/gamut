@@ -10,6 +10,21 @@ namespace internal {
 
 const std::set<std::string> kParameterRoles = {"design", "condition", "time"};
 const std::set<std::string> kLabelRoles = {"group", "categorical", "status", "split"};
+const std::set<std::string> kArrayRoles = {"design", "condition"};
+
+std::string array_role_word(const std::string& role) { return role + "_array"; }
+
+std::string array_role_of(const std::string& word) {
+  static const std::string suffix = "_array";
+  if (word.size() <= suffix.size() ||
+      word.compare(word.size() - suffix.size(), suffix.size(), suffix) != 0) {
+    return std::string();
+  }
+  const std::string role = word.substr(0, word.size() - suffix.size());
+  return kArrayRoles.count(role) == 1 ? role : std::string();
+}
+
+std::string array_scale(const std::string& name) { return "/gamut_" + name + "_d1"; }
 const std::set<std::string> kMachinery = {
     "CLASS", "NAME", "DIMENSION_LIST", "REFERENCE_LIST", "DIMENSION_LABELS",
     "_Netcdf4Dimid", "_Netcdf4Coordinates", "_nc3_strict", "_NCProperties"};

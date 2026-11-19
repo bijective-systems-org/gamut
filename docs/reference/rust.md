@@ -21,6 +21,7 @@ checkout with `cargo run --example run_table`.
 | `gamut.open(path)`, `gamut.open(path, mode="a")` | `gamut::open(path)?`, `gamut::open_append(path)?` |
 | `study.get_field("p", rows=r, nodes=n)` | `study.get_field("p", r, n)?`: `..` for every one, `2..5`, a `Vec` of positions, or one position |
 | `study.get_parameter("alpha")` | `study.get_parameter::<f64>("alpha", ..)?`: `i64` for one declared int64 |
+| `study.get_array("wall")` | `study.get_array::<f64>("wall", .., ..)?`: a `gamut::Array`, runs × length |
 | `study.row_count`, `study.type` | `study.row_count()?`, `study.type_()?` |
 | `study.related("cl")` | `study.related("cl")?`: a `gamut::Related` |
 | `gamut.evaluate(path, inputs, path=out)` | `gamut::evaluate(path, &inputs, out)?`: the answer and the W4 findings |
@@ -30,11 +31,13 @@ checkout with `cargo run --example run_table`.
 ## Conventions
 
 A run's values are pairs of a name and a `gamut::Value`, made with
-`.into()` from an `f64`, an `i64` or a label's name; many runs' are pairs
-of a name and a `gamut::Column`, from a `Vec`. A parameter is float64
+`.into()` from an `f64`, an `i64`, a label's name or an array's `Vec`; many
+runs' are pairs of a name and a `gamut::Column`, from a `Vec`, or for an
+array from a `gamut::Array` of runs × length. A parameter is float64
 unless declared otherwise: `declare_parameter_with` takes a
 `gamut::Parameter` that says `.int64()`, `.bounds(lower, upper)` or, for
-time, `.run_group(label)`. A result that describes another is declared
+time, `.run_group(label)`; `declare_array_with` takes the same for an
+array, but for the run group. A result that describes another is declared
 with `declare_scalar_of` or `declare_field_of` and `gamut::std_of`,
 `quantile_of` or `derivative_of`. Reads come back as a `Vec`, or as a
 `gamut::Array` with its `shape` for a field, indexed `cp[[run, node]]`.

@@ -686,6 +686,58 @@ try
 catch err
     ok(strcmp(err.identifier, 'gamut:E4'), ['integer past 2^53: ' err.message]);
 end
+% Arrays: a fixed number of values per run, written as runs x length,
+% read back by run and by value, and read by a model, rows first.
+ap = fullfile(tmp, 'arrays.gamut');
+s = gamut.create(ap, 'writer', 'matlab tests', 'parameters', struct('mach', '1'), ...
+    'arrays', struct('wall', struct('units', 'K', 'length', 3, 'role', 'condition', ...
+                                    'lower', 200, 'upper', 400), ...
+                     'plies', struct('units', '1', 'length', 2, 'dtype', 'int64')), ...
+    'scalars', struct('q', 'W m-2'));
+ok(s.addRun(struct('mach', 0.5, 'wall', [300 310 320], 'plies', int64([4 5]), 'q', 1)) == 0, ...
+    'an array''s run as a row of its values');
+ok(isequal(s.addRuns(struct('mach', [0.6; 0.7], 'wall', [330 340 350; 150 300 450], ...
+    'plies', int64([6 7; 8 9]), 'q', [2; 3])), [1 2]), 'arrays as runs x length');
+try
+    s.addRuns(struct('mach', [0.6; 0.7], 'wall', [1 2; 3 4; 5 6], 'plies', int64([6 7; 8 9]), ...
+        'q', [2; 3]));
+    ok(false, 'an array given length x runs refused');
+catch err
+    ok(contains(err.message, 'first axis'), ['an array given length x runs: ' err.message]);
+end
+s.close();
+s = gamut.open(ap);
+ok(isequal(sort(s.names('arrays')), {'plies'; 'wall'}) || isequal(sort(s.names('arrays')), {'plies', 'wall'}), ...
+    'arrays named');
+ok(strcmp(s.describe('wall').length, '3'), 'an array''s length described');
+ok(isequal(s.getArray('wall'), [300 310 320; 330 340 350; 150 300 450]), 'an array read runs x length');
+ok(isequal(s.getArray('wall', 'rows', 3, 'values', [1 3]), [150 450]), 'an array read by run and value');
+ok(isequal(s.getArray('plies'), int64([4 5; 6 7; 8 9])), 'an int64 array read as int64');
+ok(isequal(s.outside('wall'), [0 0 0; 0 0 0; -50 0 50]), 'outside per value of an array');
+s.close();
+r = gamut.validate(ap);
+ok(numel(r) == 1 && strcmp(r(1).rule, 'W4'), 'an array outside its bounds is W4 only');
+amp = fullfile(tmp, 'array_model.gamut');
+nn = gamut.Nearest({'mach', 'wall'}, [0 200], [1 400], [0.5 300 300 300; 0.5 400 400 400], ...
+    struct('q', [1; 2]), [1 3]);
+s = gamut.createModel(amp, 'writer', 'matlab tests', ...
+    'parameters', struct('mach', struct('units', '1', 'lower', 0, 'upper', 1)), ...
+    'arrays', struct('wall', struct('units', 'K', 'length', 3, 'lower', 200, 'upper', 400)), ...
+    'scalars', struct('q', struct('units', '1', 'model', 'nn', 'output', 'q')));
+s.addModel('nn', nn, {'mach', 'wall'});
+s.close();
+ok(isempty(gamut.validate(amp)), 'a model reading an array validates');
+wall = [310 310 310; 390 390 500; 350 360 370];
+lastwarn('');
+w = warning('off', 'gamut:W4');
+o = gamut.evaluate(amp, struct('mach', [0.5; 0.5; 0.5], 'wall', wall));
+warning(w);
+ok(isequal(o.getScalar('q'), [1; 2; 2]), 'nearest reads an array value by value');
+ok(isequal(o.getArray('wall'), wall), 'the answer keeps the array');
+o.close();
+% One stored point, read by one array: x is that point's row of values.
+one = gamut.Nearest({'wall'}, 200, 400, [300 300 300], struct('q', 1), 3);
+ok(isequal(size(one.X), [1 3]), 'a one-point model of one array keeps x as one row');
 fprintf('%d checks, %d failures\n', checks, failures);
 if failures > 0, error('gamut:tests', '%d failures', failures); end
 end

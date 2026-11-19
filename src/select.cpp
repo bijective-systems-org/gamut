@@ -240,6 +240,10 @@ class Parser {
       return out;
     }
     const bool scalar = s.result(name.text) != nullptr && s.result(name.text)->where == "scalar";
+    if (s.array(name.text) != nullptr) {
+      throw Error("", "where: \"" + name.text + "\" is an array, which has many values per run; where "
+                      "compares a parameter, a scalar or a label");
+    }
     if (s.parameter(name.text) == nullptr && !scalar) {
       throw Error("", "where: \"" + name.text + "\" is not a parameter, scalar or label");
     }

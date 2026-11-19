@@ -62,10 +62,29 @@ Nearest nearest_from(const Dict& numbers) {
     need(std::isfinite(m.lower[j]) && std::isfinite(m.upper[j]) && m.lower[j] <= m.upper[j], "E17",
          "nearest: bounds are finite with lower <= upper");
   }
+  // widths: absent, one value per column (every input a parameter).
+  const Value* widths = find_path(numbers, "widths");
+  m.widths.assign(c, 1);
+  if (widths != nullptr) {
+    need(widths->kind() == Value::Kind::Numbers && widths->shape().size() == 1 &&
+             static_cast<std::size_t>(widths->shape()[0]) == c && widths->dtype() == DType::Int64,
+         "E17", "nearest: widths is an int64 array with one entry per column");
+    const auto& b = widths->bytes();
+    for (std::size_t j = 0; j < c; ++j) std::memcpy(&m.widths[j], &b[j * 8], 8);
+    m.widths_stored = true;
+  }
+  std::int64_t values = 0;
+  for (const std::int64_t w : m.widths) {
+    need(w >= 1 && w <= std::numeric_limits<std::int64_t>::max() - values, "E17",
+         "nearest: each width is at least 1");
+    values += w;
+  }
+  m.values = values;
   const Value* x = find_path(numbers, "x");
   need(x != nullptr && x->kind() == Value::Kind::Numbers && x->shape().size() == 2 &&
-           static_cast<std::size_t>(x->shape()[1]) == c,
-       "E17", "nearest: x is points x columns");
+           x->shape()[1] == values,
+       "E17", "nearest: x is points x columns, " + std::to_string(values) +
+                  (values == 1 ? " value" : " values") + " a point (the columns' widths summed)");
   m.points = x->shape()[0];
   need(m.points >= 1, "E17", "nearest: a model holds at least one point");
   m.x = as_doubles(*x, "x");
@@ -91,7 +110,13 @@ Dict nearest_numbers(const Nearest& m) {
   };
   d["lower"] = doubles(m.lower, {static_cast<std::int64_t>(m.lower.size())});
   d["upper"] = doubles(m.upper, {static_cast<std::int64_t>(m.upper.size())});
-  d["x"] = doubles(m.x, {m.points, static_cast<std::int64_t>(m.columns.size())});
+  if (m.widths_stored) {
+    std::vector<unsigned char> b(m.widths.size() * 8);
+    if (!b.empty()) std::memcpy(b.data(), m.widths.data(), b.size());
+    d["widths"] = Value::numbers(DType::Int64, {static_cast<std::int64_t>(m.widths.size())},
+                                 std::move(b));
+  }
+  d["x"] = doubles(m.x, {m.points, m.values});
   Dict outputs;
   for (const auto& kv : m.outputs) outputs[kv.first] = kv.second;
   d["outputs"] = Value::dict(std::move(outputs));
@@ -102,6 +127,8 @@ std::vector<std::int64_t> nearest_indices(const Nearest& m,
                                           const std::map<std::string, const double*>& inputs,
                                           std::int64_t rows) {
   const std::size_t c = m.columns.size();
+  const std::size_t nv = static_cast<std::size_t>(m.values);
+  // Value v of a row: the column it belongs to and its place in that column.
   std::vector<const double*> q(c, nullptr);
   for (std::size_t j = 0; j < c; ++j) {
     const auto it = inputs.find(m.columns[j]);
@@ -109,24 +136,37 @@ std::vector<std::int64_t> nearest_indices(const Nearest& m,
          "nearest: the input " + m.columns[j] + " is missing");
     q[j] = it->second;
   }
+  std::vector<std::size_t> column_of(nv), place_of(nv);
+  for (std::size_t j = 0, v = 0; j < c; ++j) {
+    for (std::int64_t k = 0; k < m.widths[j]; ++k, ++v) {
+      column_of[v] = j;
+      place_of[v] = static_cast<std::size_t>(k);
+    }
+  }
+  std::vector<double> query(nv);
   std::vector<std::int64_t> out(static_cast<std::size_t>(rows), -1);
   for (std::int64_t r = 0; r < rows; ++r) {
     bool finite = true;
-    for (std::size_t j = 0; j < c; ++j) {
-      if (m.upper[j] != m.lower[j] && !std::isfinite(q[j][r])) finite = false;
+    for (std::size_t v = 0; v < nv; ++v) {
+      const std::size_t j = column_of[v];
+      const std::size_t w = static_cast<std::size_t>(m.widths[j]);
+      query[v] = q[j][static_cast<std::size_t>(r) * w + place_of[v]];
+      if (m.upper[j] != m.lower[j] && !std::isfinite(query[v])) finite = false;
     }
     if (!finite) continue;
-    // Spec section 7.5: t_j = (q_j - x_ij) / (upper_j - lower_j), rounded to
-    // float64 before squaring; summed left to right in column order, each
-    // step rounded, no fused multiply-add (the build forbids contraction).
+    // Spec section 7.5: t_v = (q_v - x_iv) / (upper_v - lower_v), with the
+    // bounds of the input value v belongs to, rounded to float64 before
+    // squaring; summed left to right in the order of x, each step rounded,
+    // no fused multiply-add (the build forbids contraction).
     double best = std::numeric_limits<double>::infinity();
     std::int64_t best_i = -1;
     for (std::int64_t i = 0; i < m.points; ++i) {
       double d = 0.0;
-      for (std::size_t j = 0; j < c; ++j) {
+      for (std::size_t v = 0; v < nv; ++v) {
+        const std::size_t j = column_of[v];
         const double span = m.upper[j] - m.lower[j];
         if (span == 0.0) continue;
-        const double t = (q[j][r] - m.x[static_cast<std::size_t>(i) * c + j]) / span;
+        const double t = (query[v] - m.x[static_cast<std::size_t>(i) * nv + v]) / span;
         const double tt = t * t;
         d = d + tt;
       }

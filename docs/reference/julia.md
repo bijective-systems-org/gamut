@@ -19,6 +19,7 @@ folder with `julia --project=<checkout>/julia <checkout>/examples/julia/run_tabl
 | `study.add_run(values, fields=...)` | `GamutFile.add_run!(study, values; fields=...)` |
 | `study.get_field("p", rows=r, nodes=n)` | `GamutFile.get_field(study, "p"; rows=r, nodes=n)` |
 | `study.select("mach > 0.7")` | `GamutFile.select(study, "mach > 0.7")`, positions from 1 |
+| `study.get_array("wall", rows=r)` | `GamutFile.get_array(study, "wall"; rows=r)`: runs × length |
 | `study.outside("alpha", rows=r)` | `GamutFile.outside(study, "alpha"; rows=r)` |
 | `study.row_count`, `study.type` | `study.row_count`, `study.type` |
 | `study.related("cl")` | `GamutFile.related(study, "cl")` |

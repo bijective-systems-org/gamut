@@ -69,6 +69,9 @@ EXAMPLE_NOTES = """\
 # runs.csv has a header of column names and one line per run: a value for
 #   each parameter and scalar, a name for each label, and for each field the
 #   path (relative to the CSV) of a .npy file holding that run's values.
+#   An "arrays" section declares inputs with a fixed number of values per
+#   run ({"wall_temperature": {"units": "K", "length": 200}}); each has a
+#   column naming a .npy of that run's values, as a field does.
 #   When the geometry changes per run (or per group member), a column
 #   "points" names a .npy of that run's points, and for a changing mesh a
 #   column "cells" names a .npz of its types, offsets and connectivity.
@@ -117,7 +120,7 @@ def _summary(path: str) -> dict:
                                            "references", "source", "portion_marking",
                                            "generalisation_group", "trained_on",
                                            "evaluated_from") if k in d},
-            "parameters": [], "labels": [], "scalars": [], "constants": [],
+            "parameters": [], "arrays": [], "labels": [], "scalars": [], "constants": [],
         }
         for name in f.names("parameters"):
             p = f.describe(name)
@@ -133,6 +136,20 @@ def _summary(path: str) -> dict:
                         lo, hi = min(lo, float(np.nanmin(v))), max(hi, float(np.nanmax(v)))
                 entry["range"] = [lo, hi]
             doc["parameters"].append(entry)
+        for name in f.names("arrays"):
+            a = f.describe(name)
+            entry = {"name": name, "role": a.get("role"), "units": a.get("units"),
+                     "dtype": a.get("dtype"), "length": int(a.get("length", 0))}
+            for k in ("lower", "upper"):
+                if k in a:
+                    entry[k] = float(a[k])
+            if f.row_count:
+                lo, hi = np.inf, -np.inf
+                for v in _blocks(f, f.get_array, name, size=max(1, (1 << 20) // max(1, entry["length"]))):
+                    if v.size and not np.all(np.isnan(v)):
+                        lo, hi = min(lo, float(np.nanmin(v))), max(hi, float(np.nanmax(v)))
+                entry["range"] = [lo, hi]
+            doc["arrays"].append(entry)
         for name in f.names("labels"):
             l = f.describe(name)
             entry = {"name": name, "role": l.get("role")}
@@ -220,6 +237,13 @@ def _human(doc: dict) -> str:
             r = "" if not rng else f" {rng[0]:g}" if rng[0] == rng[1] else f" {rng[0]:g} to {rng[1]:g}"
             items.append(f"{p['name']} [{p['units']}]{r}")
         lines.append("  parameters  " + ", ".join(items))
+    if doc["arrays"]:
+        items = []
+        for a in doc["arrays"]:
+            rng = a.get("range") or ([a["lower"], a["upper"]] if "lower" in a else None)
+            r = "" if not rng else f" {rng[0]:g}" if rng[0] == rng[1] else f" {rng[0]:g} to {rng[1]:g}"
+            items.append(f"{a['name']} [{a['units']}] ({_counted(a['length'], 'value')}){r}")
+        lines.append("  arrays      " + ", ".join(items))
     for l in doc["labels"]:
         counts = {c: n for c, n in (l.get("counts") or {}).items() if n}
         names = list(counts) if counts else l["categories"]
@@ -282,7 +306,8 @@ def _blocks(f: Any, read: Any, name: str, size: int = 1 << 20) -> Any:
 def cmd_info(args: argparse.Namespace) -> int:
     """--json: {"file", "format", "kind", "type", "addons", "row_count", "file_bytes",
     "metadata": {...}, "parameters": [{name, role, units, dtype, lower?, upper?,
-    run_group?, range?}], "labels": [{name, role, categories, counts?}],
+    run_group?, range?}], "arrays": [{name, role, units, dtype, length, lower?,
+    upper?, range?}], "labels": [{name, role, categories, counts?}],
     "scalars": [{name, ...describe}], "constants": [...], "mesh"?: {kind, per,
     coordinate_units, axes, precision, nodes?, cells?, support_id?, node_fields,
     cell_fields, mesh_labels}, "models": [{id, type, inputs, repr?}]}"""
@@ -324,8 +349,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 
 _KNOWN_KEYS = {"writer", "title", "license", "references", "source", "portion_marking", "mesh",
-               "parameters", "labels", "scalars", "fields", "mesh_labels", "constants", "runs",
-               "generalisation_group"}
+               "parameters", "arrays", "labels", "scalars", "fields", "mesh_labels", "constants",
+               "runs", "generalisation_group"}
 
 
 def _json_kind(value: Any) -> str:
@@ -343,7 +368,7 @@ def _check_document(doc: dict, base: str, appending: bool) -> list[tuple[str, st
     if not appending and not doc.get("writer"):
         problems.append(("writer", "name the program writing the file"))
     # Each section's JSON type first: the checks below read inside them.
-    shapes = {"parameters": dict, "labels": dict, "scalars": dict, "fields": dict,
+    shapes = {"parameters": dict, "arrays": dict, "labels": dict, "scalars": dict, "fields": dict,
               "mesh_labels": dict, "constants": dict, "mesh": dict, "runs": str, "writer": str,
               "title": str, "license": str, "references": str, "source": str,
               "portion_marking": str, "generalisation_group": str}
@@ -351,7 +376,7 @@ def _check_document(doc: dict, base: str, appending: bool) -> list[tuple[str, st
     for key in sorted(wrong):
         problems.append((key, f"is {_json_kind(doc[key])}; it is " +
                               ("an object of names" if shapes[key] is dict else "text")))
-    for group in ("parameters", "scalars", "fields"):
+    for group in ("parameters", "arrays", "scalars", "fields"):
         if group in wrong:
             continue
         for name, spec in (doc.get(group) or {}).items():
@@ -365,6 +390,11 @@ def _check_document(doc: dict, base: str, appending: bool) -> list[tuple[str, st
             elif not _lib.units_valid(units):
                 problems.append((f"{group}.{name}.units",
                                  f"\"{units}\" does not parse; use UDUNITS form such as m s-1"))
+            if group == "arrays":
+                length = spec.get("length") if isinstance(spec, dict) else None
+                if isinstance(length, bool) or not isinstance(length, int) or length < 1:
+                    problems.append((f"arrays.{name}.length", "is the number of values per run, "
+                                                              "a whole number of at least 1"))
     if "constants" not in wrong:
         for name, value in (doc.get("constants") or {}).items():
             if not (isinstance(value, list) and len(value) == 2 and isinstance(value[1], str)):
@@ -442,21 +472,26 @@ def _read_runs(doc: dict, base: str, study_fields: set[str], labels: set[str],
     return columns, fields, points, cells
 
 
-def _rows(doc: dict, base: str, fields: set[str], labels: set[str], mesh_kind: str) -> tuple:
-    """A document's runs, read whole: (n, columns, fields, points, cells)."""
+def _rows(doc: dict, base: str, fields: set[str], labels: set[str], mesh_kind: str,
+          arrays: set[str] = frozenset()) -> tuple:
+    """A document's runs, read whole: (n, columns, fields, points, cells).
+    An array's .npy files, one a run, are one column of runs x length."""
     problems: list[tuple[str, str]] = []
-    columns, field_values, points, cells = _read_runs(doc, base, fields, labels, problems)
+    columns, field_values, points, cells = _read_runs(doc, base, fields | arrays, labels, problems)
     if problems:
         raise Problems(problems)
+    for k in arrays & set(field_values):
+        columns[k] = np.stack([np.ravel(v) for v in field_values.pop(k)])
     n = len(next(iter(columns.values()))) if columns else 0
-    arrays = {k: np.stack(v) if mesh_kind != "changing" else np.concatenate([a.ravel() for a in v])
-              for k, v in field_values.items()}
-    return n, columns, arrays, points or None, cells or None
+    stacked = {k: np.stack(v) if mesh_kind != "changing" else np.concatenate([a.ravel() for a in v])
+               for k, v in field_values.items()}
+    return n, columns, stacked, points or None, cells or None
 
 
-def _add_rows(study: Any, doc: dict, base: str, fields: set[str], labels: set[str]) -> int:
-    n, columns, arrays, points, cells = _rows(doc, base, fields, labels, study._mesh_kind)
-    study.add_runs(columns, fields=arrays, points=points, cells=cells)
+def _add_rows(study: Any, doc: dict, base: str, fields: set[str], labels: set[str],
+              arrays: set[str] = frozenset()) -> int:
+    n, columns, stacked, points, cells = _rows(doc, base, fields, labels, study._mesh_kind, arrays)
+    study.add_runs(columns, fields=stacked, points=points, cells=cells)
     return n
 
 
@@ -478,7 +513,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     study = None
     try:
         study = create(args.output, writer=doc["writer"], parameters=doc.get("parameters"),
-                       labels=doc.get("labels"), scalars=doc.get("scalars"),
+                       arrays=doc.get("arrays"), labels=doc.get("labels"), scalars=doc.get("scalars"),
                        fields=doc.get("fields"), mesh_labels=doc.get("mesh_labels"),
                        constants={k: tuple(v) for k, v in (doc.get("constants") or {}).items()},
                        mesh=mesh.get("kind"), per=mesh.get("per"),
@@ -496,7 +531,8 @@ def cmd_build(args: argparse.Namespace) -> int:
                 study.set_mesh(z["points"], cells, labels)
             else:
                 study.set_mesh(cells=cells, labels=labels, n_nodes=int(z["n_nodes"]))
-        n = _add_rows(study, doc, base, set(doc.get("fields") or {}), set(doc.get("labels") or {}))
+        n = _add_rows(study, doc, base, set(doc.get("fields") or {}), set(doc.get("labels") or {}),
+                      set(doc.get("arrays") or {}))
         study.close()
     except Problems as e:
         return _report_problems(args, e.problems)
@@ -563,7 +599,8 @@ def cmd_append(args: argparse.Namespace) -> int:
             _rows_kept(f, "appending")
             fields = set(f.names("node_fields") + f.names("cell_fields"))
             labels = set(f.names("labels"))
-            n, columns, arrays, points, cells = _rows(doc, base, fields, labels, f._mesh_kind)
+            n, columns, arrays, points, cells = _rows(doc, base, fields, labels, f._mesh_kind,
+                                                      set(f.names("arrays")))
             try:
                 _lib.call("gamut_check_marking", f._handle(), _lib.b(doc.get("portion_marking")),
                           _lib.b(args.marking))
@@ -787,6 +824,7 @@ def _gather(args: argparse.Namespace) -> tuple[dict[str, np.ndarray], dict[str, 
         fields = set(f.names("node_fields") + f.names("cell_fields"))
         labels = set(f.names("labels"))
         params = set(f.names("parameters"))
+        arrays = set(f.names("arrays"))
         zone_at = f.describe(args.zone.partition("=")[0]).get("location") if args.zone else None
         for name in args.names:
             if name in fields:
@@ -801,6 +839,11 @@ def _gather(args: argparse.Namespace) -> tuple[dict[str, np.ndarray], dict[str, 
                 data[name] = f.get_label(name, rows=rows)
             elif name in params:
                 data[name] = f.get_parameter(name, rows=rows)
+            elif name in arrays:
+                if args.zone:
+                    raise GamutError("", f"--zone selects nodes or cells, and {name} is an array, "
+                                          "whose values have no place on the mesh")
+                data[name] = np.atleast_2d(f.get_array(name, rows=rows))
             elif name == "row":
                 data[name] = f.get_row_ids(rows)
             else:

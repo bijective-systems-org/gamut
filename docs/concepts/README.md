@@ -13,7 +13,9 @@ defines it exactly, rule by rule.
 Every file is a table with a row per run. A run is located by its
 **parameters**, numbers with units and a role: `design` for the shape of
 the thing, `condition` for how it is operated, `time` for a saved step.
-**Labels** name rather than measure: a status, a solver, the member of a
+An input with a fixed number of values per run, such as a wall
+temperature at 200 stations, is an **array**: one unit and one role for
+all its values. **Labels** name rather than measure: a status, a solver, the member of a
 family; they are stored as a code per row with a table of names.
 **Scalars** are results with one value per run, and **constants** hold
 one value for the whole study, such as a reference area.
@@ -32,12 +34,13 @@ That is the file of [the first example](../guide/01-run-tables.md). Every
 row gets an id when it is written, unique in the file and never reused,
 so a run can be traced after it is copied to another file. Units are
 required on every number. A result a run does not have, as for the
-failed run here, is NaN; parameters and labels are never missing.
+failed run here, is NaN; parameters, arrays and labels are never missing.
 
 | Word | Means |
 |---|---|
 | run | one simulation; a row of the run table (a transient run has a row per saved step) |
 | parameter | an input that places a run in the study: a design variable, an operating condition, a time |
+| array | an input with a fixed number of values per run, such as a profile, with no mesh |
 | label | a value that names rather than measures: a status, a geometry's name, a solver |
 | scalar | a result with one number per run, such as a lift coefficient |
 | constant | one number for the whole study, such as a reference area |

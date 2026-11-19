@@ -3,8 +3,9 @@ function out = evaluate(modelPath, inputs, varargin)
 %   out = gamut.evaluate(modelPath, inputs)
 %   out = gamut.evaluate(modelPath, inputs, 'path', p)
 %   out = gamut.evaluate(modelPath, inputs, 'coordinates', C)
-%   inputs maps each parameter to values and each label to names (a cell
-%   array) from the model file's table, all of one length n.  C (n x nodes
+%   inputs maps each parameter to values, each array to n x length values
+%   and each label to names (a cell array) from the model file's table,
+%   all for the same n rows.  C (n x nodes
 %   x axes) is needed when a model reads geometry the file does not store.
 %   Returns the resulting data file open to read; without 'path' it lives
 %   in a temporary file removed when it is closed.  An input outside a
@@ -18,9 +19,13 @@ m = gamut.open(modelPath);
 closeModel = onCleanup(@() m.close());
 labels = m.names('labels');
 params = m.names('parameters');
+arrays = m.names('arrays');
 given = fieldnames(inputs)';
 n = 0;
-if ~isempty(given), n = numel(inputs.(given{1})); end
+if ~isempty(given)
+    first = inputs.(given{1});
+    if any(strcmp(arrays, given{1})), n = size(first, 1); else, n = numel(first); end
+end
 outPath = p.Results.path;
 temporary = isempty(outPath);
 if temporary
@@ -35,6 +40,12 @@ for k = 1:numel(given)
     name = given{k};
     if any(strcmp(labels, name))
         gamut_mex('evaluation_names', ev, name, cellstr(inputs.(name)));
+    elseif any(strcmp(arrays, name))      % n x length, rows first
+        if strcmp(gamut.internal.field(m.describe(name), 'dtype', ''), 'int64')
+            gamut_mex('evaluation_array', ev, name, int64Exactly(inputs.(name), name));
+        else
+            gamut_mex('evaluation_array', ev, name, exactDouble(inputs.(name), name));
+        end
     elseif ~any(strcmp(params, name))   % the core refuses the name (E2) before its values
         gamut_mex('evaluation_values', ev, name, []);
     elseif strcmp(gamut.internal.field(m.describe(name), 'dtype', ''), 'int64')

@@ -243,8 +243,9 @@ by name, `gamut.registerModelType('Polynomial')`, before the first
 with no trace of the first: [`evaluate_model.m`](https://github.com/bijective-systems-org/gamut/blob/main/examples/matlab/evaluate_model.m)
 evaluates the file the Python program writes, and prints the same line.
 
-`call` receives each input the model reads, an array with a value per row,
-and the list of what is wanted. Each item names an output and what is
+`call` receives each input the model reads, an array with a value per row
+(rows × length for an [array](#an-input-of-many-values)), and the list of
+what is wanted. Each item names an output and what is
 wanted of it: its values, its spread, a quantile or a derivative. A model
 file asks for a spread or a derivative by declaring it as a result, as a
 data file does ([uncertainty](06-uncertainty-and-gradients.md)).
@@ -357,6 +358,85 @@ numbers with `GamutFile.model_numbers`. C and C++ read a model's numbers and
 run the built-in model through `gamut.h`
 ([C++ and C](../reference/c-and-cpp.md#a-model-file)); neither the C++
 header nor the Rust crate writes model files.
+
+## An input of many values
+
+A model's input may be a fixed number of values in each row, such as a
+wall temperature at four stations, rather than one number. Such an input
+is an **array**: declared once with its length, one unit for all its
+values and one pair of bounds, and given as rows × length. The values have
+no mesh; their order is yours, value i the same station in every row. Here
+the built-in model reads one, so every language evaluates the file:
+
+/// tab | Python
+
+```python
+walls = np.array([[300.0, 340.0, 380.0, 420.0], [500.0, 540.0, 580.0, 620.0]])
+with gamut.create_model("heating_nearest.gamut", writer="example fit",
+                         arrays={"wall_t": {"units": "K", "length": 4, "role": "condition",
+                                            "lower": 300.0, "upper": 620.0}},
+                         scalars={"q": {"units": "kW m-2", "model": "fit", "output": "q"}}) as model:
+    model.add_model("fit", gamut.Nearest(["wall_t"], [300.0], [620.0], walls, {"q": [41.0, 35.0]},
+                                         widths=[4]), inputs=["wall_t"])
+
+with gamut.evaluate("heating_nearest.gamut", {"wall_t": [[320.0, 350.0, 390.0, 430.0],
+                                                          [480.0, 530.0, 600.0, 640.0]]}) as answer:
+    q, outside = answer.get_scalar("q"), answer.outside("wall_t")
+print("the nearest run's heat flux for two walls:", " ".join(f"{v:g}" for v in q), "kW m-2")
+print("kelvin outside the fitted range, second wall:", " ".join(f"{v:g}" for v in outside[1]))
+```
+
+///
+
+/// tab | MATLAB
+
+```matlab
+walls = [300 340 380 420; 500 540 580 620];
+model = gamut.createModel('heating_nearest.gamut', 'writer', 'example fit', ...
+    'arrays', struct('wall_t', struct('units', 'K', 'length', 4, 'role', 'condition', ...
+                                      'lower', 300, 'upper', 620)), ...
+    'scalars', struct('q', struct('units', 'kW m-2', 'model', 'fit', 'output', 'q')));
+model.addModel('fit', gamut.Nearest({'wall_t'}, 300, 620, walls, struct('q', [41; 35]), 4), {'wall_t'});
+model.close();
+
+answer = gamut.evaluate('heating_nearest.gamut', struct('wall_t', [320 350 390 430; 480 530 600 640]));
+q = answer.getScalar('q');
+outside = answer.outside('wall_t');
+answer.close();
+fprintf('the nearest run''s heat flux for two walls: %s kW m-2\n', strjoin(compose('%g', q), ' '));
+fprintf('kelvin outside the fitted range, second wall: %s\n', strjoin(compose('%g', outside(2, :)), ' '));
+```
+
+///
+
+Each prints:
+
+```text
+the nearest run's heat flux for two walls: 41 35 kW m-2
+kelvin outside the fitted range, second wall: 0 0 0 20
+```
+
+- `arrays` declares the input as `parameters` does, with its `length`. A
+  data file declares arrays the same way; a run gives an array's values in
+  order, and `get_array` (`getArray`) reads them back, rows × length.
+- A model reads an array as rows × length. An array given length × rows
+  is refused, except when its length equals the number of rows, which no
+  library can tell apart: give rows first. `Nearest` takes each input's
+  `widths`, 1 for a parameter and the length for an array, and measures
+  the distance over every value.
+- The bounds hold for every value. An answer's `outside` gives a number
+  per value, and a value outside is reported (W4) and evaluated. The
+  bounds are a range per value: a wall inside them at every station may
+  still be one the model has never seen, and they do not say so.
+
+```console
+$ gamut info heating_nearest.gamut
+heating_nearest.gamut: model file
+  arrays      wall_t [K] (4 values) 300 to 620
+  results     q [kW m-2]
+  model       fit: nearest reading wall_t
+  file        ... KB
+```
 
 ## Notes
 

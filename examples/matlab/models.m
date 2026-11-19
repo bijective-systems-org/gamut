@@ -61,3 +61,19 @@ outside = answer.outside('alpha');
 answer.close();
 fprintf('the model''s lift at 5 and 12 degrees: %s\n', strjoin(compose('%.2f', lift), ' '));
 fprintf('degrees outside the fitted range: %s\n', strjoin(compose('%g', outside), ' '));
+
+% An input of many values: a wall temperature at four stations is one array.
+walls = [300 340 380 420; 500 540 580 620];
+model = gamut.createModel('heating_nearest.gamut', 'writer', 'example fit', ...
+    'arrays', struct('wall_t', struct('units', 'K', 'length', 4, 'role', 'condition', ...
+                                      'lower', 300, 'upper', 620)), ...
+    'scalars', struct('q', struct('units', 'kW m-2', 'model', 'fit', 'output', 'q')));
+model.addModel('fit', gamut.Nearest({'wall_t'}, 300, 620, walls, struct('q', [41; 35]), 4), {'wall_t'});
+model.close();
+
+answer = gamut.evaluate('heating_nearest.gamut', struct('wall_t', [320 350 390 430; 480 530 600 640]));
+q = answer.getScalar('q');
+outside = answer.outside('wall_t');
+answer.close();
+fprintf('the nearest run''s heat flux for two walls: %s kW m-2\n', strjoin(compose('%g', q), ' '));
+fprintf('kelvin outside the fitted range, second wall: %s\n', strjoin(compose('%g', outside(2, :)), ' '));

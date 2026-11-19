@@ -18,7 +18,7 @@ namespace gamut_core {
 namespace internal {
 
 // A new data file at `out_path` declaring what the model file declares:
-// parameters (with their bounds), labels (with the model file's tables, so
+// parameters and arrays (with their bounds), labels (with the model file's tables, so
 // codes agree), results (stored, at the precision of the model file's
 // datasets), constants, and the mesh (its stored coordinates when fixed;
 // cells only when a model or the caller gives coordinates per run).  The
@@ -48,9 +48,12 @@ class Evaluation {
   Evaluation(const Evaluation&) = delete;
   Evaluation& operator=(const Evaluation&) = delete;
 
-  // A parameter's values, converted by the writer's rule to the dtype it is
-  // declared with (E4 for a value that is not exact there).
-  void values(const std::string& name, const Column& given);
+  // A parameter's values, or an array's rows x length values, converted by
+  // the writer's rule to the dtype it is declared with (E4 for a value that
+  // is not exact there).  first_axis is the extent of the first axis of
+  // the caller's array, 0 for a flat one: an array given length x rows is
+  // refused rather than read across its rows.
+  void values(const std::string& name, const Column& given, std::int64_t first_axis = 0);
   // A label's names, each in the model file's table (E9).
   void names(const std::string& name, const std::vector<std::string>& given);
   // rows x nodes x axes, for a model that reads geometry the file does not
@@ -64,8 +67,9 @@ class Evaluation {
   // The models the caller runs (those not built in), in the order asked.
   std::vector<std::string> models() const;
   const std::vector<Request>& requests(const std::string& model_id) const;
-  // An input as a model reads it: a parameter in its dtype, a label as its
-  // codes (int64), coordinates as float64 rows x nodes x axes.
+  // An input as a model reads it: a parameter in its dtype, an array in its
+  // dtype as rows x length, a label as its codes (int64), coordinates as
+  // float64 rows x nodes x axes.
   DType input_dtype(const std::string& name) const;
   std::vector<std::int64_t> input_shape(const std::string& name) const;
   const std::vector<unsigned char>& input(const std::string& name) const;
@@ -96,7 +100,7 @@ class Evaluation {
   std::string out_path_;
   std::unique_ptr<Writer> writer_;                        // the data file, until finished
   bool ready_ = false;
-  std::map<std::string, Column> parameters_;              // converted
+  std::map<std::string, Column> parameters_;              // parameters and arrays, converted
   std::map<std::string, std::vector<std::string>> label_names_;
   std::map<std::string, std::vector<std::int64_t>> label_codes_;
   std::vector<double> coordinates_;                       // given, or the stored ones per row

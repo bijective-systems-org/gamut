@@ -1,17 +1,18 @@
 function s = createModel(path, varargin)
 %CREATEMODEL Creates a model file (no runs) and returns it open to write.
 %   s = gamut.createModel(path, 'writer', name, ...
-%       'parameters', P, 'labels', L, 'scalars', S, 'fields', F, ...
+%       'parameters', P, 'arrays', A, 'labels', L, 'scalars', S, 'fields', F, ...
 %       'constants', C, 'mesh', 'shared', 'per', 'fixed'|'run', ...
 %       'coordinates', struct('units', 'm', 'axes', 3), ...
 %       'trainedOn', {fileIds}, 'title', t, 'license', l, ...
 %       'references', r, 'source', src, 'portionMarking', m)
-%   Parameters carry bounds (lower, upper); every scalar and field names
+%   Parameters and arrays carry bounds (lower, upper); every scalar and field names
 %   the model and output that computes it.  Then s.setMesh(...) when there
 %   is a mesh, s.addModel(id, model, inputs) for each model, s.close().
 p = inputParser;
 p.addParameter('writer', '');
 p.addParameter('parameters', struct());
+p.addParameter('arrays', struct());
 p.addParameter('labels', struct());
 p.addParameter('scalars', struct());
 p.addParameter('fields', struct());

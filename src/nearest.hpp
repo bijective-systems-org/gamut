@@ -16,9 +16,12 @@ namespace internal {
 
 struct Nearest {
   std::vector<std::string> columns;
-  std::vector<double> lower, upper;
+  std::vector<std::int64_t> widths;         // per column: 1, or an array's length
+  bool widths_stored = false;               // the numbers hold `widths`
+  std::vector<double> lower, upper;         // per column
   std::int64_t points = 0;
-  std::vector<double> x;                    // points x columns, C order
+  std::int64_t values = 0;                  // the sum of widths
+  std::vector<double> x;                    // points x values, C order
   std::map<std::string, Value> outputs;     // float64 arrays, first axis points
 };
 
@@ -30,7 +33,8 @@ Nearest nearest_from(const Dict& numbers);
 Dict nearest_numbers(const Nearest& m);
 
 // The index of the nearest point for each of `rows` query rows, -1 where a
-// used input is not finite.  `inputs` maps each column to `rows` values.
+// used input is not finite.  `inputs` maps each column to rows x its width
+// values, C order.
 std::vector<std::int64_t> nearest_indices(const Nearest& m,
                                           const std::map<std::string, const double*>& inputs,
                                           std::int64_t rows);

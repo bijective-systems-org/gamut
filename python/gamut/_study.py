@@ -43,6 +43,17 @@ def _axes(coordinates: Mapping[str, Any] | None) -> int:
     return int(value)
 
 
+def _declare_array(handle: Any, name: str, value: Any, dtype: Any = None) -> None:
+    """An array (spec section 3.9), declared as `{"units": "K", "length": 200}`
+    with optional "role", "lower", "upper" and "dtype"."""
+    spec = _spec(value, "units")
+    has = "lower" in spec or "upper" in spec
+    call("gamut_declare_array", handle, b(name), b(spec.get("role", "design")), b(spec.get("units")),
+         _lib.int64_value(spec.get("length", 0), f"{name}: length"),
+         _precision(dtype if dtype is not None else spec.get("dtype")), 1 if has else 0,
+         float(spec.get("lower", math.nan)), float(spec.get("upper", math.nan)))
+
+
 class _Declaration(dict):
     """A concept's attributes as a reader relies on them: an entry the file
     lacks is refused, rather than a missing key."""
@@ -214,7 +225,8 @@ class Study:
                 points: Any = None, cells: Any = None,
                 mesh_labels: Mapping[str, Any] | None = None) -> int:
         """Adds one run; returns its id.  `values` gives each parameter, label
-        (by name) and scalar; `fields` one value per node or cell."""
+        (by name), scalar and array (its values); `fields` one value per node
+        or cell."""
         columns = {k: [self._given(k, v)] for k, v in values.items()}
         flds = {k: np.asarray(v).reshape(1, -1) if self._mesh_kind != "changing" else np.asarray(v)
                 for k, v in (fields or {}).items()}
@@ -223,22 +235,25 @@ class Study:
                             [mesh_labels] if mesh_labels is not None else None)[0]
 
     def _given(self, name: str, value: Any) -> Any:
-        """A value as (number, units) is converted to the declared units."""
+        """A value as (number, units), or an array's as (values, units), is
+        converted to the declared units."""
         if isinstance(value, tuple) and len(value) == 2 and isinstance(value[1], str):
             target = self._declared_units.get(name)
             if target is None:
                 raise GamutError("", f"{name} has no declared units to convert to")
             if value[1] == target:            # nothing to convert: the core takes it as given
                 return value[0]
-            return float(_units.convert(_lib.float64_exactly(value[0], name), value[1], target))
+            converted = _units.convert(_lib.float64_exactly(value[0], name), value[1], target)
+            return float(converted) if np.ndim(converted) == 0 else np.asarray(converted, dtype=np.float64)
         return value
 
     def add_runs(self, columns: Mapping[str, Any], *, fields: Mapping[str, Any] | None = None,
                  points: Sequence[Any] | None = None, cells: Sequence[Any] | None = None,
                  mesh_labels: Sequence[Mapping[str, Any]] | None = None) -> list[int]:
         """Adds many runs at once: `columns` maps each name to one value per
-        run, as a dict of arrays or a pandas DataFrame does; `fields` to runs
-        x sites (a changing mesh: every run's values end to end); `points`,
+        run, as a dict of arrays or a pandas DataFrame does, and each array
+        to runs x length; `fields` to runs x sites (a changing mesh: every
+        run's values end to end); `points`,
         `cells`, `mesh_labels` one per run (or per new group member) when the
         geometry changes."""
         columns = dict(columns.items())
@@ -347,7 +362,7 @@ class Study:
         return self._rows
 
     def names(self, group: str) -> list[str]:
-        """The names in a group: "parameters", "labels", "scalars",
+        """The names in a group: "parameters", "arrays", "labels", "scalars",
         "constants", "node_fields", "cell_fields", "node_labels",
         "cell_labels", "tables" or "models"."""
         self._need_reader()
@@ -425,12 +440,22 @@ class Study:
                            else np.float64)
         return self._in_units(name, values, units)
 
+    def get_array(self, name: str, rows: Any = None, values: Any = None,
+                  units: str | None = None) -> np.ndarray:
+        """An array's values in each row, rows x length (one row asked by
+        its position gives its values alone); `values` selects among them,
+        and `units` converts them (which needs the `units` extra, pint)."""
+        d = self.describe(name)
+        out = self._get(name, rows, values, dtype=np.int64 if d.get("dtype") == "int64" and units is None
+                        else np.float64)
+        return self._in_units(name, out, units)
+
     def outside(self, name: str, rows: Any = None) -> np.ndarray:
-        """How far each row's value of the parameter `name` lies outside the
-        bounds the file declares for it, in the parameter's units: 0 inside
-        or on a bound, `value - lower` (negative) below, `value - upper`
-        (positive) above, NaN where the value is missing.  A parameter with
-        no bounds is refused.  The answer of `evaluate` keeps the model's
+        """How far each row's value of the parameter `name`, or each value of
+        the array `name` (rows x length), lies outside the bounds the file
+        declares for it, in its units: 0 inside or on a bound, `value -
+        lower` (negative) below, `value - upper` (positive) above, NaN where
+        the value is missing.  One with no bounds is refused.  The answer of `evaluate` keeps the model's
         bounds, so this says which of its rows lie outside the range the
         model was fitted on, and how far."""
         self._need_reader()
@@ -521,18 +546,22 @@ class Study:
         return _lib.strings_out("gamut_table", self._handle(), b(table))
 
     def table(self, names: Sequence[str] | None = None, rows: Any = None) -> dict[str, np.ndarray]:
-        """The run table as columns: parameters, labels (as names), scalars."""
+        """The run table as columns: parameters, labels (as names), scalars.
+        An array is not among them unless named; it comes as rows x length."""
         self._need_reader()
         if names is None:
             names = self.names("parameters") + self.names("labels") + self.names("scalars")
         labels = set(self.names("labels"))
         params = set(self.names("parameters"))
+        arrays = set(self.names("arrays"))
         out: dict[str, np.ndarray] = {}
         for n in names:
             if n in labels:
                 out[n] = self.get_label(n, rows)
             elif n in params:
                 out[n] = self.get_parameter(n, rows)
+            elif n in arrays:
+                out[n] = self.get_array(n, rows)
             else:
                 out[n] = self.get_scalar(n, rows)
         return out
@@ -639,7 +668,7 @@ class _NotesWriter:
 
 
 def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = None,
-           labels: Mapping[str, Any] | None = None, scalars: Mapping[str, Any] | None = None,
+           arrays: Mapping[str, Any] | None = None, labels: Mapping[str, Any] | None = None, scalars: Mapping[str, Any] | None = None,
            fields: Mapping[str, Any] | None = None, mesh_labels: Mapping[str, Any] | None = None,
            constants: Mapping[str, Any] | None = None, mesh: str | None = None,
            per: str | None = None, coordinates: Mapping[str, Any] | None = None,
@@ -657,6 +686,11 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
       (the default), "condition" or "time"; optional "lower", "upper".
       float64 whatever the values given, or `"dtype": "int64"` for whole
       numbers such as a count or a seed.
+    - `arrays`: inputs with a fixed number of values per run, as
+      `{"wall_temperature": {"units": "K", "length": 200, "role": "condition"}}`.
+      Role "design" (the default) or "condition"; optional "lower" and
+      "upper", which every value lies within; `"dtype": "int64"` for counts.
+      A run gives its `length` values in order; many runs, runs x length.
     - `labels`: names rather than numbers, as
       `{"status": {"role": "status", "categories": ["converged", "failed"]}}`.
       Role "categorical" (the default), "group", "status" or "split". Only
@@ -696,7 +730,7 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
     study._group = per[6:] if per and per.startswith("group:") else None
     study._axes = axes
     try:
-        for group in (parameters, scalars):
+        for group in (parameters, arrays, scalars):
             for name, value in (group or {}).items():
                 study._declared_units[name] = _spec(value, "units").get("units", "")
         precision = dict(precision or {})
@@ -720,6 +754,8 @@ def create(path: str, *, writer: str, parameters: Mapping[str, Any] | None = Non
                  b(spec.get("units")), _precision(precision.get(name, spec.get("dtype"))),
                  1 if has else 0, float(spec.get("lower", math.nan)), float(spec.get("upper", math.nan)),
                  b(spec.get("run_group", "")))
+        for name, value in (arrays or {}).items():
+            _declare_array(handle, name, value, precision.get(name))
         if coordinates is not None:
             call("gamut_declare_coordinates", handle, b(coordinates.get("units")),
                  _precision(coordinates.get("precision")), int(coordinates.get("axes", 3)),
@@ -784,7 +820,7 @@ def open(path: str, mode: str = "r", threads: int = 1) -> Study:  # noqa: A001
         reader = open(path, "r")
         kind, per = reader._mesh_kind, reader._per
         declared = {n: reader.describe(n).get("units", "")
-                    for n in reader.names("parameters") + reader.names("scalars")}
+                    for n in reader.names("parameters") + reader.names("arrays") + reader.names("scalars")}
         reader.close()
         call("gamut_open_append", b(path), ctypes.byref(handle))
         study = Study(handle, path, writing=True)

@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- Arrays: an input with a fixed number of values per run, such as a wall
+  temperature at 200 stations or 40 shape coefficients, with no mesh
+  (specification §3.9). One unit, a role (design or condition) and, in a
+  model file, one pair of bounds hold for all its values. Declared with
+  `arrays={"wall_t": {"units": "K", "length": 200}}` in Python (and the
+  same in MATLAB, Julia, C++, Rust and C, `gamut_declare_array`), given as
+  runs × length and read with `get_array`. A model's `inputs` may name
+  one, and reads it as rows × length; the built-in nearest model takes
+  arrays, each input's number of values given in its new `widths`.
+  Evaluation takes an array rows first (`gamut_evaluation_array` refuses
+  one given length × rows) and writes it into the answer; `outside`, the
+  W4 findings and `gamut info` go value by value. The format stays
+  `gamut/1`: an array is stored as a dataset whose role is
+  `design_array` or `condition_array`, which earlier readers ignore.
+  Earlier releases still read a data file that has arrays, without them
+  (their validator reports W5); they cannot validate a model file whose
+  models read one (E17) or evaluate it, and appending to or copying a file
+  that has arrays needs this release: an earlier one leaves the array
+  short of the new rows, or out of the copy. This release refuses to read
+  or append to an array left short that way (E5), and says why.
 - `append` takes several source files at once (a list in Python, a cell
   or string array in MATLAB, a vector in Julia, `append_files` in C++ and
   Rust, `gamut_append_files` in C, several files on the command line).

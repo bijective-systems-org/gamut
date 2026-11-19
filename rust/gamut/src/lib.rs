@@ -218,7 +218,7 @@ impl Sel {
 }
 
 /// What a read returns: values in C order and their shape (runs x nodes for
-/// a field on a shared mesh). `array[[i, j]]` is the value at row i, column j.
+/// a field on a shared mesh, runs x length for an array). `array[[i, j]]` is the value at row i, column j.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Array<T> {
     pub shape: Vec<usize>,
@@ -342,13 +342,15 @@ impl Parameter {
     }
 }
 
-/// One run's value of a parameter or scalar (integers stay integers), or
-/// its label by name.
+/// One run's value of a parameter or scalar (integers stay integers), its
+/// label by name, or an array's values.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Float(f64),
     Int(i64),
     Name(String),
+    Floats(Vec<f64>),
+    Ints(Vec<i64>),
 }
 
 impl From<f64> for Value {
@@ -371,22 +373,49 @@ impl From<String> for Value {
         Value::Name(v)
     }
 }
+impl From<Vec<f64>> for Value {
+    fn from(v: Vec<f64>) -> Value {
+        Value::Floats(v)
+    }
+}
+impl From<Vec<i64>> for Value {
+    fn from(v: Vec<i64>) -> Value {
+        Value::Ints(v)
+    }
+}
 
-/// Many runs' values of one name, one entry per run.
+/// Many runs' values of one name, one entry per run; an array's as runs x
+/// length.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Column {
     Float(Vec<f64>),
     Int(Vec<i64>),
     Names(Vec<String>),
+    FloatArray(Array<f64>),
+    IntArray(Array<i64>),
 }
 
 impl Column {
+    /// Runs: a column's length, an array's first axis.
     fn len(&self) -> usize {
         match self {
             Column::Float(v) => v.len(),
             Column::Int(v) => v.len(),
             Column::Names(v) => v.len(),
+            Column::FloatArray(a) => a.shape.first().copied().unwrap_or(a.values.len()),
+            Column::IntArray(a) => a.shape.first().copied().unwrap_or(a.values.len()),
         }
+    }
+}
+
+impl From<Array<f64>> for Column {
+    fn from(a: Array<f64>) -> Column {
+        Column::FloatArray(a)
+    }
+}
+impl From<Array<i64>> for Column {
+    fn from(a: Array<i64>) -> Column {
+        Column::IntArray(a)
     }
 }
 
@@ -585,6 +614,33 @@ impl Study {
         })
     }
 
+    /// A float64 array (spec section 3.9): `length` values per run, one unit
+    /// for all of them. role: "design" or "condition".
+    pub fn declare_array(&mut self, name: &str, role: &str, units: &str, length: usize) -> Result<()> {
+        self.declare_array_with(name, role, units, length, Parameter::default())
+    }
+
+    /// An array declared further: `Parameter::default().int64()` for
+    /// counts, `.bounds(lower, upper)` for the bounds every value lies in.
+    /// An array takes no run group.
+    pub fn declare_array_with(&mut self, name: &str, role: &str, units: &str, length: usize, how: Parameter)
+                              -> Result<()> {
+        let f = self.writer()?;
+        if !how.run_group.is_empty() {
+            return Err(Error::new("E15", format!("{name}: run_group belongs on a time parameter, never on an array")));
+        }
+        let (name, role, units) = (c(name)?, c(role)?, c(units)?);
+        let dtype = if how.int64 { sys::GAMUT_INT64 } else { sys::GAMUT_FLOAT64 };
+        let (has, (lower, upper)) = match how.bounds {
+            Some(b) => (1, b),
+            None => (0, (0.0, 0.0)),
+        };
+        call(|e| unsafe {
+            sys::gamut_declare_array(f, name.as_ptr(), role.as_ptr(), units.as_ptr(), count(length), dtype, has,
+                                     lower, upper, e)
+        })
+    }
+
     /// role: "categorical", "status", "group" or "split"; without categories
     /// the table grows as names appear.
     pub fn declare_label(&mut self, name: &str, role: &str, categories: &[&str]) -> Result<()> {
@@ -696,6 +752,12 @@ impl Study {
                 Value::Int(v) => call(|e| unsafe {
                     sys::gamut_batch_values(f, n.as_ptr(), sys::GAMUT_INT64, v as *const i64 as *const _, 0, 1, e)
                 })?,
+                Value::Floats(v) => call(|e| unsafe {
+                    sys::gamut_batch_values(f, n.as_ptr(), sys::GAMUT_FLOAT64, v.as_ptr().cast(), 0, count(v.len()), e)
+                })?,
+                Value::Ints(v) => call(|e| unsafe {
+                    sys::gamut_batch_values(f, n.as_ptr(), sys::GAMUT_INT64, v.as_ptr().cast(), 0, count(v.len()), e)
+                })?,
                 Value::Name(s) => {
                     let label = c(s)?;
                     let p = label.as_ptr();
@@ -755,6 +817,15 @@ impl Study {
                     let p = pointers(&names);
                     call(|e| unsafe { sys::gamut_batch_names(f, name.as_ptr(), p.as_ptr(), count(n), e) })?;
                 }
+                // Runs first: the core refuses an array whose first axis is not the runs.
+                Column::FloatArray(a) => call(|e| unsafe {
+                    sys::gamut_batch_values(f, name.as_ptr(), sys::GAMUT_FLOAT64, a.values.as_ptr().cast(),
+                                            count(n), count(a.values.len()), e)
+                })?,
+                Column::IntArray(a) => call(|e| unsafe {
+                    sys::gamut_batch_values(f, name.as_ptr(), sys::GAMUT_INT64, a.values.as_ptr().cast(),
+                                            count(n), count(a.values.len()), e)
+                })?,
             }
         }
         self.stage_fields(fields)?;
@@ -913,6 +984,14 @@ impl Study {
         Ok(self.read(name, rows, ..)?.values)
     }
 
+    /// An array as runs x length, in the type it is stored as (as
+    /// get_parameter); `values` selects among its values.
+    pub fn get_array<T: Number>(&self, name: &str, rows: impl Into<Selection>, values: impl Into<Selection>)
+                                -> Result<Array<T>> {
+        self.stored_as::<T>(name)?;
+        self.read(name, rows, values)
+    }
+
     pub fn get_scalar(&self, name: &str, rows: impl Into<Selection>) -> Result<Vec<f64>> {
         Ok(self.read(name, rows, ..)?.values)
     }
@@ -926,17 +1005,19 @@ impl Study {
         Ok(s.take())
     }
 
-    /// How far each row's value of a parameter lies outside the bounds the
-    /// file declares for it, in its units: 0 inside or on a bound, value -
-    /// lower below, value - upper above, NaN where the value is missing. A
-    /// parameter without bounds is refused.
+    /// How far each row's value of a parameter, or each value of an array
+    /// (runs x length, in C order), lies outside the bounds the file
+    /// declares for it, in its units: 0 inside or on a bound, value - lower
+    /// below, value - upper above, NaN where the value is missing. One
+    /// without bounds is refused.
     pub fn outside(&self, name: &str, rows: impl Into<Selection>) -> Result<Vec<f64>> {
         let f = self.reader()?;
         let name = c(name)?;
         let r = Sel::of(rows.into());
         let (mut shape, mut rank) = ([0i64; 4], 0);
         call(|e| unsafe { sys::gamut_shape(f, name.as_ptr(), &r.c(), ptr::null(), &mut rank, shape.as_mut_ptr(), 4, e) })?;
-        let mut out = vec![0.0; if rank == 1 { shape[0] as usize } else { 0 }];
+        let n: usize = if rank >= 1 { shape[..rank as usize].iter().map(|&d| d as usize).product() } else { 0 };
+        let mut out = vec![0.0; n];
         let bytes = count(out.len() * std::mem::size_of::<f64>());
         call(|e| unsafe { sys::gamut_outside(f, name.as_ptr(), &r.c(), out.as_mut_ptr(), bytes, e) })?;
         Ok(out)
@@ -1194,8 +1275,9 @@ pub fn validate(path: &str) -> Result<Report> {
     Ok(out)
 }
 
-/// Evaluates a model file on a column of inputs per parameter and label (a
-/// label's by name), all of one length, into a new data file at `path`,
+/// Evaluates a model file on a column of inputs per parameter, array (runs x
+/// length) and label (a label's by name), all for the same rows, into a new
+/// data file at `path`,
 /// returned open to read with the W4 findings (inputs outside a
 /// parameter's bounds, which are evaluated). The core runs the built-in
 /// models; a model of another type is refused with its type's name, since
@@ -1226,6 +1308,14 @@ pub fn evaluate(model_path: &str, inputs: &[(&str, Column)], path: &str) -> Resu
                 let p = pointers(&names);
                 call(|e| unsafe { sys::gamut_evaluation_names(ev.0, name.as_ptr(), p.as_ptr(), count(p.len()), e) })?;
             }
+            Column::FloatArray(a) => call(|e| unsafe {
+                sys::gamut_evaluation_array(ev.0, name.as_ptr(), sys::GAMUT_FLOAT64, a.values.as_ptr().cast(),
+                                            count(column.len()), count(a.values.len()), e)
+            })?,
+            Column::IntArray(a) => call(|e| unsafe {
+                sys::gamut_evaluation_array(ev.0, name.as_ptr(), sys::GAMUT_INT64, a.values.as_ptr().cast(),
+                                            count(column.len()), count(a.values.len()), e)
+            })?,
         }
     }
     let (mut warnings, mut models) = (Strings::new(), Strings::new());

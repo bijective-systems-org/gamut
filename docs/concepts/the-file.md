@@ -13,7 +13,8 @@ convention.
 
 The run table is at the root: one dataset per parameter, label and
 scalar, each over the `row` dimension, with its role and, but for a
-label, its units as attributes. A label stores its codes there and its
+label, its units as attributes; an array is rows × its length, its values
+along a dimension of its own. A label stores its codes there and its
 names under `categories`; a constant is a dataset of one value. A mesh is the group `mesh`, holding the coordinates, the
 cells in VTK's arrays (types, offsets, connectivity), the mesh labels,
 and the fields. The main arrays of the cylinder of

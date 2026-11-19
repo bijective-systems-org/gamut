@@ -99,6 +99,7 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
     "gamut_open_append": (_I, [_S, _PP, _E]),
     "gamut_set_attribute": (_I, [_P, _S, _S, _E]),
     "gamut_declare_parameter": (_I, [_P, _S, _S, _S, _I, _I, _D, _D, _S, _E]),
+    "gamut_declare_array": (_I, [_P, _S, _S, _S, _L, _I, _I, _D, _D, _E]),
     "gamut_declare_label": (_I, [_P, _S, _S, _SS, _L, _E]),
     "gamut_declare_result": (_I, [_P, _S, _S, _S, _I, _S, _S, _I, _D, _S, _S, _S, _S, _I, _S, _S, _E]),
     "gamut_declare_mesh_label": (_I, [_P, _S, _S, _SS, _L, _E]),
@@ -128,6 +129,7 @@ _SIGNATURES: dict[str, tuple[Any, list[Any]]] = {
                                ctypes.POINTER(_D), _L, _E]),
     "gamut_evaluation_begin": (_I, [_P, _L, _S, _PP, _E]),
     "gamut_evaluation_values": (_I, [_P, _S, _I, _P, _L, _E]),
+    "gamut_evaluation_array": (_I, [_P, _S, _I, _P, _L, _L, _E]),
     "gamut_evaluation_names": (_I, [_P, _S, _SS, _L, _E]),
     "gamut_evaluation_coordinates": (_I, [_P, _I, _P, _L, _E]),
     "gamut_evaluation_ready": (_I, [_P, _PP, _PP, _E]),
@@ -413,8 +415,10 @@ def outside(handle: Any, name: str, rows: Selection) -> np.ndarray:
     shape = (ctypes.c_int64 * 4)()
     rank = ctypes.c_int()
     call("gamut_shape", handle, b(name), rows.pointer(), None, ctypes.byref(rank), shape, len(shape))
-    # Sized as a read of the parameter; for any other name the core refuses.
-    out = np.empty(shape[0] if rank.value == 1 else 0, dtype=np.float64)
+    # Sized as a read of the parameter or array; for any other name the core
+    # refuses.
+    dims = tuple(shape[i] for i in range(rank.value))
+    out = np.empty(dims if rank.value >= 1 else 0, dtype=np.float64)
     call("gamut_outside", handle, b(name), rows.pointer(), out.ctypes.data_as(ctypes.c_void_p),
          out.nbytes)
     return out

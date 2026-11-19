@@ -38,6 +38,17 @@ struct Parameter {
   std::string run_group;
 };
 
+// A fixed-length array of numbers per row (spec section 3.9).
+struct Array {
+  std::string name;
+  std::string role;               // design | condition; on disk <role>_array
+  std::string units;
+  DType dtype = DType::Float64;   // int64 only when declared so
+  std::int64_t length = 0;        // values per row, at least 1
+  std::optional<double> lower, upper;
+  std::int64_t stored_rows = -1;  // read from a file: the rows its dataset holds
+};
+
 struct Label {
   std::string name;
   std::string role;               // group | categorical | status | split
@@ -113,6 +124,7 @@ struct Schema {
   std::string generalisation_group, trained_on, evaluated_from;
   std::int64_t rows = 0;
   std::vector<Parameter> parameters;
+  std::vector<Array> arrays;
   std::vector<Label> labels;
   std::vector<Result> results;    // scalars and fields
   std::vector<Constant> constants;
@@ -121,6 +133,7 @@ struct Schema {
   std::vector<Model> models;
 
   const Parameter* parameter(const std::string& name) const;
+  const Array* array(const std::string& name) const;
   const Label* label(const std::string& name) const;
   // A result by concept path: "cl", "node_fields/p", "cell_fields/p".
   const Result* result(const std::string& path) const;

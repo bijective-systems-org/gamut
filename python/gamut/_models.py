@@ -16,7 +16,7 @@ import numpy as np
 
 from . import _lib
 from ._lib import GamutError, b, call
-from ._study import Study, _axes, _declared, _label_spec, _precision, _spec, open as _open
+from ._study import Study, _axes, _declare_array, _declared, _label_spec, _precision, _spec, open as _open
 
 # --- dictionaries <-> core trees --------------------------------------------
 
@@ -170,14 +170,18 @@ def _nearest_check(numbers: Mapping[str, Any]) -> None:
 class Nearest:
     """The built-in model: for each input row, the outputs of the closest
     stored point (spec section 7.5).  Evaluated by the core, so every
-    language gets the same answers.  `x` is points x columns; each output
-    has points first."""
+    language gets the same answers.  `columns` names the inputs, parameters
+    and arrays; `widths` gives each one's number of values (1 for a
+    parameter, an array's length; all 1 when left out); `lower` and `upper`
+    are each input's bounds.  `x` is points x values, each point's inputs
+    side by side in the order of `columns`; each output has points first."""
 
     type = "nearest"
 
     def __init__(self, columns: Sequence[str], lower: Sequence[float], upper: Sequence[float],
-                 x: Any, outputs: Mapping[str, Any]) -> None:
+                 x: Any, outputs: Mapping[str, Any], widths: Sequence[int] | None = None) -> None:
         self.columns = [str(c) for c in columns]
+        self.widths = None if widths is None else np.asarray(widths, dtype=np.int64)
         self.lower = np.asarray(lower, dtype=np.float64)
         self.upper = np.asarray(upper, dtype=np.float64)
         # x is points x columns as given, so the core refuses another
@@ -195,18 +199,22 @@ class Nearest:
         # or foreign file may lack one (E17).
         _nearest_check(numbers)
         return cls(numbers["columns"], numbers["lower"], numbers["upper"], numbers["x"],
-                   numbers["outputs"])
+                   numbers["outputs"], numbers.get("widths"))
 
     def save(self) -> dict[str, Any]:
         """Its numbers, to store."""
-        return {"columns": list(self.columns), "lower": self.lower, "upper": self.upper,
-                "x": self.x, "outputs": dict(self.outputs)}
+        numbers = {"columns": list(self.columns), "lower": self.lower, "upper": self.upper,
+                   "x": self.x, "outputs": dict(self.outputs)}
+        if self.widths is not None:
+            numbers["widths"] = self.widths
+        return numbers
 
     def call(self, inputs: Mapping[str, Any], wanted: Sequence[tuple]) -> dict[str, dict]:
         """For each input row, the values of the closest stored point."""
         missing = [c for c in self.columns if c not in inputs]
         if missing:
             raise GamutError("", f"nearest needs the inputs {', '.join(missing)}")
+        # An array is rows x length; the core reads it row by row.
         cols = [np.ascontiguousarray(np.asarray(inputs[c], dtype=np.float64)) for c in self.columns]
         n = len(cols[0]) if cols else len(next(iter(inputs.values()))) if inputs else 0
         handle = _to_tree(self.save())
@@ -243,7 +251,7 @@ class ModelFile(Study):
     def add_model(self, id: str, model: Any, inputs: Sequence[str], repr: str | None = None) -> None:
         """Stores a model: `id` is the name the results give as their
         "model"; `model` an object of a registered type, or `Nearest`;
-        `inputs` the parameters, labels or "coordinates" it reads. The file
+        `inputs` the parameters, arrays, labels or "coordinates" it reads. The file
         keeps the numbers `model.save()` returns; `repr` is an optional
         one-line description."""
         numbers = model.save()
@@ -260,7 +268,7 @@ class ModelFile(Study):
 
 
 def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None = None,
-                 labels: Mapping[str, Any] | None = None, scalars: Mapping[str, Any] | None = None,
+                 arrays: Mapping[str, Any] | None = None, labels: Mapping[str, Any] | None = None, scalars: Mapping[str, Any] | None = None,
                  fields: Mapping[str, Any] | None = None, constants: Mapping[str, Any] | None = None,
                  mesh: str | None = None, per: str = "fixed",
                  coordinates: Mapping[str, Any] | None = None,
@@ -278,6 +286,9 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
       was fitted on, as
       `{"alpha": {"units": "degree", "lower": 0.0, "upper": 10.0}}`.
       `evaluate` warns (W4) of an input outside it, and evaluates it.
+    - `arrays`: likewise, with "lower" and "upper" holding for every value,
+      as `{"wall_temperature": {"units": "K", "length": 200, "lower": 250.0,
+      "upper": 900.0}}`. A model reads one as rows x length.
     - `scalars`, `fields`: each names the model and the output that
       computes it, as `{"cl": {"units": "1", "model": "fit", "output": "cl"}}`.
       A spread or a derivative is declared as in `create` ("of",
@@ -352,6 +363,8 @@ def create_model(path: str, *, writer: str, parameters: Mapping[str, Any] | None
                  b(spec.get("units")), _precision(spec.get("dtype")), 1 if has else 0,
                  float(spec.get("lower", math.nan)), float(spec.get("upper", math.nan)),
                  b(spec.get("run_group", "")))
+        for name, value in (arrays or {}).items():
+            _declare_array(handle, name, value)
         if coordinates is not None:
             call("gamut_declare_coordinates", handle, b(coordinates.get("units")),
                  _precision(coordinates.get("precision")), int(coordinates.get("axes", 3)),
@@ -455,7 +468,8 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
     not exist. `inputs` maps each
     parameter to values and each label to names from the model file's
     table, all of one length; `coordinates` (rows x nodes x axes) when a
-    model reads geometry the file does not store.  Each model's type must
+    model reads geometry the file does not store.  An array is given as
+    rows x length.  Each model's type must
     be registered (`register_model_type`; `Nearest` is built in).  An
     input outside a parameter's bounds is evaluated, with a warning (W4),
     and the answer's `outside(name)` says how far each row lies outside.
@@ -463,6 +477,7 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
     read it in a `with` block, or give `path` to keep it."""
     with _open(model_path) as m:
         labels, params = set(m.names("labels")), set(m.names("parameters"))
+        arrays = set(m.names("arrays"))
         n = len(np.atleast_1d(np.asarray(next(iter(inputs.values()))))) if inputs else 0
         # The core checks the inputs, runs the built-in models and writes the
         # answer; this layer converts values and calls the registered types.
@@ -478,6 +493,14 @@ def evaluate(model_path: str, inputs: Mapping[str, Any], path: str | None = None
                     if name in labels:
                         names = [str(x) for x in np.atleast_1d(np.asarray(given))]
                         call("gamut_evaluation_names", ev, b(name), _lib.string_array(names), len(names))
+                    elif name in arrays:
+                        int64 = m.describe(name).get("dtype") == "int64"
+                        given = np.asarray(_lib.int64_exactly(given, name) if int64
+                                           else _lib.float64_exactly(given, name))
+                        col = np.ascontiguousarray(given)
+                        call("gamut_evaluation_array", ev, b(name), _lib.dtype_code(col),
+                             col.ctypes.data_as(ctypes.c_void_p), given.shape[0] if given.ndim > 1 else 0,
+                             col.size)
                     elif name not in params:          # the core says what it is not
                         call("gamut_evaluation_values", ev, b(name), _lib.GAMUT_FLOAT64, None, 0)
                     else:
