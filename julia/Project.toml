@@ -3,9 +3,11 @@ uuid = "881430a9-b256-471a-abd1-503ac8aceb2f"
 version = "2.3.0"
 
 [deps]
+Gamut_jll = "02da01fe-b393-5a98-b135-b8b8cd2b2135"
 Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
 
 [compat]
+Gamut_jll = "2.3"
 julia = "1.10"
 
 [extras]
