@@ -17,8 +17,8 @@
   `gamut/1`: an array is stored as a dataset whose role is
   `design_array` or `condition_array`, which earlier readers ignore.
   Earlier releases still read a data file that has arrays, without them
-  (their validator reports W5); they cannot validate or evaluate a model
-  file whose models read one (E17), and appending to or copying a file
+  (their validator reports W5); they cannot validate a model file whose
+  models read one (E17) or evaluate it, and appending to or copying a file
   that has arrays needs this release: an earlier one leaves the array
   short of the new rows, or out of the copy. This release refuses to read
   or append to an array left short that way (E5), and says why.

@@ -419,7 +419,9 @@ kelvin outside the fitted range, second wall: 0 0 0 20
 - `arrays` declares the input as `parameters` does, with its `length`. A
   data file declares arrays the same way; a run gives an array's values in
   order, and `get_array` (`getArray`) reads them back, rows × length.
-- A model reads an array as rows × length. `Nearest` takes each input's
+- A model reads an array as rows × length. An array given length × rows
+  is refused, except when its length equals the number of rows, which no
+  library can tell apart: give rows first. `Nearest` takes each input's
   `widths`, 1 for a parameter and the length for an array, and measures
   the distance over every value.
 - The bounds hold for every value. An answer's `outside` gives a number
