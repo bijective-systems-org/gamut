@@ -13,17 +13,27 @@
 
 namespace gamut_core {
 namespace internal {
-namespace {
 
 // HDF5 prints its own error stack on any failure; the core reports
-// failures through gamut_core::Error instead.  With its own copy of HDF5 the
-// core also loads no filter plugin: the format allows only gzip and
-// shuffle, which HDF5 has built in, so a file naming another filter is
-// refused rather than loading code from HDF5_PLUGIN_PATH.  A core sharing
-// the process's HDF5 leaves that setting to the process.
+// failures through gamut_core::Error instead.  An HDF5 built thread-safe
+// (as HDF5_jll is) keeps that setting per thread, so each thread turns it
+// off the first time it calls in.  It stays off on that thread afterwards,
+// replacing any handler the host program had set there.
+void quiet_hdf5() {
+  thread_local const bool quiet = H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr) >= 0;
+  (void)quiet;
+}
+
+namespace {
+
+// With its own copy of HDF5 the core loads no filter plugin: the format
+// allows only gzip and shuffle, which HDF5 has built in, so a file naming
+// another filter is refused rather than loading code from
+// HDF5_PLUGIN_PATH.  A core sharing the process's HDF5 leaves that setting
+// to the process.
 struct SilenceHdf5 {
   SilenceHdf5() {
-    H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
+    quiet_hdf5();
 #ifdef GAMUT_OWN_HDF5
     H5PLset_loading_state(0);
 #endif
