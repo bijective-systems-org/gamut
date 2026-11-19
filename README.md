@@ -102,7 +102,7 @@ another approach is faster.
 |---|---|
 | Python 3.11 or later | `pip install bijective-gamut` |
 | MATLAB R2023b or later | open `Gamut.mltbx` from the [latest release](https://github.com/bijective-systems-org/gamut/releases/latest) |
-| Julia 1.10 or later | `Pkg.add(name="GamutFile", version="2.3.0")` |
+| Julia 1.10 or later | `Pkg.add("GamutFile")` |
 | C++ and C | CMake build and install, then `find_package(gamut)`; include `gamut/gamut.hpp` (C++17) or `gamut/gamut.h` (C) |
 | Rust 1.70 or later | `bijective-gamut = { git = "https://github.com/bijective-systems-org/gamut", tag = "v2.3.0" }`, with `GAMUT_LIB_DIR` at a release's core |
 
