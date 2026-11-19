@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 2.3.0 (2026-11-18)
+
+The file format (`gamut/1`) is unchanged: arrays are an addition within
+it (specification §17). The C interface only adds calls.
 
 - Arrays: an input with a fixed number of values per run, such as a wall
   temperature at 200 stations or 40 shape coefficients, with no mesh
