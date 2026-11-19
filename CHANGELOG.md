@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- The core builds and runs against HDF5 2 as well as 1.14 (HDF5 2 reads a
+  stored chunk with `H5Dread_chunk2`; a chunk whose stored size differs from
+  its index is E23).
+- HDF5's own error printing stays off on every thread that calls the core,
+  not only the one that loaded it, so a thread-safe HDF5 (such as Julia's
+  `HDF5_jll`) prints nothing when a call fails.
+
 ## 2.3.0 (2026-11-18)
 
 The file format (`gamut/1`) is unchanged: arrays are an addition within

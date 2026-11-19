@@ -17,7 +17,8 @@ namespace internal {
 // HDF5 prints its own error stack on any failure; the core reports
 // failures through gamut_core::Error instead.  An HDF5 built thread-safe
 // (as HDF5_jll is) keeps that setting per thread, so each thread turns it
-// off the first time it calls in.
+// off the first time it calls in.  It stays off on that thread afterwards,
+// replacing any handler the host program had set there.
 void quiet_hdf5() {
   thread_local const bool quiet = H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr) >= 0;
   (void)quiet;

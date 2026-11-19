@@ -377,7 +377,9 @@ void ChunkStore::fetch(hid_t dset, const std::string& path, const Dataset& d,
   need(H5Dread_chunk2(dset, H5P_DEFAULT, offset.data(), &got, raw.data(), &room) >= 0,
        "cannot read a chunk of \"" + path + "\"");
   if (room != raw.size()) {
-    throw Error("E23", "a chunk of \"" + path + "\" " + size_mismatch(room, d.whole), path);
+    throw Error("E23", "a chunk of \"" + path + "\" is stored in " + std::to_string(room) +
+                           " bytes, not the " + std::to_string(raw.size()) + " its index gives",
+                path);
   }
 #else
   need(H5Dread_chunk(dset, H5P_DEFAULT, offset.data(), &got, raw.data()) >= 0,
