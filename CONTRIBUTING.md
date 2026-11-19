@@ -53,10 +53,11 @@ command-line page's sessions, and build the C example. Change an example
 and its page together.
 
 Julia's tests, and the corpus from Python and Julia (the Julia check needs
-the JSON package in its environment):
+the JSON package in its environment, and `GAMUT_LIBRARY` set as for the
+tests; without it, Julia uses the released core from `Gamut_jll`):
 
 ```bash
-julia --project=julia -e 'include("julia/test/runtests.jl")'
+GAMUT_LIBRARY=build/libgamut.so julia --project=julia -e 'include("julia/test/runtests.jl")'
 python corpus/generate.py /tmp/corpus
 GAMUT_LIBRARY=build/libgamut.so python corpus/check.py /tmp/corpus
 julia --project=<an environment with JSON and GamutFile> julia/test/check_corpus.jl /tmp/corpus

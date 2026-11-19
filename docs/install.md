@@ -21,7 +21,8 @@ loses its files when `gamut-format` is removed;
 Every language uses the same core library, written in C++. The Python
 wheels and the MATLAB toolbox carry it with HDF5 linked inside, so it
 never meets another HDF5 in the same process: h5py's, MATLAB's or a
-solver's. The oldest versions Gamut 2 supports are Python 3.11, NumPy
+solver's. Julia's, `Gamut_jll`, uses `HDF5_jll`, the HDF5 the rest of
+Julia (HDF5.jl) loads. The oldest versions Gamut 2 supports are Python 3.11, NumPy
 1.26, MATLAB R2023b and Julia 1.10. Each is tested, and none of them
 rises within 2.x.
 
@@ -111,24 +112,23 @@ folder is all MATLAB needs on its path.
 
 /// tab | Julia
 
-Julia 1.10 or later. Add the package, `GamutFile`, at the release that
-matches the core it calls, and point it at a core library:
+Julia 1.10 or later. Add the package, `GamutFile`; it brings the core
+library with it, as `Gamut_jll`:
 
 ```julia
 using Pkg
-Pkg.add(name="GamutFile", version="2.3.0")
-ENV["GAMUT_LIBRARY"] = "/path/to/libgamut.dylib"   # .so on Linux, gamut.dll on Windows
+Pkg.add("GamutFile")
 using GamutFile
 GamutFile.version()
 ```
 
-The core is in each release's `gamut-core-<version>-<platform>` archive
-(`lib/`, or `bin/` on Windows), and the Python wheel's serves too:
-`gamut.library_path()` prints its path. Set `GAMUT_LIBRARY` in the
-environment, or in `ENV` before the first call; `GamutFile.version()` says
-which core was loaded. From a checkout, `julia --project=julia` uses the
-package in place, and without `GAMUT_LIBRARY` it looks in `build/` at the
-top of the checkout.
+To use another build of the core (one from a checkout, or one linked to
+your own HDF5), set `GAMUT_LIBRARY` to its path in the environment, or in
+`ENV` before the first call: each release's
+`gamut-core-<version>-<platform>` archive holds one (`lib/`, or `bin/` on
+Windows), and the Python wheel's serves too (`gamut.library_path()` prints
+its path). `GamutFile.library_path()` says which core is in use. From a
+checkout, `julia --project=julia` uses the package in place.
 
 ///
 
