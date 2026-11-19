@@ -423,11 +423,11 @@ if isfile(fullfile(examples, 'one_mesh.m'))
     run_example(fullfile(examples, 'one_mesh.m'), exampleDir);
     ok(isempty(gamut.validate(fullfile(exampleDir, 'cylinder.gamut'))), ...
         'the MATLAB example writes a valid file');
-    readme = fileread(fullfile(fileparts(fileparts(here)), 'README.md'));
-    line = regexp(readme, 'lift of the runs that converged:[^\r\n]*', 'match', 'once');
+    firstFile = fileread(fullfile(fileparts(fileparts(here)), 'docs', 'first-file.md'));
+    line = regexp(firstFile, '^cl: [^\r\n]*', 'match', 'once', 'lineanchors');
     prints = @(out) ~isempty(line) && any(strcmp(splitlines(string(out)), line));
     ok(prints(run_example(fullfile(examples, 'sweep.m'), exampleDir)), ...
-        'the MATLAB sweep prints the README''s line');
+        'the MATLAB sweep prints the First file result');
     ok(prints(run_example(fullfile(examples, 'read_with_ncread.m'), exampleDir)), ...
         'ncread reads the sweep alike');
 

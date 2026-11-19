@@ -120,15 +120,12 @@ jobs:
         run: |
           julia --project=julia -e 'using Pkg; Pkg.instantiate()'
           julia --project=julia -e 'include("julia/test/runtests.jl")'
-          mkdir -p "$RUNNER_TEMP/jexample/sweep" "$RUNNER_TEMP/jexample/models" "$RUNNER_TEMP/jprinted"
+          mkdir -p "$RUNNER_TEMP/jexample/models" "$RUNNER_TEMP/jprinted"
           # What each example prints is kept, and held to the pages that show it.
-          for example in run_table one_mesh family refinement transient uncertain parts combining; do
+          for example in run_table one_mesh family refinement transient uncertain parts combining sweep; do
             mkdir -p "$RUNNER_TEMP/jexample/$example"
             (cd "$RUNNER_TEMP/jexample/$example" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/$example.jl") | tee "$RUNNER_TEMP/jprinted/$example.txt"
           done
-          # The README's sweep prints the README's line.
-          (cd "$RUNNER_TEMP/jexample/sweep" && julia --project="$GITHUB_WORKSPACE/julia" "$GITHUB_WORKSPACE/examples/julia/sweep.jl") | tee "$RUNNER_TEMP/jsweep.txt"
-          grep -qxF "$(grep -m1 '^lift of the runs that converged:' README.md)" "$RUNNER_TEMP/jsweep.txt"
           # The nearest model fitted in Python evaluates in Julia to the lift the
           # models page shows, and to what the Julia page shows.
           (cd "$RUNNER_TEMP/jexample/models" && "$RUNNER_TEMP/venv-3.12/bin/python" "$GITHUB_WORKSPACE/examples/07_models.py" > /dev/null)
@@ -154,7 +151,6 @@ jobs:
             mkdir -p "$RUNNER_TEMP/rexample/$example"
             (cd "$RUNNER_TEMP/rexample/$example" && "$GITHUB_WORKSPACE/rust/target/debug/examples/$example") | tee "$RUNNER_TEMP/rprinted/$example.txt"
           done
-          grep -qxF "$(grep -m1 '^lift of the runs that converged:' README.md)" "$RUNNER_TEMP/rprinted/sweep.txt"
           # The nearest model fitted in Python, in the folder the Julia step made.
           (cd "$RUNNER_TEMP/jexample/models" && "$GITHUB_WORKSPACE/rust/target/debug/examples/nearest") | tee "$RUNNER_TEMP/rprinted/nearest.txt"
           "$RUNNER_TEMP/venv-3.12/bin/python" python/tests/_pages.py rust "$RUNNER_TEMP/rprinted"

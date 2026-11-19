@@ -13,7 +13,7 @@ import sys
 
 import pytest
 
-from _pages import EXAMPLES, GUIDE, blocks, contiguous, matches, outputs, sessions
+from _pages import DOCS, EXAMPLES, GUIDE, blocks, contiguous, matches, outputs, sessions
 from gamut import cli
 
 SCRIPTS = sorted(p for p in EXAMPLES.glob("[0-9][0-9]_*.py")) if EXAMPLES.is_dir() else []
@@ -35,7 +35,8 @@ def test_example_runs(script, tmp_path, capsys, monkeypatch):
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout.strip(), "an example says what it did"
 
-    for page in GUIDE.glob(script.name[:2] + "-*.md"):
+    pages = [DOCS / "first-file.md"] if script.name == "00_readme.py" else GUIDE.glob(script.name[:2] + "-*.md")
+    for page in pages:
         text = page.read_text(encoding="utf-8")
         source = script.read_text(encoding="utf-8")
         assert f"examples/{script.name}" in text, f"{page.name} names its script"

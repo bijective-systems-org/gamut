@@ -20,14 +20,14 @@ calls as any other file and checked by `gamut validate`.
 
 ## The pattern
 
-The model here is a quadratic fitted to the runs of the
-[README's sweep](../README.md#a-study-in-four-languages) that converged. `Polynomial` is
-its type, a class of a few lines [defined below](#a-model-type-of-your-own).
+The example writes its own sweep with run status and fits a quadratic
+to the runs that converged. [`Polynomial`](#a-model-type-of-your-own)
+is the model type.
 
 /// tab | Python
 
 ```python
-with gamut.open("sweep.gamut") as study:
+with gamut.open("training_sweep.gamut") as study:
     rows = study.select("status == converged")
     alpha, cl = study.get_parameter("alpha", rows=rows), study.get_scalar("cl", rows=rows)
     sweep_id = study.describe()["file_id"]
@@ -50,7 +50,7 @@ print("the answer is a valid study file:", "yes" if gamut.validate("lift_answer.
 ```matlab
 gamut.registerModelType('Polynomial');
 
-study = gamut.open('sweep.gamut');
+study = gamut.open('training_sweep.gamut');
 rows = study.select('status == converged');
 alpha = study.getParameter('alpha', 'rows', rows);
 cl = study.getScalar('cl', 'rows', rows);

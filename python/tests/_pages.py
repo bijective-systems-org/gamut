@@ -61,6 +61,8 @@ def contiguous(part: str, whole: str) -> bool:
 # output blocks are what they print (see `outputs`). Every program a lane
 # checks must have run, except the files a page quotes that print nothing.
 PROGRAMS = {
+    "first-file.md": {"matlab": ["matlab/sweep.m"], "julia": ["julia/sweep.jl"],
+                      "cpp": ["cpp/sweep.cpp"], "rust": ["rust/sweep.rs"]},
     "guide/01-run-tables.md": {"matlab": ["matlab/run_table.m"], "julia": ["julia/run_table.jl"],
                                "cpp": ["cpp/run_table.cpp"], "rust": ["rust/run_table.rs"]},
     "guide/02-one-mesh.md": {"matlab": ["matlab/one_mesh.m"], "julia": ["julia/one_mesh.jl"],

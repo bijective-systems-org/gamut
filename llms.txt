@@ -91,7 +91,8 @@ with gamut.evaluate("lift.gamut", {"alpha": [1.0, 5.0]}) as answer:   # an ordin
 
 ## Docs
 
-- [README](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/README.md): what Gamut is, one program in Python, MATLAB, Julia, C++ and Rust, benchmarks, install
+- [First file](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/first-file.md): write, read, inspect and validate a study, with examples in five languages
+- [README](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/README.md): project summary, Python example, benchmarks, installation
 - [Guide](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/README.md): one page per concept, each running one script from `examples/`, and the words used throughout
 - [Run tables](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/01-run-tables.md): inputs, results and status with units, no mesh
 - [One mesh](https://raw.githubusercontent.com/bijective-systems-org/gamut/main/docs/guide/02-one-mesh.md): every run on one mesh, fields as runs × nodes, zones
