@@ -60,7 +60,7 @@ tests; without it, Julia uses the released core from `Gamut_jll`):
 GAMUT_LIBRARY=build/libgamut.so julia --project=julia -e 'include("julia/test/runtests.jl")'
 python corpus/generate.py /tmp/corpus
 GAMUT_LIBRARY=build/libgamut.so python corpus/check.py /tmp/corpus
-julia --project=<an environment with JSON and GamutFile> julia/test/check_corpus.jl /tmp/corpus
+GAMUT_LIBRARY=build/libgamut.so julia --project=<an environment with JSON and GamutFile> julia/test/check_corpus.jl /tmp/corpus
 ```
 
 Rust's tests, the corpus from Rust, and the check that `bijective-gamut-sys`
