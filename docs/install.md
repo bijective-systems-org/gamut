@@ -168,7 +168,7 @@ that matches the core it links, and point the build at a core library:
 
 ```toml
 [dependencies]
-bijective-gamut = { git = "https://github.com/bijective-systems-org/gamut", tag = "v2.3.0" }
+bijective-gamut = { git = "https://github.com/bijective-systems-org/gamut", tag = "v2.3.1" }
 ```
 
 ```bash

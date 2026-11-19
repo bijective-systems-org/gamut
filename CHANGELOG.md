@@ -1,7 +1,14 @@
 # Changelog
 
-## Unreleased
+## 2.3.1 (unreleased)
 
+The file format (`gamut/1`) and the C interface are unchanged.
+
+- Julia: `Pkg.add("GamutFile")` is all a Julia user needs. The package
+  brings the core as `Gamut_jll`, built by Yggdrasil against `HDF5_jll`, the
+  HDF5 the rest of Julia loads; `GAMUT_LIBRARY` still names another build
+  of it. GamutFile no longer looks for a core in a checkout's `build/`, and
+  its folder has a README of its own.
 - The core builds and runs against HDF5 2 as well as 1.14 (HDF5 2 reads a
   stored chunk with `H5Dread_chunk2`; a chunk whose stored size differs from
   its index is E23).

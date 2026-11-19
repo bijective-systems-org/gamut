@@ -5,7 +5,7 @@ message: >-
   `format`, for example "gamut/1").
 title: "Gamut: an open file format for simulation studies"
 type: software
-version: 2.3.0
+version: 2.3.1
 date-released: 2026-11-18
 authors:
   - name: "Bijective Systems"

@@ -1,6 +1,6 @@
 name = "GamutFile"
 uuid = "881430a9-b256-471a-abd1-503ac8aceb2f"
-version = "2.3.0"
+version = "2.3.1"
 
 [deps]
 Gamut_jll = "02da01fe-b393-5a98-b135-b8b8cd2b2135"
