@@ -5,8 +5,8 @@ spelling: functions in the `GamutFile` module taking the study first,
 declarations as `Dict`s or named tuples, `do` blocks that close the file,
 and positions counted from 1. The package is named `GamutFile`, after
 Julia's convention for file-format packages; the format and the other
-languages keep `gamut`. It needs the core library
-([installing](../install.md)). An example written in Julia has a
+languages keep `gamut`. It brings the core library with it, as
+`Gamut_jll` ([installing](../install.md)). An example written in Julia has a
 Julia tab, quoted from a program in `examples/julia`; the
 [examples](../guide/README.md) say which are. Run one from a working
 folder with `julia --project=<checkout>/julia <checkout>/examples/julia/run_table.jl`.
@@ -69,7 +69,7 @@ bounds or on one, negative below them, positive above.
   to the caller; only Python's reads convert, through pint.
 - Julia evaluates model files whose models are the built-in nearest
   neighbour; models of other types are registered in Python or MATLAB.
-- `GamutFile.library_path()` names the core library in use, set by
-  `GAMUT_LIBRARY`.
+- `GamutFile.library_path()` names the core library in use: `Gamut_jll`'s,
+  or the one `GAMUT_LIBRARY` names.
 
 Next: [C++ and C](c-and-cpp.md).

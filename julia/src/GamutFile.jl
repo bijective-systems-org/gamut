@@ -7,13 +7,14 @@ are 1-based; arrays come back with the logical axes in order, `p[run, node]`.
 Cell connectivity holds the stored 0-based node numbers, as in every
 language (VTK's convention).
 
-The core is found at `ENV["GAMUT_LIBRARY"]`, else beside this package in
-`build/` at the top of a checkout. Only the built-in `Nearest` model type
+The core comes from `Gamut_jll`, unless `ENV["GAMUT_LIBRARY"]` names another
+build of it. Only the built-in `Nearest` model type
 evaluates here; others are registered in Python or MATLAB.
 """
 module GamutFile
 
 using Libdl
+import Gamut_jll
 
 export GamutError
 
@@ -28,8 +29,8 @@ const SYMBOLS_LOCK = ReentrantLock()
 function library_path()
     p = get(ENV, "GAMUT_LIBRARY", "")
     isempty(p) || return p
-    name = Sys.isapple() ? "libgamut.dylib" : Sys.iswindows() ? "gamut.dll" : "libgamut.so"
-    return normpath(joinpath(@__DIR__, "..", "..", "build", name))
+    # Gamut_jll has no build for some platforms (Gamut_jll.is_available() is false).
+    return Gamut_jll.is_available() ? Gamut_jll.libgamut_path : ""
 end
 
 # The notice on opening a marked file, which the library is given when it loads.
@@ -65,11 +66,13 @@ function sym(name::Symbol)
         get!(SYMBOLS, name) do
             if HANDLE[] == C_NULL
                 p = library_path()
-                isfile(p) || error("the Gamut core library ($p) was not found; set " *
-                                   "GAMUT_LIBRARY to its path: the Python wheel's (pip install " *
-                                   "bijective-gamut, then python -c \"import gamut; " *
-                                   "print(gamut.library_path())\"), or one built from a " *
-                                   "checkout with cmake -S . -B build && cmake --build build")
+                isempty(p) && error("Gamut_jll has no Gamut core library for this platform; " *
+                                    "set GAMUT_LIBRARY to one: the Python wheel's (pip install " *
+                                    "bijective-gamut, then python -c \"import gamut; " *
+                                    "print(gamut.library_path())\"), or one built from a " *
+                                    "checkout with cmake -S . -B build && cmake --build build")
+                isfile(p) || error("the Gamut core library ($p) was not found; " *
+                                   "GAMUT_LIBRARY names a file that is not there")
                 HANDLE[] = Libdl.dlopen(p)
                 # The notice on opening a marked file goes to the logger from the start.
                 ccall(Libdl.dlsym(HANDLE[], :gamut_set_marking_notice), Cvoid, (Ptr{Cvoid}, Ptr{Cvoid}),
