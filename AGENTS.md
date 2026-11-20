@@ -36,7 +36,7 @@ layers over that interface; a validator; a command line; VTK conversion.
 | What a file means, what is valid | `SPEC.md` |
 | The expected outcome of a case, in every language | the corpus |
 | Behaviour | the core; a language layer converts types and positions, nothing more |
-| Names and argument order across languages | the guide pages 12-14 and each layer's docstrings, which follow the Python names |
+| Names and argument order across languages | the [Python](docs/reference/python.md), [MATLAB](docs/reference/matlab.md), [Julia](docs/reference/julia.md), [C and C++](docs/reference/c-and-cpp.md) and [Rust](docs/reference/rust.md) references and each layer's docstrings, which follow the Python names |
 | Which rows train a model, how a model computes, file lineage | the producing or consuming tool, never Gamut |
 
 ## Boundaries worth knowing before an edit
