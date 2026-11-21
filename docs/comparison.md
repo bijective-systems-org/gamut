@@ -23,7 +23,7 @@ is a storage baseline, not another simulation standard.
 | netCDF with [CF](https://cfconventions.org/) and [UGRID](https://ugrid-conventions.github.io/ugrid-conventions/) | geoscience data, with conventions for grids, meshes and time | you share with climate and ocean tools | a Gamut file is a netCDF-4 file: netCDF tools and xarray read it as it is; Gamut adds what a study means, such as runs, roles, statuses and relations |
 | [Zarr](https://zarr.dev/) | chunked arrays in object storage, read by many workers at once | reads go over the network to a cluster | a Gamut file is one local file; copy it, or extract the part a job needs |
 | Parquet or CSV | tables | the study has no fields and the meaning lives elsewhere | the run table carries units, roles and statuses; `gamut get study.gamut mach cl -o table.csv` exports columns |
-| Dataset packages for machine learning ([PLAID](https://plaid-lib.readthedocs.io/), [The Well](https://polymathic-ai.org/the_well/)) | benchmark datasets with loaders and fixed splits | the benchmark's loader is what you need | a study keeps its published splits and its unit of generalization, and a fitted model is a file of the same shape |
+| Dataset packages for machine learning ([PLAID](https://plaid-lib.readthedocs.io/), [The Well](https://polymathic-ai.org/the_well/)) | benchmark datasets with loaders and fixed splits | the benchmark's loader is what you need | a study keeps its published splits and its unit of generalisation, and a fitted model is a file of the same shape |
 
 The [benchmarks](benchmarks.md) measure size and read speed against
 several of these on real studies.
@@ -46,7 +46,7 @@ processing and PyTorch operations serve a different part of the workflow.
 Exodus and CGNS already supply scientific data models and established
 language interfaces. Gamut's particular focus is the study across runs:
 design and condition parameters, status, published splits, the unit of
-generalization and shared-mesh correspondence. Its Python, MATLAB, Julia,
+generalisation and shared-mesh correspondence. Its Python, MATLAB, Julia,
 C++, C and Rust interfaces use that study vocabulary. This is a scope comparison,
 not a claim that other formats cannot carry metadata or be read across languages.
 

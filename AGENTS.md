@@ -27,7 +27,7 @@ layers over that interface; a validator; a command line; VTK conversion.
 | `docs/` | install, the guide, reference, security, comparison, benchmarks |
 | `bench/` | benchmark scripts and results; `bench/figures.py` writes the page's tables and figures |
 | `tools/` | `build_deps.sh` (static zlib and HDF5), `build_core.sh` (the core as a release carries it), `damaged_files.py` |
-| `licenses/` | the licences of HDF5 and zlib, which packages link in and carry |
+| `licenses/` | the licenses of HDF5 and zlib, which packages link in and carry |
 
 ## Who owns what
 
@@ -35,7 +35,7 @@ layers over that interface; a validator; a command line; VTK conversion.
 |---|---|
 | What a file means, what is valid | `SPEC.md` |
 | The expected outcome of a case, in every language | the corpus |
-| Behaviour | the core; a language layer converts types and positions, nothing more |
+| Behavior | the core; a language layer converts types and positions, nothing more |
 | Names and argument order across languages | the [Python](docs/reference/python.md), [MATLAB](docs/reference/matlab.md), [Julia](docs/reference/julia.md), [C and C++](docs/reference/c-and-cpp.md) and [Rust](docs/reference/rust.md) references and each layer's docstrings, which follow the Python names |
 | Which rows train a model, how a model computes, file lineage | the producing or consuming tool, never Gamut |
 
@@ -54,7 +54,7 @@ layers over that interface; a validator; a command line; VTK conversion.
   the same point in every run; the file cannot check physical meaning.
 - **Untrusted files.** Counts are checked against stated limits before
   buffers are sized; links are never followed; the packaged core loads no
-  HDF5 plugins. HDF5 itself can hang on a damaged file: the defence is a
+  HDF5 plugins. HDF5 itself can hang on a damaged file: the defense is a
   process boundary (`docs/security.md`).
 - **HDF5 linked in.** Packages link HDF5 statically and export only the
   `gamut_*` symbols: on Linux a core linked to a shared HDF5 crashes beside a
