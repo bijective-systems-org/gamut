@@ -7,7 +7,7 @@ values on its own mesh.
 
 The example runs the same flow on three meshes of increasing resolution,
 with the pressure stored per cell as a finite-volume solver reports it,
-at each cell's centre. `ring` and `pressure` are the mesher and solver of
+at each cell's center. `ring` and `pressure` are the mesher and solver of
 the [geometry families](03-geometry-families.md) example.
 
 ## Writing

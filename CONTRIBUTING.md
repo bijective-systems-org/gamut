@@ -2,7 +2,7 @@
 
 The [specification](SPEC.md) and the [corpus](corpus) define Gamut. The
 C++ core in `src/` implements them once; Python, MATLAB, Julia, Rust and
-the C++ header are thin layers over its C interface. A change of behaviour starts from the
+the C++ header are thin layers over its C interface. A change of behavior starts from the
 specification and the corpus, never from one language.
 
 ## A bug
@@ -82,7 +82,7 @@ example `examples/julia/nearest.jl` runs in such a folder too.
 toolbox, and `tests/check_toolbox.m` installs it in a clean session and
 runs an example with it. `bash tools/build_core.sh PREFIX DEPS` installs
 the core as a release carries it, with its headers, CMake package and
-licences.
+licenses.
 
 `tools/damaged_files.py` measures how readers meet damaged files, and
 `bench/` holds the benchmarks (`bench/figures.py` rebuilds the benchmark

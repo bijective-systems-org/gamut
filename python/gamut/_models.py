@@ -1,6 +1,6 @@
 """Model files and the plug-in interface (spec section 7, interface
 section 5): model numbers as plain dictionaries, the built-in nearest
-neighbour, model types registered by their owning software, and evaluation
+neighbor, model types registered by their owning software, and evaluation
 driven from Python with the core writing the result."""
 
 from __future__ import annotations

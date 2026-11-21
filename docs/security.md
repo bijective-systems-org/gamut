@@ -82,7 +82,7 @@ bits flipped, or with runs of bytes zeroed), then validates each copy and
 makes every read on it, each in a child process.
 
 Measured on 23 October 2026 with the core built as the packages are (HDF5
-1.14.6 linked in), and again under the address and undefined-behaviour
+1.14.6 linked in), and again under the address and undefined-behavior
 sanitizers: all 840 copies were answered by rule, and every read of them
 returned or was refused. Runs with more copies find the rare one HDF5
 itself cannot meet: in 4,200 copies under the sanitizers, seven crashed and

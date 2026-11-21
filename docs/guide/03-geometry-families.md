@@ -265,7 +265,7 @@ cylinders as circulation grows.
 ## Notes
 
 - `per` `run` is the same idea with a geometry per run: a mesh that
-  deforms with every run, such as an aeroelastic or optimisation history.
+  deforms with every run, such as an aeroelastic or optimization history.
 - Coordinates are always absolute positions, never displacements.
 - When the members are meshed separately, with different node counts or
   connectivity, the study is a [changing mesh](04-changing-meshes.md)

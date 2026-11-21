@@ -320,7 +320,7 @@ published VTK files (AirfRANS, where every format reads them). From one
 run of the whole benchmark to the next, medians moved by up to a third.
 During the capsule run another process used one of the machine's eight
 cores part of the time. Against an earlier run without it, every read's
-median was within 17 %, faster or slower, except Parquet's (893 µs then,
+median was within 17%, faster or slower, except Parquet's (893 µs then,
 1.32 ms now).
 
 For every read, every format returns the same numbers.

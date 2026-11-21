@@ -15,15 +15,15 @@ is a storage baseline, not another simulation standard.
 
 | Format | Built for | Keep it when | With Gamut |
 |---|---|---|---|
-| VTK files (`.vtu`, `.vtp`, [VTKHDF](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html)) | one mesh and its data, for visualisation; VTKHDF adds time steps | you are looking at results in ParaView or VisIt | `gamut-vtk` turns a folder of runs into one study, and a study back into a folder ([VTK](guide/10-vtk.md)); cells use VTK's codes and node order |
+| VTK files (`.vtu`, `.vtp`, [VTKHDF](https://docs.vtk.org/en/latest/vtk_file_formats/vtkhdf_file_format/vtkhdf_specifications.html)) | one mesh and its data, for visualization; VTKHDF adds time steps | you are looking at results in ParaView or VisIt | `gamut-vtk` turns a folder of runs into one study, and a study back into a folder ([VTK](guide/10-vtk.md)); cells use VTK's codes and node order |
 | [CGNS](https://cgns.org/) | CFD solutions: zones, boundary conditions, solver state | a solver reads or restarts from it | write each run's results from the solver, or convert its output; zones and patches become mesh labels |
 | [Exodus II](https://sandialabs.github.io/seacas-docs/html/index.html) | finite-element meshes, blocks, sets and results through time, built on netCDF | your finite-element tools need its model and ecosystem | retain native results; collect runs, their design/condition inputs and their study relationships in Gamut |
-| [PhysicsNeMo-Mesh (`.pmsh`)](https://docs.nvidia.com/physicsnemo/latest/user-guide/mesh/using_mesh.html#serialization) | simplicial meshes with tensor fields, stored as memory-mapped tensors for PhysicsNeMo/PyTorch workflows | mesh processing and training happen in that ecosystem | Gamut holds the study and its run relationships; a training pipeline can materialise the arrays or meshes it needs |
-| [CAE OpenUSD](https://github.com/NVIDIA-Omniverse/cae-openusd-plugins) | exposing scientific/engineering data through OpenUSD schemas and on-demand readers | your workflow composes or visualises simulation assets through USD | the current plugins retain native files as the source of truth; a Gamut adapter would be a separate integration, not an existing feature |
+| [PhysicsNeMo-Mesh (`.pmsh`)](https://docs.nvidia.com/physicsnemo/latest/user-guide/mesh/using_mesh.html#serialization) | simplicial meshes with tensor fields, stored as memory-mapped tensors for PhysicsNeMo/PyTorch workflows | mesh processing and training happen in that ecosystem | Gamut holds the study and its run relationships; a training pipeline can materialize the arrays or meshes it needs |
+| [CAE OpenUSD](https://github.com/NVIDIA-Omniverse/cae-openusd-plugins) | exposing scientific/engineering data through OpenUSD schemas and on-demand readers | your workflow composes or visualizes simulation assets through USD | the current plugins retain native files as the source of truth; a Gamut adapter would be a separate integration, not an existing feature |
 | netCDF with [CF](https://cfconventions.org/) and [UGRID](https://ugrid-conventions.github.io/ugrid-conventions/) | geoscience data, with conventions for grids, meshes and time | you share with climate and ocean tools | a Gamut file is a netCDF-4 file: netCDF tools and xarray read it as it is; Gamut adds what a study means, such as runs, roles, statuses and relations |
 | [Zarr](https://zarr.dev/) | chunked arrays in object storage, read by many workers at once | reads go over the network to a cluster | a Gamut file is one local file; copy it, or extract the part a job needs |
 | Parquet or CSV | tables | the study has no fields and the meaning lives elsewhere | the run table carries units, roles and statuses; `gamut get study.gamut mach cl -o table.csv` exports columns |
-| Dataset packages for machine learning ([PLAID](https://plaid-lib.readthedocs.io/), [The Well](https://polymathic-ai.org/the_well/)) | benchmark datasets with loaders and fixed splits | the benchmark's loader is what you need | a study keeps its published splits and its unit of generalisation, and a fitted model is a file of the same shape |
+| Dataset packages for machine learning ([PLAID](https://plaid-lib.readthedocs.io/), [The Well](https://polymathic-ai.org/the_well/)) | benchmark datasets with loaders and fixed splits | the benchmark's loader is what you need | a study keeps its published splits and its unit of generalization, and a fitted model is a file of the same shape |
 
 The [benchmarks](benchmarks.md) measure size and read speed against
 several of these on real studies.
@@ -46,7 +46,7 @@ processing and PyTorch operations serve a different part of the workflow.
 Exodus and CGNS already supply scientific data models and established
 language interfaces. Gamut's particular focus is the study across runs:
 design and condition parameters, status, published splits, the unit of
-generalisation and shared-mesh correspondence. Its Python, MATLAB, Julia,
+generalization and shared-mesh correspondence. Its Python, MATLAB, Julia,
 C++, C and Rust interfaces use that study vocabulary. This is a scope comparison,
 not a claim that other formats cannot carry metadata or be read across languages.
 

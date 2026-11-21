@@ -68,7 +68,7 @@ bounds or on one, negative below them, positive above.
   `GamutFile.describe(study, name)["units"]` names. Converting them is left
   to the caller; only Python's reads convert, through pint.
 - Julia evaluates model files whose models are the built-in nearest
-  neighbour; models of other types are registered in Python or MATLAB.
+  neighbor; models of other types are registered in Python or MATLAB.
 - `GamutFile.library_path()` names the core library in use, set by
   `GAMUT_LIBRARY`.
 
