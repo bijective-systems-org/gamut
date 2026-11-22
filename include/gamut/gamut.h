@@ -319,7 +319,7 @@ GAMUT_API int gamut_add_model(gamut_file* f, const char* id, const char* type,
  * gamut_describe(f, "models/<id>"); its numbers from here. */
 GAMUT_API int gamut_model_numbers(const gamut_file* f, const char* id, gamut_tree** out, gamut_error* err);
 
-/* The built-in nearest-neighbour model (spec section 7.5), so every
+/* The built-in nearest-neighbor model (spec section 7.5), so every
  * binding gets the same answers. */
 GAMUT_API int gamut_nearest_check(const gamut_tree* numbers, gamut_error* err);
 GAMUT_API int gamut_nearest_output_size(const gamut_tree* numbers, const char* output,

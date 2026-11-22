@@ -4,7 +4,7 @@ function package_toolbox(output)
 %
 %   The toolbox holds the gamut package and each gateway in this folder
 %   (gamut_mex.mexa64, .mexmaca64, .mexw64) with its core library beside
-%   it, so installing it needs no compiler; and the licences of HDF5 and
+%   it, so installing it needs no compiler; and the licenses of HDF5 and
 %   zlib, which the core links in. It claims the platforms of the gateways
 %   it holds and this MATLAB's release and later: a gateway runs in the
 %   release it was built with and later ones, so build the gateways with

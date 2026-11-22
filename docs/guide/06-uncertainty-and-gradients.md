@@ -6,7 +6,7 @@ Each of these is a result of its own that names the result it describes,
 so a reader finds it without relying on naming conventions.
 
 The example stores, for each angle of attack, a lift coefficient with its
-standard deviation, its 5 % and 95 % quantiles, and its derivative with
+standard deviation, its 5% and 95% quantiles, and its derivative with
 respect to angle of attack.
 
 ## Writing

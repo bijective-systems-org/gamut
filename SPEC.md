@@ -280,7 +280,7 @@ another result with a descriptive name.
 | `statistic` | Means | Also |
 |---|---|---|
 | `std` | the standard deviation of `of`: a measured spread (an unsteady run's fluctuation, repeated tests, a Gaussian model's sigma) | never negative (W10) |
-| `quantile` | the value of `of` at percentile `q`: `q = 0.05` is the value 5 % of outcomes fall below | `q` in (0, 1); a symmetric interval is two quantiles |
+| `quantile` | the value of `of` at percentile `q`: `q = 0.05` is the value 5% of outcomes fall below | `q` in (0, 1); a symmetric interval is two quantiles |
 
 Either may carry `method`: one line on how it was obtained. Its units
 string equals that of `of`.
@@ -333,7 +333,7 @@ standardizes the interface, never the internals: only the software that
 owns the type interprets the numbers. A file never holds executable code.
 
 Licensing is not part of the format or its libraries. Running a model needs
-its owning software and whatever licence that software requires; a model
+its owning software and whatever license that software requires; a model
 of a user's own type runs with the user's registered code; the built-in
 `nearest` runs everywhere.
 
@@ -379,7 +379,7 @@ when a model reads them, as n × nodes × axes in the coordinates' units.
 The data file's rows get ids 0 to n − 1. A label's codes are the model
 file's.
 
-### 7.5 The built-in model: nearest neighbour
+### 7.5 The built-in model: nearest neighbor
 
 Type `nearest` returns, for each input row, the outputs of the closest
 stored point. It exists so that model files can be tested in every
@@ -420,7 +420,7 @@ random UUID, lower-case, written once when the file is created), and may
 carry `title`, `license` (an SPDX identifier or a URL), `references` (a
 citation or DOI) and `source` (the program that produced the data), with
 the meanings the Attribute Convention for Data Discovery gives them, so
-that dataset catalogues can read them. `/notes` holds any other free-form
+that dataset catalogs can read them. `/notes` holds any other free-form
 public attributes; nothing depends on them. `/private` holds a producer's
 own records in any form; readers copy it and never interpret it. Public
 information is never only in `/notes` or `/private`.

@@ -57,5 +57,5 @@ is defined to the order of each addition, so every implementation gives
 the same answer.
 
 Running a model of another type needs the software that owns it, and
-whatever licence that software requires; licensing is not part of the
+whatever license that software requires; licensing is not part of the
 format.

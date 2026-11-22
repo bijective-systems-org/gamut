@@ -78,7 +78,7 @@ bounds or on one, negative below them, positive above.
   `study.describe(name)?["units"]` names. Converting them is left to the
   caller; only Python's reads convert, through pint.
 - Rust evaluates model files whose models are the built-in nearest
-  neighbour; models of other types are registered in Python or MATLAB.
+  neighbor; models of other types are registered in Python or MATLAB.
   The crate writes data files, not model files.
 - `study.handle()` gives the open file to the calls of `gamut.h` the
   crate does not cover, through `bijective-gamut-sys` (`gamut_sys`).
