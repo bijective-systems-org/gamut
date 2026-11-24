@@ -34,7 +34,7 @@ no errors, no warnings
 The run that failed in [the first example](../guide/01-run-tables.md) is
 reported, so whoever receives the file sees it without being told. A row
 in a finding is a position in the file, counted from 0. An array of more
-than 67,108,864 values is reported (W11) rather than checked value by
+than 2²⁶ values is reported (W11) rather than checked value by
 value. `validate` is
 also a call in every language, and `gamut validate --json` gives the
 findings to a script. Readers make the checks a read needs on what they

@@ -296,7 +296,7 @@ decompresses only the stored chunks that hold what it asks for.
 - The first run without circulation gives the textbook minimum of −3 at
   the top and bottom of the cylinder; circulation deepens one side.
 - Fields are compressed in chunks of about 256 KB. On a small mesh a
-  chunk holds many whole runs; on a mesh of more than about 32,000 nodes it
+  chunk holds many whole runs; on a mesh of more than about 32000 nodes it
   holds part of one run, so a region of every run reads a small part of
   the file ([benchmarks](../benchmarks.md)).
 - A `per = fixed` mesh's points and cells are written once however many

@@ -10,6 +10,7 @@ Tables go into docs/benchmarks.md between `<!-- results: NAME -->` and
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import math
 import os
@@ -20,6 +21,11 @@ ROOT = os.path.dirname(HERE)
 RESULTS = os.path.join(HERE, "results")
 PAGE = os.path.join(ROOT, "docs", "benchmarks.md")
 ASSETS = os.path.join(ROOT, "docs", "assets")
+with open(os.path.join(ASSETS, "fonts", "inter-variable.woff2"), "rb") as font:
+    INTER_FONT = base64.b64encode(font.read()).decode("ascii")
+# The figures also appear as images on GitHub, where they cannot load the site's fonts.
+FONT_FACE = ('@font-face { font-family: Inter; font-weight: 100 900; '
+             f'src: url(data:font/woff2;base64,{INTER_FONT}) format("woff2"); }}')
 
 NAMES = {"gamut": "Gamut", "gamut_threads": "Gamut, 4 threads", "vtk_folder": "VTK folder", "vtk_zip": "VTK folder, zipped",
          "hdf5_per_run": "HDF5, a group per run", "netcdf": "netCDF-4 (xarray)",
@@ -31,13 +37,13 @@ NAMES.update({"exodus": "Exodus II, native defaults", "exodus_gzip": "Exodus II,
 READS = {"open": "Open", "one_run": "One run", "one_node": "One node, every run",
          "region": "A region, every run", "query": "Runs by condition"}
 
-STYLE = """<style>
+STYLE = "<style>\n    " + FONT_FACE + """
     .ink { fill: #1F2328; } .soft { fill: #59636E; } .grid { stroke: #D0D7DE; stroke-width: 1; }
     .bar { fill: #8C959F; } .ours { fill: #4A9FF5; } .page { fill: #FFFFFF; }
     @media (prefers-color-scheme: dark) {
       .page { fill: #0D1117; } .ink { fill: #E6EDF3; } .soft { fill: #9198A1; } .grid { stroke: #30363D; } .bar { fill: #6E7681; }
     }
-    text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; }
+    text { font-family: Inter, sans-serif; font-size: 12px; }
     .h { font-size: 13px; font-weight: 600; }
   </style>"""
 
@@ -157,8 +163,8 @@ def summary_figure(r: dict) -> str:
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
            f'height="{height}" role="img" aria-label="Size and read times of one study in eight formats">', STYLE, '<rect class="page" width="100%" height="100%"/>',
            f'<text class="ink h" x="0" y="18">One study in {WORDS[len(formats)]} formats</text>',
-           f'<text class="soft" x="0" y="36">{shape["runs"]:,} runs of a capsule family on one '
-           f'{shape["nodes"]:,}-node mesh; shorter is better</text>']
+           f'<text class="soft" x="0" y="36">{shape["runs"]} runs of a capsule family on one '
+           f'{shape["nodes"]}-node mesh; shorter is better</text>']
     for b, pair in enumerate(panels):
         y0 = top + b * band
         for i, fmt in enumerate(formats):
@@ -220,8 +226,8 @@ def study_summary(capsule: dict, xfoil: dict) -> str:
     band = [44 + max(len(rows[2 * b]), len(rows[2 * b + 1])) * row + 26 for b in (0, 1)]
     top = 92
     height = top + band[0] + band[1] + 40
-    style = """<style>
-      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+    style = "<style>\n      " + FONT_FACE + """
+      text { font-family: Inter, sans-serif; }
       .page { fill: #FFFFFF; } .ink { fill: #1F2328; } .muted { fill: #59636E; }
       .capsule { fill: #0070DC; } .xfoil { fill: #74B5EB; }
       .grid { stroke: #E1E6EC; stroke-width: 1; } .base { stroke: #1F2328; stroke-width: 1.5; }
@@ -248,7 +254,7 @@ def study_summary(capsule: dict, xfoil: dict) -> str:
     for x, (name, result, colour) in zip((0, panel_width + gap), datasets):
         shape = result["shape"]
         out += [f'<rect class="{colour}" x="{x}" y="37" width="12" height="8" rx="1"/>',
-                f'<text class="ink small" x="{x+20}" y="45">{name} · {shape["runs"]:,} runs · {shape["nodes"]:,} nodes</text>']
+                f'<text class="ink small" x="{x+20}" y="45">{name} · {shape["runs"]} runs · {shape["nodes"]} nodes</text>']
     out.append('<text class="muted small" x="0" y="68">Bars are relative to Gamut on one thread (the line at 1×) on the '
                'same dataset; labels are measured values. Shorter is smaller or faster.</text>')
     for panel, ((title, metric), shown) in enumerate(zip(panels, rows)):
@@ -305,7 +311,7 @@ def generated() -> tuple[dict[str, str], dict[str, str]]:
         "bench-size.svg": size_figure([("The capsule family", capsule), ("AirfRANS", airfrans)]),
         "bench-one-node.svg": read_figure(
             capsule, "one_node", "One node across every run",
-            f"capsule family, {capsule['shape']['runs']:,} runs; median of five, shorter is faster"),
+            f"capsule family, {capsule['shape']['runs']} runs; median of five, shorter is faster"),
         "bench-one-run.svg": read_figure(
             airfrans, "one_run", "One run's points and pressure",
             f"AirfRANS, {airfrans['shape']['runs']} runs on their own meshes; median of five, "

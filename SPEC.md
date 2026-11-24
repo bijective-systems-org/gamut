@@ -118,7 +118,7 @@ At most one `status` label. Any number of the others. A yes/no value is a
 `categorical` label whose table is `false`, `true` (codes 0 and 1); a
 library accepts booleans and writes that table itself.
 
-**Unit of generalisation.** The root may name one group label in
+**Unit of generalization.** The root may name one group label in
 `generalisation_group`: the group a fair test holds out whole, such as the
 geometry of a family. A published split that places rows of one such group,
 or of one run (`run_group`), on both sides is reported (W1).
@@ -437,9 +437,9 @@ rewrapped.
 
 A root text attribute that a writer sets (`title`, `license`,
 `references`, `source`, `portion_marking`, `trained_on`,
-`evaluated_from`) holds at most 65,504 bytes of UTF-8 less the room its
+`evaluated_from`) holds at most 65504 bytes of UTF-8 less the room its
 name takes, the name and its terminating NUL rounded up to a multiple of
-8 bytes: 65,496 bytes for `title`, `license` and `source`, and 65,488 for
+8 bytes: 65496 bytes for `title`, `license` and `source`, and 65488 for
 `references`, `portion_marking`, `trained_on` and `evaluated_from`. HDF5
 keeps the attribute in the root's object header as one message of at
 most 64 KiB; HDF5 1.14.6 writes a slightly longer value as a root that
@@ -726,7 +726,7 @@ A writer chunks every dataset with a dimension that may grow (`row`,
 lists as unlimited) and makes that dimension unlimited; any dataset with an
 unlimited dimension is chunked (E20). A file whose growable dimensions are
 fixed instead is valid and read-only (§11.5). Larger fixed datasets may be
-chunked too, to be compressed. With T = 262,144 bytes and b the bytes of one entry along
+chunked too, to be compressed. With T = 262144 bytes and b the bytes of one entry along
 the first axis (dtype size times the other extents):
 
 - **Leading axis grows** (root datasets, arrays among them; category tables; shared-mesh
@@ -747,9 +747,9 @@ A writer creates files with HDF5's persistent free-space management
 (strategy `FSM_AGGR`, persisting, threshold 1) and library version bounds
 from the earliest to 1.10, which that needs. A compressed chunk rewritten
 larger leaves its old space free, and without tracking that space is lost
-when the file closes. Measured (20 float64 columns, 3,000 appends of one
+when the file closes. Measured (20 float64 columns, 3000 appends of one
 row, the file reopened for each): 32 MB without, 0.49 MB with, the size of
-the data; chunks of 32,768 entries without it reached 196 MB. Readers need
+the data; chunks of 32768 entries without it reached 196 MB. Readers need
 HDF5 1.10 or later; netCDF4, xarray and MATLAB R2026a (HDF5 1.14.4) read
 such files. Writers also buffer appends to whole chunks within a session.
 
@@ -942,7 +942,7 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 
 | Rule | Finding |
 |---|---|
-| W1 | a published split that places rows of one generalisation group, or of one run, on both sides |
+| W1 | a published split that places rows of one generalization group, or of one run, on both sides |
 | W2 | rows whose status is not `converged`, by row |
 | W3 | NaN or infinite values in a result, by row and name |
 | W4 | a parameter's or an array's value outside its bounds (and, on evaluation, an input outside a model's domain) |
@@ -952,7 +952,7 @@ Errors make a file invalid; warnings are reported and the file is accepted.
 | W8 | `created` not an ISO 8601 UTC timestamp |
 | W9 | two rows of one run at the same time (decidable with `run_group`) |
 | W10 | a negative `std` |
-| W11 | an array whose values were not checked because it holds more than 2²⁶ (67,108,864) values, the reference validator's limit |
+| W11 | an array whose values were not checked because it holds more than 2²⁶ (67108864) values, the reference validator's limit |
 
 ## 17. Versions and additions
 
@@ -1032,7 +1032,7 @@ Each of these is the simpler of the choices considered.
 13. **Constants may be int64** as well as floating point.
 14. **Persistent free-space management and a 512-entry cap on leading
     chunks**, so a file appended one run at a time, even reopened each
-    time, stays the size of its data (measured: 20 columns and 3,000
+    time, stays the size of its data (measured: 20 columns and 3000
     single-row appends, each reopening the file, give 0.49 MB, against
     32 MB without).
 15. **An array is its own kind of input, with its own role words.** A

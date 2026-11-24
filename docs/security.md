@@ -85,7 +85,7 @@ Measured on 23 October 2026 with the core built as the packages are (HDF5
 1.14.6 linked in), and again under the address and undefined-behavior
 sanitizers: all 840 copies were answered by rule, and every read of them
 returned or was refused. Runs with more copies find the rare one HDF5
-itself cannot meet: in 4,200 copies under the sanitizers, seven crashed and
+itself cannot meet: in 4200 copies under the sanitizers, seven crashed and
 three hung, each inside HDF5's own code, most while reading a file's
 dimension-scale attributes. Such a hang has been reported to the HDF Group.
 

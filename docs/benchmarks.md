@@ -21,8 +21,8 @@ and settings, rather than an intrinsic ranking of format names.
 
 ### A geometry family
 
-The capsule study has 1,364 runs on 44 geometries sharing one topology:
-6,722 nodes and 6,720 quadrilaterals, with pressure and heating from
+The capsule study has 1364 runs on 44 geometries sharing one topology:
+6722 nodes and 6720 quadrilaterals, with pressure and heating from
 engineering methods. It is not CFD validation. Each native result file
 holds one geometry and all 31 of its runs, avoiding a file per run.
 
@@ -50,8 +50,8 @@ input for every peer; the original quad results above remain unchanged.
 ### The capsule with triangulated connectivity
 
 This is a separate storage/read case. Each original quad `[a,b,c,d]` is
-split into `[a,b,c]` and `[a,c,d]`, in source-cell order, giving 13,440
-triangles. All 6,722 nodes, 44 geometries, 1,364 runs, nodal values and run
+split into `[a,b,c]` and `[a,c,d]`, in source-cell order, giving 13440
+triangles. All 6722 nodes, 44 geometries, 1364 runs, nodal values and run
 table entries are retained without interpolation. Every peer is rewritten
 and timed on that same transformed input, including Gamut; no row below
 is borrowed from the original quad measurements.
@@ -223,12 +223,12 @@ The capsule family is our own: 44 capsule shapes meshed with one topology
 by a mapping tool, each run at 31 conditions (Mach number, angle of
 attack, sideslip), with surface pressure and heating from engineering
 methods (modified Newtonian pressure, laminar heating by Lees' similarity)
-on 6,722 nodes. It has many runs, a small mesh, and a geometry per shape.
+on 6722 nodes. It has many runs, a small mesh, and a geometry per shape.
 It is not public.
 
 AirfRANS is public: 100 runs of the AirfRANS dataset (Bonnet et al.,
 NeurIPS 2022; ODbL), two-dimensional RANS solutions around NACA 4-digit
-airfoils from OpenFOAM, each on its own mesh of about 176,000 nodes, with
+airfoils from OpenFOAM, each on its own mesh of about 176000 nodes, with
 pressure, velocity and turbulent viscosity at nodes and cells. It has few
 runs, large meshes, and a mesh per run. `bench/airfrans.py` fetches the
 same subset.
@@ -304,7 +304,7 @@ building its library.
 *Open* opens the study and lists what it holds. *One run* reads one run's
 pressure (with its points, for AirfRANS). *One node, every run* and *a
 region, every run* read the pressure at one node, or at 672 consecutive
-nodes, in all 1,364 runs. *Runs by condition* chooses the runs with Mach
+nodes, in all 1364 runs. *Runs by condition* chooses the runs with Mach
 number above 20 and positive angle of attack (inflow speed above 50 m/s
 and angle above 5°, for AirfRANS) and reads a result of each.
 
