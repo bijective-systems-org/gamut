@@ -12,18 +12,20 @@ type are those of the README's other figures.
 """
 from __future__ import annotations
 
+import base64
 import os
 import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+with open(os.path.join(HERE, "fonts", "inter-variable.woff2"), "rb") as font:
+    INTER_FONT = base64.b64encode(font.read()).decode("ascii")
 THEMES = {
-    "light": dict(page="#FFFFFF", ink="#1F2328", soft="#59636E", faint="#8C959F", rule="#D0D7DE",
+    "light": dict(page="#FFFFFF", ink="#1F2328", soft="#59636E", rule="#D0D7DE",
                   band="#EEF6FE", edge="#74BFF8", arrow="#0070DC"),
-    "dark": dict(page="#0D1117", ink="#E6EDF3", soft="#9198A1", faint="#6E7681", rule="#30363D",
+    "dark": dict(page="#0D1117", ink="#E6EDF3", soft="#9198A1", rule="#30363D",
                  band="#11243A", edge="#0B4FA8", arrow="#4A9FF5"),
 }
-FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
-MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+FONT = "Inter, sans-serif"
 LANGUAGES = [("Python", True), ("MATLAB", True), ("Julia", True), ("C++", True), ("C", True),
              ("Rust", True), ("Fortran", False)]
 STRIP = 30                                            # the C interface, on the core's edge
@@ -64,6 +66,8 @@ def draw(c: dict) -> str:
          '<title id="languages-title">Python (with the command line), MATLAB, Julia, C++, C and Rust each '
          'read and write a .gamut file through the C interface of the one C++ core; Fortran is '
          'planned.</title>',
+         '<style>@font-face { font-family: Inter; font-weight: 100 900; '
+         f'src: url(data:font/woff2;base64,{INTER_FONT}) format("woff2"); }}</style>',
          f'<rect width="{W}" height="{H}" fill="{c["page"]}"/>']
     core_y, core_h = M, H - 2 * M
     for i, (name, ready) in enumerate(LANGUAGES):
@@ -82,8 +86,8 @@ def draw(c: dict) -> str:
         else:
             o.append(f'<rect x="{M}" y="{y}" width="{BOX_W}" height="{BOX_H}" rx="6" fill="{c["page"]}" '
                      f'stroke="{c["rule"]}" stroke-width="1.5" stroke-dasharray="4 3"/>')
-            o.append(text(M + 16, mid + 5, name, c["faint"], anchor="start"))
-            o.append(text(M + BOX_W - 14, mid + 4, "planned", c["faint"], size=12, anchor="end",
+            o.append(text(M + 16, mid + 5, name, c["soft"], anchor="start"))
+            o.append(text(M + BOX_W - 14, mid + 4, "planned", c["soft"], size=12, anchor="end",
                           style=' font-style="italic"'))
             o.append(arrow(M + BOX_W + 8, CORE_X - 8, mid, c["rule"], dashed=True))
     # The core: one library behind one C interface.
@@ -92,11 +96,11 @@ def draw(c: dict) -> str:
     # The C interface: a strip on the edge every language enters by.
     o.append(f'<path d="M{CORE_X + STRIP} {core_y}v{core_h}" stroke="{c["edge"]}" stroke-width="1.5"/>')
     o.append(f'<text transform="translate({CORE_X + STRIP / 2 + 4.5:.1f} {H / 2:.1f}) rotate(-90)" '
-             f'fill="{c["soft"]}" font-family="{MONO}" font-size="12.5" text-anchor="middle">'
+             f'fill="{c["soft"]}" font-family="{FONT}" font-size="12.5" text-anchor="middle">'
              f'C interface · gamut.h</text>')
     centre = CORE_X + STRIP + (CORE_W - STRIP) / 2
     o.append(text(centre, H / 2 - 4, "C++ core", c["ink"], size=18, weight=600))
-    o.append(text(centre, H / 2 + 18, "libgamut", c["soft"], size=12.5, family=MONO))
+    o.append(text(centre, H / 2 + 18, "libgamut", c["soft"], size=12.5))
     # The file, reached only through the core.
     o.append(arrow(CORE_X + CORE_W + 8, FILE_X - 8, H / 2, c["arrow"]))
     o.append(text((CORE_X + CORE_W + FILE_X) / 2, H / 2 - 12, "read · write", c["soft"], size=12.5))

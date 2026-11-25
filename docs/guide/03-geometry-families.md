@@ -144,7 +144,7 @@ study.close()?;
 - A label with the role `split` publishes which runs are for training and
   which for testing, so everyone who uses the file tests the same way.
   Here the wide cylinder is held out whole.
-- The generalisation group, `member`, records that a fair test of a model
+- The generalization group, `member`, records that a fair test of a model
   trained on this study holds out whole members. A published split that
   puts runs of one member on both sides is reported (W1).
 

@@ -105,8 +105,8 @@ The file format (`gamut/1`) is unchanged; the C interface only adds calls.
   `gamut info` shows the marking as that
   block in its output, where it printed the raw text before.
 - A root text attribute holds at most what HDF5 writes in a header that
-  opens again: 65,504 bytes less its name padded to 8 (65,496 for `title`,
-  `license` and `source`; 65,488 for `references`, `portion_marking`,
+  opens again: 65504 bytes less its name padded to 8 (65496 for `title`,
+  `license` and `source`; 65488 for `references`, `portion_marking`,
   `evaluated_from` and `trained_on`), refused before anything is written.
   HDF5 1.14.6 accepted a few bytes more and wrote a root it could not open
   again. A stated marking for `append`, or for `gamut append` with a
@@ -141,7 +141,7 @@ move from `gamut-format`, uninstall it, then install `bijective-gamut`
   `bijective-gamut-sys`, the declarations of `gamut.h` that
   `rust/gamut-sys/generate.py` writes from it. It writes and reads
   data files with the calls of the other languages, evaluates model files
-  whose models are the built-in nearest neighbour, and is held to the
+  whose models are the built-in nearest neighbor, and is held to the
   corpus. Every example has a Rust tab, and the reference a Rust page.
   The crates are added from this repository's release tag (not yet from
   crates.io).
@@ -437,7 +437,7 @@ MATLAB installs from a toolbox, `Gamut.mltbx`, attached to each release:
 MATLAB R2023b or later on Linux, Windows or an Apple silicon Mac, and no
 compiler. Each release also carries the core on its own for each platform
 (`gamut-core-<version>-<platform>`, with its headers and CMake package) for
-Julia, C and C++. Every package now includes the licences of HDF5 and zlib,
+Julia, C and C++. Every package now includes the licenses of HDF5 and zlib,
 which the core links in.
 
 Evaluating a damaged model file is refused in every language when the file
