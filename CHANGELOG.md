@@ -1,7 +1,22 @@
 # Changelog
 
-## Unreleased
+## 2.3.1 (2026-11-26)
 
+The file format (`gamut/1`) and the C interface are unchanged.
+
+- The packages (the Python wheels, the MATLAB toolbox and the release's
+  cores) link HDF5 2.2.0 in place of 1.14.6. It has the fixes for the 27
+  security flaws that the HDF Group's CVE list names in 1.14.6, among them
+  CVE-2025-2308, CVE-2025-2309, CVE-2025-6269 and CVE-2025-44904. Files are
+  written as before, because Gamut sets HDF5's format bounds itself: Gamut
+  2.3.0 and other readers on HDF5 1.14 read them, and this release reads
+  theirs. Building HDF5 with `tools/build_deps.sh` now needs CMake 3.26 or
+  later. `licenses/hdf5.txt` is HDF5 2.2.0's licence, which carries the
+  Lawrence Berkeley and Lawrence Livermore notices itself, so
+  `licenses/hdf5-lbnl.txt` is gone.
+- Julia: GamutFile is not yet in Julia's General registry, as the 2.3.0
+  notes said it would be. Add it from the release's tag:
+  `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v2.3.1")`.
 - The core builds and runs against HDF5 2 as well as 1.14 (HDF5 2 reads a
   stored chunk with `H5Dread_chunk2`; a chunk whose stored size differs from
   its index is E23).

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(gamut VERSION 2.3.0 LANGUAGES C CXX)
+project(gamut VERSION 2.3.1 LANGUAGES C CXX)
 
 # The shared core of spec version 1: one C++ library behind a plain C
 # interface (include/gamut/gamut.h).  Python, MATLAB and Julia bind to
@@ -49,7 +49,7 @@ endif()
 
 find_package(HDF5 REQUIRED COMPONENTS C HL)
 # 1.14 brought H5Dchunk_iter, which the core's chunk index pass uses;
-# packages bundle 1.14.
+# packages bundle 2.2.0.
 if(HDF5_VERSION AND HDF5_VERSION VERSION_LESS 1.14)
   message(FATAL_ERROR "the Gamut core needs HDF5 1.14 or later; found ${HDF5_VERSION}. "
                       "Point HDF5_ROOT at a newer HDF5.")
