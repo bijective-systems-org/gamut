@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.3.1 (2026-11-25)
+## 2.3.1 (2026-11-26)
 
 The file format (`gamut/1`) and the C interface are unchanged.
 
