@@ -13,9 +13,10 @@ The file format (`gamut/1`) and the C interface are unchanged.
   file is removed, and a file being appended to is unchanged, with the copy
   the runs were written to removed. The writer lets go of the file at
   that point, and every later call on it repeats the error. HDF5 does not
-  free a file whose last close failed: about 0.7 MB of its metadata cache
+  free a file whose last close failed: the metadata its cache held then
   stays allocated until the process ends, once for each file that fails
-  this way.
+  this way. That is about 0.7 MB for a small file and more for a file
+  with many objects; HDF5's cache holds up to 32 MB by default.
 - A new file that cannot be written at all (a disk with nothing free) is
   reported as that, with the system's reason or "no space left on the
   device?", and no empty file is left at its path. It was reported as "an

@@ -231,9 +231,10 @@ class File {
   // what the file holds is then unknown and it cannot be finished. It is
   // not flushed and no link is removed from it afterwards (HDF5 walks the
   // open ids in both); all that is left is to release it. HDF5 frees
-  // such a file's handle and not its metadata cache, about 0.7 MB that
-  // stays allocated until the process ends; it offers no call that frees
-  // a cache it could not write out.
+  // such a file's handle and not its metadata cache, which stays
+  // allocated until the process ends: about 0.7 MB for a small file, more
+  // for a file with many objects (the cache holds up to 32 MB by default).
+  // HDF5 offers no call that frees a cache it could not write out.
   bool failed() const { return failed_; }
 
   // The kind of the last link of `path`, stopping at the first link that

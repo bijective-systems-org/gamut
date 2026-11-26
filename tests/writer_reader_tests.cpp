@@ -6,6 +6,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
 #if !defined(_WIN32)
 #include <signal.h>
 #include <sys/resource.h>
@@ -1592,30 +1595,55 @@ void add_wide_run(Writer& w, std::uint64_t& seed) {
 // The tests below each run a writer that fails in a process of its own:
 // this program started again with the arguments `--child NAME ARGS`.
 // HDF5 cannot free a file whose last close failed: its metadata cache stays
-// allocated (about 0.6 MB a file) until the process ends. A leak checker
-// run on these children is therefore told to pass over memory allocated
-// inside HDF5, and only there; in every other process of this program it
-// reports all of it.
-std::string g_program;
+// allocated (about 0.7 MB for these files) until the process ends. A leak
+// checker run on these children is therefore told to pass over memory
+// allocated inside HDF5, and only there; in every other process of this
+// program it reports all of it.
+// This program's file, asked of the system: the name it was started by may
+// have been found on PATH. Empty where there is no way to ask.
+std::string this_program() {
+#if defined(__APPLE__)
+  std::uint32_t size = 0;
+  _NSGetExecutablePath(nullptr, &size);
+  std::string path(size, '\0');
+  if (_NSGetExecutablePath(path.data(), &size) != 0) return std::string();
+  path.resize(std::strlen(path.c_str()));
+  return path;
+#else
+  std::error_code ec;
+  const std::filesystem::path path = std::filesystem::read_symlink("/proc/self/exe", ec);
+  return ec ? std::string() : path.string();
+#endif
+}
+
+extern "C" char** environ;
 
 int run_child(const std::vector<std::string>& args) {
+  const std::string program = this_program();
   const std::string rules = std::filesystem::absolute("wr_child_leaks.supp").string();
   std::ofstream(rules) << "leak:^H5\n";
+  // The child's arguments and environment are made before the fork: between
+  // fork and exec a process may call only what is safe in a signal handler.
+  std::vector<std::string> all = {program, "--child"};
+  all.insert(all.end(), args.begin(), args.end());
+  std::vector<char*> argv;
+  for (std::string& a : all) argv.push_back(a.data());
+  argv.push_back(nullptr);
+  const char* given = std::getenv("LSAN_OPTIONS");
+  std::string options = std::string("LSAN_OPTIONS=") + (given ? std::string(given) + ":" : "") +
+                        "suppressions=" + rules + ":print_suppressions=0";
+  std::vector<char*> envp;
+  for (char** e = environ; *e != nullptr; ++e) {
+    if (std::strncmp(*e, "LSAN_OPTIONS=", 13) != 0) envp.push_back(*e);
+  }
+  envp.push_back(options.data());
+  envp.push_back(nullptr);
   std::fflush(stdout);
   std::fflush(stderr);
   const pid_t child = fork();
   if (child == 0) {
-    const char* given = std::getenv("LSAN_OPTIONS");
-    const std::string options = (given ? std::string(given) + ":" : std::string()) +
-                                "suppressions=" + rules + ":print_suppressions=0";
-    setenv("LSAN_OPTIONS", options.c_str(), 1);
-    std::vector<std::string> all = {g_program, "--child"};
-    all.insert(all.end(), args.begin(), args.end());
-    std::vector<char*> argv;
-    for (std::string& a : all) argv.push_back(a.data());
-    argv.push_back(nullptr);
-    execv(g_program.c_str(), argv.data());
-    std::_Exit(7);
+    execve(program.c_str(), argv.data(), envp.data());
+    _exit(7);
   }
   int status = -1;
   if (child > 0) waitpid(child, &status, 0);
@@ -2271,7 +2299,6 @@ void test_rejected_instance_counts_are_not_summed() {
 
 int main(int argc, char** argv) {
 #if !defined(_WIN32)
-  g_program = std::filesystem::absolute(argv[0]).string();
   if (argc > 1 && std::string(argv[1]) == "--child") return child_main(argc, argv);
 #else
   (void)argc;
