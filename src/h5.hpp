@@ -347,6 +347,9 @@ class File {
   mutable bool object_index_built_ = false;
 };
 
+// Removes the file at `path`, one this process created and could not
+// finish, and says what became of it, for the error that reports the write.
+std::string removed(const std::string& path);
 std::string scale_name_attribute(hsize_t length);
 FilterPipeline pipeline_of(const DsetInfo& info);
 Id string_type(std::size_t size);

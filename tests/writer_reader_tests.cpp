@@ -1639,7 +1639,7 @@ int write_under_limit(const std::string& path, bool append, rlim_t limit) {
 // appended to with its bytes unchanged and nothing left beside it.
 void test_write_without_room() {
   const std::string path = "wr_no_room.gamut";
-  const std::vector<rlim_t> limits = {1 << 10, 4 << 10, 16 << 10, 64 << 10, 256 << 10, 1 << 20, 8 << 20};
+  const std::vector<rlim_t> limits = {0, 1 << 10, 4 << 10, 16 << 10, 64 << 10, 256 << 10, 1 << 20, 8 << 20};
   for (const rlim_t limit : limits) {
     const bool room = limit >= (8 << 20);   // the whole file is about 1.3 MB
     std::remove(path.c_str());
@@ -1675,6 +1675,67 @@ void test_write_without_room() {
     }
   }
   std::remove(path.c_str());
+}
+
+// A new file that is given up is the file the writer made, also when it
+// was named relative to a folder the program has since left, and a file of
+// the same name in the folder it is in now stays.
+void test_given_up_file_is_the_one_created() {
+  namespace fs = std::filesystem;
+  const fs::path home = fs::current_path();
+  const std::string other = "an unrelated file the writer never made\n";
+  auto begin = [&] {
+    fs::remove_all("wr_made");
+    fs::create_directories("wr_made/a");
+    fs::create_directories("wr_made/b");
+    std::ofstream("wr_made/b/rel.gamut") << other;
+    fs::current_path(home / "wr_made" / "a");
+    auto w = Writer::create("rel.gamut", "tests", "", "fixed");
+    w->declare_parameter(param("x", "condition", "1"));
+    w->declare_array(array("w", "condition", "1", 4096));
+    fs::current_path(home / "wr_made" / "b");
+    return w;
+  };
+  // Given up on purpose.
+  {
+    auto w = begin();
+    w->abandon(true);
+    fs::current_path(home);
+  }
+  CHECK(!fs::exists("wr_made/a/rel.gamut"));
+  CHECK(file_bytes("wr_made/b/rel.gamut") == other);
+
+  // Given up because the disk has no room: 2 when the error names the file
+  // made, 3 when it names another.
+  std::fflush(stdout);
+  std::fflush(stderr);
+  const pid_t child = fork();
+  if (child == 0) {
+    int code = 0;
+    try {
+      auto w = begin();
+      signal(SIGXFSZ, SIG_IGN);
+      const struct rlimit rl = {256 << 10, 256 << 10};
+      if (setrlimit(RLIMIT_FSIZE, &rl) != 0) std::_Exit(6);
+      try {
+        std::uint64_t seed = 1;
+        for (int i = 0; i < 40; ++i) add_wide_run(*w, seed);
+        w->close();
+      } catch (const gamut_core::Error& e) {
+        const std::string made = (home / "wr_made" / "a" / "rel.gamut").string();
+        code = std::string(e.what()).find("\"" + made + "\" was removed") != std::string::npos ? 2 : 3;
+      }
+    } catch (...) {
+      code = 5;
+    }
+    std::exit(code);
+  }
+  int status = -1;
+  if (child > 0) waitpid(child, &status, 0);
+  CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 2);
+  CHECK(!fs::exists("wr_made/a/rel.gamut"));
+  CHECK(file_bytes("wr_made/b/rel.gamut") == other);
+  fs::remove_all("wr_made");
 }
 #endif
 
@@ -2189,6 +2250,7 @@ int main() {
       {"append_many", test_append_many},
 #if !defined(_WIN32)
       {"no_room", test_write_without_room},
+      {"given_up_file", test_given_up_file_is_the_one_created},
 #endif
       {"rank", test_threaded_read_of_fewer_axes},
       {"read_limit", test_read_limit_before_allocation},

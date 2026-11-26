@@ -2,7 +2,16 @@
 
 #include <hdf5_hl.h>
 
+#include <fcntl.h>
+#include <sys/stat.h>
+#if defined(_WIN32)
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
 #include <algorithm>
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -274,6 +283,16 @@ bool Id::close() {
   return status >= 0;
 }
 
+std::string removed(const std::string& path) {
+  std::error_code ec;
+  const std::filesystem::path file = std::filesystem::u8path(path);
+  std::filesystem::remove(file, ec);
+  if (!ec && !std::filesystem::exists(file, ec) && !ec) {
+    return "the incomplete \"" + path + "\" was removed";
+  }
+  return "the incomplete \"" + path + "\" could not be removed and is still there";
+}
+
 const char* link_kind_name(LinkKind kind) {
   switch (kind) {
     case LinkKind::Missing: return "missing";
@@ -399,6 +418,31 @@ std::string cannot_open(const std::string& path, const std::string& as) {
   return "cannot open \"" + path + "\" " + as;
 }
 
+// Creates an empty file at `path`, which must not exist: the one step that
+// tells an existing file from a file that cannot be made. HDF5 reports both
+// as a failed create, and leaves an empty file behind when it could make
+// the file and not write to it.
+void create_exclusively(const std::string& path) {
+#if defined(_WIN32)
+  const int fd = ::_wopen(std::filesystem::u8path(path).wstring().c_str(),
+                          _O_WRONLY | _O_CREAT | _O_EXCL | _O_BINARY, _S_IREAD | _S_IWRITE);
+#else
+  const int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0666);
+#endif
+  if (fd < 0) {
+    if (errno == EEXIST) {
+      throw Error("", "cannot create new file \"" + path +
+                          "\"; an existing file is never replaced");
+    }
+    throw Error("", "cannot create new file \"" + path + "\": " + std::strerror(errno));
+  }
+#if defined(_WIN32)
+  ::_close(fd);
+#else
+  ::close(fd);
+#endif
+}
+
 }  // namespace
 
 File File::open_read(const std::string& path) {
@@ -437,8 +481,13 @@ File File::create(const std::string& path) {
   Id fapl(H5Pcreate(H5P_FILE_ACCESS));
   need(H5Pset_libver_bounds(fapl.get(), H5F_LIBVER_EARLIEST, H5F_LIBVER_V110) >= 0,
        "cannot set the library version bounds");
-  f.id_ = Id(H5Fcreate(path.c_str(), H5F_ACC_EXCL, fcpl.get(), fapl.get()));
-  if (!f.id_.valid()) throw Error("", "cannot create new file \"" + path + "\"; an existing file is never replaced");
+  create_exclusively(path);
+  // HDF5 then writes into the file made here.
+  f.id_ = Id(H5Fcreate(path.c_str(), H5F_ACC_TRUNC, fcpl.get(), fapl.get()));
+  if (!f.id_.valid()) {
+    throw Error("", "cannot write the new file \"" + path +
+                        "\" (no space left on the device?); " + removed(path));
+  }
   return f;
 }
 

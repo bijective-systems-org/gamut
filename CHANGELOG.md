@@ -17,6 +17,16 @@
   file is removed, and a file being appended to is unchanged, with the copy
   the runs were written to removed. The file is released at that point;
   every later call on it repeats the error.
+- A new file that cannot be written at all (a disk with nothing free) is
+  reported as that, with the system's reason or "no space left on the
+  device?", and no empty file is left at its path. It was reported as "an
+  existing file is never replaced", and the empty file left behind made the
+  same create fail again once there was room.
+- A new file that is given up, by `abandon` or because it could not be
+  written, is removed at the path it was created at. A file created by a
+  relative name was removed relative to the program's current folder at
+  that later moment, which could remove another file of the same name. The
+  error says so when the file could not be removed.
 
 ## 2.3.0 (2026-11-18)
 

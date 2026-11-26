@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <random>
 #include <set>
 
@@ -370,8 +371,10 @@ std::unique_ptr<Writer> Writer::create(const std::string& path,
          "a changing mesh changes per run or per group, never fixed");
   }
   std::unique_ptr<Writer> w(new Writer());
-  w->path_ = path;
-  w->file_.reset(new File(File::create(path)));
+  // The whole path now: the file made here is the one removed if it cannot
+  // be finished, wherever the program's current folder is by then.
+  w->path_ = std::filesystem::absolute(std::filesystem::u8path(path)).u8string();
+  w->file_.reset(new File(File::create(w->path_)));
   w->created_ = true;
   Schema& s = w->schema_;
   s.kind = "data";
@@ -492,7 +495,14 @@ std::unique_ptr<Writer> Writer::open_append(const std::string& path) {
     const std::vector<std::int64_t> ids = f.read_i64("/row");
     for (const std::int64_t id : ids) w->next_id_ = std::max(w->next_id_, id + 1);
   }
-  w->file_.reset(new File(File::open_write(w->session_->copy())));
+  const std::string& copy = w->session_->copy();
+  try {
+    w->file_.reset(new File(File::open_write(copy)));
+  } catch (const Error&) {
+    // HDF5 writes to a file as it opens it to write.
+    throw Error("", "cannot write the copy of \"" + path + "\" that the runs are added to (no "
+                        "space left on the device?); \"" + path + "\" is unchanged");
+  }
   return w;
 }
 
@@ -1342,8 +1352,7 @@ void Writer::give_up() {
   session_.reset();   // an append's copy goes and the file stays as it was
   failure_ = "cannot write the file (no space left on the device?); ";
   if (created_) {
-    std::remove(path_.c_str());
-    failure_ += "the incomplete \"" + path_ + "\" was removed";
+    failure_ += removed(path_);
   } else {
     failure_ += "\"" + path_ + "\" is unchanged";
   }
@@ -2004,7 +2013,7 @@ void Writer::abandon(bool remove) {
   pending_.clear();
   file_.reset();
   session_.reset();   // the copy goes and the file stays as it was
-  if (remove && created_) std::remove(path_.c_str());
+  if (remove && created_) removed(path_);
 }
 
 void Writer::finish() {
