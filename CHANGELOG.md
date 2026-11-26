@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.3.2 (2026-11-26)
+
+The file format (`gamut/1`) and the C interface are unchanged.
 
 - A write that the disk has no room for no longer crashes the process
   (#175). `close()` raised its error and the process then died with SIGSEGV
@@ -45,6 +47,7 @@ The file format (`gamut/1`) and the C interface are unchanged.
 - HDF5's own error printing stays off on every thread that calls the core,
   not only the one that loaded it, so a thread-safe HDF5 (such as Julia's
   `HDF5_jll`) prints nothing when a call fails.
+
 ## 2.3.0 (2026-11-18)
 
 The file format (`gamut/1`) is unchanged: arrays are an addition within

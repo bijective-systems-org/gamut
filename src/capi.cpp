@@ -66,7 +66,7 @@ struct gamut_tree {
 
 namespace {
 
-const char kVersion[] = "2.3.1";
+const char kVersion[] = "2.3.2";
 const char kFormat[] = "gamut/1";
 
 // HDF5 keeps process-wide state and may be built without its thread-safety
