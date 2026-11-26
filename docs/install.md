@@ -64,7 +64,8 @@ This builds the core, so it needs a C++17 compiler and HDF5 1.14 or later
 (pip fetches CMake if yours is older than 3.20). HDF5 can come from conda,
 Homebrew or your system's packages; point CMake at it with
 `CMAKE_ARGS="-DHDF5_ROOT=/path/to/hdf5"`. To build the core with its own
-HDF5 linked in, as the wheels are:
+HDF5 linked in, as the wheels are (building HDF5 needs CMake 3.26 or
+later):
 
 ```bash
 bash tools/build_deps.sh deps                     # zlib and HDF5, static, in ./deps
@@ -116,7 +117,7 @@ matches the core it calls, and point it at a core library:
 
 ```julia
 using Pkg
-Pkg.add(name="GamutFile", version="2.3.0")
+Pkg.add(name="GamutFile", version="2.3.1")
 ENV["GAMUT_LIBRARY"] = "/path/to/libgamut.dylib"   # .so on Linux, gamut.dll on Windows
 using GamutFile
 GamutFile.version()
@@ -168,7 +169,7 @@ that matches the core it links, and point the build at a core library:
 
 ```toml
 [dependencies]
-bijective-gamut = { git = "https://github.com/bijective-systems-org/gamut", tag = "v2.3.0" }
+bijective-gamut = { git = "https://github.com/bijective-systems-org/gamut", tag = "v2.3.1" }
 ```
 
 ```bash

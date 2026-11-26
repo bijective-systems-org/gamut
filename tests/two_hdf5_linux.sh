@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Whether the core works beside another HDF5 in one Linux process, where
-# shared libraries share one symbol namespace. HDF5 1.14.6 is built from
+# shared libraries share one symbol namespace. HDF5 2.2.0 is built from
 # source, shared and static, and the core twice: linked to the shared
 # HDF5, and with HDF5 linked in (GAMUT_STATIC_HDF5, only gamut_* exported).
 # Each runs the Python suite with h5py's own HDF5 loaded, and with a foreign
@@ -50,27 +50,27 @@ else
   row "core against the system HDF5" "refused at configure: $(grep -m1 -o 'needs HDF5 1.14 or later; found [0-9.]*' "$work/system-configure.log")"
 fi
 
-# HDF5 1.14.6 from source, built twice: static and position independent
+# HDF5 2.2.0 from source, built twice: static and position independent
 # (for GAMUT_STATIC_HDF5), and shared (the baseline).
-tarball="$work/hdf5-1.14.6.tar.gz"
+tarball="$work/hdf5-2.2.0.tar.gz"
 if [ ! -d "$work/hdf5-static" ]; then
   curl -sSfL -o "$tarball" \
-    https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.6/hdf5-1.14.6.tar.gz &&
-  row "HDF5 source" "1.14.6, sha256 $(sha256sum "$tarball" | cut -d' ' -f1)" &&
+    https://github.com/HDFGroup/hdf5/releases/download/2.2.0/hdf5-2.2.0.tar.gz &&
+  row "HDF5 source" "2.2.0, sha256 $(sha256sum "$tarball" | cut -d' ' -f1)" &&
   tar -xzf "$tarball" -C "$work" || row "HDF5 source" "FAIL"
   for kind in static shared; do
     if [ $kind = static ]; then libs="-DBUILD_SHARED_LIBS=OFF"; else libs="-DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF"; fi
-    cmake -S "$work/hdf5-1.14.6" -B "$work/hdf5-build-$kind" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    cmake -S "$work/hdf5-2.2.0" -B "$work/hdf5-build-$kind" -G Ninja -DCMAKE_BUILD_TYPE=Release \
           $libs -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_TESTING=OFF \
           -DHDF5_BUILD_TOOLS=OFF -DHDF5_BUILD_EXAMPLES=OFF -DHDF5_BUILD_CPP_LIB=OFF \
-          -DHDF5_BUILD_FORTRAN=OFF -DHDF5_BUILD_HL_LIB=ON -DHDF5_ENABLE_Z_LIB_SUPPORT=ON \
+          -DHDF5_BUILD_FORTRAN=OFF -DHDF5_BUILD_HL_LIB=ON -DHDF5_ENABLE_ZLIB_SUPPORT=ON -DHDF5_USE_GNU_DIRS=OFF \
           -DCMAKE_INSTALL_PREFIX="$work/hdf5-$kind" > "$work/hdf5-$kind-configure.log" 2>&1 &&
     cmake --build "$work/hdf5-build-$kind" -j2 > "$work/hdf5-$kind-build.log" 2>&1 &&
     cmake --install "$work/hdf5-build-$kind" > "$work/hdf5-$kind-install.log" 2>&1 ||
-    row "HDF5 1.14.6 $kind build" "FAIL (see hdf5-$kind-*.log)"
+    row "HDF5 2.2.0 $kind build" "FAIL (see hdf5-$kind-*.log)"
   done
 fi
-# The core linked to the shared HDF5 1.14.6.
+# The core linked to the shared HDF5 2.2.0.
 cmake -S "$core" -B "$work/shared" -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DGAMUT_BUILD_TESTS=OFF -DHDF5_ROOT="$work/hdf5-shared" > "$work/shared-configure.log" 2>&1 &&
   cmake --build "$work/shared" -j2 > "$work/shared-build.log" 2>&1 ||
