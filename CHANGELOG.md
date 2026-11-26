@@ -11,7 +11,12 @@ The file format (`gamut/1`) and the C interface are unchanged.
   written as before, because Gamut sets HDF5's format bounds itself: Gamut
   2.3.0 and other readers on HDF5 1.14 read them, and this release reads
   theirs. Building HDF5 with `tools/build_deps.sh` now needs CMake 3.26 or
-  later.
+  later. `licenses/hdf5.txt` is HDF5 2.2.0's licence, which carries the
+  Lawrence Berkeley and Lawrence Livermore notices itself, so
+  `licenses/hdf5-lbnl.txt` is gone.
+- Julia: GamutFile is not yet in Julia's General registry. Add it from the
+  release's tag:
+  `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v2.3.1")`.
 - The core builds and runs against HDF5 2 as well as 1.14 (HDF5 2 reads a
   stored chunk with `H5Dread_chunk2`; a chunk whose stored size differs from
   its index is E23).
