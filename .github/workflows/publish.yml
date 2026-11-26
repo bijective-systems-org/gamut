@@ -364,10 +364,11 @@ jobs:
 
   julia:
     name: register the Julia package
-    # Not for v2.3.1: GamutFile's first registration (General pull request
-    # 176172) waits for 2.3.2, whose GamutFile takes its core from Gamut_jll.
-    # 2.3.2 removes this condition.
-    if: github.event_name == 'push' && github.ref_type == 'tag' && github.ref_name != 'v2.3.1'
+    # Off for now: GamutFile's first registration (General pull request
+    # 176172) waits for the release whose GamutFile takes its core from
+    # Gamut_jll. That release turns this job back on, with the condition
+    #   github.event_name == 'push' && github.ref_type == 'tag'
+    if: false
     # Once the release is on PyPI and its files are attached, so a Julia
     # user never meets a version whose core is not out yet.
     needs: [publish, release]
