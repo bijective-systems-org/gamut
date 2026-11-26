@@ -2,12 +2,6 @@
 
 ## Unreleased
 
-- The core builds and runs against HDF5 2 as well as 1.14 (HDF5 2 reads a
-  stored chunk with `H5Dread_chunk2`; a chunk whose stored size differs from
-  its index is E23).
-- HDF5's own error printing stays off on every thread that calls the core,
-  not only the one that loaded it, so a thread-safe HDF5 (such as Julia's
-  `HDF5_jll`) prints nothing when a call fails.
 - A write that the disk has no room for no longer crashes the process
   (#175). `close()` raised its error and the process then died with SIGSEGV
   while the file's HDF5 ids were released. Each id is now closed with the
@@ -28,6 +22,29 @@
   that later moment, which could remove another file of the same name. The
   error says so when the file could not be removed.
 
+## 2.3.1 (2026-11-26)
+
+The file format (`gamut/1`) and the C interface are unchanged.
+
+- The packages (the Python wheels, the MATLAB toolbox and the release's
+  cores) link HDF5 2.2.0 in place of 1.14.6. It has the fixes for the 27
+  security flaws that the HDF Group's CVE list names in 1.14.6, among them
+  CVE-2025-2308, CVE-2025-2309, CVE-2025-6269 and CVE-2025-44904. Files are
+  written as before, because Gamut sets HDF5's format bounds itself: Gamut
+  2.3.0 and other readers on HDF5 1.14 read them, and this release reads
+  theirs. Building HDF5 with `tools/build_deps.sh` now needs CMake 3.26 or
+  later. `licenses/hdf5.txt` is HDF5 2.2.0's licence, which carries the
+  Lawrence Berkeley and Lawrence Livermore notices itself, so
+  `licenses/hdf5-lbnl.txt` is gone.
+- Julia: GamutFile is not yet in Julia's General registry, as the 2.3.0
+  notes said it would be. Add it from the release's tag:
+  `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v2.3.1")`.
+- The core builds and runs against HDF5 2 as well as 1.14 (HDF5 2 reads a
+  stored chunk with `H5Dread_chunk2`; a chunk whose stored size differs from
+  its index is E23).
+- HDF5's own error printing stays off on every thread that calls the core,
+  not only the one that loaded it, so a thread-safe HDF5 (such as Julia's
+  `HDF5_jll`) prints nothing when a call fails.
 ## 2.3.0 (2026-11-18)
 
 The file format (`gamut/1`) is unchanged: arrays are an addition within

@@ -30,8 +30,8 @@ The specification, the corpus and the core change together.
 ## Building and running the checks
 
 The core needs CMake 3.16 or later, a C++17 compiler and HDF5 1.14 or
-later (or `tools/build_deps.sh` and `-DGAMUT_STATIC_HDF5=ON`, as in
-[installing](docs/install.md)). From the top of a checkout:
+later (or `tools/build_deps.sh`, which needs CMake 3.26 or later, and
+`-DGAMUT_STATIC_HDF5=ON`, as in [installing](docs/install.md)). From the top of a checkout:
 
 ```bash
 cmake -S . -B build -DHDF5_ROOT=/path/to/hdf5

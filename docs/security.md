@@ -88,6 +88,10 @@ returned or was refused. Runs with more copies find the rare one HDF5
 itself cannot meet: in 4200 copies under the sanitizers, seven crashed and
 three hung, each inside HDF5's own code, most while reading a file's
 dimension-scale attributes. Such a hang has been reported to the HDF Group.
+Measured again on 25 November 2026 with HDF5 2.2.0 linked in, on 2100
+copies of 15 files: every read returned or was refused, and validation hung
+on one copy, inside HDF5's read of a dimension-scale attribute. The core
+with 1.14.6 hangs on the same copy.
 
 So for a file nobody vouches for, a separate process is the protection.
 Check it with `gamut validate FILE` (or `gamut info`) in a child process

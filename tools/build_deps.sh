@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the core's two dependencies from source, static and position
-# independent, into one prefix: zlib 1.3.1 and HDF5 1.14.6. Packages link
+# independent, into one prefix: zlib 1.3.1 and HDF5 2.2.0. Packages link
 # them into the core so that it cannot meet another HDF5 in the same process
 # (an h5py's, a host program's); see tests/two_hdf5_linux.sh.
 #
@@ -9,7 +9,7 @@
 # then configure the core with
 #   -DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT=PREFIX -DZLIB_ROOT=PREFIX
 #
-# Needs cmake 3.20 or later and a C compiler; uses Ninja when present.
+# Needs cmake 3.26 or later (HDF5 2 does) and a C compiler; uses Ninja when present.
 # Sources are checked against their published SHA-256 before use.
 # licenses/ holds their licence texts, which a new version may change.
 set -euo pipefail
@@ -73,15 +73,17 @@ fi
 zlib_lib=$prefix/lib/libz.a
 [ -f "$zlib_lib" ] || zlib_lib=$prefix/lib/zlibstatic.lib
 
-if [ ! -f "$prefix/.hdf5-1.14.6" ]; then
-  fetch https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.6/hdf5-1.14.6.tar.gz \
-        hdf5-1.14.6.tar.gz e4defbac30f50d64e1556374aa49e574417c9e72c6b1de7a4ff88c4b1bea6e9b
-  build "$downloads/hdf5-1.14.6" "$downloads/hdf5-build" \
+# HDF5_USE_GNU_DIRS=OFF installs into lib/ on every system, as zlib does
+# (HDF5 2 would otherwise choose lib64/ on some Linux systems).
+if [ ! -f "$prefix/.hdf5-2.2.0" ]; then
+  fetch https://github.com/HDFGroup/hdf5/releases/download/2.2.0/hdf5-2.2.0.tar.gz \
+        hdf5-2.2.0.tar.gz 1a1ab8209b35586fbc1aa279ba76d102130b95badcb20ca329587219112d8c16
+  build "$downloads/hdf5-2.2.0" "$downloads/hdf5-2.2.0-build" \
         -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF -DHDF5_BUILD_TOOLS=OFF \
         -DHDF5_BUILD_EXAMPLES=OFF -DHDF5_BUILD_CPP_LIB=OFF -DHDF5_BUILD_FORTRAN=OFF \
-        -DHDF5_BUILD_JAVA=OFF -DHDF5_BUILD_HL_LIB=ON -DHDF5_ENABLE_Z_LIB_SUPPORT=ON \
-        -DHDF5_ENABLE_SZIP_SUPPORT=OFF -DZLIB_INCLUDE_DIR="$prefix/include" \
+        -DHDF5_BUILD_JAVA=OFF -DHDF5_BUILD_HL_LIB=ON -DHDF5_ENABLE_ZLIB_SUPPORT=ON \
+        -DHDF5_ENABLE_SZIP_SUPPORT=OFF -DHDF5_USE_GNU_DIRS=OFF -DZLIB_INCLUDE_DIR="$prefix/include" \
         -DZLIB_LIBRARY="$zlib_lib"
-  touch "$prefix/.hdf5-1.14.6"
+  touch "$prefix/.hdf5-2.2.0"
 fi
-echo "build_deps: zlib 1.3.1 and HDF5 1.14.6 (static) in $prefix"
+echo "build_deps: zlib 1.3.1 and HDF5 2.2.0 (static) in $prefix"
