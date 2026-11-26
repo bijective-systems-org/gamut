@@ -14,8 +14,8 @@ The file format (`gamut/1`) and the C interface are unchanged.
   later. `licenses/hdf5.txt` is HDF5 2.2.0's licence, which carries the
   Lawrence Berkeley and Lawrence Livermore notices itself, so
   `licenses/hdf5-lbnl.txt` is gone.
-- Julia: GamutFile is not yet in Julia's General registry. Add it from the
-  release's tag:
+- Julia: GamutFile is not yet in Julia's General registry, as the 2.3.0
+  notes said it would be. Add it from the release's tag:
   `Pkg.add(url="https://github.com/bijective-systems-org/gamut", subdir="julia", rev="v2.3.1")`.
 - The core builds and runs against HDF5 2 as well as 1.14 (HDF5 2 reads a
   stored chunk with `H5Dread_chunk2`; a chunk whose stored size differs from
