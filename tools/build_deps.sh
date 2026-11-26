@@ -78,7 +78,7 @@ zlib_lib=$prefix/lib/libz.a
 if [ ! -f "$prefix/.hdf5-2.2.0" ]; then
   fetch https://github.com/HDFGroup/hdf5/releases/download/2.2.0/hdf5-2.2.0.tar.gz \
         hdf5-2.2.0.tar.gz 1a1ab8209b35586fbc1aa279ba76d102130b95badcb20ca329587219112d8c16
-  build "$downloads/hdf5-2.2.0" "$downloads/hdf5-build" \
+  build "$downloads/hdf5-2.2.0" "$downloads/hdf5-2.2.0-build" \
         -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF -DHDF5_BUILD_TOOLS=OFF \
         -DHDF5_BUILD_EXAMPLES=OFF -DHDF5_BUILD_CPP_LIB=OFF -DHDF5_BUILD_FORTRAN=OFF \
         -DHDF5_BUILD_JAVA=OFF -DHDF5_BUILD_HL_LIB=ON -DHDF5_ENABLE_ZLIB_SUPPORT=ON \

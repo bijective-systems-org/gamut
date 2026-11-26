@@ -53,30 +53,30 @@ fi
 # HDF5 2.2.0 from source, built twice: static and position independent
 # (for GAMUT_STATIC_HDF5), and shared (the baseline).
 tarball="$work/hdf5-2.2.0.tar.gz"
-if [ ! -d "$work/hdf5-static" ]; then
+if [ ! -d "$work/hdf5-2.2.0-static" ]; then
   curl -sSfL -o "$tarball" \
     https://github.com/HDFGroup/hdf5/releases/download/2.2.0/hdf5-2.2.0.tar.gz &&
   row "HDF5 source" "2.2.0, sha256 $(sha256sum "$tarball" | cut -d' ' -f1)" &&
   tar -xzf "$tarball" -C "$work" || row "HDF5 source" "FAIL"
   for kind in static shared; do
     if [ $kind = static ]; then libs="-DBUILD_SHARED_LIBS=OFF"; else libs="-DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF"; fi
-    cmake -S "$work/hdf5-2.2.0" -B "$work/hdf5-build-$kind" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    cmake -S "$work/hdf5-2.2.0" -B "$work/hdf5-2.2.0-build-$kind" -G Ninja -DCMAKE_BUILD_TYPE=Release \
           $libs -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_TESTING=OFF \
           -DHDF5_BUILD_TOOLS=OFF -DHDF5_BUILD_EXAMPLES=OFF -DHDF5_BUILD_CPP_LIB=OFF \
           -DHDF5_BUILD_FORTRAN=OFF -DHDF5_BUILD_HL_LIB=ON -DHDF5_ENABLE_ZLIB_SUPPORT=ON -DHDF5_USE_GNU_DIRS=OFF \
-          -DCMAKE_INSTALL_PREFIX="$work/hdf5-$kind" > "$work/hdf5-$kind-configure.log" 2>&1 &&
-    cmake --build "$work/hdf5-build-$kind" -j2 > "$work/hdf5-$kind-build.log" 2>&1 &&
-    cmake --install "$work/hdf5-build-$kind" > "$work/hdf5-$kind-install.log" 2>&1 ||
+          -DCMAKE_INSTALL_PREFIX="$work/hdf5-2.2.0-$kind" > "$work/hdf5-$kind-configure.log" 2>&1 &&
+    cmake --build "$work/hdf5-2.2.0-build-$kind" -j2 > "$work/hdf5-$kind-build.log" 2>&1 &&
+    cmake --install "$work/hdf5-2.2.0-build-$kind" > "$work/hdf5-$kind-install.log" 2>&1 ||
     row "HDF5 2.2.0 $kind build" "FAIL (see hdf5-$kind-*.log)"
   done
 fi
 # The core linked to the shared HDF5 2.2.0.
 cmake -S "$core" -B "$work/shared" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-      -DGAMUT_BUILD_TESTS=OFF -DHDF5_ROOT="$work/hdf5-shared" > "$work/shared-configure.log" 2>&1 &&
+      -DGAMUT_BUILD_TESTS=OFF -DHDF5_ROOT="$work/hdf5-2.2.0-shared" > "$work/shared-configure.log" 2>&1 &&
   cmake --build "$work/shared" -j2 > "$work/shared-build.log" 2>&1 ||
   row "shared build" "FAIL (see shared-build.log)"
 cmake -S "$core" -B "$work/static" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-      -DGAMUT_BUILD_TESTS=OFF -DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT="$work/hdf5-static" \
+      -DGAMUT_BUILD_TESTS=OFF -DGAMUT_STATIC_HDF5=ON -DHDF5_ROOT="$work/hdf5-2.2.0-static" \
       > "$work/static-configure.log" 2>&1 &&
   cmake --build "$work/static" -j2 > "$work/static-build.log" 2>&1 ||
   row "static build" "FAIL (see static-build.log)"
