@@ -42,6 +42,9 @@ system_version=$(dpkg-query -W -f '${Version}' 'libhdf5-[0-9]*' 2>/dev/null | he
 row "h5py's HDF5" "$h5py_version, \`$(basename "$h5py_lib")\`"
 row "system HDF5" "$system_version, \`$(basename "$system_lib")\`"
 
+# The core's builds start afresh each run: a CMake cache keeps the HDF5 it
+# found first, whatever HDF5_ROOT later says.
+rm -rf "$work/system" "$work/shared" "$work/static"
 # The system's HDF5 is older than the core needs: refused at configure.
 if cmake -S "$core" -B "$work/system" -G Ninja -DGAMUT_BUILD_TESTS=OFF \
      > "$work/system-configure.log" 2>&1; then
