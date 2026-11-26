@@ -11,8 +11,11 @@ The file format (`gamut/1`) and the C interface are unchanged.
   close the file, adding runs, flushing and closing stop with "cannot write
   the file (no space left on the device?)" and say what became of it: a new
   file is removed, and a file being appended to is unchanged, with the copy
-  the runs were written to removed. The file is released at that point;
-  every later call on it repeats the error.
+  the runs were written to removed. The writer lets go of the file at
+  that point, and every later call on it repeats the error. HDF5 does not
+  free a file whose last close failed: about 0.7 MB of its metadata cache
+  stays allocated until the process ends, once for each file that fails
+  this way.
 - A new file that cannot be written at all (a disk with nothing free) is
   reported as that, with the system's reason or "no space left on the
   device?", and no empty file is left at its path. It was reported as "an

@@ -230,7 +230,10 @@ class File {
   // True once HDF5 could not close a dataset or flush or close the file:
   // what the file holds is then unknown and it cannot be finished. It is
   // not flushed and no link is removed from it afterwards (HDF5 walks the
-  // open ids in both); all that is left is to release it.
+  // open ids in both); all that is left is to release it. HDF5 frees
+  // such a file's handle and not its metadata cache, about 0.7 MB that
+  // stays allocated until the process ends; it offers no call that frees
+  // a cache it could not write out.
   bool failed() const { return failed_; }
 
   // The kind of the last link of `path`, stopping at the first link that
