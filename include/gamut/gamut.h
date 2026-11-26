@@ -182,7 +182,11 @@ GAMUT_API int gamut_set_private(gamut_file* f, const char* name, const void* byt
 /* Closes a file opened by any call and frees the handle; writes what a
  * writer holds.  f may be NULL.  When a writer's close is refused (a model
  * file without a model, a shared mesh never set) the handle stays open:
- * fix what the error names and close again, or gamut_abandon. */
+ * fix what the error names and close again, or gamut_abandon.  When the
+ * file cannot be written out (no space left on the device), adding rows,
+ * flushing and closing fail and the file is given up: a new file is
+ * removed, a file being appended to is unchanged.  The handle is then
+ * good only for gamut_abandon. */
 GAMUT_API int gamut_close(gamut_file* f, gamut_error* err);
 /* Gives up on a file and frees the handle without finishing it: nothing
  * more is written.  remove_file (non-zero) deletes a file this handle

@@ -8,6 +8,15 @@
 - HDF5's own error printing stays off on every thread that calls the core,
   not only the one that loaded it, so a thread-safe HDF5 (such as Julia's
   `HDF5_jll`) prints nothing when a call fails.
+- A write that the disk has no room for no longer crashes the process
+  (#175). `close()` raised its error and the process then died with SIGSEGV
+  while the file's HDF5 ids were released. Each id is now closed with the
+  close call of its type. When HDF5 cannot close a dataset or flush or
+  close the file, adding runs, flushing and closing stop with "cannot write
+  the file (no space left on the device?)" and say what became of it: a new
+  file is removed, and a file being appended to is unchanged, with the copy
+  the runs were written to removed. The file is released at that point;
+  every later call on it repeats the error.
 
 ## 2.3.0 (2026-11-18)
 

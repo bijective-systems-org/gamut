@@ -522,6 +522,7 @@ Writer::~Writer() {
 }
 
 void Writer::need_open() const {
+  need(failure_.empty(), "", failure_);
   need(!closed_, "", "the file is closed");
   need(!finished_, "", "the file is finished and waits to replace the original; close it again");
 }
@@ -1334,7 +1335,51 @@ void Writer::check_relations() const {
   }
 }
 
+void Writer::give_up() {
+  closed_ = true;
+  pending_.clear();
+  file_.reset();
+  session_.reset();   // an append's copy goes and the file stays as it was
+  failure_ = "cannot write the file (no space left on the device?); ";
+  if (created_) {
+    std::remove(path_.c_str());
+    failure_ += "the incomplete \"" + path_ + "\" was removed";
+  } else {
+    failure_ += "\"" + path_ + "\" is unchanged";
+  }
+  throw Error("", failure_);
+}
+
+template <class Step>
+std::int64_t Writer::writing(Step step) {
+  need(failure_.empty(), "", failure_);
+  std::int64_t result = 0;
+  try {
+    result = step();
+  } catch (...) {
+    // A failed file's own error names one HDF5 call, and says nothing of
+    // what became of the file.
+    if (file_ && file_->failed()) give_up();
+    throw;
+  }
+  if (file_ && file_->failed()) give_up();
+  return result;
+}
+
 std::int64_t Writer::add_runs(const Batch& batch, bool check_only) {
+  return writing([&] { return commit(batch, check_only); });
+}
+
+void Writer::flush() {
+  writing([&] { write_pending(); return 0; });
+}
+
+void Writer::close() {
+  if (closed_ && failure_.empty()) return;
+  writing([&] { finish(); return 0; });
+}
+
+std::int64_t Writer::commit(const Batch& batch, bool check_only) {
   need_open();
   need(!model_, "E16", "a model file has no runs; evaluate it to get a data file");
   // Before the first rows, the declarations are resolved against this batch
@@ -1897,7 +1942,7 @@ void Writer::add_model(const std::string& id, const std::string& type,
   schema_.models.push_back(m);
 }
 
-void Writer::flush() {
+void Writer::write_pending() {
   if (closed_ || !file_) return;
   File& f = *file_;
   for (auto& kv : pending_) {
@@ -1962,8 +2007,7 @@ void Writer::abandon(bool remove) {
   if (remove && created_) std::remove(path_.c_str());
 }
 
-void Writer::close() {
-  if (closed_) return;
+void Writer::finish() {
   if (finished_) {   // a rename that failed before: tried again
     const std::string note = session_->publish();
     session_.reset();
@@ -1999,6 +2043,7 @@ void Writer::close() {
   flush();
   write_cf_coordinates();
   file_->flush();
+  file_->close();
   file_.reset();
   std::string note;
   if (session_) {

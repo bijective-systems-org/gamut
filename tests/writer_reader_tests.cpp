@@ -7,6 +7,9 @@
 #include <cstring>
 #include <filesystem>
 #if !defined(_WIN32)
+#include <signal.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #endif
 #include <fstream>
@@ -1571,6 +1574,110 @@ std::string refusal(const std::function<void()>& f) {
   return "";
 }
 
+#if !defined(_WIN32)
+// One run of a parameter and an array of 4096 values that do not compress.
+void add_wide_run(Writer& w, std::uint64_t& seed) {
+  std::vector<double> values(4096);
+  for (double& v : values) {
+    seed = seed * 6364136223846793005ULL + 1442695040888963407ULL;
+    v = static_cast<double>(seed >> 11);
+  }
+  Batch b;
+  b.runs = 1;
+  b.values["x"] = f64({1.0});
+  b.values["w"] = f64(values);
+  w.add_runs(b);
+}
+
+// In a child process that may not grow a file past `limit` bytes, as on a
+// full disk: creates `path`, or appends to it, with 40 runs of 32 KB each.
+// Returns the child's wait status. The child leaves with 0 when the file was
+// written, 3 after an Error that says what became of the file, 4 after an
+// Error that does not, and 5 after anything else thrown.
+int write_under_limit(const std::string& path, bool append, rlim_t limit) {
+  std::fflush(stdout);
+  std::fflush(stderr);
+  const pid_t child = fork();
+  if (child == 0) {
+    signal(SIGXFSZ, SIG_IGN);   // a write past the limit fails with EFBIG
+    const struct rlimit rl = {limit, limit};
+    if (setrlimit(RLIMIT_FSIZE, &rl) != 0) std::_Exit(6);
+    int code = 0;
+    try {
+      std::unique_ptr<Writer> w;
+      try {
+        if (append) {
+          w = Writer::open_append(path);
+        } else {
+          w = Writer::create(path, "tests", "", "fixed");
+          w->declare_parameter(param("x", "condition", "1"));
+          w->declare_array(array("w", "condition", "1", 4096));
+        }
+        std::uint64_t seed = 1;
+        for (int i = 0; i < 40; ++i) add_wide_run(*w, seed);
+        w->close();
+      } catch (const gamut_core::Error& e) {
+        const std::string said = e.what();
+        const bool tells = append ? said.find("is unchanged") != std::string::npos
+                                  : said.find("was removed") != std::string::npos;
+        code = tells ? 3 : 4;
+        if (!tells) std::fprintf(stderr, "limit %lld: %s\n", static_cast<long long>(limit), e.what());
+      }
+      // The writer goes here, as a program that caught the error would let it.
+    } catch (...) {
+      code = 5;
+    }
+    std::exit(code);   // HDF5 releases what it still holds on the way out
+  }
+  int status = -1;
+  if (child > 0) waitpid(child, &status, 0);
+  return status;
+}
+
+// A write the disk has no room for is refused with an Error, the process
+// goes on, and the destination is as it was: no new file, or the file
+// appended to with its bytes unchanged and nothing left beside it.
+void test_write_without_room() {
+  const std::string path = "wr_no_room.gamut";
+  const std::vector<rlim_t> limits = {1 << 10, 4 << 10, 16 << 10, 64 << 10, 256 << 10, 1 << 20, 8 << 20};
+  for (const rlim_t limit : limits) {
+    const bool room = limit >= (8 << 20);   // the whole file is about 1.3 MB
+    std::remove(path.c_str());
+    int status = write_under_limit(path, false, limit);
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status) == (room ? 0 : 3));
+    CHECK(std::filesystem::exists(path) == room);
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != (room ? 0 : 3)) {
+      std::fprintf(stderr, "new file, limit %lld: wait status 0x%x\n",
+                   static_cast<long long>(limit), static_cast<unsigned>(status));
+    }
+
+    std::remove(path.c_str());
+    {
+      auto w = Writer::create(path, "tests", "", "fixed");
+      w->declare_parameter(param("x", "condition", "1"));
+      w->declare_array(array("w", "condition", "1", 4096));
+      std::uint64_t seed = 7;
+      add_wide_run(*w, seed);
+      w->close();
+    }
+    const std::string before = file_bytes(path);
+    status = write_under_limit(path, true, limit);
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status) == (room ? 0 : 3));
+    CHECK(beside(path).empty());
+    if (room) {
+      CHECK(Reader::open(path)->schema().rows == 41);
+    } else {
+      CHECK(file_bytes(path) == before);
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != (room ? 0 : 3)) {
+      std::fprintf(stderr, "append, limit %lld: wait status 0x%x\n",
+                   static_cast<long long>(limit), static_cast<unsigned>(status));
+    }
+  }
+  std::remove(path.c_str());
+}
+#endif
+
 void test_append_many() {
   xy_table("am_dst.gamut", {1, 2});
   xy_table("am_a.gamut", {10});
@@ -2080,6 +2187,9 @@ int main() {
       {"growable", test_append_needs_growable_columns},
       {"append_sessions", test_append_sessions},
       {"append_many", test_append_many},
+#if !defined(_WIN32)
+      {"no_room", test_write_without_room},
+#endif
       {"rank", test_threaded_read_of_fewer_axes},
       {"read_limit", test_read_limit_before_allocation},
       {"short_chunk", test_short_unfiltered_chunk},

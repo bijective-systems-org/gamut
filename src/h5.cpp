@@ -51,8 +51,8 @@ std::string parent_of(const std::string& path) {
   return path.substr(0, at);
 }
 
-Id open_object(hid_t file, const std::string& path) {
-  Id id(H5Oopen(file, path.c_str(), H5P_DEFAULT));
+Id open_object(hid_t file, const std::string& path, bool* failed) {
+  Id id(H5Oopen(file, path.c_str(), H5P_DEFAULT), failed);
   need(id.valid(), "cannot open \"" + path + "\"");
   return id;
 }
@@ -252,11 +252,26 @@ std::size_t checked_product(const std::string& path,
   return n;
 }
 
-void Id::close() {
-  if (id_ >= 0) {
-    H5Idec_ref(id_);
-    id_ = H5I_INVALID_HID;
+// Each type's own close call, because H5Idec_ref keeps an id whose close
+// failed in HDF5's table although the object behind it is freed, and HDF5
+// reads that object the next time it walks its open ids. H5Dclose removes
+// the id whether or not the close succeeds.
+bool Id::close() {
+  if (id_ < 0) return true;
+  herr_t status;
+  switch (H5Iget_type(id_)) {
+    case H5I_FILE: status = H5Fclose(id_); break;
+    case H5I_GROUP: status = H5Gclose(id_); break;
+    case H5I_DATATYPE: status = H5Tclose(id_); break;
+    case H5I_DATASPACE: status = H5Sclose(id_); break;
+    case H5I_DATASET: status = H5Dclose(id_); break;
+    case H5I_ATTR: status = H5Aclose(id_); break;
+    case H5I_GENPROP_LST: status = H5Pclose(id_); break;
+    default: status = H5Idec_ref(id_) < 0 ? -1 : 0; break;
   }
+  id_ = H5I_INVALID_HID;
+  if (status < 0 && failed_ != nullptr) *failed_ = true;
+  return status >= 0;
 }
 
 const char* link_kind_name(LinkKind kind) {
@@ -427,8 +442,20 @@ File File::create(const std::string& path) {
   return f;
 }
 
+void File::need_not_failed() const {
+  need(!failed_, "an earlier write to the file failed");
+}
+
 void File::flush() {
-  need(H5Fflush(id_.get(), H5F_SCOPE_GLOBAL) >= 0, "cannot flush the file");
+  need_not_failed();
+  failed_ = H5Fflush(id_.get(), H5F_SCOPE_GLOBAL) < 0;
+  need(!failed_, "cannot flush the file");
+}
+
+void File::close() {
+  need_not_failed();
+  failed_ = !id_.close();
+  need(!failed_, "cannot close the file");
 }
 
 LinkKind File::link_kind(const std::string& path) const {
@@ -562,7 +589,7 @@ std::vector<RawAttr> attributes_of(hid_t object_id) {
 
 std::vector<RawAttr> File::attributes(const std::string& path) const {
   if (link_kind(path) != LinkKind::Hard) return {};
-  return attributes_of(open_object(id_.get(), path).get());
+  return attributes_of(open_object(id_.get(), path, &failed_).get());
 }
 
 
@@ -585,7 +612,7 @@ DsetInfo& with_shape(hid_t dset, DsetInfo& info) {
 }  // namespace
 
 Id File::open_dataset(const std::string& path) const {
-  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
+  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT), &failed_);
   need(dset.valid(), "cannot open \"" + path + "\"");
   // How a dataset stores its values is fixed when it is created, so each
   // is checked once per open file.
@@ -598,7 +625,7 @@ Id File::open_dataset(const std::string& path) const {
 }
 
 std::string File::stored_outside(const std::string& path) const {
-  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT));
+  Id dset(H5Dopen2(id_.get(), path.c_str(), H5P_DEFAULT), &failed_);
   need(dset.valid(), "cannot open \"" + path + "\"");
   return outside_storage(dset.get(), path);
 }
@@ -613,7 +640,7 @@ DsetInfo File::dataset_shape(const std::string& path) const {
 
 std::pair<std::vector<RawAttr>, DsetInfo> File::inspect(const std::string& path) const {
   if (link_kind(path) != LinkKind::Hard) return {};
-  Id object = open_object(id_.get(), path);
+  Id object = open_object(id_.get(), path, &failed_);
   DsetInfo info;
   if (H5Iget_type(object.get()) == H5I_DATASET) {
     const std::string outside = outside_storage(object.get(), path);
@@ -1025,7 +1052,7 @@ void File::make_group(const std::string& path) {
 void File::write_raw_string_attr(const std::string& path,
                                  const std::string& name,
                                  const std::string& bytes) {
-  Id object = open_object(id_.get(), path);
+  Id object = open_object(id_.get(), path, &failed_);
   const std::size_t size = bytes.empty() ? 1 : bytes.size();
   Id type = string_type(size);
   Id space(H5Screate(H5S_SCALAR));
@@ -1044,7 +1071,7 @@ void File::write_attr(const std::string& path, const std::string& name,
     write_raw_string_attr(path, name, value.as_text());
     return;
   }
-  Id object = open_object(id_.get(), path);
+  Id object = open_object(id_.get(), path, &failed_);
   Id space(H5Screate(H5S_SCALAR));
   hid_t ftype = H5T_STD_I64LE;
   hid_t mtype = H5T_NATIVE_INT64;
@@ -1079,7 +1106,7 @@ void File::write_attr(const std::string& path, const std::string& name,
 
 void File::replace_attr(const std::string& path, const std::string& name,
                         const AttrValue& value) {
-  Id object = open_object(id_.get(), path);
+  Id object = open_object(id_.get(), path, &failed_);
   const htri_t exists = H5Aexists(object.get(), name.c_str());
   need(exists >= 0, "cannot inspect the attribute \"" + name + "\"");
   if (exists == 0) {
@@ -1230,7 +1257,7 @@ void File::create_dataset(const std::string& path, DType dtype,
     ftype = file_type(dtype);
   }
   Id dset(H5Dcreate2(id_.get(), path.c_str(), ftype, space.get(), H5P_DEFAULT,
-                     dcpl.get(), H5P_DEFAULT));
+                     dcpl.get(), H5P_DEFAULT), &failed_);
   need(dset.valid(), "cannot create the dataset \"" + path + "\"");
   forget(path);
 }
@@ -1320,7 +1347,7 @@ void File::make_scale(const std::string& path, hsize_t length, bool unlimited) {
   H5Pset_chunk(dcpl.get(), 1, &chunk);
   H5Pset_fill_time(dcpl.get(), H5D_FILL_TIME_ALLOC);
   Id dset(H5Dcreate2(id_.get(), path.c_str(), H5T_IEEE_F32BE, space.get(),
-                     H5P_DEFAULT, dcpl.get(), H5P_DEFAULT));
+                     H5P_DEFAULT, dcpl.get(), H5P_DEFAULT), &failed_);
   need(dset.valid(), "cannot create the dimension scale \"" + path + "\"");
   forget(path);
   const std::string name = scale_name_attribute(length);
@@ -1457,6 +1484,7 @@ void File::forget(const std::string& path) {
 }
 
 void File::remove_link(const std::string& path) {
+  need_not_failed();
   need(H5Ldelete(id_.get(), path.c_str(), H5P_DEFAULT) >= 0,
        "cannot remove \"" + path + "\"");
   object_index_built_ = false;
