@@ -143,6 +143,12 @@ class Writer {
 
   // Writes every staged partial chunk.  Reading through the same handle
   // flushes first.  When appending, the runs reach the file on close.
+  //
+  // add_runs, flush and close write to the disk.  When one of them finds
+  // that HDF5 could not write the file out (a full disk is the usual
+  // reason), the file cannot be finished: the writer releases it, removes
+  // the new file or the copy an append was writing, and the error says
+  // which.  Every later call but abandon repeats that error.
   void flush();
   void close();
   // A fingerprint of a geometry as it would be stored: points at the
@@ -162,6 +168,14 @@ class Writer {
                                                std::int64_t on_disk);
 
   void need_open() const;
+  std::int64_t commit(const Batch& batch, bool check_only);
+  void write_pending();
+  void finish();
+  // Runs a step that writes to the disk, and gives the file up if HDF5
+  // could not write it out meanwhile.
+  template <class Step>
+  std::int64_t writing(Step step);
+  [[noreturn]] void give_up();
   void need_no_runs(const std::string& what) const;
   void check_new_root_name(const std::string& name) const;
   void ensure_datasets(const Batch* first);
@@ -191,6 +205,7 @@ class Writer {
   Schema schema_;
   FilterPipeline filters_ = default_pipeline();
   bool closed_ = false;
+  std::string failure_;                      // set once the file was given up
   bool model_ = false;
   bool created_ = false;
   bool datasets_ready_ = false;

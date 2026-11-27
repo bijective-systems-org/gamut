@@ -27,18 +27,22 @@ namespace internal {
 // Turns off HDF5's printing of its error stack on the calling thread.
 void quiet_hdf5();
 
-// An HDF5 identifier that closes itself.
+// An HDF5 identifier that closes itself. A close can fail: closing a
+// dataset writes the chunks HDF5 still holds for it, which a full disk
+// refuses. `failed`, when given, is set to true if this id's close fails;
+// it must outlive the id.
 class Id {
  public:
   Id() : id_(H5I_INVALID_HID) {}
-  explicit Id(hid_t id) : id_(id) {}
+  explicit Id(hid_t id, bool* failed = nullptr) : id_(id), failed_(failed) {}
   Id(const Id&) = delete;
   Id& operator=(const Id&) = delete;
-  Id(Id&& o) noexcept : id_(o.id_) { o.id_ = H5I_INVALID_HID; }
+  Id(Id&& o) noexcept : id_(o.id_), failed_(o.failed_) { o.id_ = H5I_INVALID_HID; }
   Id& operator=(Id&& o) noexcept {
     if (this != &o) {
       close();
       id_ = o.id_;
+      failed_ = o.failed_;
       o.id_ = H5I_INVALID_HID;
     }
     return *this;
@@ -47,10 +51,13 @@ class Id {
 
   hid_t get() const { return id_; }
   bool valid() const { return id_ >= 0; }
-  void close();
+  // Releases the id with the close call of its type; false when that call
+  // failed. The id is gone either way.
+  bool close();
 
  private:
   hid_t id_;
+  bool* failed_ = nullptr;
 };
 
 // Every count and length below comes out of the file, so each one is
@@ -217,7 +224,18 @@ class File {
   static File create(const std::string& path);
 
   hid_t get() const { return id_.get(); }
+  // Both refuse a file that has failed, and a failure of either makes it one.
   void flush();
+  void close();
+  // True once HDF5 could not close a dataset or flush or close the file:
+  // what the file holds is then unknown and it cannot be finished. It is
+  // not flushed and no link is removed from it afterwards (HDF5 walks the
+  // open ids in both); all that is left is to release it. HDF5 frees
+  // such a file's handle and not its metadata cache, which stays
+  // allocated until the process ends: about 0.7 MB for a small file, more
+  // for a file with many objects (the cache holds up to 32 MB by default).
+  // HDF5 offers no call that frees a cache it could not write out.
+  bool failed() const { return failed_; }
 
   // The kind of the last link of `path`, stopping at the first link that
   // is not hard, so nothing below a soft or external link is touched.
@@ -323,13 +341,19 @@ class File {
                      const std::vector<Selection>& sel, void* out, std::size_t out_bytes) const;
   std::string dataset_path(hid_t object) const;
 
+  void need_not_failed() const;
+
   Id id_;
+  mutable bool failed_ = false;
   mutable ChunkStore chunks_;
   mutable std::set<std::string> inside_;   // datasets checked to hold their own values
   mutable std::map<std::string, std::string> object_paths_;
   mutable bool object_index_built_ = false;
 };
 
+// Removes the file at `path`, one this process created and could not
+// finish, and says what became of it, for the error that reports the write.
+std::string removed(const std::string& path);
 std::string scale_name_attribute(hsize_t length);
 FilterPipeline pipeline_of(const DsetInfo& info);
 Id string_type(std::size_t size);

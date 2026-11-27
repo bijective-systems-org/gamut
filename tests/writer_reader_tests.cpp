@@ -6,7 +6,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
 #if !defined(_WIN32)
+#include <signal.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #endif
 #include <fstream>
@@ -1571,6 +1577,239 @@ std::string refusal(const std::function<void()>& f) {
   return "";
 }
 
+#if !defined(_WIN32)
+// One run of a parameter and an array of 4096 values that do not compress.
+void add_wide_run(Writer& w, std::uint64_t& seed) {
+  std::vector<double> values(4096);
+  for (double& v : values) {
+    seed = seed * 6364136223846793005ULL + 1442695040888963407ULL;
+    v = static_cast<double>(seed >> 11);
+  }
+  Batch b;
+  b.runs = 1;
+  b.values["x"] = f64({1.0});
+  b.values["w"] = f64(values);
+  w.add_runs(b);
+}
+
+// The tests below each run a writer that fails in a process of its own:
+// this program started again with the arguments `--child NAME ARGS`.
+// HDF5 cannot free a file whose last close failed: its metadata cache stays
+// allocated (about 0.7 MB for these files) until the process ends. A leak
+// checker run on these children is therefore told to pass over memory
+// allocated inside HDF5, and only there; in every other process of this
+// program it reports all of it.
+// This program's file, asked of the system: the name it was started by may
+// have been found on PATH. Empty where there is no way to ask.
+std::string this_program() {
+#if defined(__APPLE__)
+  std::uint32_t size = 0;
+  _NSGetExecutablePath(nullptr, &size);
+  std::string path(size, '\0');
+  if (_NSGetExecutablePath(path.data(), &size) != 0) return std::string();
+  path.resize(std::strlen(path.c_str()));
+  return path;
+#else
+  std::error_code ec;
+  const std::filesystem::path path = std::filesystem::read_symlink("/proc/self/exe", ec);
+  return ec ? std::string() : path.string();
+#endif
+}
+
+extern "C" char** environ;
+
+int run_child(const std::vector<std::string>& args) {
+  const std::string program = this_program();
+  const std::string rules = std::filesystem::absolute("wr_child_leaks.supp").string();
+  std::ofstream(rules) << "leak:^H5\n";
+  // The child's arguments and environment are made before the fork: between
+  // fork and exec a process may call only what is safe in a signal handler.
+  std::vector<std::string> all = {program, "--child"};
+  all.insert(all.end(), args.begin(), args.end());
+  std::vector<char*> argv;
+  for (std::string& a : all) argv.push_back(a.data());
+  argv.push_back(nullptr);
+  const char* given = std::getenv("LSAN_OPTIONS");
+  std::string options = std::string("LSAN_OPTIONS=") + (given ? std::string(given) + ":" : "") +
+                        "suppressions=" + rules + ":print_suppressions=0";
+  std::vector<char*> envp;
+  for (char** e = environ; *e != nullptr; ++e) {
+    if (std::strncmp(*e, "LSAN_OPTIONS=", 13) != 0) envp.push_back(*e);
+  }
+  envp.push_back(options.data());
+  envp.push_back(nullptr);
+  std::fflush(stdout);
+  std::fflush(stderr);
+  const pid_t child = fork();
+  if (child == 0) {
+    execve(program.c_str(), argv.data(), envp.data());
+    _exit(7);
+  }
+  int status = -1;
+  if (child > 0) waitpid(child, &status, 0);
+  std::remove(rules.c_str());
+  return status;
+}
+
+// A process may not grow a file past `limit` bytes, as on a full disk.
+void limit_file_size(rlim_t limit) {
+  signal(SIGXFSZ, SIG_IGN);   // a write past the limit fails with EFBIG
+  const struct rlimit rl = {limit, limit};
+  if (setrlimit(RLIMIT_FSIZE, &rl) != 0) std::_Exit(6);
+}
+
+// The child `write`: under a limit, creates `path`, or appends to it, with
+// 40 runs of 32 KB each. Leaves with 0 when the file was written, 3 after
+// an Error that says what became of the file, 4 after an Error that does
+// not, and 5 after anything else thrown.
+int child_write(const std::string& path, bool append, rlim_t limit) {
+  limit_file_size(limit);
+  int code = 0;
+  try {
+    std::unique_ptr<Writer> w;
+    try {
+      if (append) {
+        w = Writer::open_append(path);
+      } else {
+        w = Writer::create(path, "tests", "", "fixed");
+        w->declare_parameter(param("x", "condition", "1"));
+        w->declare_array(array("w", "condition", "1", 4096));
+      }
+      std::uint64_t seed = 1;
+      for (int i = 0; i < 40; ++i) add_wide_run(*w, seed);
+      w->close();
+    } catch (const gamut_core::Error& e) {
+      const std::string said = e.what();
+      const bool tells = append ? said.find("is unchanged") != std::string::npos
+                                : said.find("was removed") != std::string::npos;
+      code = tells ? 3 : 4;
+      if (!tells) std::fprintf(stderr, "limit %lld: %s\n", static_cast<long long>(limit), e.what());
+    }
+    // The writer goes here, as a program that caught the error would let it.
+  } catch (...) {
+    code = 5;
+  }
+  return code;   // HDF5 releases what it still holds as the process ends
+}
+
+int write_under_limit(const std::string& path, bool append, rlim_t limit) {
+  return run_child({"write", path, append ? "append" : "new", std::to_string(limit)});
+}
+
+// A write the disk has no room for is refused with an Error, the process
+// goes on, and the destination is as it was: no new file, or the file
+// appended to with its bytes unchanged and nothing left beside it.
+void test_write_without_room() {
+  const std::string path = "wr_no_room.gamut";
+  const std::vector<rlim_t> limits = {0, 1 << 10, 4 << 10, 16 << 10, 64 << 10, 256 << 10, 1 << 20, 8 << 20};
+  for (const rlim_t limit : limits) {
+    const bool room = limit >= (8 << 20);   // the whole file is about 1.3 MB
+    std::remove(path.c_str());
+    int status = write_under_limit(path, false, limit);
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status) == (room ? 0 : 3));
+    CHECK(std::filesystem::exists(path) == room);
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != (room ? 0 : 3)) {
+      std::fprintf(stderr, "new file, limit %lld: wait status 0x%x\n",
+                   static_cast<long long>(limit), static_cast<unsigned>(status));
+    }
+
+    std::remove(path.c_str());
+    {
+      auto w = Writer::create(path, "tests", "", "fixed");
+      w->declare_parameter(param("x", "condition", "1"));
+      w->declare_array(array("w", "condition", "1", 4096));
+      std::uint64_t seed = 7;
+      add_wide_run(*w, seed);
+      w->close();
+    }
+    const std::string before = file_bytes(path);
+    status = write_under_limit(path, true, limit);
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status) == (room ? 0 : 3));
+    CHECK(beside(path).empty());
+    if (room) {
+      CHECK(Reader::open(path)->schema().rows == 41);
+    } else {
+      CHECK(file_bytes(path) == before);
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != (room ? 0 : 3)) {
+      std::fprintf(stderr, "append, limit %lld: wait status 0x%x\n",
+                   static_cast<long long>(limit), static_cast<unsigned>(status));
+    }
+  }
+  std::remove(path.c_str());
+}
+
+// In the folder wr_made/a of `home`, creates rel.gamut by that name, then
+// moves to wr_made/b, which holds an unrelated file of the same name.
+const char kUnrelated[] = "an unrelated file the writer never made\n";
+std::unique_ptr<Writer> create_then_move(const std::filesystem::path& home) {
+  namespace fs = std::filesystem;
+  fs::remove_all(home / "wr_made");
+  fs::create_directories(home / "wr_made" / "a");
+  fs::create_directories(home / "wr_made" / "b");
+  std::ofstream(home / "wr_made" / "b" / "rel.gamut") << kUnrelated;
+  fs::current_path(home / "wr_made" / "a");
+  auto w = Writer::create("rel.gamut", "tests", "", "fixed");
+  w->declare_parameter(param("x", "condition", "1"));
+  w->declare_array(array("w", "condition", "1", 4096));
+  fs::current_path(home / "wr_made" / "b");
+  return w;
+}
+
+// The child `moved`: the file is given up because the disk has no room.
+// Leaves with 2 when the error names the file made, 3 when it names another.
+int child_moved(const std::filesystem::path& home) {
+  int code = 0;
+  try {
+    auto w = create_then_move(home);
+    limit_file_size(256 << 10);
+    try {
+      std::uint64_t seed = 1;
+      for (int i = 0; i < 40; ++i) add_wide_run(*w, seed);
+      w->close();
+    } catch (const gamut_core::Error& e) {
+      const std::string made = (home / "wr_made" / "a" / "rel.gamut").string();
+      code = std::string(e.what()).find("\"" + made + "\" was removed") != std::string::npos ? 2 : 3;
+    }
+  } catch (...) {
+    code = 5;
+  }
+  return code;
+}
+
+// A new file that is given up is the file the writer made, also when it
+// was named relative to a folder the program has since left, and a file of
+// the same name in the folder it is in now stays.
+void test_given_up_file_is_the_one_created() {
+  namespace fs = std::filesystem;
+  const fs::path home = fs::current_path();
+  // Given up on purpose.
+  {
+    auto w = create_then_move(home);
+    w->abandon(true);
+    fs::current_path(home);
+  }
+  CHECK(!fs::exists("wr_made/a/rel.gamut"));
+  CHECK(file_bytes("wr_made/b/rel.gamut") == kUnrelated);
+
+  const int status = run_child({"moved", home.string()});
+  CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 2);
+  CHECK(!fs::exists("wr_made/a/rel.gamut"));
+  CHECK(file_bytes("wr_made/b/rel.gamut") == kUnrelated);
+  fs::remove_all("wr_made");
+}
+
+int child_main(int argc, char** argv) {
+  const std::string name = argc > 2 ? argv[2] : "";
+  if (name == "write" && argc == 6) {
+    return child_write(argv[3], std::string(argv[4]) == "append",
+                       static_cast<rlim_t>(std::stoull(argv[5])));
+  }
+  if (name == "moved" && argc == 4) return child_moved(argv[3]);
+  return 8;
+}
+#endif
+
 void test_append_many() {
   xy_table("am_dst.gamut", {1, 2});
   xy_table("am_a.gamut", {10});
@@ -2058,7 +2297,13 @@ void test_rejected_instance_counts_are_not_summed() {
   std::remove(path.c_str());
 }
 
-int main() {
+int main(int argc, char** argv) {
+#if !defined(_WIN32)
+  if (argc > 1 && std::string(argv[1]) == "--child") return child_main(argc, argv);
+#else
+  (void)argc;
+  (void)argv;
+#endif
   const std::vector<std::pair<const char*, std::function<void()>>> tests = {
       {"table", test_table_run_at_a_time},
       {"rejected_instance_counts", test_rejected_instance_counts_are_not_summed},
@@ -2080,6 +2325,10 @@ int main() {
       {"growable", test_append_needs_growable_columns},
       {"append_sessions", test_append_sessions},
       {"append_many", test_append_many},
+#if !defined(_WIN32)
+      {"no_room", test_write_without_room},
+      {"given_up_file", test_given_up_file_is_the_one_created},
+#endif
       {"rank", test_threaded_read_of_fewer_axes},
       {"read_limit", test_read_limit_before_allocation},
       {"short_chunk", test_short_unfiltered_chunk},

@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.3.2 (2026-11-26)
+
+The file format (`gamut/1`) and the C interface are unchanged.
+
+- A write that the disk has no room for no longer crashes the process
+  (#175). `close()` raised its error and the process then died with SIGSEGV
+  while the file's HDF5 ids were released. Each id is now closed with the
+  close call of its type. When HDF5 cannot close a dataset or flush or
+  close the file, adding runs, flushing and closing stop with "cannot write
+  the file (no space left on the device?)" and say what became of it: a new
+  file is removed, and a file being appended to is unchanged, with the copy
+  the runs were written to removed. The writer lets go of the file at
+  that point, and every later call on it repeats the error. HDF5 does not
+  free a file whose last close failed: the metadata its cache held then
+  stays allocated until the process ends, once for each file that fails
+  this way. That is about 0.7 MB for a small file and more for a file
+  with many objects; HDF5's cache holds up to 32 MB by default.
+- A new file that cannot be written at all (a disk with nothing free) is
+  reported as that, with the system's reason or "no space left on the
+  device?", and no empty file is left at its path. It was reported as "an
+  existing file is never replaced", and the empty file left behind made the
+  same create fail again once there was room.
+- A new file that is given up, by `abandon` or because it could not be
+  written, is removed at the path it was created at. A file created by a
+  relative name was removed relative to the program's current folder at
+  that later moment, which could remove another file of the same name. The
+  error says so when the file could not be removed.
+
 ## 2.3.1 (2026-11-26)
 
 The file format (`gamut/1`) and the C interface are unchanged.
